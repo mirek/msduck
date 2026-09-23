@@ -17,13 +17,11 @@ GitHub-hosted Linux runners are the initial CI environment. The optional SSH
 builder remains available for development; its local configuration and credentials
 are not published or exposed to pull-request jobs.
 
-Enable Code review and Automatic reviews for `mirek/msduck` in
-[Codex settings](https://chatgpt.com/codex/settings/code-review).
-The native integration reviews new PRs opened for review. Use `@codex review`
-for a follow-up pass after fixes. Repository review rules live in AGENTS.md.
-See [official configuration instructions](https://learn.chatgpt.com/docs/third-party/github).
-An enabled workflow or posted request is not proof that Codex actually reviewed a PR;
-check for its reaction/review and resolve substantive findings.
+The owner can request Codex review on approved PRs. Under the owner-only intake
+policy, do not enable all-PR automatic review unless intake can exclude unapproved
+external content before retrieval. Bot review output requires owner triage before
+another agent reads it. An automatic request is not a completed review. Repository
+review rules live in AGENTS.md. See [the contribution workflow](agent-work.md).
 
 Use issues for actionable gaps with reference evidence and acceptance criteria;
 use the roadmap tracking issue to group larger work. The long-term scope remains
@@ -31,6 +29,7 @@ in ROADMAP.md. Close an issue only when the promised behavior and evidence exist
 Keep verification progress in PR checks and linked artifacts rather than creating
 an issue for every successful test run.
 
-A GitHub Projects board can be added after the CLI has `project` authorization
-(`gh auth refresh -s project`). It is optional: issues, labels, milestones and PR
-links provide the initial work queue without that additional token scope.
+The [development project](https://github.com/users/mirek/projects/2) now groups
+workstreams and bounded tasks. Readiness is informational: workers discover only
+the owner-approved registry and claim through `scripts/agent-work.mjs`.
+See [exclusive claims and owner-only intake](agent-work.md).
