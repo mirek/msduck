@@ -325,6 +325,24 @@
       "dependencies": [],
       "issue": 35,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PGzMO"
+    },
+    {
+      "id": "trim-collation-reference-v1",
+      "title": "Capture collation-sensitive trim semantics from SQL Server",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal; first-party differential probes exposed CI/AI and surrogate mismatches in explicit trim character lists.",
+      "scope": [
+        "scripts/capture-trim-collation.mjs",
+        "reference/trim-collation.json"
+      ],
+      "acceptance": [
+        "Capture default and explicit trim behavior across all six supported collations, including source versus character-list collation precedence.",
+        "Retain complete rows, descriptors, errors and completion tokens for case/accent, padding, ignorable characters, isolated surrogates and supplementary pairs.",
+        "Validate capture completeness and report observations without replacing linguistic behavior with generic Unicode folding."
+      ],
+      "dependencies": [],
+      "issue": 37,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PG0Zi"
     }
   ]
 }
