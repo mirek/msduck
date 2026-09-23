@@ -83,6 +83,7 @@ pub fn expression_with(
             if matches!(
                 name.as_str(),
                 "REPLICATE"
+                    | "SPACE"
                     | "UNICODE"
                     | "__MSDUCK_CARRIER_UNICODE"
                     | "DATALENGTH"
@@ -240,6 +241,21 @@ pub(crate) fn literal_null(expr: &Expr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn space_properties_match_constant_parameter_column_and_empty_reference() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../reference/space-properties.json")).unwrap();
+        for case in fixture["results"].as_array().unwrap() {
+            let sql = case["query"].as_str().unwrap();
+            let actual = fields(&CatalogSnapshot::default(), sql);
+            let columns = case["reference"]["sets"][0]["columns"].as_array().unwrap();
+            assert_eq!(actual.len(), columns.len(), "{sql}");
+            for (properties, column) in actual.iter().zip(columns) {
+                assert_eq!(column["flags"], 33, "reference changed: {sql}");
+                assert_eq!(*properties, Properties::expression(true), "{sql}");
+            }
+        }
+    }
     #[test]
     fn unicode_retains_nullable_expression_origin_for_values_and_empty_results() {
         for sql in [
