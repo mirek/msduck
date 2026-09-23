@@ -99,6 +99,70 @@ fn concatenation(expr: &Expr) -> bool {
     }
 }
 pub fn lower(expr: &mut Expr, parameters: &HashMap<String, Parameter>) -> Result<(), String> {
+    if let Expr::Cast {
+        expr: source,
+        data_type,
+        kind: CastKind::Cast,
+        format: None,
+    } = expr
+        && concatenation(source)
+        && let Some(bound) = plan(source, parameters)?
+        && matches!(bound.declaration.family, Family::Nchar | Family::Nvarchar)
+        && let Ok(Type::Character(target)) = msduck_sql::sql_type::declaration(data_type)
+    {
+        let name = match target.family() {
+            Family::Nvarchar => "__msduck_cast_carrier_nvarchar",
+            Family::Nchar => "__msduck_cast_carrier_nchar",
+            Family::Varchar => "__msduck_cast_carrier_varchar",
+            Family::Char => "__msduck_cast_carrier_char",
+        };
+        *expr = msduck_sql::expr::binary_function(
+            name,
+            emit(bound),
+            msduck_sql::expr::number(match target.length() {
+                Length::Max => -1,
+                Length::Bounded(n) => i32::from(n),
+            }),
+        );
+        return Ok(());
+    }
+    if let Expr::Function(f) = expr {
+        let name = f.name.to_string().to_ascii_uppercase();
+        if matches!(name.as_str(), "LEFT" | "RIGHT")
+            && let FunctionArguments::List(args) = &f.args
+            && matches!(f.parameters, FunctionArguments::None)
+            && f.over.is_none()
+            && f.filter.is_none()
+            && f.null_treatment.is_none()
+            && f.within_group.is_empty()
+            && args.duplicate_treatment.is_none()
+            && args.clauses.is_empty()
+            && let [
+                FunctionArg::Unnamed(FunctionArgExpr::Expr(source)),
+                FunctionArg::Unnamed(FunctionArgExpr::Expr(count)),
+            ] = args.args.as_slice()
+            && concatenation(source)
+            && let Some(bound) = plan(source, parameters)?
+            && matches!(bound.declaration.family, Family::Nchar | Family::Nvarchar)
+        {
+            let count = Expr::Cast {
+                kind: CastKind::Cast,
+                expr: Box::new(count.clone()),
+                data_type: DataType::Int(None),
+                format: None,
+            };
+            *expr = msduck_sql::expr::binary_function(
+                if name == "LEFT" {
+                    "__msduck_left_unicode"
+                } else {
+                    "__msduck_right_unicode"
+                },
+                emit(bound),
+                count,
+            );
+            return Ok(());
+        }
+    }
     if concatenation(expr) {
         if let Some(bound) = plan(expr, parameters)? {
             *expr = emit(bound);

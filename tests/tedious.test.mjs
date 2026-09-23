@@ -8980,6 +8980,12 @@ test('typed concatenation applies intermediate caps, MAX and raw UTF16 execution
     ["SELECT REPLICATE(N'a',3999)+N'🦆' AS n", 'a'.repeat(3999)+'\ud83e'],
     ["SELECT LEFT(N'🦆',1)+RIGHT(N'🦆',1) AS n", '🦆'],
     ["SELECT N'a'+NULL AS n", null],
+    ["SELECT CAST(N'a'+N'b' AS NVARCHAR(4)) AS n", 'ab'],
+    ["SELECT CAST(N'a'+N'b' AS VARCHAR(4)) AS n", 'ab'],
+    ["SELECT CAST(N'a'+N'b' AS NCHAR(4)) AS n", 'ab  '],
+    ["SELECT CAST(LEFT(N'🦆',1)+N'x' AS NVARCHAR(1)) AS n", '\ud83e'],
+    ["SELECT LEFT(N'ab'+N'cd',2) AS n", 'ab'],
+    ["SELECT RIGHT(N'ab'+N'cd',2) AS n", 'cd'],
   ]
   for (const [sql, expected] of cases) assert.deepEqual((await query(c, sql)).rows, [[expected]], sql)
   assert.deepEqual((await query(c, "SELECT LEN(N'a'+SPACE(8000)),DATALENGTH(N'a'+SPACE(8000))")).rows, [[1,8000]])
