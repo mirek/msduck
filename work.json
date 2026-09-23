@@ -441,6 +441,30 @@
       "dependencies": [],
       "issue": 48,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PG8yR"
+    },
+    {
+      "id": "unicode-column-storage-v1",
+      "title": "Persist declared Unicode columns as raw UTF16 carriers",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. The 180 owner-generated SQL Server cases in PR49 and replay at c199d44 demonstrate ordinary Unicode storage stringifies carriers and cannot retain surrogate units.",
+      "scope": [
+        "crates/msduck-sql/src/character_storage.rs",
+        "src/character_storage.rs",
+        "src/assignment.rs",
+        "src/insert.rs",
+        "src/update.rs",
+        "src/table_alter.rs",
+        "tests/unicode_storage.rs"
+      ],
+      "acceptance": [
+        "Use an explicit UTF16 carrier representation for new declared NVARCHAR/NCHAR columns and defaults while preserving logical catalog declarations and NULL semantics.",
+        "Route INSERT, UPDATE and schema target conversions through declared width and physical layout, retaining exact surrogate units and SQL Server padding, trailing-space handling and write atomicity.",
+        "Cover persistent reopen and transactional schema changes with native tests; identify legacy UTF8 storage and preserve valid existing data.",
+        "Run formatting, strict Clippy, workspace and relevant real-client tests. Preserve and document remaining query-consumer or migration gaps; do not normalize reference differences. Root translator and public client wiring remain under existing same-worker integration claim."
+      ],
+      "dependencies": [],
+      "issue": 51,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PG_uG"
     }
   ]
 }
