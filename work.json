@@ -106,6 +106,26 @@
       "dependencies": [],
       "issue": 12,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PGmPW"
+    },
+    {
+      "id": "smp-codec-v1",
+      "title": "Implement bounded deterministic SMP framing for MARS integration",
+      "state": "ready",
+      "authorization": "Direct owner instruction: continue implementing the full SQL Server compatible Rust/DuckDB server and reuse mirek/mssqlite. This is first-party protocol work derived from the inspected source inventory.",
+      "scope": [
+        "crates/msduck-tds/src/smp.rs",
+        "crates/msduck-tds/src/lib.rs",
+        "docs/smp.md",
+        "THIRD_PARTY_NOTICES.md"
+      ],
+      "acceptance": [
+        "Implement typed SMP header encoding/decoding and incremental bounded framing without I/O or server negotiation changes.",
+        "Use Microsoft MC-SMP framing rules and port attributed upstream byte fixtures; test fragmentation, malformed lengths, flags, boundaries and fatal decoder state.",
+        "Run formatting, strict Clippy and deterministic tests; retain full workspace verification separately without disturbing the active Linux run."
+      ],
+      "dependencies": [],
+      "issue": 15,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGoeU"
     }
   ]
 }
