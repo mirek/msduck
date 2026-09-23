@@ -289,6 +289,24 @@
       "dependencies": [],
       "issue": 31,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PGv9m"
+    },
+    {
+      "id": "unicode-case-reference-v1",
+      "title": "Capture SQL Server UTF16 casing maps for supported collations",
+      "state": "ready",
+      "authorization": "Direct owner full compatibility goal; first-party LOWER carrier gap requires exact collation-specific reference evidence.",
+      "scope": [
+        "scripts/capture-unicode-case.mjs",
+        "reference/unicode-case.json"
+      ],
+      "acceptance": [
+        "Enumerate BMP code-unit casing behavior under all six currently recognized wire collations using the pinned SQL Server reference.",
+        "Retain mapping deltas, coverage/length/NULL statistics and string probes including isolated surrogates and supplementary pairs.",
+        "Validate capture completeness and record collation differences without claiming Rust or DuckDB casing equivalence."
+      ],
+      "dependencies": [],
+      "issue": 33,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGwpz"
     }
   ]
 }
