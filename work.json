@@ -363,6 +363,27 @@
       "dependencies": [],
       "issue": 39,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PG09r"
+    },
+    {
+      "id": "unicode-case-core-v1",
+      "title": "Implement deterministic SQL Server UTF16 case maps",
+      "state": "ready",
+      "authorization": "Direct owner full compatibility goal; owner-authored SQL Server BMP casing captures at 3dfbe04 establish exact legacy and version-100 maps needed by Unicode carrier consumers.",
+      "scope": [
+        "crates/msduck-core/src/case_mapping.rs",
+        "crates/msduck-core/src/lib.rs",
+        "scripts/generate-case-maps.mjs",
+        "docs/unicode-case.md"
+      ],
+      "acceptance": [
+        "Generate deterministic per-unit lower/upper maps from the retained reference/unicode-case.json at owner-authored commit 3dfbe04; validate complete BMP coverage statistics and all string probes before generating.",
+        "Expose explicit collation-family and case-direction inputs, preserve isolated surrogate units and supplementary pairs under the supported non-SC collations, and reject unsupported collation selection.",
+        "Keep catalog/backend/IO dependencies outside core; test captured edge cases and all surrogate units, validate reproducible generation and run deterministic tests and strict Clippy.",
+        "Document the native adapter and SQL binding work still required; do not claim runtime LOWER/UPPER integration."
+      ],
+      "dependencies": [],
+      "issue": 41,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PG18P"
     }
   ]
 }
