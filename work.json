@@ -502,6 +502,43 @@
       "dependencies": [],
       "issue": 54,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHBar"
+    },
+    {
+      "id": "unicode-json-consumers-v1",
+      "title": "Adapt JSON consumers to declared Unicode column storage",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal and request for owner-published parallel work. Owner-run Linux client suite at 7588ea1 exposes six JSON regressions after Unicode carrier storage; no external issue or review content was used. Start from owner-pushed commit 7588ea1 (work/duckdb-nested-alter-v1), with an isolated worktree and new private claim receipt.",
+      "scope": [
+        "src/isjson.rs",
+        "src/json_extract.rs",
+        "src/string_escape.rs",
+        "src/openjson.rs",
+        "src/openjson/schema.rs",
+        "src/openjson/binary.rs",
+        "src/for_json.rs",
+        "src/for_json/native.rs",
+        "crates/msduck-core/src/json.rs",
+        "crates/msduck-core/src/json_path.rs",
+        "crates/msduck-core/src/json_escape.rs",
+        "crates/msduck-core/src/openjson.rs",
+        "crates/msduck-core/src/openjson/schema.rs",
+        "crates/msduck-core/src/openjson/binary.rs",
+        "crates/msduck-core/src/for_json.rs",
+        "tests/unicode_json_storage.rs",
+        "tests/unicode_json_storage.test.mjs",
+        "scripts/capture-unicode-json-storage.mjs",
+        "reference/unicode-json-storage.json"
+      ],
+      "acceptance": [
+        "Reproduce existing tedious failures without changing or weakening expectations: ISJSON validates strict syntax root constraints and typed NULL results; JSON_VALUE and JSON_QUERY preserve paths text and lax strict behavior; OPENJSON default rows preserve lexical values duplicates metadata and APPLY; JSON_PATH_EXISTS preserves presence wildcard NULL and INT semantics; STRING_ESCAPE applies JSON rules with MAX metadata and error recovery; FOR JSON keeps fragment provenance through derived tables CTEs and correlated columns.",
+        "Inspect native text conversion boundaries: never stringify the physical STRUCT representation as user JSON. Preserve ordinary VARCHAR and NVARCHAR behavior, NULLs, paths, descriptors, prepared execution, catalog constraints, and single evaluation of volatile operands.",
+        "Preserve exact UTF16 semantics; no lossy surrogate replacement or silent conversion. Use pinned SQL Server reference capture for any uncertain behavior including isolated code units. Keep raw reference evidence and unsupported boundaries explicit.",
+        "Keep deterministic JSON rules in msduck-core and native/catalog effects in root adapters. Add focused tests in the allocated new test files; existing tests/tedious.test.mjs belongs to another active claim and must remain unchanged. If another shared adapter is required, publish a disjoint companion task rather than expanding this active scope.",
+        "Run relevant native/client regressions and required workspace/Clippy/fmt checks; report exact tested revision, remaining gaps and any unrelated base failures. Coordinate remote builder lock; never overwrite a binary used by live tests."
+      ],
+      "dependencies": [],
+      "issue": 56,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHDqG"
     }
   ]
 }
