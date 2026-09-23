@@ -24,7 +24,7 @@ fn declaration(expr: &Expr, parameters: &HashMap<String, Parameter>) -> Option<D
         Expr::Function(f)
             if matches!(
                 f.name.to_string().to_ascii_uppercase().as_str(),
-                "LTRIM" | "RTRIM"
+                "LTRIM" | "RTRIM" | "LOWER" | "UPPER"
             ) =>
         {
             match &f.args {
@@ -150,7 +150,7 @@ pub fn lower(expr: &mut Expr, parameters: &HashMap<String, Parameter>) -> Result
     } = expr
         && (concatenation(source)
             || matches!(source.as_ref(), Expr::Trim { .. })
-            || matches!(source.as_ref(), Expr::Function(f) if matches!(f.name.to_string().to_ascii_uppercase().as_str(), "LTRIM" | "RTRIM")))
+            || matches!(source.as_ref(), Expr::Function(f) if matches!(f.name.to_string().to_ascii_uppercase().as_str(), "LTRIM" | "RTRIM" | "LOWER" | "UPPER")))
         && let Some(bound) = plan(source, parameters)?
         && matches!(bound.declaration.family, Family::Nchar | Family::Nvarchar)
         && let Ok(Type::Character(target)) = msduck_sql::sql_type::declaration(data_type)

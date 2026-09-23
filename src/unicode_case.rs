@@ -75,6 +75,82 @@ pub fn function(family: Family, direction: Direction) -> &'static str {
         (Family::Latin1General100, Direction::Upper) => "__msduck_upper_unicode_100",
     }
 }
+/// Consume only the scoped operand annotation emitted by the pure binder.
+pub fn lower(expr: &mut sqlparser::ast::Expr) -> Result<(), String> {
+    use sqlparser::ast::*;
+    let Expr::Function(f) = expr else {
+        return Ok(());
+    };
+    let name = f.name.to_string().to_ascii_uppercase();
+    let direction = match name.as_str() {
+        "LOWER" => Direction::Lower,
+        "UPPER" => Direction::Upper,
+        _ => return Ok(()),
+    };
+    let Some(source) = msduck_sql::function_args::unary(f, &name)? else {
+        return Ok(());
+    };
+    let Expr::Collate {
+        expr: cast,
+        collation,
+    } = source
+    else {
+        return Ok(());
+    };
+    let Expr::Cast {
+        expr: marker,
+        data_type,
+        kind: CastKind::Cast,
+        format: None,
+    } = cast.as_ref()
+    else {
+        return Ok(());
+    };
+    let Expr::Function(marker) = marker.as_ref() else {
+        return Ok(());
+    };
+    let marker_name = marker.name.to_string();
+    if !matches!(
+        marker_name.as_str(),
+        "__msduck_case_input_legacy" | "__msduck_case_input_100"
+    ) {
+        return Ok(());
+    }
+    let family = Family::for_collation(&collation.to_string())
+        .ok_or("unsupported bound casing collation")?;
+    let expected = match family {
+        Family::SqlLatin1 => "__msduck_case_input_legacy",
+        Family::Latin1General100 => "__msduck_case_input_100",
+    };
+    let unicode_type = match data_type {
+        DataType::Nvarchar(Some(CharacterLength::Max)) => true,
+        DataType::Nvarchar(Some(CharacterLength::IntegerLength { length, unit: None })) => {
+            *length <= 4000
+        }
+        _ => {
+            matches!(msduck_sql::sql_type::declaration(data_type), Ok(msduck_core::types::Type::Character(t)) if t.family()==msduck_core::character::Family::Nchar)
+        }
+    };
+    if marker_name != expected || !unicode_type {
+        return Err("invalid bound Unicode casing annotation".into());
+    }
+    let original = msduck_sql::function_args::unary(marker, expected)?
+        .ok_or("invalid bound Unicode casing operand")?;
+    // The binder already selected the operand's collation. COLLATE does not
+    // change its value and must not reach DuckDB as a collation on a carrier.
+    fn operand(expr: Expr) -> Expr {
+        match expr {
+            Expr::Nested(value) | Expr::Collate { expr: value, .. } => operand(*value),
+            value => value,
+        }
+    }
+    *expr = msduck_sql::expr::unary_function(
+        function(family, direction),
+        msduck_sql::expr::unary_function("__msduck_carrier_input", operand(original.clone())),
+    );
+    Ok(())
+}
+
 pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
     for family in [Family::SqlLatin1, Family::Latin1General100] {
         db.register_scalar_function_with_state::<Case<false>>(

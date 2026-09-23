@@ -84,6 +84,8 @@ pub fn expression_with(
                 name.as_str(),
                 "REPLICATE"
                     | "SPACE"
+                    | "LOWER"
+                    | "UPPER"
                     | "UNICODE"
                     | "__MSDUCK_CARRIER_UNICODE"
                     | "DATALENGTH"
@@ -241,6 +243,17 @@ pub(crate) fn literal_null(expr: &Expr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn casing_is_nullable_computed_even_for_constants_and_empty_results() {
+        for sql in [
+            "SELECT LOWER(N''), UPPER(N'a'), LOWER(NULL)",
+            "SELECT LOWER(s), UPPER(s) FROM (VALUES(N'x')) t(s) WHERE 1=0",
+        ] {
+            let actual = fields(&CatalogSnapshot::default(), sql);
+            assert!(!actual.is_empty());
+            assert!(actual.iter().all(|p| *p == Properties::expression(true)));
+        }
+    }
     #[test]
     fn space_properties_match_constant_parameter_column_and_empty_reference() {
         let fixture: serde_json::Value =

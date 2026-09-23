@@ -917,6 +917,13 @@ fn expression(
             };
             info.system_type_id = Some(id);
             info.user_type_id = Some(i32::from(id));
+            if id == 231
+                && info.max_length == Some(0)
+                && matches!(e, Expr::Function(f) if matches!(f.name.to_string().to_ascii_uppercase().as_str(), "LOWER" | "UPPER"))
+            {
+                // SQL Server advertises NVARCHAR(1) for casing an empty literal.
+                info.max_length = Some(2);
+            }
             return Some(info);
         }
         return None;

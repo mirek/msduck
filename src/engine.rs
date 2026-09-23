@@ -1549,6 +1549,7 @@ impl Session {
         crate::aggregate_columns::annotate(&self.db, &mut statement, parameters)
             .map_err(anyhow::Error::msg)?;
         crate::concat_lower::recursive_carriers(&mut statement);
+        crate::query_catalog::annotate_unicode_case(&self.db, &mut statement, parameters)?;
         crate::for_json::lower_nested(&self.db, &mut statement, parameters)?;
         let mut translator = Translator {
             parameters,
@@ -2895,6 +2896,9 @@ impl VisitorMut for Translator<'_> {
     fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<String> {
         msduck_sql::expr::lower_unary_plus(expr);
         if let Err(error) = crate::concat_lower::lower(expr, self.parameters) {
+            return ControlFlow::Break(error);
+        }
+        if let Err(error) = crate::unicode_case::lower(expr) {
             return ControlFlow::Break(error);
         }
         if let Err(error) = crate::datalength::lower(expr, self.parameters, &|_| None) {

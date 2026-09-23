@@ -514,7 +514,15 @@ pub fn metadata(out: &mut Vec<u8>, columns: &[Column]) -> Result<()> {
             Origin::Identity => 0x10,
             Origin::Derived | Origin::Unknown => 0,
         };
-        let flags = origin | u16::from(col.properties.nullable != Some(false));
+        // COLLATION packs IgnoreCase at bit 20; fCaseSen is its inverse,
+        // and applies only to character columns.
+        let case_sensitive = matches!(
+            col.kind,
+            Type::Text | Type::Nvarchar(_) | Type::Nchar(_) | Type::Varchar(_) | Type::Char(_)
+        ) && col.collation.unwrap_or_default().bytes()[2] & 0x10 == 0;
+        let flags = origin
+            | u16::from(col.properties.nullable != Some(false))
+            | (u16::from(case_sensitive) << 1);
         out.extend(flags.to_le_bytes());
         if let Some(token) = col.fixed_scalar_type() {
             out.push(token);
@@ -1131,6 +1139,44 @@ mod result_property_tests {
                 assert_eq!(out[9], 0x38);
             } else {
                 assert_eq!(&out[9..11], &[0x26, 4]);
+            }
+        }
+    }
+    #[test]
+    fn case_sensitivity_flag_follows_character_collation_only() {
+        for (name, sensitive) in [
+            ("SQL_Latin1_General_CP1_CI_AS", false),
+            ("Latin1_General_100_CI_AS", false),
+            ("Latin1_General_100_CS_AS", true),
+            ("Latin1_General_100_CI_AI", false),
+            ("Latin1_General_100_CS_AI", true),
+            ("Latin1_General_100_BIN2", true),
+        ] {
+            for kind in [
+                Type::Text,
+                Type::Nvarchar(1),
+                Type::Nchar(1),
+                Type::Varchar(1),
+                Type::Char(1),
+                Type::Int(4),
+            ] {
+                let character = !matches!(kind, Type::Int(_));
+                let mut out = Vec::new();
+                metadata(
+                    &mut out,
+                    &[Column {
+                        name: "x".into(),
+                        kind,
+                        collation: collation::Collation::for_name(name),
+                        properties: Properties::expression(true),
+                    }],
+                )
+                .unwrap();
+                assert_eq!(
+                    u16::from_le_bytes([out[7], out[8]]),
+                    if sensitive && character { 35 } else { 33 },
+                    "{name}"
+                );
             }
         }
     }

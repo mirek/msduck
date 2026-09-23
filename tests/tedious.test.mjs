@@ -9028,3 +9028,36 @@ test('trim consumers preserve raw UTF16 concatenation results', { timeout: 20000
   ]
   for (const [sql, expected] of cases) assert.deepEqual((await query(c, sql)).rows, [expected], sql)
 })
+
+
+test('Unicode casing matches retained SQL Server collation captures', { timeout: 60000 }, async t => {
+  const { readFile } = await import('node:fs/promises')
+  const { canonical } = await import('../scripts/lib/compatibility.mjs')
+  // Preserve isolated surrogate code units in the original Node JSON capture.
+  const fixture = JSON.parse(await readFile(new URL('../reference/unicode-case.json', import.meta.url), 'utf8'))
+  const c = await start(t)
+  for (const collation of fixture.results) {
+    for (const probe of collation.strings) {
+      assert.deepEqual(canonical(await capture(c, probe.query)), probe.reference, `${collation.collation}: ${probe.name}`)
+    }
+  }
+})
+
+
+test('Unicode casing binds columns scopes parameters and surrounding expressions', { timeout: 30000 }, async t => {
+  const c = await start(t)
+  await query(c, 'CREATE TABLE dbo.case_bound(s NVARCHAR(8))')
+  await query(c, "INSERT INTO dbo.case_bound VALUES(N'ƀ')")
+  for (const sql of [
+    'SELECT UPPER(t.s COLLATE Latin1_General_100_CI_AS) FROM dbo.case_bound t',
+    'WITH c(v) AS (SELECT s FROM dbo.case_bound) SELECT UPPER(v COLLATE Latin1_General_100_CI_AS) FROM c',
+    'SELECT (SELECT UPPER(t.s COLLATE Latin1_General_100_CI_AS)) FROM dbo.case_bound t',
+    'SELECT a.v FROM dbo.case_bound t CROSS APPLY (SELECT UPPER(t.s COLLATE Latin1_General_100_CI_AS) AS v) a',
+  ]) assert.deepEqual((await query(c, sql)).rows, [['Ƀ']], sql)
+  assert.deepEqual((await query(c, "SELECT LOWER(N'A')+N'Z',LOWER(N'A'+N'B'),CAST(UPPER(N'ƀ' COLLATE Latin1_General_100_CI_AS) AS NVARCHAR(4)),LOWER(UPPER(N'ƀ' COLLATE Latin1_General_100_CI_AS))")).rows, [['aZ','ab','Ƀ','ƀ']])
+  const p = await prepare(c, 'SELECT UPPER(@s),UPPER(@s COLLATE Latin1_General_100_CI_AS),DATALENGTH(LOWER(@s))', [['s', TYPES.NVarChar, { length: 8 }]])
+  assert.deepEqual(await p.run({s:'ƀ'}), [['ƀ','Ƀ',2]])
+  assert.deepEqual(await p.run({s:null}), [[null,null,null]])
+  assert.deepEqual(await p.run({s:'A🦆Z'}), [['A🦆Z','A🦆Z',8]])
+  await p.release()
+})

@@ -86,6 +86,55 @@ pub fn bind_query_with_parameters(
     Ok(fields)
 }
 
+/// Annotate complete query scopes after logical metadata acquisition and before
+/// physical translation. Nested queries are covered by the outer query's plan.
+pub fn annotate_unicode_case<T: Visit + VisitMut>(
+    db: &Connection,
+    node: &mut T,
+    parameters: &std::collections::HashMap<String, crate::parameter::Parameter>,
+) -> anyhow::Result<()> {
+    let catalog = snapshot(db, node)?;
+    let mut scope = Scope::default();
+    for (name, parameter) in parameters {
+        if let Some(info) = catalog.cast_info(&parameter.ast_type()) {
+            scope.parameters.insert(name.to_lowercase(), info);
+        }
+    }
+    struct Annotate<'a> {
+        catalog: &'a CatalogSnapshot,
+        scope: &'a Scope,
+        depth: usize,
+    }
+    impl VisitorMut for Annotate<'_> {
+        type Break = msduck_core::diagnostic::SqlError;
+        fn pre_visit_query(&mut self, query: &mut Query) -> std::ops::ControlFlow<Self::Break> {
+            if self.depth == 0
+                && let Err(error) =
+                    infer::annotate_unicode_case_inputs(self.catalog, query, self.scope)
+            {
+                return std::ops::ControlFlow::Break(error);
+            }
+            self.depth += 1;
+            std::ops::ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &mut Query) -> std::ops::ControlFlow<Self::Break> {
+            self.depth -= 1;
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    match VisitMut::visit(
+        node,
+        &mut Annotate {
+            catalog: &catalog,
+            scope: &scope,
+            depth: 0,
+        },
+    ) {
+        std::ops::ControlFlow::Continue(()) => Ok(()),
+        std::ops::ControlFlow::Break(error) => Err(error.into()),
+    }
+}
+
 pub fn expand_qualified_stars(
     db: &Connection,
     query: &mut Query,
