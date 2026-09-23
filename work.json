@@ -481,6 +481,27 @@
       "dependencies": [],
       "issue": 52,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHAv9"
+    },
+    {
+      "id": "duckdb-nested-alter-v1",
+      "title": "Fix same-transaction DuckDB nested-column NOT NULL commit failure",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Declared Unicode storage at b46b69f exposes a single-connection DuckDB commit failure; owner-generated direct native reproduction confirms it independently of the translator.",
+      "scope": [
+        "vendor/libduckdb-sys/build_bundled_cc.rs",
+        "vendor/libduckdb-sys/MSDUCK-PATCH.md",
+        "tests/duckdb_nested_alter.rs"
+      ],
+      "acceptance": [
+        "Reproduce directly: CREATE TABLE x(id INT); INSERT INTO x VALUES(1); BEGIN TRANSACTION; ALTER TABLE x ADD COLUMN s STRUCT(u BLOB) DEFAULT CAST(row(from_hex('780020002000')) AS STRUCT(u BLOB)); ALTER TABLE x ALTER COLUMN s SET NOT NULL; COMMIT. Current result is Attempting to modify table x but another transaction has altered this table.",
+        "Identify the actual backend cause. Preserve transaction rollback, persistence and concurrent-conflict protections; never bypass IsMainTable checks or force commits merely to obtain a pass.",
+        "If patching the bundled source, follow existing exact-match build patches with drift assertions and retain the pinned original duckdb.tar.gz unchanged. Record patch rationale and provenance.",
+        "Add direct native tests for success, rollback, genuine NULL rejection, ordinary scalar columns, subsequent inserts and competing transactions; run relevant storage/ALTER regressions at b46b69f or a successor. Keep root adapter changes outside this scope.",
+        "Use isolated build artifacts and the remote build lock. Never overwrite an executable while a live test suite uses it; report any remaining limitations honestly."
+      ],
+      "dependencies": [],
+      "issue": 54,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHBar"
     }
   ]
 }
