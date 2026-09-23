@@ -7,9 +7,9 @@ use duckdb::{
 };
 use msduck_core::left_right::Side;
 
-const CELL_LIMIT: usize = 16 * 1024 * 1024;
-const CHUNK_LIMIT: usize = 64 * 1024 * 1024;
-fn kind() -> LogicalTypeHandle {
+pub(crate) const CELL_LIMIT: usize = 16 * 1024 * 1024;
+pub(crate) const CHUNK_LIMIT: usize = 64 * 1024 * 1024;
+pub(crate) fn kind() -> LogicalTypeHandle {
     LogicalTypeHandle::struct_type(&[("__msduck_utf16le", Id::Blob.into())])
 }
 
@@ -19,7 +19,7 @@ pub fn is_storage_name(name: &str) -> bool {
 
 // Copy while the local string_t is alive: inline bytes belong to that value,
 // while long strings belong to DuckDB. Callers check validity before reading.
-fn bytes(
+pub(crate) fn bytes(
     vector: &FlatVector<'_>,
     row: usize,
     len: usize,
@@ -444,7 +444,7 @@ impl VScalar for FirstUnit {
     }
 }
 
-fn vector_units(
+pub(crate) fn vector_units(
     source: &FlatVector<'_>,
     data: &FlatVector<'_>,
     row: usize,

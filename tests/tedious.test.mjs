@@ -9016,3 +9016,15 @@ test('character concatenation matches complete retained SQL Server family captur
     assert.deepEqual(canonical(tokens), entry.tokens, `${entry.name}: decoded DONE tokens`)
   }
 })
+
+
+test('trim consumers preserve raw UTF16 concatenation results', { timeout: 20000 }, async t => {
+  const c = await start(t)
+  // SQL Server 2025 CU7 reference probes preserve this isolated high surrogate.
+  const cases = [
+    ["SELECT LTRIM(N' '+LEFT(N'🦆',1)),RTRIM(LEFT(N'🦆',1)+N' '),TRIM(N' '+LEFT(N'🦆',1)+N' ')", ['\ud83e','\ud83e','\ud83e']],
+    ["SELECT LTRIM(RTRIM(N' '+LEFT(N'🦆',1)+N' '))", ['\ud83e']],
+    ["SELECT CAST(RTRIM(N'ab'+N' ') AS NVARCHAR(4))", ['ab']],
+  ]
+  for (const [sql, expected] of cases) assert.deepEqual((await query(c, sql)).rows, [expected], sql)
+})

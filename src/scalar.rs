@@ -26,6 +26,7 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
     crate::decimal_division::register(db)?;
     crate::replicate::register(db)?;
     crate::unicode_carrier::register(db)?;
+    crate::unicode_trim::register(db)?;
     db.register_scalar_function::<crate::aggregate::SumResult<false>>("__msduck_sum_int_result")?;
     db.register_scalar_function::<crate::aggregate::SumResult<true>>("__msduck_sum_big_result")?;
     crate::calendar_parts::register(db)?;

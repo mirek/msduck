@@ -12,6 +12,40 @@ use sqlparser::ast::*;
 use std::collections::HashMap;
 
 fn declaration(expr: &Expr, parameters: &HashMap<String, Parameter>) -> Option<Declaration> {
+    if let Expr::Function(f) = expr
+        && let Some(source) = msduck_sql::function_args::unary(f, "__msduck_carrier_input")
+            .ok()
+            .flatten()
+    {
+        return declaration(source, parameters);
+    }
+    let trim_source = match expr {
+        Expr::Trim { expr, .. } => Some(expr.as_ref()),
+        Expr::Function(f)
+            if matches!(
+                f.name.to_string().to_ascii_uppercase().as_str(),
+                "LTRIM" | "RTRIM"
+            ) =>
+        {
+            match &f.args {
+                FunctionArguments::List(args) => match args.args.first() {
+                    Some(FunctionArg::Unnamed(FunctionArgExpr::Expr(source))) => Some(source),
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
+        _ => None,
+    };
+    if let Some(source) = trim_source {
+        let mut d = plan(source, parameters).ok()??.declaration;
+        d.family = match d.family {
+            Family::Nchar => Family::Nvarchar,
+            Family::Char => Family::Varchar,
+            family => family,
+        };
+        return Some(d);
+    }
     if let Expr::Collate {
         expr: inner,
         collation,
@@ -98,6 +132,15 @@ fn concatenation(expr: &Expr) -> bool {
         _ => false,
     }
 }
+pub fn trim_input(expr: Expr, parameters: &HashMap<String, Parameter>) -> Expr {
+    if declaration(&expr, parameters)
+        .is_some_and(|d| matches!(d.family, Family::Nchar | Family::Nvarchar))
+    {
+        unary("__msduck_carrier_input", expr)
+    } else {
+        expr
+    }
+}
 pub fn lower(expr: &mut Expr, parameters: &HashMap<String, Parameter>) -> Result<(), String> {
     if let Expr::Cast {
         expr: source,
@@ -105,7 +148,9 @@ pub fn lower(expr: &mut Expr, parameters: &HashMap<String, Parameter>) -> Result
         kind: CastKind::Cast,
         format: None,
     } = expr
-        && concatenation(source)
+        && (concatenation(source)
+            || matches!(source.as_ref(), Expr::Trim { .. })
+            || matches!(source.as_ref(), Expr::Function(f) if matches!(f.name.to_string().to_ascii_uppercase().as_str(), "LTRIM" | "RTRIM")))
         && let Some(bound) = plan(source, parameters)?
         && matches!(bound.declaration.family, Family::Nchar | Family::Nvarchar)
         && let Ok(Type::Character(target)) = msduck_sql::sql_type::declaration(data_type)
@@ -118,7 +163,7 @@ pub fn lower(expr: &mut Expr, parameters: &HashMap<String, Parameter>) -> Result
         };
         *expr = msduck_sql::expr::binary_function(
             name,
-            emit(bound),
+            unary("__msduck_carrier_input", emit(bound)),
             msduck_sql::expr::number(match target.length() {
                 Length::Max => -1,
                 Length::Bounded(n) => i32::from(n),
@@ -224,4 +269,77 @@ pub fn statement<T: VisitMut>(
         std::ops::ControlFlow::Continue(()) => Ok(()),
         std::ops::ControlFlow::Break(e) => Err(e),
     }
+}
+
+/// Recursive set members must agree on physical Unicode representation. Run
+/// after logical operand annotation: the wrappers must not erase CTE types while
+/// the binder is still resolving recursive references. Keep the original CAST
+/// inside the wrapper so its conversion/width checks remain in effect.
+pub fn recursive_carriers<T: VisitMut>(node: &mut T) {
+    struct Normalize(Vec<bool>);
+    impl VisitorMut for Normalize {
+        type Break = ();
+        fn pre_visit_query(&mut self, query: &mut Query) -> std::ops::ControlFlow<()> {
+            self.0.push(
+                self.0.last().copied().unwrap_or(false)
+                    || query.with.as_ref().is_some_and(|w| w.recursive),
+            );
+            std::ops::ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &mut Query) -> std::ops::ControlFlow<()> {
+            self.0.pop();
+            std::ops::ControlFlow::Continue(())
+        }
+        fn post_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<()> {
+            if self.0.last() == Some(&true)
+                && let Expr::Cast {
+                    expr: source,
+                    data_type,
+                    kind: CastKind::Cast,
+                    format: None,
+                } = expr
+                && let Ok(Type::Character(target)) = msduck_sql::sql_type::declaration(data_type)
+                && matches!(target.family(), Family::Nchar | Family::Nvarchar)
+            {
+                // typeof is bind-time only. Each selected branch evaluates its
+                // source once; ordinary numeric conversions retain the original
+                // CAST, while an existing carrier never passes through VARCHAR.
+                let sql = format!(
+                    "CASE WHEN typeof(__msduck_recursive_source)='STRUCT(__msduck_utf16le BLOB)' THEN CAST(__msduck_recursive_source AS STRUCT(__msduck_utf16le BLOB)) ELSE __msduck_carrier_input(CAST(__msduck_recursive_source AS {data_type})) END"
+                );
+                let mut dispatch =
+                    sqlparser::parser::Parser::new(&sqlparser::dialect::DuckDbDialect {})
+                        .try_with_sql(&sql)
+                        .expect("generated cast syntax")
+                        .parse_expr()
+                        .expect("generated cast expression");
+                struct Substitute(Expr);
+                impl VisitorMut for Substitute {
+                    type Break = ();
+                    fn post_visit_expr(&mut self, e: &mut Expr) -> std::ops::ControlFlow<()> {
+                        if matches!(e,Expr::Identifier(id) if id.value=="__msduck_recursive_source")
+                        {
+                            *e = self.0.clone();
+                        }
+                        std::ops::ControlFlow::Continue(())
+                    }
+                }
+                let _ = VisitMut::visit(&mut dispatch, &mut Substitute(*source.clone()));
+                *expr = msduck_sql::expr::binary_function(
+                    if target.family() == Family::Nchar {
+                        "__msduck_cast_carrier_nchar"
+                    } else {
+                        "__msduck_cast_carrier_nvarchar"
+                    },
+                    dispatch,
+                    msduck_sql::expr::number(match target.length() {
+                        Length::Max => -1,
+                        Length::Bounded(n) => i32::from(n),
+                    }),
+                );
+            }
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    let _ = node.visit(&mut Normalize(Vec::new()));
 }

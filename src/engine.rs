@@ -1548,6 +1548,7 @@ impl Session {
         crate::concat_lower::statement(&mut statement, parameters).map_err(anyhow::Error::msg)?;
         crate::aggregate_columns::annotate(&self.db, &mut statement, parameters)
             .map_err(anyhow::Error::msg)?;
+        crate::concat_lower::recursive_carriers(&mut statement);
         crate::for_json::lower_nested(&self.db, &mut statement, parameters)?;
         let mut translator = Translator {
             parameters,
@@ -3198,9 +3199,10 @@ impl VisitorMut for Translator<'_> {
                 }
             }
             Expr::Trim {
+                expr: source,
+                trim_where,
                 trim_what,
                 trim_characters,
-                ..
             } => {
                 if trim_characters.is_some() {
                     return ControlFlow::Break("unsupported TRIM argument syntax".into());
@@ -3214,6 +3216,16 @@ impl VisitorMut for Translator<'_> {
                         sqlparser::ast::Value::SingleQuotedString(" ".into()).into(),
                     )));
                 }
+                let name = match trim_where {
+                    Some(TrimWhereField::Leading) => "__msduck_ltrim",
+                    Some(TrimWhereField::Trailing) => "__msduck_rtrim",
+                    _ => "__msduck_trim",
+                };
+                *expr = msduck_sql::expr::binary_function(
+                    name,
+                    crate::concat_lower::trim_input(*source.clone(), self.parameters),
+                    *trim_what.clone().unwrap(),
+                );
             }
             Expr::Cast {
                 expr: argument,
@@ -3310,6 +3322,14 @@ impl VisitorMut for Translator<'_> {
                     {
                         return ControlFlow::Break("trim characters cannot have a MAX type".into());
                     }
+                    if let FunctionArg::Unnamed(FunctionArgExpr::Expr(source)) = &mut args.args[0] {
+                        *source = crate::concat_lower::trim_input(source.clone(), self.parameters);
+                    }
+                    f.name = ObjectName::from(vec![Ident::new(if name == "LTRIM" {
+                        "__msduck_ltrim"
+                    } else {
+                        "__msduck_rtrim"
+                    })]);
                     return ControlFlow::Continue(());
                 }
                 if name == "LEN" {
