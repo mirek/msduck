@@ -126,6 +126,40 @@
       "dependencies": [],
       "issue": 15,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PGoeU"
+    },
+    {
+      "id": "attention-design-v1",
+      "title": "Design deterministic request cancellation and transport ownership",
+      "scope": [
+        "docs/attention-design.md"
+      ],
+      "acceptance": [
+        "Inspect src/server.rs, the existing TDS skill, and the local native interrupt API; cite source symbols and identify proven behavior versus gaps.",
+        "Specify a deterministic request lifecycle and effects interface covering Attention before/during/after execution, response boundaries, connection reuse, transactions and disconnect cleanup.",
+        "Propose bounded successor implementation tasks and exact wire/client acceptance tests. Documentation only: do not alter server code, run shared-port tests, or enable MARS."
+      ],
+      "state": "ready",
+      "authorization": "Direct owner instructions to organize independently claimable parallel work and continue implementing the SQL Server compatible Rust/DuckDB server. First-party planning based on repository source and retained reference evidence; no external submission is approved.",
+      "dependencies": [],
+      "issue": 17,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGqZH"
+    },
+    {
+      "id": "concat-lowering-plan-v1",
+      "title": "Plan typed concatenation execution consistent with declared capacity",
+      "scope": [
+        "docs/concat-lowering-plan.md"
+      ],
+      "acceptance": [
+        "Inspect deterministic concat shape rules, SQL result inference, native plus lowering, Unicode carrier support, and reference/character-concat.json without changing those files.",
+        "Document why the SPACE test at tests/tedious.test.mjs currently encounters NVARCHAR value exceeds declared width; distinguish the observed failure from hypotheses and assess the existing expected result against retained SQL Server evidence.",
+        "Propose typed lowering that evaluates operands once, respects intermediate bounded truncation/MAX/NULL and raw UTF-16, and composes with downstream character functions. List exact differential probes and bounded successor scopes. Documentation only; no test expectation changes or shared server runs."
+      ],
+      "state": "ready",
+      "authorization": "Direct owner instructions to organize independently claimable parallel work and continue implementing the SQL Server compatible Rust/DuckDB server. First-party planning based on repository source and retained reference evidence; no external submission is approved.",
+      "dependencies": [],
+      "issue": 18,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGqZQ"
     }
   ]
 }
