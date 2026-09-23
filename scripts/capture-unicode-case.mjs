@@ -16,6 +16,7 @@ const probes = [
   ['empty', "N''"],
   ['NULL', 'CAST(NULL AS NVARCHAR(4))'],
 ]
+const inputs = {ASCII:'AbZz','case edge characters':'İΣẞßǅKıI','Greek context':'ΟΣ ΣΟΣ Σ','supplementary letters':'𐐀𐐨','isolated high surrogate':'\ud83e','isolated low surrogate':'\udd86','surrogate pair and ASCII':'A🦆Z',empty:'',NULL:null}
 await withReferenceContainer(async(config,container)=>{
  const c=await connect(config)
  try {
@@ -41,6 +42,14 @@ await withReferenceContainer(async(config,container)=>{
    for(const [name,expression] of probes){
     const query=`SELECT LOWER((${expression}) COLLATE ${collation}) AS lower_text,UPPER((${expression}) COLLATE ${collation}) AS upper_text`
     strings.push({name,query,reference:canonical(await command(c,query))})
+   }
+   const map = new Map(rows.map(([unit,lower,upper])=>[unit,[lower,upper]]))
+   for(const probe of strings){
+    const input=inputs[probe.name]
+    for(let direction=0;direction<2;direction++){
+     const mapped=input===null?null:Array.from({length:input.length},(_,i)=>String.fromCharCode(map.get(input.charCodeAt(i))?.[direction]??input.charCodeAt(i))).join('')
+     assert.equal(mapped,probe.reference.sets[0].rows[0][direction],`${collation}: ${probe.name}`)
+    }
    }
    results.push({collation,statisticsQuery,statistics,mappingQuery,mapping,strings})
    console.log(JSON.stringify({collation,changedUnits:rows.length,strings:strings.map(x=>({name:x.name,rows:x.reference.sets[0].rows}))}))
