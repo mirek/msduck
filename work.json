@@ -384,6 +384,24 @@
       "dependencies": [],
       "issue": 41,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PG18P"
+    },
+    {
+      "id": "unicode-case-native-v1",
+      "title": "Execute captured Unicode casing maps in bounded native vectors",
+      "state": "ready",
+      "authorization": "Direct owner full compatibility goal; deterministic casing maps at 00c9d05 are verified and now require a lossless native DuckDB carrier adapter.",
+      "scope": [
+        "src/unicode_case.rs"
+      ],
+      "acceptance": [
+        "Implement native LOWER/UPPER adapters consuming a UTF16 carrier and explicit validated table family; preserve NULL and isolated surrogate units without VARCHAR conversion.",
+        "Enforce native cell/chunk bounds and reject invalid carrier payloads and invalid family selectors; ensure each input expression is evaluated once.",
+        "Test legacy/version-100 differences, raw UTF16, multi-chunk filtered vectors and volatile inputs; run formatting, strict workspace Clippy and workspace Rust tests.",
+        "Keep SQL collation binding separate; existing integration-owned wiring files remain under their current exclusive claims."
+      ],
+      "dependencies": [],
+      "issue": 43,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PG3bJ"
     }
   ]
 }
