@@ -75,11 +75,73 @@ enum Bin2Input {
     Windows1252,
 }
 
+struct CaseInput {
+    data_type: DataType,
+    collation: String,
+    marker: &'static str,
+}
+#[derive(Default)]
+struct Bindings {
+    comparisons: Vec<(usize, Bin2Input)>,
+    cases: Vec<(usize, CaseInput)>,
+}
+fn case_input(catalog: &CatalogSnapshot, expr: &Expr, scope: &Scope) -> Option<CaseInput> {
+    let Expr::Function(f) = expr else {
+        return None;
+    };
+    let name = f.name.to_string().to_ascii_uppercase();
+    if !matches!(name.as_str(), "LOWER" | "UPPER") {
+        return None;
+    }
+    let source = crate::function_args::unary(f, &name).ok()??;
+    if let Expr::Collate { expr, .. } = source
+        && let Expr::Cast { expr, .. } = expr.as_ref()
+        && let Expr::Function(marker) = expr.as_ref()
+        && matches!(
+            marker.name.to_string().as_str(),
+            "__msduck_case_input_legacy" | "__msduck_case_input_100"
+        )
+    {
+        return None;
+    }
+
+    let info = member_expression(catalog, source, &[], scope)?;
+    if !matches!(info.system_type_id, Some(231 | 239)) {
+        return None;
+    }
+    let label = expression_collation(catalog, source, &[], scope)?.ok()?;
+    let collation = label.name()?.to_owned();
+    let family = msduck_core::case_mapping::Family::for_collation(&collation)?;
+    let length = match info.max_length? {
+        -1 if info.system_type_id == Some(231) => CharacterLength::Max,
+        n if n >= 0 && n % 2 == 0 => CharacterLength::IntegerLength {
+            length: (n / 2) as u64,
+            unit: None,
+        },
+        _ => return None,
+    };
+    Some(CaseInput {
+        data_type: if info.system_type_id == Some(239) {
+            DataType::Custom(
+                ObjectName::from(vec![Ident::new("nchar")]),
+                vec![(info.max_length.unwrap() / 2).to_string()],
+            )
+        } else {
+            DataType::Nvarchar(Some(length))
+        },
+        collation,
+        marker: match family {
+            msduck_core::case_mapping::Family::SqlLatin1 => "__msduck_case_input_legacy",
+            msduck_core::case_mapping::Family::Latin1General100 => "__msduck_case_input_100",
+        },
+    })
+}
+
 fn comparison_plan(
     catalog: &CatalogSnapshot,
     query: &Query,
     outer: &Scope,
-) -> Result<Vec<(usize, Bin2Input)>, SqlError> {
+) -> Result<Bindings, SqlError> {
     struct Check<'a> {
         catalog: &'a CatalogSnapshot,
         outer: &'a Scope,
@@ -88,7 +150,7 @@ fn comparison_plan(
         selects: Vec<SelectBindings>,
         saved_rows: Vec<(*const Expr, Rows)>,
         position: usize,
-        bin2: Vec<(usize, Bin2Input)>,
+        bindings: Bindings,
     }
     impl Visitor for Check<'_> {
         type Break = SqlError;
@@ -218,12 +280,15 @@ fn comparison_plan(
                             })
                         && let Some(mode) = mode
                     {
-                        self.bin2.push((self.position, mode));
+                        self.bindings.comparisons.push((self.position, mode));
                     }
                     label
                 }
                 _ => expression_collation(self.catalog, expr, &[], scope),
             };
+            if let Some(input) = case_input(self.catalog, expr, scope) {
+                self.bindings.cases.push((self.position, input));
+            }
             self.position += 1;
             if let Some(Err(Conflict::Operation(error))) = label {
                 return ControlFlow::Break(error);
@@ -246,11 +311,11 @@ fn comparison_plan(
         selects: vec![],
         saved_rows: vec![],
         position: 0,
-        bin2: vec![],
+        bindings: Bindings::default(),
     };
     match query.visit(&mut check) {
         ControlFlow::Break(error) => Err(error),
-        ControlFlow::Continue(()) => Ok(check.bin2),
+        ControlFlow::Continue(()) => Ok(check.bindings),
     }
 }
 
@@ -282,7 +347,7 @@ pub fn lower_bin2_comparisons(
     query: &mut Query,
     outer: &Scope,
 ) -> Result<(), SqlError> {
-    let positions = comparison_plan(catalog, query, outer)?;
+    let positions = comparison_plan(catalog, query, outer)?.comparisons;
     struct Lower {
         position: usize,
         pending: std::iter::Peekable<std::vec::IntoIter<(usize, Bin2Input)>>,
@@ -331,5 +396,59 @@ pub fn lower_bin2_comparisons(
     };
     let _ = VisitMut::visit(query, &mut lower);
     debug_assert!(lower.pending.next().is_none());
+    Ok(())
+}
+
+/// Retain original public casing functions while carrying scoped declarations
+/// to the late backend translator. Markers are never backend function calls.
+pub fn annotate_unicode_case_inputs(
+    catalog: &CatalogSnapshot,
+    query: &mut Query,
+    outer: &Scope,
+) -> Result<(), SqlError> {
+    let cases = comparison_plan(catalog, query, outer)?.cases;
+    struct Annotate {
+        position: usize,
+        pending: std::iter::Peekable<std::vec::IntoIter<(usize, CaseInput)>>,
+    }
+    impl VisitorMut for Annotate {
+        type Break = ();
+        fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
+            if self
+                .pending
+                .peek()
+                .is_some_and(|(position, _)| *position == self.position)
+            {
+                let (_, input) = self.pending.next().unwrap();
+                let Expr::Function(f) = expr else {
+                    unreachable!("bound casing function");
+                };
+                let FunctionArguments::List(args) = &mut f.args else {
+                    unreachable!("bound casing arguments");
+                };
+                let FunctionArg::Unnamed(FunctionArgExpr::Expr(source)) = &mut args.args[0] else {
+                    unreachable!("bound casing operand");
+                };
+                let original = std::mem::replace(source, crate::expr::number(0));
+                *source = Expr::Collate {
+                    expr: Box::new(Expr::Cast {
+                        kind: CastKind::Cast,
+                        expr: Box::new(crate::expr::unary_function(input.marker, original)),
+                        data_type: input.data_type,
+                        format: None,
+                    }),
+                    collation: ObjectName::from(vec![Ident::new(input.collation)]),
+                };
+            }
+            self.position += 1;
+            ControlFlow::Continue(())
+        }
+    }
+    let mut annotate = Annotate {
+        position: 0,
+        pending: cases.into_iter().peekable(),
+    };
+    let _ = VisitMut::visit(query, &mut annotate);
+    debug_assert!(annotate.pending.next().is_none());
     Ok(())
 }

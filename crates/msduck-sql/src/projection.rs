@@ -10,7 +10,9 @@ use std::collections::HashMap;
 
 mod collation_validation;
 mod constant_case;
-pub use collation_validation::{lower_bin2_comparisons, validate_query_operations};
+pub use collation_validation::{
+    annotate_unicode_case_inputs, lower_bin2_comparisons, validate_query_operations,
+};
 
 /// SQL result labels are independent of backend-generated expression names.
 pub(crate) fn expression_name(expr: &Expr) -> Option<String> {
@@ -850,6 +852,9 @@ fn expression(
     sources: &[Source],
     scope: &Scope,
 ) -> Option<Info> {
+    if let Expr::Collate { expr, .. } = e {
+        return member_expression(catalog, expr, sources, scope);
+    }
     if let Expr::Subquery(query) = e {
         let mut inherited = scope.clone();
         inherited.rows.push(Some(sources.to_vec()));
@@ -902,13 +907,7 @@ fn expression(
         }
     }
     if let Some(value) = storage::retained_argument(e) {
-        let info = match expression(catalog, value, sources, scope) {
-            Some(info) => Some(info),
-            None => match storage::kind(value, &HashMap::new(), &|_| None) {
-                Some(kind) => catalog.cast_info(&kind),
-                None => None,
-            },
-        };
+        let info = member_expression(catalog, value, sources, scope);
         if let Some(mut info) = info {
             let id = info.system_type_id?;
             let id = match id {
