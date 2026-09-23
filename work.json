@@ -85,6 +85,27 @@
       "parent": 5,
       "issue": 10,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PGjg9"
+    },
+    {
+      "id": "result-alignment-v1",
+      "title": "Keep success and error descriptors aligned with physical result columns",
+      "state": "ready",
+      "authorization": "Direct owner instruction: continue implementing the fully functional SQL Server compatible Rust/DuckDB server; this fixes an internally identified descriptor-alignment inconsistency, not an external submission.",
+      "scope": [
+        "src/result_metadata.rs",
+        "src/lib.rs",
+        "src/engine.rs",
+        "src/query_error.rs",
+        "docs/result-metadata.md"
+      ],
+      "acceptance": [
+        "Use one explicit alignment decision for logical fields and declared overrides on success and error descriptor paths.",
+        "Add root integration regressions for shorter and longer metadata lists, NULL values, and aligned overrides; demonstrate the pre-fix failure.",
+        "Preserve ordinary descriptors and complete error metadata; run formatting, strict Clippy, workspace tests, independent clients and diagnostic audit."
+      ],
+      "dependencies": [],
+      "issue": 12,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGmPW"
     }
   ]
 }
