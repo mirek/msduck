@@ -307,6 +307,24 @@
       "dependencies": [],
       "issue": 33,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PGwpz"
+    },
+    {
+      "id": "unicode-trim-v1",
+      "title": "Preserve UTF16 carriers through trim consumers",
+      "state": "ready",
+      "authorization": "Direct owner full compatibility goal; first-party recursive concatenation failures expose unsupported carrier trim consumers.",
+      "scope": [
+        "src/unicode_trim.rs",
+        "src/scalar.rs"
+      ],
+      "acceptance": [
+        "Implement bounded native trim adapters preserving UTF16 units, NULLs and single evaluation for carrier values.",
+        "Retain existing text trim behavior through physical dispatch and validate nested and recursive consumers.",
+        "Run native tests, client regressions, formatting, strict Clippy and workspace verification; record remaining compatibility gaps."
+      ],
+      "dependencies": [],
+      "issue": 35,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGzMO"
     }
   ]
 }
