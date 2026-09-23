@@ -8,9 +8,12 @@ Project fields show progress but never authorize a task or acquire a lock.
 
 The authoritative queue is `work.json` on the separate `agent-control` branch.
 Only snapshots explicitly approved by mirek belong there. The initial publication
-was authorized by the owner's request to establish this workflow. Future agents
-may propose task descriptions in their PR, but cannot approve/publish them on
-the owner's behalf without an explicit owner instruction. Broad issues #2–#7
+was authorized by the owner's request to establish this workflow. An owner instruction to implement work, including an ongoing implementation
+goal, authorizes decomposition and publication of bounded first-party tasks
+within that scope. Record the originating instruction in the task snapshot.
+Do not require repeated approval for already-authorized work. Unsolicited
+external submissions still require manual owner triage; neither a general goal
+nor permission to manage the project authorizes reading that content. Broad issues #2–#7
 remain backlog/tracking, not invitations for multiple agents to edit everything.
 
 ## Start a worker
@@ -67,9 +70,12 @@ The agent receives that snapshot, not a link instructing it to ingest the origin
 The owner can create a replacement owner-authored issue for display; the registry
 remains authoritative and workers do not fetch issue bodies even then.
 
-To publish a revision, the owner explicitly authorizes the exact new snapshot,
-briefly disables ruleset 23899192, updates only `agent-control:work.json`, then
-immediately reenables the rule. Workers refuse operations while protection is
+To publish a revision, verify that every added task is covered by a direct owner
+instruction or a manually approved external-content snapshot. The owner or an
+agent acting under that authorization briefly disables ruleset 23899192, updates
+only `agent-control:work.json`, then immediately reenables the rule (also on
+failure). Preserve existing tasks and use a fast-forward update from the revision
+read; a concurrent publication requires reloading and revalidating the queue. Workers refuse operations while protection is
 inactive. Review the new JSON and its scopes/dependencies before publication;
 ready scopes must not overlap. Do not change an active task's description or
 reuse an ID: verification will reject a changed digest. Add a successor only
