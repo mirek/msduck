@@ -193,3 +193,37 @@ fn explicit_unicode_alter_upgrades_legacy_utf8_without_losing_values() {
         vec![Some(vec![0x3e, 0xd8, 0x86, 0xdd, 32, 0])]
     );
 }
+
+#[test]
+fn guarded_unicode_add_rejects_duplicates_and_rolls_back_prior_actions() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    execute(
+        &mut session,
+        "CREATE TABLE dbo.duplicate_units(id INT,s NCHAR(3) DEFAULT N'a');INSERT INTO dbo.duplicate_units(id) VALUES(1)",
+    );
+    assert!(
+        !session
+            .batch_response(
+                "ALTER TABLE dbo.duplicate_units ADD s NCHAR(3) NOT NULL DEFAULT N'b'",
+                &Default::default(),
+                false,
+                None
+            )
+            .1
+    );
+    assert_eq!(
+        bytes(
+            &session,
+            "SELECT s.__msduck_utf16le FROM dbo.duplicate_units"
+        ),
+        vec![Some(vec![97, 0, 32, 0, 32, 0])]
+    );
+    assert!(!session.batch_response("ALTER TABLE dbo.duplicate_units ADD fresh NCHAR(3) NOT NULL DEFAULT N'x',s NCHAR(3) NOT NULL DEFAULT N'y'",&Default::default(),false,None).1);
+    assert_eq!(session.db.query_row("SELECT count(*) FROM information_schema.columns WHERE table_name='duplicate_units' AND column_name='fresh'",[],|r|r.get::<_,i64>(0)).unwrap(),0);
+    execute(
+        &mut session,
+        "BEGIN TRAN;ALTER TABLE dbo.duplicate_units ADD fresh NCHAR(3) NOT NULL DEFAULT N'x';ROLLBACK",
+    );
+    assert_eq!(session.db.query_row("SELECT count(*) FROM information_schema.columns WHERE table_name='duplicate_units' AND column_name='fresh'",[],|r|r.get::<_,i64>(0)).unwrap(),0);
+}

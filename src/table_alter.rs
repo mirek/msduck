@@ -16,6 +16,7 @@ pub fn execute_declared(
 ) -> Result<()> {
     validate(table)?;
     let mut commands = Vec::new();
+    let mut guarded_adds = std::collections::HashMap::new();
     let mut definitions = Vec::new();
     let mut populations = Vec::new();
     for (operation, original) in table.operations.iter().zip(&original.operations) {
@@ -23,6 +24,7 @@ pub fn execute_declared(
             AlterTableOperation::AddColumn { column_def, .. } => {
                 let mut column = column_def.clone();
                 let mut restored_default = None;
+                let mut constant_unicode_default = false;
                 if let AlterTableOperation::AddColumn {
                     column_def: source, ..
                 } = original
@@ -59,6 +61,9 @@ pub fn execute_declared(
                         )
                         .map_err(anyhow::Error::msg)?
                     {
+                        constant_unicode_default =
+                            crate::character_storage::unicode_storage_type(&source.data_type)
+                                .is_some();
                         for option in &mut column.options {
                             if let ColumnOption::Default(value) = &mut option.option {
                                 restored_default = Some(value.clone());
@@ -100,7 +105,19 @@ pub fn execute_declared(
                 });
                 // Nullable ADD DEFAULT leaves old rows NULL in SQL Server.
                 // Install its default only after the column has been added.
-                commands.push(format!("ALTER TABLE {} ADD COLUMN {column}", table.name));
+                if constant_unicode_default {
+                    // DuckDB rewrites expression defaults into ADD + UPDATE.
+                    // IF NOT EXISTS selects its direct ADD path, safe for this
+                    // generated constant. Preserve ordinary ADD semantics with
+                    // an absence check inside the same catalog transaction.
+                    guarded_adds.insert(commands.len(), column.name.value.clone());
+                    commands.push(format!(
+                        "ALTER TABLE {} ADD COLUMN IF NOT EXISTS {column}",
+                        table.name
+                    ));
+                } else {
+                    commands.push(format!("ALTER TABLE {} ADD COLUMN {column}", table.name));
+                }
                 if let Some(default) = deferred_default {
                     commands.push(format!(
                         "ALTER TABLE {} ALTER COLUMN {} SET DEFAULT {default}",
@@ -215,7 +232,18 @@ pub fn execute_declared(
         for definition in definitions {
             definition.install(db)?;
         }
-        for command in commands {
+        for (index, command) in commands.into_iter().enumerate() {
+            if let Some(column) = guarded_adds.get(&index) {
+                let mut existing = db.prepare(&format!("SELECT * FROM {} LIMIT 0", table.name))?;
+                existing.query([])?.next()?;
+                ensure!(
+                    !existing
+                        .column_names()
+                        .iter()
+                        .any(|name| name.eq_ignore_ascii_case(column)),
+                    "Column with name {column} already exists!"
+                );
+            }
             db.execute(&command, [])?;
         }
         for population in populations {

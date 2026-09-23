@@ -56,3 +56,19 @@ optimizing their child independently and retaining the filter above it. This
 prevents join reconstruction from moving the predicate again after filter
 pushdown. One exact insertion is asserted in `relation_manager.cpp`. The same
 native regression runs with normal optimizer settings.
+
+Unicode ADD COLUMN defaults require an adapter workaround, not another native
+patch. The pinned parser rewrites non-literal defaults into ADD, UPDATE and SET
+DEFAULT statements. A subsequent SET NOT NULL replaces table storage, leaving
+the UPDATE undo entry attached to the old table; COMMIT then rejects the change.
+For generated deterministic Unicode constant defaults only, `table_alter.rs`
+uses ADD COLUMN IF NOT EXISTS to select the parser's direct ADD path. An executed
+metadata query checks column absence inside the same transaction before each
+such ADD, preserving duplicate-column errors. A competing catalog writer must
+still produce a transaction conflict. Arbitrary and volatile defaults retain
+the original path. The transaction's IsMainTable checks are unchanged.
+
+Regression: `tests/duckdb_nested_alter.rs` covers direct ADD followed by NOT NULL,
+real NULL rejection, rollback, concurrent catalog conflicts and database reopen.
+`tests/unicode_storage.rs` covers the public adapter, including duplicate columns
+and rollback of earlier additions in a multi-column statement.
