@@ -465,6 +465,22 @@
       "dependencies": [],
       "issue": 51,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PG_uG"
+    },
+    {
+      "id": "unicode-output-storage-test-v1",
+      "title": "Retain exact OUTPUT image assertions for Unicode storage",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal; Unicode column storage changes the native value representation while keeping logical OUTPUT values identical.",
+      "scope": [
+        "src/engine/joined_output.rs"
+      ],
+      "acceptance": [
+        "Update the existing native typed OUTPUT image regression to assert exact UTF16 units for the Unicode field and equality with persisted images.",
+        "Do not weaken SQL-visible values, metadata, atomicity or other typed assertions. Run the targeted native regression."
+      ],
+      "dependencies": [],
+      "issue": 52,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHAv9"
     }
   ]
 }
