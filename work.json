@@ -402,6 +402,25 @@
       "dependencies": [],
       "issue": 43,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PG3bJ"
+    },
+    {
+      "id": "unicode-case-binding-v1",
+      "title": "Bind Unicode casing from scoped logical declarations",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal; native Unicode casing adapters at a5b5ebb now need deterministic scope-aware SQL binding without runtime type guesses.",
+      "scope": [
+        "crates/msduck-sql/src/projection/collation_validation.rs",
+        "crates/msduck-sql/tests/case_binding.rs"
+      ],
+      "acceptance": [
+        "Bind LOWER/UPPER Unicode operand types and supported collations from explicit catalog snapshots, covering parameters, aliases, CTEs, correlated scopes and JOIN/APPLY visibility.",
+        "Preserve public function/type structure until late backend translation using validated internal operand annotations; never infer a collation or declared width from runtime values.",
+        "Keep unknown declarations unresolved and retain original metadata and sensitive-operation errors; add deterministic binding regressions.",
+        "Run deterministic tests and strict Clippy; root execution integration stays under existing root integration/native adapter claims."
+      ],
+      "dependencies": [],
+      "issue": 45,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PG47w"
     }
   ]
 }
