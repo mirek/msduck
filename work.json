@@ -89,7 +89,7 @@
     {
       "id": "result-alignment-v1",
       "title": "Keep success and error descriptors aligned with physical result columns",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner instruction: continue implementing the fully functional SQL Server compatible Rust/DuckDB server; this fixes an internally identified descriptor-alignment inconsistency, not an external submission.",
       "scope": [
         "src/result_metadata.rs",
@@ -213,6 +213,28 @@
       "dependencies": [],
       "issue": 24,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PGr1I"
+    },
+    {
+      "id": "concat-integration-v1",
+      "title": "Integrate declared concatenation execution and public overflow regressions",
+      "state": "ready",
+      "authorization": "Direct owner goal to implement SQL Server compatibility. The current worker stops result-alignment-v1 edits and preserves its PR/evidence; its full verification is blocked by inherited concat failure. This successor owns root integration paths.",
+      "scope": [
+        "src/concat_lower.rs",
+        "src/engine.rs",
+        "src/lib.rs",
+        "src/query_catalog.rs",
+        "tests/concat_execution.rs",
+        "tests/tedious.test.mjs"
+      ],
+      "acceptance": [
+        "Integrate deterministic concat binding with native primitives using logical declarations before backend AST rewriting; preserve NULL, bounded/MAX and raw Unicode values.",
+        "Correct SPACE client expectation from captured SQL Server evidence and add public execution regressions for intermediate truncation and prepared metadata.",
+        "Run formatting, strict Clippy, focused and full tests; explicitly record unsupported consumer or catalog-binding gaps instead of claiming complete compatibility."
+      ],
+      "dependencies": [],
+      "issue": 26,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGsjK"
     }
   ]
 }
