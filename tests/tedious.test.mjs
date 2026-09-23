@@ -8995,3 +8995,24 @@ test('typed concatenation applies intermediate caps, MAX and raw UTF16 execution
   assert.deepEqual(await p.run({a:'a',b:'b'}), [['ab']])
   await p.release()
 })
+
+test('character concatenation matches complete retained SQL Server family captures', { timeout: 30000 }, async t => {
+  const { readFile } = await import('node:fs/promises')
+  const { canonical } = await import('../scripts/lib/compatibility.mjs')
+  // Node preserves isolated UTF-16 surrogates in the original JSON captures.
+  const fixture = JSON.parse(await readFile(new URL('../reference/character-concat.json', import.meta.url), 'utf8'))
+  assert.equal(fixture.results.length, 26)
+  const c = await start(t)
+  let tokens = []
+  const debug = c.debug.token.bind(c.debug)
+  c.debug.token = token => {
+    if (token.name.startsWith('DONE')) tokens.push({ ...token })
+    debug(token)
+  }
+  for (const entry of fixture.results) {
+    if (entry.setup) await query(c, entry.setup)
+    tokens = []
+    assert.deepEqual(canonical(await capture(c, entry.query)), entry.reference, entry.name)
+    assert.deepEqual(canonical(tokens), entry.tokens, `${entry.name}: decoded DONE tokens`)
+  }
+})
