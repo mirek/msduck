@@ -343,6 +343,26 @@
       "dependencies": [],
       "issue": 37,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PG0Zi"
+    },
+    {
+      "id": "trim-collation-binding-v1",
+      "title": "Validate trim collation conflicts before execution",
+      "state": "ready",
+      "authorization": "Direct owner full compatibility and parallel-work instructions; owner-published reference capture at 508b962 proves ten missing trim conflict diagnostics.",
+      "scope": [
+        "crates/msduck-core/src/collation.rs",
+        "crates/msduck-sql/src/projection.rs",
+        "crates/msduck-sql/tests/trim_collation.rs"
+      ],
+      "acceptance": [
+        "Start from owner-authored revision 508b962 (work/trim-collation-reference-v1); inspect reference/trim-collation.json locally without fetching issue or review content.",
+        "Add deterministic collation-sensitive binding for two-argument LTRIM/RTRIM and Expr::Trim, preserving SQL Server error 468/state 9/class 16 and exact operation spelling/operand order from all ten captures.",
+        "Preserve inner-operation errors through outer COLLATE and validate projected, predicate and nested expressions using explicit catalog snapshots; do not add backend or runtime value dependencies.",
+        "Add pure regression tests for conflicting and compatible explicit labels, source versus character-list precedence and unresolved labels; run deterministic crate tests, formatting and strict Clippy. Native trim matching remains separate."
+      ],
+      "dependencies": [],
+      "issue": 39,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PG09r"
     }
   ]
 }
