@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "repository": "mirek/msduck",
+  "owner": {
+    "login": "mirek",
+    "id": 8561
+  },
+  "project": {
+    "id": "PVT_kwHNIXHOAZHkrw",
+    "number": 2,
+    "readinessField": "PVTSSF_lAHNIXHOAZHkr84YzsEj",
+    "options": {
+      "backlog": "9e0f3f37",
+      "ready": "1d1c0dfa",
+      "claimed": "a7a087a5",
+      "review": "c5fa5a9b",
+      "done": "115fd197",
+      "blocked": "fdbb1e11"
+    },
+    "statusField": "PVTSSF_lAHNIXHOAZHkr84Yzr97",
+    "statuses": {
+      "todo": "f75ad846",
+      "progress": "47fc9ee4",
+      "done": "98236657"
+    }
+  },
+  "tasks": [
+    {
+      "id": "coordination-v1",
+      "title": "Establish owner-only intake and exclusive agent claims",
+      "state": "ready",
+      "scope": [
+        "scripts/agent-work.mjs",
+        "scripts/lib/agent-work.mjs",
+        "tests/agent-work.test.mjs",
+        ".agents/skills/contribute/",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "GROK.md",
+        "CONTRIBUTING.md",
+        ".github/copilot-instructions.md",
+        ".github/workflows/ci.yml",
+        "docs/github-workflow.md",
+        "docs/agent-work.md"
+      ],
+      "acceptance": [
+        "Create and populate the project with owner-approved tasks.",
+        "Reject duplicate claims atomically and retain permanent claim receipts.",
+        "Prevent discovery from fetching issue, comment, review or project-item content.",
+        "Document portable discovery, manual triage and abandoned-worker recovery; test races and trust failures."
+      ],
+      "issue": 8,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGjgE"
+    },
+    {
+      "id": "compiler-contract-plan-v1",
+      "title": "Map typed compiler and result metadata boundaries",
+      "state": "ready",
+      "scope": [
+        "docs/compiler-contract-plan.md"
+      ],
+      "acceptance": [
+        "Inventory existing declaration, projection, collation and runtime metadata paths with source references.",
+        "Propose ordered, bounded extraction tasks and explicit deterministic/effect boundaries.",
+        "Describe acceptance tests and dependencies without changing Rust code or claiming compatibility completion."
+      ],
+      "dependencies": [],
+      "parent": 3,
+      "issue": 9,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGjgc"
+    },
+    {
+      "id": "tds-gap-inventory-v1",
+      "title": "Inventory TDS protocol gaps and independent verification tasks",
+      "state": "ready",
+      "scope": [
+        "docs/tds-gap-inventory.md"
+      ],
+      "acceptance": [
+        "Compare implemented packet/token/RPC/session behavior with the local TDS skill and tests.",
+        "Distinguish tested behavior, unsupported behavior and unknown coverage with source references.",
+        "Propose bounded implementation tasks with wire fixtures and acceptance criteria; do not change code or run shared server tests."
+      ],
+      "dependencies": [],
+      "parent": 5,
+      "issue": 10,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGjg9"
+    }
+  ]
+}
