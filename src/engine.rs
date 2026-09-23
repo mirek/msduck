@@ -1545,6 +1545,7 @@ impl Session {
         let money_columns = crate::insert::money_columns(&statement, parameters);
         crate::update::expand_compound(&self.db, &mut statement)?;
         let money_assignments = crate::update::money_assignments(&statement, parameters);
+        crate::concat_lower::statement(&mut statement, parameters).map_err(anyhow::Error::msg)?;
         crate::aggregate_columns::annotate(&self.db, &mut statement, parameters)
             .map_err(anyhow::Error::msg)?;
         crate::for_json::lower_nested(&self.db, &mut statement, parameters)?;
@@ -2892,6 +2893,9 @@ impl VisitorMut for Translator<'_> {
     }
     fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<String> {
         msduck_sql::expr::lower_unary_plus(expr);
+        if let Err(error) = crate::concat_lower::lower(expr, self.parameters) {
+            return ControlFlow::Break(error);
+        }
         if let Err(error) = crate::datalength::lower(expr, self.parameters, &|_| None) {
             return ControlFlow::Break(error);
         }

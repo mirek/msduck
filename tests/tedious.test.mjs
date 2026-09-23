@@ -2082,7 +2082,7 @@ test('SPACE applies integer conversion, negative NULLs and the 8000-character ca
   assert.deepEqual(await p.run({n:null}), [[null,null]])
   const capped = await p.run({n:2147483647})
   assert.equal(capped[0][0], ' '.repeat(8000))
-  assert.equal(capped[0][1], 'a'+' '.repeat(8000)+'b')
+  assert.equal(capped[0][1], 'a'+' '.repeat(3999))
   await p.release()
   const text = await prepare(c, 'SELECT SPACE(@n)', [['n',TYPES.NVarChar]])
   assert.deepEqual(await text.run({n:'3'}), [['   ']])
@@ -8967,4 +8967,25 @@ test('integer overflow preserves SQL diagnostics metadata continuation and catch
     assert.deepEqual(differences(canonical(tokens), canonical(entry.tokens)), [], `${entry.name} DONE`)
   }
   assert.deepEqual((await query(c, 'SELECT 9 AS alive')).rows, [[9]])
+})
+
+test('typed concatenation applies intermediate caps, MAX and raw UTF16 execution', { timeout: 30000 }, async t => {
+  const c = await start(t)
+  const cases = [
+    ["SELECT REPLICATE('a',6000)+REPLICATE('b',6000) AS n", 'a'.repeat(6000)+'b'.repeat(2000)],
+    ["SELECT REPLICATE(N'a',3000)+REPLICATE(N'b',3000) AS n", 'a'.repeat(3000)+'b'.repeat(1000)],
+    ["SELECT REPLICATE('a',8000)+'b'+CAST('c' AS VARCHAR(MAX)) AS n", 'a'.repeat(8000)+'c'],
+    ["SELECT CAST(REPLICATE('a',8000) AS VARCHAR(MAX))+'b'+'c' AS n", 'a'.repeat(8000)+'bc'],
+    ["SELECT REPLICATE('a',8000)+('b'+CAST('c' AS VARCHAR(MAX))) AS n", 'a'.repeat(8000)+'bc'],
+    ["SELECT REPLICATE(N'a',3999)+N'🦆' AS n", 'a'.repeat(3999)+'\ud83e'],
+    ["SELECT LEFT(N'🦆',1)+RIGHT(N'🦆',1) AS n", '🦆'],
+    ["SELECT N'a'+NULL AS n", null],
+  ]
+  for (const [sql, expected] of cases) assert.deepEqual((await query(c, sql)).rows, [[expected]], sql)
+  assert.deepEqual((await query(c, "SELECT LEN(N'a'+SPACE(8000)),DATALENGTH(N'a'+SPACE(8000))")).rows, [[1,8000]])
+  const p = await prepare(c, "SELECT @a+@b AS n", [['a', TYPES.NVarChar, { length: 3000 }], ['b', TYPES.NVarChar, { length: 3000 }]])
+  assert.deepEqual(await p.run({a:'a'.repeat(3000),b:'b'.repeat(3000)}), [['a'.repeat(3000)+'b'.repeat(1000)]])
+  assert.deepEqual(await p.run({a:null,b:'b'}), [[null]])
+  assert.deepEqual(await p.run({a:'a',b:'b'}), [['ab']])
+  await p.release()
 })

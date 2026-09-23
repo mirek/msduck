@@ -106,3 +106,5 @@ mod money_arithmetic;
 pub mod tls;
 
 pub mod authentication;
+
+mod concat_lower;

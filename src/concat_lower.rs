@@ -1,0 +1,157 @@
+//! Bind character concatenation before physical AST rewriting.
+use msduck_core::{
+    character::{Family, Length},
+    collation::Label,
+    types::Type,
+};
+use msduck_sql::{
+    concat::{Declaration, Node, Plan},
+    parameter::Parameter,
+};
+use sqlparser::ast::*;
+use std::collections::HashMap;
+
+fn declaration(expr: &Expr, parameters: &HashMap<String, Parameter>) -> Option<Declaration> {
+    if let Expr::Collate {
+        expr: inner,
+        collation,
+    } = expr
+    {
+        let mut d = plan(inner, parameters).ok()??.declaration;
+        // Validate the name against the currently supported wire/code-page table.
+        crate::tds::collation::Collation::for_name(&collation.to_string())?;
+        d.collation = Label::Explicit(collation.to_string());
+        return Some(d);
+    }
+    let shape = msduck_sql::expression_metadata::storage::kind(expr, parameters, &|_| None)
+        .and_then(|kind| msduck_sql::sql_type::declaration(&kind).ok())
+        .and_then(|kind| {
+            if let Type::Character(t) = kind {
+                Some((t.family(), t.length()))
+            } else {
+                None
+            }
+        })
+        .or_else(|| match msduck_sql::result_types::expression_type(expr) {
+            Some(msduck_sql::result_types::ResultType::Character { family, length }) => {
+                Some((family, length))
+            }
+            _ => None,
+        })?;
+    Some(Declaration {
+        family: shape.0,
+        length: shape.1,
+        collation: Label::CoercibleDefault("SQL_Latin1_General_CP1_CI_AS".into()),
+    })
+}
+fn plan(expr: &Expr, parameters: &HashMap<String, Parameter>) -> Result<Option<Plan>, String> {
+    msduck_sql::concat::bind(expr, &|e| declaration(e, parameters))
+        .map_err(|e| format!("character concatenation binding failed: {e:?}"))
+}
+fn unary(name: &str, value: Expr) -> Expr {
+    msduck_sql::expr::unary_function(name, value)
+}
+fn emit(plan: Plan) -> Expr {
+    match plan.node {
+        Node::Leaf(expr) => *expr,
+        Node::Collate { child } => emit(*child),
+        Node::Concat { left, right } => {
+            let unicode = matches!(plan.declaration.family, Family::Nchar | Family::Nvarchar);
+            let operand = |p: Plan| {
+                let value = emit(p);
+                if unicode {
+                    unary("__msduck_carrier_input", value)
+                } else {
+                    value
+                }
+            };
+            let mut call = msduck_sql::expr::binary_function(
+                if unicode {
+                    "__msduck_concat_unicode"
+                } else {
+                    "__msduck_concat_cp1252"
+                },
+                operand(*left),
+                operand(*right),
+            );
+            if let Expr::Function(f) = &mut call
+                && let FunctionArguments::List(args) = &mut f.args
+            {
+                args.args.push(FunctionArg::Unnamed(FunctionArgExpr::Expr(
+                    msduck_sql::expr::number(match plan.declaration.length {
+                        Length::Max => -1,
+                        Length::Bounded(n) => i32::from(n),
+                    }),
+                )));
+            }
+            call
+        }
+    }
+}
+fn concatenation(expr: &Expr) -> bool {
+    match expr {
+        Expr::Nested(e) | Expr::Collate { expr: e, .. } => concatenation(e),
+        Expr::BinaryOp {
+            op: BinaryOperator::Plus | BinaryOperator::StringConcat,
+            ..
+        } => true,
+        _ => false,
+    }
+}
+pub fn lower(expr: &mut Expr, parameters: &HashMap<String, Parameter>) -> Result<(), String> {
+    if concatenation(expr) {
+        if let Some(bound) = plan(expr, parameters)? {
+            *expr = emit(bound);
+        }
+        return Ok(());
+    }
+    // Length consumers need the logical type before the child becomes a carrier.
+    if let Expr::Function(f) = expr {
+        let name = f.name.to_string().to_ascii_uppercase();
+        if matches!(name.as_str(), "LEN" | "DATALENGTH")
+            && let Some(source) = msduck_sql::function_args::unary(f, &name)?
+            && concatenation(source)
+            && let Some(bound) = plan(source, parameters)?
+        {
+            let unicode = matches!(bound.declaration.family, Family::Nchar | Family::Nvarchar);
+            let large = bound.declaration.length == Length::Max;
+            let native = match (unicode, name.as_str()) {
+                (true, "LEN") => "__msduck_carrier_len",
+                (true, _) => "__msduck_carrier_datalength",
+                (false, "LEN") => "__msduck_len",
+                (false, _) => "__msduck_datalength_ansi",
+            };
+            *expr = Expr::Cast {
+                kind: CastKind::Cast,
+                expr: Box::new(unary(native, emit(bound))),
+                data_type: if large {
+                    DataType::BigInt(None)
+                } else {
+                    DataType::Int(None)
+                },
+                format: None,
+            };
+        }
+    }
+    Ok(())
+}
+
+pub fn statement<T: VisitMut>(
+    node: &mut T,
+    parameters: &HashMap<String, Parameter>,
+) -> Result<(), String> {
+    struct Lower<'a>(&'a HashMap<String, Parameter>);
+    impl VisitorMut for Lower<'_> {
+        type Break = String;
+        fn pre_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<String> {
+            match lower(expr, self.0) {
+                Ok(()) => std::ops::ControlFlow::Continue(()),
+                Err(e) => std::ops::ControlFlow::Break(e),
+            }
+        }
+    }
+    match node.visit(&mut Lower(parameters)) {
+        std::ops::ControlFlow::Continue(()) => Ok(()),
+        std::ops::ControlFlow::Break(e) => Err(e),
+    }
+}
