@@ -144,6 +144,12 @@ pub fn statement<T: VisitMut>(
     impl VisitorMut for Lower<'_> {
         type Break = String;
         fn pre_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<String> {
+            // Preserve character operators until parent coercions have bound.
+            // Length consumers alone need an earlier rewrite to avoid rejecting
+            // the original concatenation as an unknown DATALENGTH operand.
+            if !matches!(expr, Expr::Function(_)) {
+                return std::ops::ControlFlow::Continue(());
+            }
             match lower(expr, self.0) {
                 Ok(()) => std::ops::ControlFlow::Continue(()),
                 Err(e) => std::ops::ControlFlow::Break(e),
