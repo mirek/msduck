@@ -1,0 +1,15 @@
+{
+  "name": "msduck-client-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "cargo build --workspace --all-targets && node --test tests/tedious.test.mjs tests/compatibility.test.mjs tests/tls.test.mjs",
+    "audit:local": "cargo build --workspace --all-targets && node scripts/compatibility.mjs",
+    "audit:compare": "cargo build --workspace --all-targets && node scripts/compatibility.mjs --compare",
+    "audit:docker": "cargo build --workspace --all-targets && node scripts/docker-compare.mjs",
+    "remote": "node scripts/remote-build.mjs"
+  },
+  "devDependencies": {
+    "tedious": "20.0.0"
+  }
+}

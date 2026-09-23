@@ -1,0 +1,162 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "query": "DECLARE @n SMALLINT=-1; RAISERROR(N'%hu|%u|%hx|%x',16,1,@n,@n,@n,@n)",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "65535|4294967295|ffff|ffffffff"
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "DECLARE @n TINYINT=12; RAISERROR(N'%hd',16,1,@n)",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "12"
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "DECLARE @n SMALLINT=6; RAISERROR(N'%*s',16,1,@n,N'duck')",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "  duck"
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'%ls',16,1,'duck')",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "duck"
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    }
+  ]
+}

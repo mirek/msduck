@@ -1,0 +1,906 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "query": "SELECT REPLICATE('ab',3) AS a,REPLICATE(N'雪',3) AS n,REPLICATE(CAST('x' AS CHAR(3)),2) AS c,REPLICATE(CAST(N'x' AS NCHAR(3)),2) AS nc",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "a",
+                "type": "VarChar",
+                "length": 6,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 6,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "c",
+                "type": "VarChar",
+                "length": 6,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "nc",
+                "type": "NVarChar",
+                "length": 12,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "ababab",
+                "雪雪雪",
+                "x  x  ",
+                "x  x  "
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "SELECT REPLICATE('x',0) AS z,REPLICATE('x',-1) AS neg,REPLICATE('',-1) AS empty_neg,REPLICATE(NULL,3) AS absent,REPLICATE('x',NULL) AS missing_count",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "z",
+                "type": "VarChar",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "neg",
+                "type": "VarChar",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "empty_neg",
+                "type": "VarChar",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "absent",
+                "type": "VarChar",
+                "length": 3,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "missing_count",
+                "type": "VarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "",
+                null,
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "SELECT REPLICATE(CAST('x' AS VARCHAR(MAX)),3) AS a,REPLICATE(CAST(N'雪' AS NVARCHAR(MAX)),3) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "a",
+                "type": "VarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "xxx",
+                "雪雪雪"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "SELECT DATALENGTH(REPLICATE('x',8100)) AS a,DATALENGTH(REPLICATE(N'x',4100)) AS n,DATALENGTH(REPLICATE(CAST('x' AS VARCHAR(MAX)),8100)) AS am,DATALENGTH(REPLICATE(CAST(N'x' AS NVARCHAR(MAX)),4100)) AS nm",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "a",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "am",
+                "type": "IntN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "nm",
+                "type": "IntN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                8000,
+                8000,
+                "8100",
+                "8200"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "SELECT REPLICATE(12,3) AS number,REPLICATE(0x4142,3) AS bytes,REPLICATE('x',2.9) AS fraction",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "number",
+                "type": "VarChar",
+                "length": 36,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "bytes",
+                "type": "VarChar",
+                "length": 6,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "fraction",
+                "type": "VarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "121212",
+                "ABABAB",
+                "xx"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "DECLARE @n INT=3; SELECT REPLICATE('ab',@n) AS a,REPLICATE(N'ab',@n) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "a",
+                "type": "VarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "ababab",
+                "ababab"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "query": "SELECT REPLICATE(N'🦆x',1334) AS split",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "split",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x🦆x"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "SELECT REPLICATE(N'🦆',2001) AS pairs",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "pairs",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆🦆"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "SELECT DATALENGTH(REPLICATE('x',CAST(2147483648 AS BIGINT))) AS large_count",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "large_count",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8115,
+            "state": 2,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Arithmetic overflow error converting expression to data type int."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "SELECT REPLICATE('x','3') AS text_count,REPLICATE('x',CAST(2.9 AS FLOAT)) AS float_count",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "text_count",
+                "type": "VarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "float_count",
+                "type": "VarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "xxx",
+                "xx"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "SELECT REPLICATE(CAST(NULL AS NVARCHAR(MAX)),3) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                null
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "SELECT REPLICATE('x',-0.5) AS near_zero",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "near_zero",
+                "type": "VarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                ""
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "SELECT REPLICATE(0x008041,2) AS bytes",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "bytes",
+                "type": "VarChar",
+                "length": 6,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "\u0000€A\u0000€A"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "SELECT REPLICATE('x',1,2)",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 174,
+            "state": 1,
+            "class": 15,
+            "lineNumber": 1,
+            "message": "The replicate function requires 2 argument(s)."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    }
+  ]
+}

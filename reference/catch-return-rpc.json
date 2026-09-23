@@ -1,0 +1,391 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "query": "BEGIN TRY RAISERROR('x',16,1); END TRY BEGIN CATCH PRINT 'before'; RETURN; END CATCH",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "before"
+          }
+        ],
+        "returnStatus": 0,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 349
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 246
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 350
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 247
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 219
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ]
+    },
+    {
+      "query": "BEGIN TRY RAISERROR('x',16,1); END TRY BEGIN CATCH SELECT 1 AS before_return; RETURN; END CATCH",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "before_return",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 349
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 246
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 350
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 219
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ]
+    },
+    {
+      "query": "BEGIN TRY THROW 50003,'x',1; END TRY BEGIN CATCH RETURN; END CATCH",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 50003,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 349
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 246
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 350
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 219
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ]
+    },
+    {
+      "query": "BEGIN TRY RAISERROR('x',16,1); END TRY BEGIN CATCH RETURN 7; END CATCH",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 178,
+            "state": 1,
+            "class": 15,
+            "lineNumber": 1,
+            "message": "A RETURN statement with a return value cannot be used in this context."
+          }
+        ],
+        "info": [],
+        "returnStatus": 178,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ]
+    }
+  ]
+}

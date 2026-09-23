@@ -1,0 +1,420 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "name": "join direct",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS); INSERT INTO coll_scope VALUES(1,N'a',N'A')",
+      "query": "SELECT t.a FROM coll_scope t JOIN coll_scope u ON t.a=u.b",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_CI_AS\" in the equal to operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "join scalar subquery",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS); INSERT INTO coll_scope VALUES(1,N'a',N'A')",
+      "query": "SELECT t.a FROM coll_scope t JOIN coll_scope u ON EXISTS(SELECT 1 WHERE t.a=u.b)",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_CI_AS\" in the equal to operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "join preceding comma invalid",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS); INSERT INTO coll_scope VALUES(1,N'a',N'A')",
+      "query": "SELECT t.a FROM coll_scope t,coll_scope u JOIN coll_scope v ON t.a=u.b",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 4104,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The multi-part identifier \"t.a\" could not be bound."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "join future alias invalid",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS); INSERT INTO coll_scope VALUES(1,N'a',N'A')",
+      "query": "SELECT t.a FROM coll_scope t JOIN coll_scope u ON t.a=v.b JOIN coll_scope v ON 1=1",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 4104,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The multi-part identifier \"v.b\" could not be bound."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "join own inputs after comma",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS); INSERT INTO coll_scope VALUES(1,N'a',N'A')",
+      "query": "SELECT t.a FROM coll_scope t,coll_scope u JOIN coll_scope v ON u.a=v.b",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_CI_AS\" in the equal to operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "apply correlated conflict",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS); INSERT INTO coll_scope VALUES(1,N'a',N'A')",
+      "query": "SELECT x.s FROM coll_scope t CROSS APPLY (SELECT REPLACE(t.a,t.b,N'z') AS s) x",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_CI_AS\" in the replace operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "apply later alias invalid",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS); INSERT INTO coll_scope VALUES(1,N'a',N'A')",
+      "query": "SELECT x.s FROM coll_scope t CROSS APPLY (SELECT REPLACE(u.a,u.b,N'z') AS s) x CROSS JOIN coll_scope u",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 4104,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The multi-part identifier \"u.a\" could not be bound."
+          },
+          {
+            "number": 4104,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The multi-part identifier \"u.b\" could not be bound."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "derived correlation invalid",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS); INSERT INTO coll_scope VALUES(1,N'a',N'A')",
+      "query": "SELECT x.s FROM coll_scope t CROSS JOIN (SELECT REPLACE(t.a,t.b,N'z') AS s) x",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 4104,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The multi-part identifier \"t.a\" could not be bound."
+          },
+          {
+            "number": 4104,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The multi-part identifier \"t.b\" could not be bound."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "join explicit resolution",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS); INSERT INTO coll_scope VALUES(1,N'a',N'A')",
+      "query": "SELECT t.a FROM coll_scope t JOIN coll_scope u ON t.a=u.b COLLATE Latin1_General_100_BIN2",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "a",
+                "type": "NVarChar",
+                "length": 20,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 2,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 0,
+          "curCmd": 193
+        }
+      ]
+    }
+  ]
+}

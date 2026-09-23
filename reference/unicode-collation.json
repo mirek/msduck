@@ -1,0 +1,6143 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        97
+      ],
+      "right": [
+        65
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x4100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        32
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x61002000 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [],
+      "right": [
+        32
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x2000 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        9
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x61000900 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x61000000 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        32,
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x610020000000 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        160
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x6100a000 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        8203
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x61000b20 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [],
+      "right": [
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x0000 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        0
+      ],
+      "right": [
+        32
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x0000 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x2000 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        97,
+        0,
+        98
+      ],
+      "right": [
+        97,
+        98
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x610000006200 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x61006200 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        97
+      ],
+      "right": [
+        225
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0xe100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        233
+      ],
+      "right": [
+        101,
+        769
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xe900 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x65000103 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        223
+      ],
+      "right": [
+        115,
+        115
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xdf00 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x73007300 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        230
+      ],
+      "right": [
+        97,
+        101
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xe600 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x61006500 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        339
+      ],
+      "right": [
+        111,
+        101
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x5301 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x6f006500 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        304
+      ],
+      "right": [
+        105
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3001 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x6900 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        305
+      ],
+      "right": [
+        73
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3101 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x4900 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        931
+      ],
+      "right": [
+        962
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xa303 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0xc203 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        65313
+      ],
+      "right": [
+        65
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x21ff AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x4100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        12459
+      ],
+      "right": [
+        12363
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xab30 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x4b30 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        55358
+      ],
+      "right": [
+        56710
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x86dd AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        55358,
+        56710
+      ],
+      "right": [
+        57344
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed886dd AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x00e0 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        55358,
+        56710
+      ],
+      "right": [
+        55358,
+        56711
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed886dd AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x3ed887dd AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        55358
+      ],
+      "right": [
+        55358,
+        56710
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x3ed886dd AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        55358,
+        32
+      ],
+      "right": [
+        55358
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed82000 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        55358
+      ],
+      "right": [
+        55359
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x3fd8 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        56710
+      ],
+      "right": [
+        56711
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x86dd AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x87dd AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        65533
+      ],
+      "right": [
+        55358
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xfdff AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        1
+      ],
+      "right": [
+        2
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x0100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x0200 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [],
+      "right": [
+        9
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x0900 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [],
+      "right": [
+        31
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x1f00 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [],
+      "right": [
+        33
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x2100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        97,
+        32,
+        32,
+        33
+      ],
+      "right": [
+        97,
+        32,
+        33
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100200020002100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x610020002100 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_BIN2",
+      "left": [
+        97,
+        32,
+        32,
+        0
+      ],
+      "right": [
+        97,
+        32,
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100200020000000 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS l,CAST(0x610020000000 AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2 AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        65
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x4100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        32
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x61002000 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [],
+      "right": [
+        32
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x2000 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        9
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x61000900 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x61000000 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        32,
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x610020000000 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        160
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x6100a000 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        8203
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x61000b20 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [],
+      "right": [
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x0000 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        0
+      ],
+      "right": [
+        32
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x0000 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x2000 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        97,
+        0,
+        98
+      ],
+      "right": [
+        97,
+        98
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x610000006200 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x61006200 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        225
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0xe100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        233
+      ],
+      "right": [
+        101,
+        769
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xe900 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x65000103 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        223
+      ],
+      "right": [
+        115,
+        115
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xdf00 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x73007300 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        230
+      ],
+      "right": [
+        97,
+        101
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xe600 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x61006500 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        339
+      ],
+      "right": [
+        111,
+        101
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x5301 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x6f006500 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        304
+      ],
+      "right": [
+        105
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3001 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x6900 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        305
+      ],
+      "right": [
+        73
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3101 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x4900 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        931
+      ],
+      "right": [
+        962
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xa303 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0xc203 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        65313
+      ],
+      "right": [
+        65
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x21ff AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x4100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        12459
+      ],
+      "right": [
+        12363
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xab30 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x4b30 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        55358
+      ],
+      "right": [
+        56710
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed8 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x86dd AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        55358,
+        56710
+      ],
+      "right": [
+        57344
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed886dd AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x00e0 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        55358,
+        56710
+      ],
+      "right": [
+        55358,
+        56711
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed886dd AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x3ed887dd AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        55358
+      ],
+      "right": [
+        55358,
+        56710
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed8 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x3ed886dd AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        55358,
+        32
+      ],
+      "right": [
+        55358
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed82000 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x3ed8 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        55358
+      ],
+      "right": [
+        55359
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed8 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x3fd8 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        56710
+      ],
+      "right": [
+        56711
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x86dd AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x87dd AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        65533
+      ],
+      "right": [
+        55358
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xfdff AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x3ed8 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        1
+      ],
+      "right": [
+        2
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x0100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x0200 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [],
+      "right": [
+        9
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x0900 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [],
+      "right": [
+        31
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x1f00 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [],
+      "right": [
+        33
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x2100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        97,
+        32,
+        32,
+        33
+      ],
+      "right": [
+        97,
+        32,
+        33
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100200020002100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x610020002100 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "SQL_Latin1_General_CP1_CI_AS",
+      "left": [
+        97,
+        32,
+        32,
+        0
+      ],
+      "right": [
+        97,
+        32,
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100200020000000 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS l,CAST(0x610020000000 AS NVARCHAR(100)) COLLATE SQL_Latin1_General_CP1_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        65
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x4100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        32
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x61002000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [],
+      "right": [
+        32
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x2000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        9
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x61000900 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x61000000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        32,
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x610020000000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        160
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x6100a000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        8203
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x61000b20 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [],
+      "right": [
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x0000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        0
+      ],
+      "right": [
+        32
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x0000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x2000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        97,
+        0,
+        98
+      ],
+      "right": [
+        97,
+        98
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x610000006200 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x61006200 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        225
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0xe100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        233
+      ],
+      "right": [
+        101,
+        769
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xe900 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x65000103 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        223
+      ],
+      "right": [
+        115,
+        115
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xdf00 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x73007300 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        230
+      ],
+      "right": [
+        97,
+        101
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xe600 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x61006500 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        339
+      ],
+      "right": [
+        111,
+        101
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x5301 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x6f006500 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        304
+      ],
+      "right": [
+        105
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3001 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x6900 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        305
+      ],
+      "right": [
+        73
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3101 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x4900 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        931
+      ],
+      "right": [
+        962
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xa303 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0xc203 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        65313
+      ],
+      "right": [
+        65
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x21ff AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x4100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        12459
+      ],
+      "right": [
+        12363
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xab30 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x4b30 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        55358
+      ],
+      "right": [
+        56710
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x86dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        55358,
+        56710
+      ],
+      "right": [
+        57344
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed886dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x00e0 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        55358,
+        56710
+      ],
+      "right": [
+        55358,
+        56711
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed886dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x3ed887dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        55358
+      ],
+      "right": [
+        55358,
+        56710
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x3ed886dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        55358,
+        32
+      ],
+      "right": [
+        55358
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed82000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        55358
+      ],
+      "right": [
+        55359
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x3fd8 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        56710
+      ],
+      "right": [
+        56711
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x86dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x87dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        65533
+      ],
+      "right": [
+        55358
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xfdff AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        1
+      ],
+      "right": [
+        2
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x0100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x0200 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [],
+      "right": [
+        9
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x0900 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [],
+      "right": [
+        31
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x1f00 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [],
+      "right": [
+        33
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x2100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        97,
+        32,
+        32,
+        33
+      ],
+      "right": [
+        97,
+        32,
+        33
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100200020002100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x610020002100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CI_AS",
+      "left": [
+        97,
+        32,
+        32,
+        0
+      ],
+      "right": [
+        97,
+        32,
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100200020000000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS l,CAST(0x610020000000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CI_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        65
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x4100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        32
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x61002000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [],
+      "right": [
+        32
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x2000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        9
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x61000900 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x61000000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        32,
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x610020000000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        160
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x6100a000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        97,
+        8203
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x61000b20 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [],
+      "right": [
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x0000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        0
+      ],
+      "right": [
+        32
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x0000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x2000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        97,
+        0,
+        98
+      ],
+      "right": [
+        97,
+        98
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x610000006200 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x61006200 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        97
+      ],
+      "right": [
+        225
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0xe100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        233
+      ],
+      "right": [
+        101,
+        769
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xe900 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x65000103 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        223
+      ],
+      "right": [
+        115,
+        115
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xdf00 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x73007300 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        230
+      ],
+      "right": [
+        97,
+        101
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xe600 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x61006500 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        339
+      ],
+      "right": [
+        111,
+        101
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x5301 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x6f006500 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        304
+      ],
+      "right": [
+        105
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3001 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x6900 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        305
+      ],
+      "right": [
+        73
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3101 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x4900 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        931
+      ],
+      "right": [
+        962
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xa303 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0xc203 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        65313
+      ],
+      "right": [
+        65
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x21ff AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x4100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        12459
+      ],
+      "right": [
+        12363
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xab30 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x4b30 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        55358
+      ],
+      "right": [
+        56710
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x86dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        55358,
+        56710
+      ],
+      "right": [
+        57344
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed886dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x00e0 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        55358,
+        56710
+      ],
+      "right": [
+        55358,
+        56711
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed886dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x3ed887dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        55358
+      ],
+      "right": [
+        55358,
+        56710
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x3ed886dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        55358,
+        32
+      ],
+      "right": [
+        55358
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed82000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        55358
+      ],
+      "right": [
+        55359
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x3fd8 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        56710
+      ],
+      "right": [
+        56711
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x86dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x87dd AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        65533
+      ],
+      "right": [
+        55358
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0xfdff AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x3ed8 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        1
+      ],
+      "right": [
+        2
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x0100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x0200 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [],
+      "right": [
+        9
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x0900 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [],
+      "right": [
+        31
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x1f00 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [],
+      "right": [
+        33
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x2100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        97,
+        32,
+        32,
+        33
+      ],
+      "right": [
+        97,
+        32,
+        33
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100200020002100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x610020002100 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "collation": "Latin1_General_100_CS_AS",
+      "left": [
+        97,
+        32,
+        32,
+        0
+      ],
+      "right": [
+        97,
+        32,
+        0
+      ],
+      "query": "SELECT CASE WHEN l=r THEN 0 WHEN l<r THEN -1 WHEN l>r THEN 1 ELSE NULL END AS ordering FROM (SELECT CAST(0x6100200020000000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS l,CAST(0x610020000000 AS NVARCHAR(100)) COLLATE Latin1_General_100_CS_AS AS r) p",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "ordering",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    }
+  ]
+}

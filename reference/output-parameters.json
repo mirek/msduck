@@ -1,0 +1,1472 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE output_ref(id INT NOT NULL PRIMARY KEY,n INT NULL,t NVARCHAR(4) NULL); INSERT INTO output_ref VALUES(10,1,N'one'),(20,2,N'two'); CREATE TABLE output_sink(a INT NOT NULL,b INT NULL)",
+      "query": "DECLARE @p NVARCHAR(4)=N'🦆'; INSERT INTO output_ref(id,n,t) OUTPUT inserted.id,@p AS p,LEN(@p) AS units VALUES(30,3,N'tri')",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "p",
+                "type": "NVarChar",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "units",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                30,
+                "🦆",
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 195
+        }
+      ],
+      "readback": "SELECT id,n,t FROM output_ref ORDER BY id; SELECT a,b FROM output_sink ORDER BY a,b",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "t",
+                "type": "NVarChar",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                10,
+                1,
+                "one"
+              ],
+              [
+                20,
+                2,
+                "two"
+              ],
+              [
+                30,
+                3,
+                "tri"
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "a",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "b",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 3,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE output_ref(id INT NOT NULL PRIMARY KEY,n INT NULL,t NVARCHAR(4) NULL); INSERT INTO output_ref VALUES(10,1,N'one'),(20,2,N'two'); CREATE TABLE output_sink(a INT NOT NULL,b INT NULL)",
+      "query": "DECLARE @p NVARCHAR(4)=NULL; INSERT INTO output_ref(id,n,t) OUTPUT inserted.id,@p AS p SELECT 30,3,N'tri' WHERE 1=0",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "p",
+                "type": "NVarChar",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 0,
+          "curCmd": 195
+        }
+      ],
+      "readback": "SELECT id,n,t FROM output_ref ORDER BY id; SELECT a,b FROM output_sink ORDER BY a,b",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "t",
+                "type": "NVarChar",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                10,
+                1,
+                "one"
+              ],
+              [
+                20,
+                2,
+                "two"
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "a",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "b",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE output_ref(id INT NOT NULL PRIMARY KEY,n INT NULL,t NVARCHAR(4) NULL); INSERT INTO output_ref VALUES(10,1,N'one'),(20,2,N'two'); CREATE TABLE output_sink(a INT NOT NULL,b INT NULL)",
+      "query": "DECLARE @delta INT=7; UPDATE output_ref SET n=n+@delta OUTPUT inserted.id,inserted.n+@delta AS result WHERE id=10",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                10,
+                15
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 197
+        }
+      ],
+      "readback": "SELECT id,n,t FROM output_ref ORDER BY id; SELECT a,b FROM output_sink ORDER BY a,b",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "t",
+                "type": "NVarChar",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                10,
+                8,
+                "one"
+              ],
+              [
+                20,
+                2,
+                "two"
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "a",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "b",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE output_ref(id INT NOT NULL PRIMARY KEY,n INT NULL,t NVARCHAR(4) NULL); INSERT INTO output_ref VALUES(10,1,N'one'),(20,2,N'two'); CREATE TABLE output_sink(a INT NOT NULL,b INT NULL)",
+      "query": "DECLARE @p VARCHAR(8)='O''Reilly'; DELETE FROM output_ref OUTPUT deleted.id,@p AS p WHERE id=10",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "p",
+                "type": "VarChar",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                10,
+                "O'Reilly"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 196
+        }
+      ],
+      "readback": "SELECT id,n,t FROM output_ref ORDER BY id; SELECT a,b FROM output_sink ORDER BY a,b",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "t",
+                "type": "NVarChar",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                20,
+                2,
+                "two"
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "a",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "b",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE output_ref(id INT NOT NULL PRIMARY KEY,n INT NULL,t NVARCHAR(4) NULL); INSERT INTO output_ref VALUES(10,1,N'one'),(20,2,N'two'); CREATE TABLE output_sink(a INT NOT NULL,b INT NULL)",
+      "query": "DECLARE @id INT=30; INSERT INTO output_ref(id,n,t) OUTPUT @id,inserted.n INTO output_sink(a,b) VALUES(@id,3,N'tri'); SELECT @@ROWCOUNT AS affected",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "affected",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 195
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ],
+      "readback": "SELECT id,n,t FROM output_ref ORDER BY id; SELECT a,b FROM output_sink ORDER BY a,b",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "t",
+                "type": "NVarChar",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                10,
+                1,
+                "one"
+              ],
+              [
+                20,
+                2,
+                "two"
+              ],
+              [
+                30,
+                3,
+                "tri"
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "a",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "b",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                30,
+                3
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 3,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE output_ref(id INT NOT NULL PRIMARY KEY,n INT NULL,t NVARCHAR(4) NULL); INSERT INTO output_ref VALUES(10,1,N'one'),(20,2,N'two'); CREATE TABLE output_sink(a INT NOT NULL,b INT NULL)",
+      "query": "DECLARE @p INT=7; INSERT INTO output_ref(id,n,t) OUTPUT inserted.id,@p INTO output_sink(a,b) VALUES(30,3,N'tri'); SET @p=8; INSERT INTO output_ref(id,n,t) OUTPUT inserted.id,@p INTO output_sink(a,b) VALUES(40,4,N'four')",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 195
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 195
+        }
+      ],
+      "readback": "SELECT id,n,t FROM output_ref ORDER BY id; SELECT a,b FROM output_sink ORDER BY a,b",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "t",
+                "type": "NVarChar",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                10,
+                1,
+                "one"
+              ],
+              [
+                20,
+                2,
+                "two"
+              ],
+              [
+                30,
+                3,
+                "tri"
+              ],
+              [
+                40,
+                4,
+                "four"
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "a",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "b",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                30,
+                7
+              ],
+              [
+                40,
+                8
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 6
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE output_ref(id INT NOT NULL PRIMARY KEY,n INT NULL,t NVARCHAR(4) NULL); INSERT INTO output_ref VALUES(10,1,N'one'),(20,2,N'two'); CREATE TABLE output_sink(a INT NOT NULL,b INT NULL)",
+      "query": "DECLARE @p VARBINARY(4)=0x0102; DELETE FROM output_ref OUTPUT deleted.id,@p AS p WHERE id=10",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "p",
+                "type": "VarBinary",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                10,
+                {
+                  "kind": "binary",
+                  "value": "0102"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 196
+        }
+      ],
+      "readback": "SELECT id,n,t FROM output_ref ORDER BY id; SELECT a,b FROM output_sink ORDER BY a,b",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "t",
+                "type": "NVarChar",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                20,
+                2,
+                "two"
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "a",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "b",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE output_ref(id INT NOT NULL PRIMARY KEY,n INT NULL,t NVARCHAR(4) NULL); INSERT INTO output_ref VALUES(10,1,N'one'),(20,2,N'two'); CREATE TABLE output_sink(a INT NOT NULL,b INT NULL)",
+      "query": "DECLARE @p DECIMAL(19,4)=12.3456; UPDATE output_ref SET n=n+1 OUTPUT inserted.id,@p AS p WHERE id=10",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "p",
+                "type": "DecimalN",
+                "length": 17,
+                "precision": 19,
+                "scale": 4,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                10,
+                12.3456
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 197
+        }
+      ],
+      "readback": "SELECT id,n,t FROM output_ref ORDER BY id; SELECT a,b FROM output_sink ORDER BY a,b",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "t",
+                "type": "NVarChar",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                10,
+                2,
+                "one"
+              ],
+              [
+                20,
+                2,
+                "two"
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "a",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "b",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    }
+  ]
+}

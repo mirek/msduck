@@ -1,0 +1,819 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "query": "RAISERROR(N'message',0,1); SELECT @@ERROR AS e,@@ROWCOUNT AS n,42 AS after_error",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "after_error",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0,
+                42
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 50000,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'message',9,2); SELECT @@ERROR AS e,@@ROWCOUNT AS n,42 AS after_error",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "after_error",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0,
+                42
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 50000,
+            "state": 2,
+            "class": 9,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'message',10,3); SELECT @@ERROR AS e,@@ROWCOUNT AS n,42 AS after_error",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "after_error",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0,
+                42
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 50000,
+            "state": 3,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'message',11,4); SELECT @@ERROR AS e,@@ROWCOUNT AS n,42 AS after_error",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "after_error",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000,
+                0,
+                42
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 4,
+            "class": 11,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'message',16,5); SELECT @@ERROR AS e,@@ROWCOUNT AS n,42 AS after_error",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "after_error",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000,
+                0,
+                42
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 5,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'message',-1,-1); SELECT @@ERROR AS e,@@ROWCOUNT AS n,42 AS after_error",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "after_error",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0,
+                42
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 50000,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'message',16,256); SELECT @@ERROR AS e,@@ROWCOUNT AS n,42 AS after_error",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "after_error",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000,
+                0,
+                42
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 0,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'message',0,6) WITH SETERROR; SELECT @@ERROR AS e,@@ROWCOUNT AS n,42 AS after_error",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "after_error",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000,
+                0,
+                42
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 50000,
+            "state": 6,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "BEGIN TRY RAISERROR(N'message',16,7); SELECT 1 AS skipped; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,ERROR_SEVERITY() AS severity,ERROR_STATE() AS state,ERROR_MESSAGE() AS message; END CATCH",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "severity",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "state",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "message",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                50000,
+                16,
+                7,
+                "message"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'%s:%d:%%',16,1,N'duck',42)",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "duck:42:%"
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "RAISERROR(N'%08x|%+6d|%.3s',16,1,255,12,N'duck')",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "000000ff|   +12|duc"
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "RAISERROR(N'%s:%d',16,1,NULL,NULL)",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "(null):(null)"
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "RAISERROR(N'%s:%d',16,1,N'duck')",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "duck:(null)"
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "RAISERROR(50001,16,1)",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 18054,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Error 50001, severity 16, state 1 was raised, but no message with that error number was found in sys.messages. If error is larger than 50000, make sure the user-defined message is added using sp_addmessage."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    }
+  ]
+}

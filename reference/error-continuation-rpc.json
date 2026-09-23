@@ -1,0 +1,279 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "doneInProc",
+        "rowCount": 1,
+        "more": true
+      },
+      {
+        "kind": "doneProc",
+        "rowCount": null,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": 0,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "query": "SELECT 1/0 AS bad; SELECT @@ERROR AS last_error,@@ROWCOUNT AS affected,42 AS after_error",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "bad",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          },
+          {
+            "columns": [
+              {
+                "name": "last_error",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "affected",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "after_error",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                8134,
+                0,
+                42
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8134,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Divide by zero error encountered."
+          }
+        ],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "SELECT 1/0 AS bad",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "bad",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8134,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Divide by zero error encountered."
+          }
+        ],
+        "info": [],
+        "returnStatus": 8134,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "SELECT 1/0 AS first_error; SELECT 2/0 AS second_error; SELECT 42 AS after_error",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "first_error",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          },
+          {
+            "columns": [
+              {
+                "name": "second_error",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          },
+          {
+            "columns": [
+              {
+                "name": "after_error",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8134,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Divide by zero error encountered."
+          },
+          {
+            "number": 8134,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Divide by zero error encountered."
+          }
+        ],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    }
+  ]
+}
