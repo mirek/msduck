@@ -25,7 +25,9 @@ node scripts/generate-case-maps.mjs /tmp/msduck-unicode-case.json --check
 
 The generator validates full BMP coverage statistics, ordered bounded delta
 rows, table-family equality, all 54 retained string probes and unchanged
-surrogates before writing. The generated section records the input SHA-256.
+surrogates before writing. The generated section records the input SHA-256. Core regressions also hash every
+mapped BMP unit in both directions against independently calculated reference
+checksums, covering 262,144 mapping results across the two table families.
 Keep isolated surrogates intact: the capture must be read as UTF-16-preserving
 JSON, as Node does. Rust UTF-8-only JSON strings cannot represent those probes.
 

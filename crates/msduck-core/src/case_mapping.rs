@@ -3221,4 +3221,31 @@ mod tests {
             assert!(table.iter().all(|r| r[0] != r[1] || r[0] != r[2]));
         }
     }
+    #[test]
+    fn complete_bmp_outputs_match_retained_reference_checksums() {
+        // FNV-1a of every mapped UTF-16LE unit in input order 0..=65535,
+        // calculated independently from the retained SQL Server capture.
+        for (family, direction, expected) in [
+            (Family::SqlLatin1, Direction::Lower, 0xcd5fbf6953a2ab33u64),
+            (Family::SqlLatin1, Direction::Upper, 0x364e28393585964u64),
+            (
+                Family::Latin1General100,
+                Direction::Lower,
+                0xd760f51612b8860u64,
+            ),
+            (
+                Family::Latin1General100,
+                Direction::Upper,
+                0x4312a6b1d717a72fu64,
+            ),
+        ] {
+            let mut hash = 14695981039346656037u64;
+            for unit in 0..=u16::MAX {
+                for byte in family.map_unit(direction, unit).to_le_bytes() {
+                    hash = (hash ^ u64::from(byte)).wrapping_mul(1099511628211);
+                }
+            }
+            assert_eq!(hash, expected, "{family:?} {direction:?}");
+        }
+    }
 }
