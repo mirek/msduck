@@ -178,6 +178,23 @@
       "dependencies": [],
       "issue": 20,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PGq4j"
+    },
+    {
+      "id": "native-concat-v1",
+      "title": "Implement bounded native Unicode and CP1252 concatenation primitives",
+      "state": "ready",
+      "authorization": "Direct owner instruction to implement SQL Server compatibility; first-party execution primitives following captured overflow evidence.",
+      "scope": [
+        "src/unicode_carrier.rs"
+      ],
+      "acceptance": [
+        "Register native binary concatenation adapters using deterministic core prefix helpers, explicit bounded/MAX capacity, NULL propagation and checked allocation limits.",
+        "Preserve raw UTF-16 and CP1252 byte truncation; test intermediate truncation, MAX placement, vector validity and single evaluation.",
+        "Run formatting, strict Clippy and focused native tests; record that translator binding and public integration remain separate work."
+      ],
+      "dependencies": [],
+      "issue": 22,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGrTx"
     }
   ]
 }
