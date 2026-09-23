@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 pub mod bin2;
 pub mod bounded_aggregate;
+pub mod case_mapping;
 pub mod catalog;
 pub mod character;
 pub mod collation;
