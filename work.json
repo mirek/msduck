@@ -273,6 +273,22 @@
       "dependencies": [],
       "issue": 30,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PGvqV"
+    },
+    {
+      "id": "space-capacity-test-v1",
+      "title": "Correct retained SPACE pure result-shape expectation",
+      "state": "ready",
+      "authorization": "Direct owner implementation goal; new SQL Server capture contradicts old SPACE(0) zero-capacity expectation, discovered by full deterministic tests. Companion scope to space-capacity-v1.",
+      "scope": [
+        "crates/msduck-sql/tests/result_shape.rs"
+      ],
+      "acceptance": [
+        "Change only the SPACE(0) expectation to captured VARCHAR(1), retaining independent tests for other result shapes.",
+        "Run the complete deterministic test suite alongside space-capacity-v1."
+      ],
+      "dependencies": [],
+      "issue": 31,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGv9m"
     }
   ]
 }
