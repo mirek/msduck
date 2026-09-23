@@ -85,6 +85,20 @@ pub enum Layout {
     Utf16,
 }
 
+/// Physical type for newly declared Unicode columns; logical widths stay in
+/// the catalog and are enforced by assignment conversion.
+pub fn unicode_storage_type(kind: &DataType) -> Option<DataType> {
+    spec(kind).filter(|s| s.unicode)?;
+    Some(DataType::Struct(
+        vec![StructField {
+            field_name: Some(Ident::new("__msduck_utf16le")),
+            field_type: DataType::Blob(None),
+            options: None,
+        }],
+        StructBracketKind::Parentheses,
+    ))
+}
+
 pub fn convert_with_layout(value: Expr, kind: &DataType, layout: Layout) -> Option<Expr> {
     let spec = spec(kind)?;
     if matches!(layout, Layout::Utf16) {
@@ -122,13 +136,17 @@ pub fn column(column: &mut ColumnDef) -> Result<(), String> {
         return Ok(());
     };
     validate(spec).map_err(str::to_owned)?;
+    let layout = if spec.unicode {
+        Layout::Utf16
+    } else {
+        Layout::Utf8
+    };
     for option in &mut column.options {
         if let ColumnOption::Default(value) = &mut option.option {
-            *value = convert(value.clone(), &column.data_type).unwrap();
+            *value = convert_with_layout(value.clone(), &column.data_type, layout).unwrap();
         }
     }
-    // CHAR and NCHAR also use VARCHAR storage; the catalog retains the declaration.
-    column.data_type = DataType::Varchar(None);
+    column.data_type = unicode_storage_type(&column.data_type).unwrap_or(DataType::Varchar(None));
     Ok(())
 }
 /// Constant installation for ALTER ADD avoids DuckDB's outstanding-update
@@ -149,6 +167,25 @@ pub fn constant_default(value: &Expr, kind: &DataType) -> Result<Option<Expr>, S
         _ => return Ok(None),
     };
     let value = store(text, spec).map_err(|e| e.to_string())?;
+    if let Some(data_type) = unicode_storage_type(kind) {
+        let hex = value
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        return Ok(Some(Expr::Cast {
+            kind: CastKind::Cast,
+            expr: Box::new(crate::expr::unary_function(
+                "row",
+                crate::expr::unary_function(
+                    "from_hex",
+                    Expr::Value(Value::SingleQuotedString(hex).into()),
+                ),
+            )),
+            data_type,
+            format: None,
+        }));
+    }
     Ok(Some(Expr::Value(Value::SingleQuotedString(value).into())))
 }
 fn validate(spec: Spec) -> Result<(), &'static str> {

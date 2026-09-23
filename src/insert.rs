@@ -160,6 +160,57 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
             }
         }
     }
+    // Bind each explicit source arm to the target's physical Unicode domain
+    // before DuckDB tries to unify VALUES/UNION rows containing both VARCHAR
+    // literals and raw UTF-16 carriers. Width validation remains target-side.
+    fn unicode_sources(body: &mut SetExpr, unicode: &[bool]) {
+        fn pack(value: &mut Expr) {
+            *value = crate::engine::unary_function("__msduck_carrier_input", value.clone());
+        }
+        match body {
+            SetExpr::Values(values) => {
+                for row in &mut values.rows {
+                    for (value, unicode) in row.iter_mut().zip(unicode) {
+                        if *unicode {
+                            pack(value);
+                        }
+                    }
+                }
+            }
+            SetExpr::Select(select)
+                if select.projection.len() == unicode.len()
+                    && select.projection.iter().all(|item| {
+                        matches!(
+                            item,
+                            SelectItem::UnnamedExpr(_) | SelectItem::ExprWithAlias { .. }
+                        )
+                    }) =>
+            {
+                for (item, unicode) in select.projection.iter_mut().zip(unicode) {
+                    if *unicode {
+                        match item {
+                            SelectItem::UnnamedExpr(value)
+                            | SelectItem::ExprWithAlias { expr: value, .. } => pack(value),
+                            _ => unreachable!(),
+                        }
+                    }
+                }
+            }
+            SetExpr::SetOperation { left, right, .. } => {
+                unicode_sources(left, unicode);
+                unicode_sources(right, unicode);
+            }
+            SetExpr::Query(query) => unicode_sources(&mut query.body, unicode),
+            _ => {}
+        }
+    }
+    unicode_sources(
+        &mut source.body,
+        &targets
+            .iter()
+            .map(|t| utf16.contains(&t.0.to_lowercase()))
+            .collect::<Vec<_>>(),
+    );
     // Describe the source without executing its rows. Binding the original
     // INSERT would apply DuckDB's rounding cast before our rewrite, rejecting
     // otherwise valid fractional values at integer limits.

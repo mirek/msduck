@@ -2679,7 +2679,12 @@ impl VisitorMut for Translator<'_> {
                     {
                         return ControlFlow::Break("invalid time scale".into());
                     }
-                    translate_type(data_type)?;
+                    if let Some(storage) = crate::character_storage::unicode_storage_type(data_type)
+                    {
+                        *data_type = storage;
+                    } else {
+                        translate_type(data_type)?;
+                    }
                 }
                 if let AlterTableOperation::AddColumn { column_def, .. } = operation {
                     msduck_sql::money_cast::column(column_def);

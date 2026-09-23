@@ -758,7 +758,10 @@ mod tests {
             assert_eq!(values[0], Value::Int(10));
             assert_eq!(values[1], Value::Int(110));
             assert_eq!(values[2], Value::Int(6));
-            assert_eq!(values[3], Value::Text("123.45".into()));
+            assert_eq!(
+                crate::unicode_carrier::units(&values[3]).unwrap(),
+                "123.45".encode_utf16().collect::<Vec<_>>()
+            );
             assert_eq!(values[8], Value::Int(9));
             assert_eq!(values[9], Value::Int(4));
             assert_eq!(db.query_row("SELECT CAST(m AS VARCHAR), CAST(d AS VARCHAR), epoch_ns(tm), CAST(r AS DOUBLE) FROM typed_stage", [], |r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,i64>(2)?,r.get::<_,f64>(3)?))).unwrap(), ("123.4550".into(),"3.46".into(),45_296_130_000_000,1.2345678806304932));

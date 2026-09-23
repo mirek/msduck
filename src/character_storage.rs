@@ -100,7 +100,7 @@ mod tests {
             );
             let rows = session
                 .db
-                .prepare("SELECT v,n FROM dbo.saved_chars ORDER BY v")
+                .prepare("SELECT v,hex(n.__msduck_utf16le) FROM dbo.saved_chars ORDER BY v")
                 .unwrap()
                 .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
                 .unwrap()
@@ -108,7 +108,10 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 rows,
-                vec![("abc".into(), "x  ".into()), ("xy".into(), "x  ".into())]
+                vec![
+                    ("abc".into(), "780020002000".into()),
+                    ("xy".into(), "780020002000".into())
+                ]
             );
         }
         std::fs::remove_file(path).unwrap();

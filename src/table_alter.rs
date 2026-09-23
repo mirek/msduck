@@ -168,10 +168,11 @@ pub fn execute_declared(
                         ..
                     } = &mut operation
                 {
-                    *using = Some(crate::assignment::convert(
+                    *using = Some(crate::assignment::convert_for_storage(
                         Expr::Identifier(column_name.clone()),
                         kind,
                         false,
+                        crate::character_storage::unicode_storage_type(kind).is_some(),
                     ));
                 }
                 commands.push(format!("ALTER TABLE {} {operation}", table.name));
