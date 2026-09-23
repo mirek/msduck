@@ -9061,3 +9061,13 @@ test('Unicode casing binds columns scopes parameters and surrounding expressions
   assert.deepEqual(await p.run({s:'A🦆Z'}), [['A🦆Z','A🦆Z',8]])
   await p.release()
 })
+
+test('Unicode casing binds standalone initializers assignments and prepared expressions', { timeout: 30000 }, async t => {
+  const c = await start(t)
+  assert.deepEqual((await query(c, "DECLARE @s NVARCHAR(8)=UPPER(N'ƀ'); SELECT @s")).rows, [['ƀ']])
+  assert.deepEqual((await query(c, "DECLARE @s NVARCHAR(8)=UPPER(N'ƀ' COLLATE Latin1_General_100_CI_AS); SELECT @s; SET @s=LOWER(@s); SELECT @s")).rows, [['Ƀ'],['Ƀ']])
+  const p = await prepare(c, 'DECLARE @v NVARCHAR(8)=UPPER(@s); SELECT @v; SET @v=UPPER(@s COLLATE Latin1_General_100_CI_AS); SELECT @v', [['s', TYPES.NVarChar, {length:8}]])
+  assert.deepEqual(await p.run({s:'ƀ'}), [['ƀ'],['Ƀ']])
+  assert.deepEqual(await p.run({s:null}), [[null],[null]])
+  await p.release()
+})

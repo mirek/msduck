@@ -486,6 +486,11 @@ impl Session {
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
             .map_err(anyhow::Error::msg)?;
+        crate::query_catalog::annotate_unicode_case_expression(
+            &self.db,
+            &mut expression,
+            parameters,
+        )?;
         crate::for_json::lower_nested(&self.db, &mut expression, parameters)?;
         let mut translator = Translator {
             parameters,
@@ -2068,6 +2073,11 @@ impl Session {
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
             .map_err(anyhow::Error::msg)?;
+        crate::query_catalog::annotate_unicode_case_expression(
+            &self.db,
+            &mut expression,
+            parameters,
+        )?;
         crate::for_json::lower_nested(&self.db, &mut expression, parameters)?;
         let mut translator = Translator {
             parameters,

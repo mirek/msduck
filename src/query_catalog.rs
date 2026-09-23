@@ -86,6 +86,50 @@ pub fn bind_query_with_parameters(
     Ok(fields)
 }
 
+fn contains_unicode_case<T: Visit>(node: &T) -> bool {
+    struct Find;
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
+            if matches!(expr, Expr::Function(f) if matches!(f.name.to_string().to_ascii_uppercase().as_str(), "LOWER" | "UPPER"))
+            {
+                return std::ops::ControlFlow::Break(());
+            }
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    Visit::visit(node, &mut Find).is_break()
+}
+
+/// Bind a standalone initializer or predicate with no surrounding row source.
+pub fn annotate_unicode_case_expression(
+    db: &Connection,
+    expression: &mut Expr,
+    parameters: &std::collections::HashMap<String, crate::parameter::Parameter>,
+) -> anyhow::Result<()> {
+    if !contains_unicode_case(expression) {
+        return Ok(());
+    }
+    // Bind standalone initializers/predicates in an empty row scope, preserving
+    // nested query scopes. Move the AST into a SELECT; never reparse user text.
+    let Statement::Query(mut query) = msduck_sql::batch::parse("SELECT 0")?.remove(0) else {
+        unreachable!("constant SELECT template")
+    };
+    let SetExpr::Select(select) = query.body.as_mut() else {
+        unreachable!("constant SELECT body")
+    };
+    select.projection = vec![SelectItem::UnnamedExpr(expression.clone())];
+    annotate_unicode_case(db, query.as_mut(), parameters)?;
+    let SetExpr::Select(select) = query.body.as_mut() else {
+        unreachable!("retained SELECT body")
+    };
+    let SelectItem::UnnamedExpr(bound) = select.projection.remove(0) else {
+        unreachable!("retained scalar projection")
+    };
+    *expression = bound;
+    Ok(())
+}
+
 /// Annotate complete query scopes after logical metadata acquisition and before
 /// physical translation. Nested queries are covered by the outer query's plan.
 pub fn annotate_unicode_case<T: Visit + VisitMut>(
@@ -93,6 +137,9 @@ pub fn annotate_unicode_case<T: Visit + VisitMut>(
     node: &mut T,
     parameters: &std::collections::HashMap<String, crate::parameter::Parameter>,
 ) -> anyhow::Result<()> {
+    if !contains_unicode_case(node) {
+        return Ok(());
+    }
     let catalog = snapshot(db, node)?;
     let mut scope = Scope::default();
     for (name, parameter) in parameters {
