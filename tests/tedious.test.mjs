@@ -2101,7 +2101,7 @@ test('SPACE projections retain bounded VARCHAR metadata and short value framing'
   const c = await start(t)
   const literal = await query(c, "SELECT SPACE(3) AS spaces,42 AS n,(SPACE(0)) AS empty,SPACE(9000) AS capped,N'🦆' AS unicode")
   assert.deepEqual(literal.rows, [['   ',42,'',' '.repeat(8000),'🦆']])
-  for (const [index,width] of [[0,3],[2,0],[3,8000]]) {
+  for (const [index,width] of [[0,3],[2,1],[3,8000]]) {
     assert.equal(literal.columns[0][index].type.id, TYPES.VarChar.id)
     assert.equal(literal.columns[0][index].dataLength, width)
   }
@@ -2208,8 +2208,8 @@ test('logical expressions retain known character result family and maximum width
 test('ISNULL preserves known character widths with replacement truncation and padding', { timeout: 20000 }, async t => {
   const c = await start(t)
   const result = await query(c, 'SELECT ISNULL(CHAR(NULL),SPACE(5)),ISNULL(CHAR(NULL),SPACE(0)),ISNULL(CHAR(NULL),CHAR(128)),ISNULL(NULL,SPACE(4)),ISNULL(CASE WHEN 1=0 THEN SPACE(2) END,SPACE(5)),ISNULL(CASE WHEN 1=0 THEN SPACE(0) END,CHAR(65)),ISNULL(CHAR(NULL),NULL)')
-  assert.deepEqual(result.rows, [[' ',' ','€','    ','  ','',null]])
-  assert.deepEqual(result.columns[0].map(x => [x.type.id,x.dataLength]), [[TYPES.Char.id,1],[TYPES.Char.id,1],[TYPES.Char.id,1],[TYPES.VarChar.id,4],[TYPES.VarChar.id,2],[TYPES.VarChar.id,0],[TYPES.Char.id,1]])
+  assert.deepEqual(result.rows, [[' ',' ','€','    ','  ','A',null]])
+  assert.deepEqual(result.columns[0].map(x => [x.type.id,x.dataLength]), [[TYPES.Char.id,1],[TYPES.Char.id,1],[TYPES.Char.id,1],[TYPES.VarChar.id,4],[TYPES.VarChar.id,2],[TYPES.VarChar.id,1],[TYPES.Char.id,1]])
   const p = await prepare(c, 'SELECT ISNULL(CHAR(@code),SPACE(3)),ISNULL(IIF(@yes=1,SPACE(2),NULL),SPACE(5))', [['code',TYPES.Int],['yes',TYPES.Int]])
   assert.deepEqual(await p.run({code:128,yes:1}), [['€','  ']])
   assert.deepEqual(await p.run({code:null,yes:0}), [[' ','  ']])

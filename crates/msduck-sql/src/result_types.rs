@@ -7,7 +7,7 @@ use msduck_core::{
 use sqlparser::ast::*;
 
 /// Partial expression-result metadata, distinct from validated column declarations.
-/// A bounded result capacity can be zero (for example SPACE(0)); MAX is explicit.
+/// A bounded result capacity can be zero; SPACE itself has a minimum of one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ResultType {
     Character { family: Family, length: Length },
@@ -440,7 +440,11 @@ fn expression(expr: &Expr) -> Descriptor {
             {
                 return Descriptor::Known(ResultType::character(
                     Family::Varchar,
-                    Length::Bounded(literal_count(count).unwrap_or(8000)),
+                    Length::Bounded(
+                        literal_count(count)
+                            .map(|n| n.clamp(1, 8000) as u16)
+                            .unwrap_or(8000),
+                    ),
                 ));
             }
             Descriptor::Unknown
@@ -449,15 +453,19 @@ fn expression(expr: &Expr) -> Descriptor {
     }
 }
 
-fn literal_count(expr: &Expr) -> Option<u16> {
+fn literal_count(expr: &Expr) -> Option<i64> {
     match expr {
         Expr::Nested(expr)
         | Expr::UnaryOp {
             op: UnaryOperator::Plus,
             expr,
         } => literal_count(expr),
+        Expr::UnaryOp {
+            op: UnaryOperator::Minus,
+            expr,
+        } => literal_count(expr)?.checked_neg(),
         Expr::Value(value) => match &value.value {
-            Value::Number(n, _) => n.parse::<u64>().ok().map(|n| n.min(8000) as u16),
+            Value::Number(n, _) => n.parse::<i64>().ok(),
             _ => None,
         },
         _ => None,
@@ -631,6 +639,32 @@ pub fn lower_fixed_sets<T: VisitMut>(value: &mut T) {
 #[cfg(test)]
 mod conditional_declaration_tests {
     use super::*;
+    #[test]
+    fn space_capacities_match_reference_without_folding_decimal_values() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../reference/space-capacity.json")).unwrap();
+        for case in fixture["results"].as_array().unwrap() {
+            let stmt = crate::batch::parse(case["query"].as_str().unwrap())
+                .unwrap()
+                .remove(0);
+            let actual = projection(&stmt);
+            let columns = case["reference"]["sets"][0]["columns"].as_array().unwrap();
+            assert_eq!(actual.len(), columns.len());
+            for (actual, reference) in actual.into_iter().zip(columns) {
+                if reference["type"] == "VarChar" {
+                    assert_eq!(
+                        actual,
+                        Some(ResultType::Character {
+                            family: Family::Varchar,
+                            length: Length::Bounded(reference["length"].as_u64().unwrap() as u16)
+                        }),
+                        "{}",
+                        case["query"]
+                    );
+                }
+            }
+        }
+    }
     #[test]
     fn choose_keeps_all_arm_widths_and_max_survives_literal_folding() {
         for (sql, family, length) in [

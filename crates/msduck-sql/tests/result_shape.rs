@@ -18,7 +18,7 @@ fn character(family: Family, length: Length) -> Option<ResultType> {
 #[test]
 fn result_shapes_preserve_zero_max_currency_and_time_without_wire_types() {
     for (expr, expected) in [
-        ("SPACE(0)", character(Family::Varchar, Length::Bounded(0))),
+        ("SPACE(0)", character(Family::Varchar, Length::Bounded(1))),
         (
             "SPACE(99999)",
             character(Family::Varchar, Length::Bounded(8000)),
