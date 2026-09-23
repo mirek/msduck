@@ -64,6 +64,7 @@ mod object_catalog;
 mod openjson;
 mod percentile_input;
 mod query_catalog;
+mod result_metadata;
 mod result_types;
 mod scalar;
 mod schema_catalog;

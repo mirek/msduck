@@ -326,3 +326,28 @@ One of its two DONE differences was the serialization mismatch; the other was
 the SELECT command code. Fresh reference captures prove both corrections.
 The upstream engine's `udf.ts` also distinguishes bounded arithmetic errors from
 conversion errors; the exact states here are established by the live probes.
+
+### Alignment of logical facts with physical results
+
+`result_metadata::Aligned` supplies one alignment decision for normal Arrow
+results, prepared error descriptors and logical-only preparation failures.
+Logical fields and declared overrides each describe a whole result. When either
+list has a different number of columns from the physical schema, none of that
+list is applied by position. The other, aligned list can still supply its facts.
+The existing physical-type fallback and unknown properties remain available;
+this does not infer SQL declarations from row values.
+
+Previously, names and collations checked column counts, but nullability/origin
+and type overrides could still be borrowed from an unrelated prefix. Native
+adapter regression tests reproduced a NULL failing fixed-scalar encoding and an
+error descriptor advertising fixed, non-null INT after receiving a one-field
+logical list for a two-column physical result. These are direct adapter
+reproductions, not a newly established public-SQL trigger.
+
+The regressions exercise shorter and longer field/override lists, both column
+orders, actual NULL rows, and complete descriptors with duplicate SQL labels,
+Unicode capacity and collation. Complete descriptors retain the same metadata
+for populated, empty and prepared-error paths. Logical-only error description
+continues to require a complete known shape; it does not emit partial metadata.
+This fixes positional alignment, not the broader duplicated declaration binding
+or all physical/wire type differences.
