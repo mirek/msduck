@@ -254,6 +254,25 @@
       "dependencies": [],
       "issue": 28,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PGvAp"
+    },
+    {
+      "id": "space-capacity-v1",
+      "title": "Match constant SPACE capacity and dependent truncation to SQL Server",
+      "state": "ready",
+      "authorization": "Direct owner compatibility goal; retained SQL Server captures reveal incorrect zero and negative SPACE declaration capacities.",
+      "scope": [
+        "crates/msduck-sql/src/result_types.rs",
+        "reference/space-capacity.json",
+        "scripts/capture-space-capacity.mjs"
+      ],
+      "acceptance": [
+        "Capture literal signs, zero/negative bounds and dependent ISNULL/concatenation behavior.",
+        "Correct deterministic SPACE declaration inference from reference evidence; preserve prepared value independence.",
+        "Add pure fixture-backed regressions, run strict checks, and replay observable metadata and dependent values. Existing client updates remain owned by concat-integration-v1."
+      ],
+      "dependencies": [],
+      "issue": 30,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGvqV"
     }
   ]
 }
