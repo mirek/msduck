@@ -43,6 +43,7 @@ mod query_error;
 mod raiserror;
 mod replicate;
 mod unicode_carrier;
+mod unicode_case;
 mod unicode_trim;
 pub(crate) use msduck_sql::delete;
 mod decimal_aggregate;

@@ -31,9 +31,14 @@ checksums, covering 262,144 mapping results across the two table families.
 Keep isolated surrogates intact: the capture must be read as UTF-16-preserving
 JSON, as Node does. Rust UTF-8-only JSON strings cannot represent those probes.
 
-This module does not yet implement the native DuckDB adapter or SQL binding for
-LOWER/UPPER. Those must select the collation from logical binding, preserve
-NULLs and single evaluation, enforce native resource bounds, and retain result
+The root `unicode_case` adapter registers four native functions for lower/upper
+and legacy/version-100 maps. Each registration receives an immutable typed
+family, so a nullable runtime selector cannot bypass validation. It accepts
+UTF-16 carriers, preserves NULLs, bounds cell/chunk output and evaluates the
+source once. Native regressions include malformed payloads and filtered vectors.
+
+SQL LOWER/UPPER binding is still required. It must select the collation from
+logical binding, choose the corresponding native function and preserve result
 metadata. These case maps are not collation comparison weights and must not be
 used as a substitute for the sequence-sensitive trim matching documented by
 `reference/trim-collation.json` (PR #38).
