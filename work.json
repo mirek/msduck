@@ -235,6 +235,25 @@
       "dependencies": [],
       "issue": 26,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PGsjK"
+    },
+    {
+      "id": "space-properties-v1",
+      "title": "Align SPACE result properties with SQL Server metadata",
+      "state": "ready",
+      "authorization": "Direct owner implementation goal; first-party prepared reference replay found missing computed-column metadata on SPACE.",
+      "scope": [
+        "crates/msduck-sql/src/result_properties.rs",
+        "reference/space-properties.json",
+        "scripts/capture-space-properties.mjs"
+      ],
+      "acceptance": [
+        "Capture SPACE metadata for prepared, constant, column and empty results using the pinned SQL Server container.",
+        "Correct deterministic result-property inference from captured evidence without inspecting runtime parameter values.",
+        "Add meaningful pure metadata regression tests; run deterministic tests and strict Clippy and replay prepared reference after rebuilding."
+      ],
+      "dependencies": [],
+      "issue": 28,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGvAp"
     }
   ]
 }
