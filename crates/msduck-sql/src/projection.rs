@@ -11,7 +11,8 @@ use std::collections::HashMap;
 mod collation_validation;
 mod constant_case;
 pub use collation_validation::{
-    annotate_unicode_case_inputs, lower_bin2_comparisons, validate_query_operations,
+    annotate_unicode_case_inputs, lower_bin2_comparisons, lower_unicode_binary_conversions,
+    validate_query_operations,
 };
 
 /// SQL result labels are independent of backend-generated expression names.

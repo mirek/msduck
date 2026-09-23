@@ -9071,3 +9071,22 @@ test('Unicode casing binds standalone initializers assignments and prepared expr
   assert.deepEqual(await p.run({s:null}), [[null],[null]])
   await p.release()
 })
+
+test('Unicode binary conversions preserve raw units byte bounds and scoped declarations', { timeout: 30000 }, async t => {
+  const c = await start(t)
+  const r = await query(c, "SELECT CAST(N'ab' AS VARBINARY(1)) AS a,CAST(N'ab' AS BINARY(5)) AS b,CONVERT(VARBINARY(MAX),N'🦆') AS c,CONVERT(VARBINARY(3),N'ab',0) AS d,TRY_CONVERT(VARBINARY(3),N'ab') AS e,CAST(N'' AS BINARY(3)) AS f")
+  assert.deepEqual(r.rows, [[Buffer.from('61','hex'),Buffer.from('6100620000','hex'),Buffer.from('3ed886dd','hex'),Buffer.from('610062','hex'),Buffer.from('610062','hex'),Buffer.from('000000','hex')]])
+  assert.deepEqual(r.columns[0].map(x=>[x.type.name,x.dataLength,x.flags]), [['VarBinary',1,33],['Binary',5,33],['VarBinary',65535,33],['VarBinary',3,33],['VarBinary',3,33],['Binary',3,33]])
+  assert.deepEqual((await query(c,"SELECT CONVERT(VARBINARY,N'a'),CONVERT(VARBINARY(MAX),CAST(NULL AS NVARCHAR(3)))")).rows, [[Buffer.from('6100','hex'),null]])
+  await query(c,"CREATE TABLE dbo.binary_unicode(s NVARCHAR(3));INSERT INTO dbo.binary_unicode VALUES(N'🦆x')")
+  for (const sql of [
+    'SELECT CONVERT(VARBINARY(MAX),s) FROM dbo.binary_unicode',
+    'WITH q(v) AS (SELECT s FROM dbo.binary_unicode) SELECT CONVERT(VARBINARY(MAX),v) FROM q',
+    'SELECT (SELECT CONVERT(VARBINARY(MAX),t.s)) FROM dbo.binary_unicode t',
+  ]) assert.deepEqual((await query(c,sql)).rows, [[Buffer.from('3ed886dd7800','hex')]],sql)
+  assert.deepEqual((await query(c,"SELECT CONVERT(VARBINARY(MAX),LEFT(N'🦆',1)),CAST(UPPER(N'ƀ' COLLATE Latin1_General_100_CI_AS) AS VARBINARY(MAX))")).rows, [[Buffer.from('3ed8','hex'),Buffer.from('4302','hex')]])
+  const p = await prepare(c,'SELECT CONVERT(VARBINARY(MAX),@s),CAST(@s AS BINARY(3))',[['s',TYPES.NVarChar,{length:8}]])
+  assert.deepEqual(await p.run({s:'🦆'}), [[Buffer.from('3ed886dd','hex'),Buffer.from('3ed886','hex')]])
+  assert.deepEqual(await p.run({s:null}), [[null,null]])
+  await p.release()
+})

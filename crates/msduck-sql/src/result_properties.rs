@@ -135,7 +135,9 @@ pub fn expression_with(
             // Preserve unknown rather than guessing from scalar syntax alone.
             Properties::default()
         }
-        Expr::Cast { .. } | Expr::BinaryOp { .. } => Properties::expression(true),
+        Expr::Cast { .. } | Expr::Convert { .. } | Expr::BinaryOp { .. } => {
+            Properties::expression(true)
+        }
         Expr::Subquery(query) => Properties {
             nullable: Some(true),
             origin: if matches!(query.for_clause, Some(ForClause::Json { .. })) {

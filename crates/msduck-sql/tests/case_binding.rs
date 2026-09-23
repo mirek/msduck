@@ -37,6 +37,34 @@ fn catalog() -> CatalogSnapshot {
     c
 }
 #[test]
+fn unicode_binary_conversions_bind_declared_scopes_without_guessing() {
+    let c = catalog();
+    for sql in [
+        "SELECT CONVERT(VARBINARY(MAX),t.s) FROM dbo.t t",
+        "WITH q(v) AS (SELECT s FROM dbo.t) SELECT CAST(v AS BINARY(3)) FROM q",
+        "SELECT (SELECT CAST(t.s AS VARBINARY(1))) FROM dbo.t t",
+        "SELECT CONVERT(VARBINARY(5),N'a',0)",
+    ] {
+        let mut q = query(sql);
+        projection::lower_unicode_binary_conversions(&c, &mut q, &Scope::default()).unwrap();
+        let lowered = q.to_string();
+        assert!(lowered.contains("__msduck_unicode_"), "{lowered}");
+        projection::lower_unicode_binary_conversions(&c, &mut q, &Scope::default()).unwrap();
+        assert_eq!(q.to_string(), lowered);
+    }
+    for sql in [
+        "SELECT CONVERT(VARBINARY(MAX),missing)",
+        "SELECT CAST('a' AS BINARY(3))",
+        "SELECT CONVERT(VARBINARY(3),N'a',1)",
+        "SELECT CAST(t.s AS VARBINARY(1)) FROM missing t",
+    ] {
+        let mut q = query(sql);
+        let original = q.to_string();
+        projection::lower_unicode_binary_conversions(&c, &mut q, &Scope::default()).unwrap();
+        assert_eq!(q.to_string(), original);
+    }
+}
+#[test]
 fn casing_annotations_follow_scope_and_preserve_original_operands() {
     let c = catalog();
     for sql in [

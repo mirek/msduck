@@ -699,7 +699,72 @@ impl<const BYTES: bool> VScalar for Length<BYTES> {
     }
 }
 
+struct Binary<const FIXED: bool>;
+impl<const FIXED: bool> VScalar for Binary<FIXED> {
+    type State = ();
+    fn invoke(
+        _: &(),
+        input: &mut DataChunkHandle,
+        output: &mut dyn WritableVector,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let len = input.len();
+        let source = input.flat_vector(0);
+        let structure = input.struct_vector(0);
+        let payload = structure.child(0, len);
+        let widths = input.flat_vector(1);
+        let mut remaining = CHUNK_LIMIT;
+        let mut staged = Vec::with_capacity(len);
+        for row in 0..len {
+            if source.row_is_null(row as u64) || widths.row_is_null(row as u64) {
+                staged.push(None);
+                continue;
+            }
+            let width = unsafe { widths.as_slice_with_len::<i32>(len)[row] };
+            if !(1..=8000).contains(&width) && (FIXED || width != -1) {
+                return Err("invalid binary conversion width".into());
+            }
+            if payload.row_is_null(row as u64) {
+                return Err("invalid Unicode carrier: NULL payload".into());
+            }
+            let mut value = bytes(&payload, row, len)?;
+            if value.len() % 2 != 0 {
+                return Err("invalid Unicode carrier: odd byte length".into());
+            }
+            if width != -1 {
+                value.truncate(width as usize);
+                if FIXED {
+                    value.resize(width as usize, 0);
+                }
+            }
+            if value.len() > remaining {
+                return Err("Unicode binary output exceeds the configured chunk limit".into());
+            }
+            remaining -= value.len();
+            // Do not retain the original input capacity after truncation: a
+            // tiny result must not keep a cell-sized allocation in every row.
+            staged.push(Some(value.into_boxed_slice()));
+        }
+        let mut result = output.flat_vector();
+        for (row, value) in staged.into_iter().enumerate() {
+            if let Some(value) = value {
+                result.insert(row, value.as_ref());
+            } else {
+                result.set_null(row);
+            }
+        }
+        Ok(())
+    }
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        vec![ScalarFunctionSignature::exact(
+            vec![kind(), Id::Integer.into()],
+            Id::Blob.into(),
+        )]
+    }
+}
+
 pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
+    db.register_scalar_function::<Binary<false>>("__msduck_unicode_varbinary")?;
+    db.register_scalar_function::<Binary<true>>("__msduck_unicode_binary")?;
     db.register_scalar_function::<Concat<true>>("__msduck_concat_unicode")?;
     db.register_scalar_function::<Concat<false>>("__msduck_concat_cp1252")?;
     db.register_scalar_function::<Bin2Key>("__msduck_bin2_key")?;
@@ -734,6 +799,40 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn binary_conversion_preserves_units_bounds_nulls_and_single_evaluation() {
+        let db = duckdb::Connection::open_in_memory().unwrap();
+        register(&db).unwrap();
+        let raw: Vec<u8> = db.query_row("SELECT __msduck_unicode_varbinary(__msduck_unicode_from_le(from_hex('3ed84100')),3)", [], |r| r.get(0)).unwrap();
+        assert_eq!(raw, [0x3e, 0xd8, 0x41]);
+        let padded: Vec<u8> = db
+            .query_row(
+                "SELECT __msduck_unicode_binary(__msduck_pack_unicode('a'),5)",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(padded, [97, 0, 0, 0, 0]);
+        for sql in [
+            "SELECT __msduck_unicode_binary(__msduck_pack_unicode('a'),-1)",
+            "SELECT __msduck_unicode_varbinary(__msduck_pack_unicode('a'),0)",
+            "SELECT __msduck_unicode_varbinary(struct_pack(__msduck_utf16le := from_hex('01')),-1)",
+            "SELECT __msduck_unicode_varbinary(struct_pack(__msduck_utf16le := NULL::BLOB),-1)",
+        ] {
+            assert!(
+                db.query_row(sql, [], |r| r.get::<_, Vec<u8>>(0)).is_err(),
+                "{sql}"
+            );
+        }
+        db.execute_batch("CREATE SEQUENCE binary_calls").unwrap();
+        let wrong:i64 = db.query_row("SELECT count(*) FROM (SELECT i,__msduck_unicode_varbinary(__msduck_pack_unicode(CASE WHEN nextval('binary_calls')%17=0 THEN NULL ELSE '🦆' END),3) AS b FROM range(6000) t(i)) WHERE b IS DISTINCT FROM CASE WHEN (i+1)%17=0 THEN NULL ELSE from_hex('3ed886') END", [], |r|r.get(0)).unwrap();
+        assert_eq!(wrong, 0);
+        assert_eq!(
+            db.query_row("SELECT currval('binary_calls')", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            6000
+        );
+    }
     #[test]
     fn concat_preserves_reference_overflow_and_raw_units() {
         let db = duckdb::Connection::open_in_memory().unwrap();

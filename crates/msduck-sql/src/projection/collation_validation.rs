@@ -84,6 +84,52 @@ struct CaseInput {
 struct Bindings {
     comparisons: Vec<(usize, Bin2Input)>,
     cases: Vec<(usize, CaseInput)>,
+    binary: Vec<(usize, BinaryInput)>,
+}
+struct BinaryInput {
+    target: DataType,
+    width: i32,
+    fixed: bool,
+}
+fn binary_input(catalog: &CatalogSnapshot, expr: &Expr, scope: &Scope) -> Option<BinaryInput> {
+    let (source, target) = match expr {
+        Expr::Cast {
+            expr,
+            data_type,
+            format: None,
+            ..
+        } => (expr.as_ref(), data_type),
+        Expr::Convert {
+            expr,
+            data_type: Some(data_type),
+            charset: None,
+            styles,
+            ..
+        } if styles.is_empty()
+            || matches!(styles.as_slice(), [Expr::Value(v)] if matches!(&v.value, Value::Number(n, _) if n == "0")) =>
+        {
+            (expr.as_ref(), data_type)
+        }
+        _ => return None,
+    };
+    let (width, fixed) = match target {
+        DataType::Varbinary(Some(BinaryLength::Max)) => (-1, false),
+        DataType::Varbinary(None) => (30, false),
+        DataType::Varbinary(Some(BinaryLength::IntegerLength { length }))
+            if (1..=8000).contains(length) =>
+        {
+            (*length as i32, false)
+        }
+        DataType::Binary(None) => (30, true),
+        DataType::Binary(Some(length)) if (1..=8000).contains(length) => (*length as i32, true),
+        _ => return None,
+    };
+    let info = member_expression(catalog, source, &[], scope)?;
+    matches!(info.system_type_id, Some(231 | 239)).then(|| BinaryInput {
+        target: target.clone(),
+        width,
+        fixed,
+    })
 }
 fn case_input(catalog: &CatalogSnapshot, expr: &Expr, scope: &Scope) -> Option<CaseInput> {
     let Expr::Function(f) = expr else {
@@ -289,6 +335,9 @@ fn comparison_plan(
             if let Some(input) = case_input(self.catalog, expr, scope) {
                 self.bindings.cases.push((self.position, input));
             }
+            if let Some(input) = binary_input(self.catalog, expr, scope) {
+                self.bindings.binary.push((self.position, input));
+            }
             self.position += 1;
             if let Some(Err(Conflict::Operation(error))) = label {
                 return ControlFlow::Break(error);
@@ -450,5 +499,65 @@ pub fn annotate_unicode_case_inputs(
     };
     let _ = VisitMut::visit(query, &mut annotate);
     debug_assert!(annotate.pending.next().is_none());
+    Ok(())
+}
+
+/// Lower only statically bound Unicode-to-binary conversions with default style.
+/// Byte lengths may split a UTF-16 unit; fixed binary pads on the right.
+pub fn lower_unicode_binary_conversions(
+    catalog: &CatalogSnapshot,
+    query: &mut Query,
+    outer: &Scope,
+) -> Result<(), SqlError> {
+    let positions = comparison_plan(catalog, query, outer)?.binary;
+    struct Lower {
+        position: usize,
+        pending: std::iter::Peekable<std::vec::IntoIter<(usize, BinaryInput)>>,
+    }
+    fn operand(value: Expr) -> Expr {
+        match value {
+            Expr::Nested(value) | Expr::Collate { expr: value, .. } => operand(*value),
+            value => value,
+        }
+    }
+    impl VisitorMut for Lower {
+        type Break = ();
+        fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
+            if self
+                .pending
+                .peek()
+                .is_some_and(|(p, _)| *p == self.position)
+            {
+                let (_, input) = self.pending.next().unwrap();
+                let (Expr::Cast { expr: source, .. } | Expr::Convert { expr: source, .. }) = expr
+                else {
+                    unreachable!("planned binary conversion")
+                };
+                let value = crate::expr::binary_function(
+                    if input.fixed {
+                        "__msduck_unicode_binary"
+                    } else {
+                        "__msduck_unicode_varbinary"
+                    },
+                    crate::expr::unary_function("__msduck_carrier_input", operand(*source.clone())),
+                    crate::expr::number(input.width),
+                );
+                *expr = Expr::Cast {
+                    kind: CastKind::Cast,
+                    expr: Box::new(value),
+                    data_type: input.target,
+                    format: None,
+                };
+            }
+            self.position += 1;
+            ControlFlow::Continue(())
+        }
+    }
+    let mut lower = Lower {
+        position: 0,
+        pending: positions.into_iter().peekable(),
+    };
+    let _ = VisitMut::visit(query, &mut lower);
+    debug_assert!(lower.pending.next().is_none());
     Ok(())
 }

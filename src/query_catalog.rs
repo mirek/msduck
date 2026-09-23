@@ -86,12 +86,22 @@ pub fn bind_query_with_parameters(
     Ok(fields)
 }
 
-fn contains_unicode_case<T: Visit>(node: &T) -> bool {
+fn contains_unicode_operations<T: Visit>(node: &T) -> bool {
     struct Find;
     impl Visitor for Find {
         type Break = ();
         fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
             if matches!(expr, Expr::Function(f) if matches!(f.name.to_string().to_ascii_uppercase().as_str(), "LOWER" | "UPPER"))
+                || matches!(
+                    expr,
+                    Expr::Cast {
+                        data_type: DataType::Binary(_) | DataType::Varbinary(_),
+                        ..
+                    } | Expr::Convert {
+                        data_type: Some(DataType::Binary(_) | DataType::Varbinary(_)),
+                        ..
+                    }
+                )
             {
                 return std::ops::ControlFlow::Break(());
             }
@@ -102,12 +112,12 @@ fn contains_unicode_case<T: Visit>(node: &T) -> bool {
 }
 
 /// Bind a standalone initializer or predicate with no surrounding row source.
-pub fn annotate_unicode_case_expression(
+pub fn bind_unicode_expression(
     db: &Connection,
     expression: &mut Expr,
     parameters: &std::collections::HashMap<String, crate::parameter::Parameter>,
 ) -> anyhow::Result<()> {
-    if !contains_unicode_case(expression) {
+    if !contains_unicode_operations(expression) {
         return Ok(());
     }
     // Bind standalone initializers/predicates in an empty row scope, preserving
@@ -119,7 +129,7 @@ pub fn annotate_unicode_case_expression(
         unreachable!("constant SELECT body")
     };
     select.projection = vec![SelectItem::UnnamedExpr(expression.clone())];
-    annotate_unicode_case(db, query.as_mut(), parameters)?;
+    bind_unicode_operations(db, query.as_mut(), parameters)?;
     let SetExpr::Select(select) = query.body.as_mut() else {
         unreachable!("retained SELECT body")
     };
@@ -132,12 +142,12 @@ pub fn annotate_unicode_case_expression(
 
 /// Annotate complete query scopes after logical metadata acquisition and before
 /// physical translation. Nested queries are covered by the outer query's plan.
-pub fn annotate_unicode_case<T: Visit + VisitMut>(
+pub fn bind_unicode_operations<T: Visit + VisitMut>(
     db: &Connection,
     node: &mut T,
     parameters: &std::collections::HashMap<String, crate::parameter::Parameter>,
 ) -> anyhow::Result<()> {
-    if !contains_unicode_case(node) {
+    if !contains_unicode_operations(node) {
         return Ok(());
     }
     let catalog = snapshot(db, node)?;
@@ -158,6 +168,12 @@ pub fn annotate_unicode_case<T: Visit + VisitMut>(
             if self.depth == 0
                 && let Err(error) =
                     infer::annotate_unicode_case_inputs(self.catalog, query, self.scope)
+            {
+                return std::ops::ControlFlow::Break(error);
+            }
+            if self.depth == 0
+                && let Err(error) =
+                    infer::lower_unicode_binary_conversions(self.catalog, query, self.scope)
             {
                 return std::ops::ControlFlow::Break(error);
             }
