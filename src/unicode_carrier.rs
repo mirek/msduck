@@ -468,6 +468,101 @@ fn vector_units(
     ))
 }
 
+// Capacity is bound by the SQL planner: -1 means MAX, otherwise bytes/units.
+// Each child is a single native argument; intermediate results stay materialized.
+struct Concat<const UNICODE: bool>;
+impl<const UNICODE: bool> VScalar for Concat<UNICODE> {
+    type State = ();
+    fn invoke(
+        _: &(),
+        input: &mut DataChunkHandle,
+        output: &mut dyn WritableVector,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use msduck_core::character::Length;
+        let len = input.len();
+        let left = input.flat_vector(0);
+        let right = input.flat_vector(1);
+        let widths = input.flat_vector(2);
+        let left_struct = UNICODE.then(|| input.struct_vector(0));
+        let right_struct = UNICODE.then(|| input.struct_vector(1));
+        let left_data = left_struct.as_ref().map(|s| s.child(0, len));
+        let right_data = right_struct.as_ref().map(|s| s.child(0, len));
+        // Only obtain the output representation selected by the signature.
+        let mut remaining = CHUNK_LIMIT;
+        let mut rows = Vec::with_capacity(len);
+        for row in 0..len {
+            if widths.row_is_null(row as u64) {
+                return Err("concatenation capacity must be bound".into());
+            }
+            let width = unsafe { widths.as_slice_with_len::<i32>(len)[row] };
+            let capacity = match width {
+                -1 => Length::Max,
+                n if (0..=if UNICODE { 4000 } else { 8000 }).contains(&n) => {
+                    Length::Bounded(n as u16)
+                }
+                _ => return Err("invalid concatenation capacity".into()),
+            };
+            if left.row_is_null(row as u64) || right.row_is_null(row as u64) {
+                rows.push(None);
+                continue;
+            }
+            let encoded = if UNICODE {
+                let a = vector_units(&left, left_data.as_ref().unwrap(), row, len)?.unwrap();
+                let b = vector_units(&right, right_data.as_ref().unwrap(), row, len)?.unwrap();
+                let value =
+                    msduck_core::concat::utf16(&a, &b, capacity, CELL_LIMIT.min(remaining) / 2)
+                        .ok_or("concatenation output exceeds the configured limit")?;
+                value
+                    .into_iter()
+                    .flat_map(u16::to_le_bytes)
+                    .collect::<Vec<_>>()
+            } else {
+                let a = bytes(&left, row, len)?;
+                let b = bytes(&right, row, len)?;
+                let a = msduck_core::encoding::encode_cp1252(std::str::from_utf8(&a)?)?;
+                let b = msduck_core::encoding::encode_cp1252(std::str::from_utf8(&b)?)?;
+                let value = msduck_core::concat::ansi(&a, &b, capacity, CELL_LIMIT.min(remaining))
+                    .ok_or("concatenation output exceeds the configured limit")?;
+                msduck_core::encoding::decode_cp1252(&value).into_bytes()
+            };
+            if encoded.len() > CELL_LIMIT || encoded.len() > remaining {
+                return Err("concatenation output exceeds the configured limit".into());
+            }
+            remaining -= encoded.len();
+            rows.push(Some(encoded));
+        }
+        if UNICODE {
+            let mut result = output.struct_vector();
+            let mut data = result.child(0, len);
+            for (row, value) in rows.iter().enumerate() {
+                if let Some(value) = value {
+                    data.insert(row, value.as_slice());
+                } else {
+                    result.set_null(row);
+                    data.set_null(row);
+                }
+            }
+        } else {
+            let mut result = output.flat_vector();
+            for (row, value) in rows.iter().enumerate() {
+                if let Some(value) = value {
+                    result.insert(row, std::str::from_utf8(value)?);
+                } else {
+                    result.set_null(row);
+                }
+            }
+        }
+        Ok(())
+    }
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        let text = || if UNICODE { kind() } else { Id::Varchar.into() };
+        vec![ScalarFunctionSignature::exact(
+            vec![text(), text(), Id::Integer.into()],
+            text(),
+        )]
+    }
+}
+
 struct Bin2Key;
 impl VScalar for Bin2Key {
     type State = ();
@@ -605,6 +700,8 @@ impl<const BYTES: bool> VScalar for Length<BYTES> {
 }
 
 pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
+    db.register_scalar_function::<Concat<true>>("__msduck_concat_unicode")?;
+    db.register_scalar_function::<Concat<false>>("__msduck_concat_cp1252")?;
     db.register_scalar_function::<Bin2Key>("__msduck_bin2_key")?;
     db.register_scalar_function::<Bin2Compare<false>>("__msduck_bin2_compare")?;
     db.register_scalar_function::<Bin2Compare<true>>("__msduck_bin2_ansi_compare")?;
@@ -637,6 +734,70 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn concat_preserves_reference_overflow_and_raw_units() {
+        let db = duckdb::Connection::open_in_memory().unwrap();
+        register(&db).unwrap();
+        let ansi: String = db.query_row("SELECT __msduck_concat_cp1252(__msduck_concat_cp1252(repeat('a',8000),'b',8000),'c',-1)", [], |r| r.get(0)).unwrap();
+        assert_eq!(ansi, "a".repeat(8000) + "c");
+        let early: String = db.query_row("SELECT __msduck_concat_cp1252(__msduck_concat_cp1252(repeat('a',8000),'b',-1),'c',-1)", [], |r| r.get(0)).unwrap();
+        assert_eq!(early, "a".repeat(8000) + "bc");
+        let cp: String = db
+            .query_row("SELECT __msduck_concat_cp1252('€','x',1)", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(cp, "€");
+        let raw: Vec<u8> = db.query_row("SELECT (__msduck_concat_unicode(__msduck_pack_unicode(repeat('a',3999)),__msduck_pack_unicode('🦆'),4000)).__msduck_utf16le", [], |r| r.get(0)).unwrap();
+        assert_eq!(
+            raw,
+            "a".repeat(3999)
+                .encode_utf16()
+                .chain([0xd83e])
+                .flat_map(u16::to_le_bytes)
+                .collect::<Vec<_>>()
+        );
+        let space: Vec<u8> = db.query_row("SELECT (__msduck_concat_unicode(__msduck_concat_unicode(__msduck_pack_unicode('a'),__msduck_pack_unicode(repeat(' ',8000)),4000),__msduck_pack_unicode('b'),4000)).__msduck_utf16le", [], |r| r.get(0)).unwrap();
+        assert_eq!(
+            space,
+            ("a".to_owned() + &" ".repeat(3999))
+                .encode_utf16()
+                .flat_map(u16::to_le_bytes)
+                .collect::<Vec<_>>()
+        );
+        for width in [-2, 4001] {
+            assert!(db.query_row("SELECT __msduck_concat_unicode(__msduck_pack_unicode('a'),__msduck_pack_unicode('b'),?)",[width],|r|r.get::<_,duckdb::types::Value>(0)).is_err());
+        }
+        assert!(db.query_row("SELECT __msduck_concat_unicode(struct_pack(__msduck_utf16le := from_hex('01')),__msduck_pack_unicode('b'),2)",[],|r|r.get::<_,duckdb::types::Value>(0)).is_err());
+    }
+
+    #[test]
+    fn concat_vectors_propagate_null_and_evaluate_children_once() {
+        let db = duckdb::Connection::open_in_memory().unwrap();
+        register(&db).unwrap();
+        db.execute_batch("CREATE SEQUENCE concat_calls; CREATE TABLE concat_values AS SELECT i, __msduck_concat_unicode(__msduck_pack_unicode(CASE WHEN i%17=0 THEN NULL ELSE CAST(nextval('concat_calls') AS VARCHAR) END), __msduck_pack_unicode('x'),4000) AS u FROM range(6000) t(i)").unwrap();
+        let count: i64 = db
+            .query_row("SELECT count(u) FROM concat_values", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 6000 - 353);
+        let calls: i64 = db
+            .query_row("SELECT currval('concat_calls')", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(calls, count);
+        let selected: i64 = db.query_row("SELECT count(__msduck_concat_unicode(u,__msduck_pack_unicode('y'),-1)) FROM concat_values WHERE i%3=0",[],|r|r.get(0)).unwrap();
+        assert_eq!(selected, 2000 - 118);
+        let empty: String = db
+            .query_row("SELECT __msduck_concat_cp1252('a','b',0)", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(empty, "");
+        let null: Option<String> = db
+            .query_row("SELECT __msduck_concat_cp1252('a',NULL,2)", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(null, None);
+    }
+
     #[test]
     fn bin2_index_keys_enforce_padding_equality_without_losing_units() {
         let db = duckdb::Connection::open_in_memory().unwrap();
