@@ -41,6 +41,9 @@ pub enum Operation {
     GreaterEqual,
     Replace,
     Stuff,
+    Ltrim,
+    Rtrim,
+    Trim,
 }
 
 impl Operation {
@@ -54,6 +57,9 @@ impl Operation {
             Self::GreaterEqual => "greater than or equal to",
             Self::Replace => "replace",
             Self::Stuff => "stuff",
+            Self::Ltrim => "ltrim",
+            Self::Rtrim => "rtrim",
+            Self::Trim => "Trim",
         };
         let conflict = |left: &str, right: &str| {
             Conflict::Operation(crate::diagnostic::SqlError::new(

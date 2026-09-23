@@ -345,6 +345,19 @@ fn expression_collation(
             trim_characters: None,
             ..
         } => string_argument(value),
+        Expr::Trim {
+            expr: value,
+            trim_what: Some(characters),
+            trim_characters: None,
+            ..
+        } => sensitive_collation(
+            // TRIM's character list precedes the source in SQL Server's
+            // diagnostic operand order; LTRIM/RTRIM use source, then list.
+            [characters.as_ref(), value.as_ref()]
+                .into_iter()
+                .map(string_argument),
+            msduck_core::collation::Operation::Trim,
+        ),
         Expr::Function(function) => {
             let FunctionArguments::List(args) = &function.args else {
                 return None;
@@ -373,6 +386,14 @@ fn expression_collation(
                 ("LOWER" | "UPPER" | "LTRIM" | "RTRIM" | "TRIM" | "REVERSE", [value])
                 | ("LEFT" | "RIGHT" | "REPLICATE", [value, _])
                 | ("SUBSTRING", [value, _, _]) => string_argument(value),
+                ("LTRIM", [_, _]) => sensitive_collation(
+                    values.into_iter().map(string_argument),
+                    msduck_core::collation::Operation::Ltrim,
+                ),
+                ("RTRIM", [_, _]) => sensitive_collation(
+                    values.into_iter().map(string_argument),
+                    msduck_core::collation::Operation::Rtrim,
+                ),
                 ("ISNULL", [first, replacement]) => {
                     // Replacement conversion adopts the first argument's collation;
                     // an already-invalid replacement expression must remain invalid.
