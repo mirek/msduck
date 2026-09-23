@@ -421,6 +421,26 @@
       "dependencies": [],
       "issue": 45,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PG47w"
+    },
+    {
+      "id": "unicode-storage-reference-v1",
+      "title": "Capture SQL Server Unicode storage and casing assignment behavior",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Local probe at d4980b8 shows INSERT of a Unicode casing carrier is converted to struct text by the legacy storage boundary; retain reference evidence for the storage correction.",
+      "scope": [
+        "scripts/capture-unicode-storage.mjs",
+        "reference/unicode-storage.json",
+        "docs/unicode-storage-reference.md"
+      ],
+      "acceptance": [
+        "Capture SQL Server rows, column descriptors, errors and completion events for INSERT VALUES/SELECT, UPDATE, defaults and variable-to-table assignments of LOWER/UPPER and raw UTF-16 boundary results.",
+        "Cover bounded NVARCHAR/NCHAR and MAX, NULL, empty values, supplementary characters, isolated high/low surrogates, exact fit, overflow and trailing-space handling. Include statement atomicity after failed writes and retained values across reconnect.",
+        "Use the pinned owned reference-container helper, record server/image provenance and deterministic queries, preserve exact UTF-16 code units in Node JSON, and never expose credentials.",
+        "Document observed behavior and reproducible regeneration. Keep production implementation outside this task; do not fetch external GitHub content."
+      ],
+      "dependencies": [],
+      "issue": 48,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PG8yR"
     }
   ]
 }
