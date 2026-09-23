@@ -195,6 +195,24 @@
       "dependencies": [],
       "issue": 22,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PGrTx"
+    },
+    {
+      "id": "concat-binding-v1",
+      "title": "Bind deterministic character concatenation trees with explicit declarations",
+      "state": "ready",
+      "authorization": "Direct owner instruction to implement SQL Server compatibility; first-party continuation from native concatenation primitives and reference captures.",
+      "scope": [
+        "crates/msduck-sql/src/concat.rs",
+        "crates/msduck-sql/src/lib.rs"
+      ],
+      "acceptance": [
+        "Bind binary character concatenation trees using explicit caller-supplied operand declarations and collation labels; preserve nested node capacities, MAX and NULL.",
+        "Keep unknown/numeric/alias inputs unresolved and avoid backend queries or parameter-value inference. Return a plan without mutating the source AST.",
+        "Test nested truncation shape, explicit grouping/MAX placement, collation conflicts and deterministic leaf binding; run deterministic tests and strict Clippy."
+      ],
+      "dependencies": [],
+      "issue": 24,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGr1I"
     }
   ]
 }
