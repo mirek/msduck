@@ -160,6 +160,24 @@
       "dependencies": [],
       "issue": 18,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PGqZQ"
+    },
+    {
+      "id": "concat-overflow-reference-v1",
+      "title": "Capture SQL Server concatenation overflow and prepared SPACE behavior",
+      "state": "ready",
+      "authorization": "Direct owner instruction to continue implementing SQL Server compatibility; first-party follow-up to the observed concatenation regression.",
+      "scope": [
+        "scripts/capture-concat-overflow.mjs",
+        "reference/character-concat-overflow.json"
+      ],
+      "acceptance": [
+        "Capture exact prepared SPACE query for NULL, negative, small and overflowing integer inputs with full metadata, rows and completion tokens.",
+        "Capture ANSI/Unicode overflow, early and late MAX placement, grouping and raw surrogate boundaries using the pinned SQL Server reference container.",
+        "Preserve a reproducible generator and raw fixture; assert capture success and inspect lengths without altering engine or existing test expectations."
+      ],
+      "dependencies": [],
+      "issue": 20,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PGq4j"
     }
   ]
 }
