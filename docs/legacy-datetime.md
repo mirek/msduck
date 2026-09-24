@@ -1,6 +1,6 @@
 # Legacy datetime conversion evidence
 
-`reference/legacy-datetime.json` contains 38 RPC observations captured twice
+`reference/legacy-datetime.json` contains 60 RPC observations captured twice
 identically from the pinned SQL Server container. Reproduce them with
 `node scripts/capture-legacy-datetime.mjs`. The generator compares fresh results
 with the retained fixture and records raw repetitions separately. Each case
@@ -9,7 +9,8 @@ retains rows, descriptors, diagnostics, DONE tokens and a subsequent
 
 The cases distinguish nullable DATETIME and SMALLDATETIME parameters, string
 and DATETIME2(7) conversion sources, CAST and TRY_CAST, precision boundaries,
-range limits and rounding across midnight. They do not establish support for
+range limits, rounding across midnight, expression consumers and single-row
+versus mixed-source multirow assignments. They do not establish support for
 all conversion styles, date formats, language settings or implicit assignments.
 
 Observed rules include:
@@ -30,6 +31,19 @@ Observed rules include:
   cannot be replaced by range-checking a rounded wire payload.
 - SMALLDATETIME accepts `1899-12-31T23:59:59.999` after rollover to 1900, but
   rejects `2079-06-06T23:59:29.999` when rounding exceeds its upper bound.
+- DATETIME2 source `1752-12-31T23:59:59.9999999` converts to DATETIME at
+  `1753-01-01T00:00:00`. The captured maximum DATETIME2 value converts to
+  `9999-12-31T23:59:59.997`; it does not produce the string-source range error.
+- DATEPART, conversion back to DATETIME2, and comparison with the original
+  DATETIME2 value observe the rounded legacy value before wire encoding.
+- Separate SMALLDATETIME inserts of string `12:00:29.999` and its DATETIME2
+  counterpart store `12:01:00` and `12:00:00`, respectively. Combining them in
+  one multirow VALUES expression stores `12:00:00` for both: common-source
+  type conversion precedes assignment to the destination. DATETIME stores
+  `12:00:30` for both source forms and both insert arrangements.
+- NVARCHAR invalid and seven-digit fractional strings retain the captured
+  241/295 diagnostics. Out-of-range DATETIME2-to-SMALLDATETIME conversion
+  reports 242/state3/class16 and names `datetime2` as the source type.
 
 The inspected mirek/mssqlite revision
 `7f71f2081602f8e3051998f5c11f058e65fe24ec` supplies useful TDS representations in

@@ -4284,6 +4284,2896 @@
         "returnStatus": 0,
         "rowCount": 1
       }
+    },
+    {
+      "id": "DATETIME-typed-range-1752-12-31T23:59:59.9999999",
+      "sql": "SELECT CAST(CAST('1752-12-31T23:59:59.9999999' AS DATETIME2(7)) AS DATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "kind": "date",
+                  "value": "1753-01-01T00:00:00.000Z"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "DATETIME-typed-range-1899-12-31T23:59:59.9999999",
+      "sql": "SELECT CAST(CAST('1899-12-31T23:59:59.9999999' AS DATETIME2(7)) AS DATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "kind": "date",
+                  "value": "1900-01-01T00:00:00.000Z"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "DATETIME-typed-range-2079-06-06T23:59:29.9999999",
+      "sql": "SELECT CAST(CAST('2079-06-06T23:59:29.9999999' AS DATETIME2(7)) AS DATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "kind": "date",
+                  "value": "2079-06-06T23:59:30.000Z"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "DATETIME-typed-range-2079-06-06T23:59:30.0000000",
+      "sql": "SELECT CAST(CAST('2079-06-06T23:59:30.0000000' AS DATETIME2(7)) AS DATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "kind": "date",
+                  "value": "2079-06-06T23:59:30.000Z"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "DATETIME-typed-range-9999-12-31T23:59:59.9999999",
+      "sql": "SELECT CAST(CAST('9999-12-31T23:59:59.9999999' AS DATETIME2(7)) AS DATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "kind": "date",
+                  "value": "9999-12-31T23:59:59.997Z"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "DATETIME-nvarchar-2000-01-01T12:00:29.9983333",
+      "sql": "SELECT CAST(N'2000-01-01T12:00:29.9983333' AS DATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 241,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Conversion failed when converting date and/or time from character string."
+          }
+        ],
+        "info": [],
+        "returnStatus": {
+          "kind": "missing"
+        },
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                241
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "DATETIME-nvarchar-invalid",
+      "sql": "SELECT CAST(N'invalid' AS DATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 241,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Conversion failed when converting date and/or time from character string."
+          }
+        ],
+        "info": [],
+        "returnStatus": {
+          "kind": "missing"
+        },
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                241
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "DATETIME-string-rounded-expression",
+      "sql": "SELECT CONVERT(VARCHAR(33),CAST(CAST('2000-01-01T12:00:29.999' AS DATETIME) AS DATETIME2(7)),126) AS rounded,DATEPART(ns,CAST('2000-01-01T12:00:29.999' AS DATETIME)) AS fraction,CASE WHEN CAST('2000-01-01T12:00:29.999' AS DATETIME)=CAST('2000-01-01T12:00:29.999' AS DATETIME2(7)) THEN 1 ELSE 0 END AS equal_original",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "rounded",
+                "type": "VarChar",
+                "length": 33,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "fraction",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "equal_original",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "2000-01-01T12:00:30",
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "DATETIME-datetime2-rounded-expression",
+      "sql": "SELECT CONVERT(VARCHAR(33),CAST(CAST(CAST('2000-01-01T12:00:29.999' AS DATETIME2(7)) AS DATETIME) AS DATETIME2(7)),126) AS rounded,DATEPART(ns,CAST(CAST('2000-01-01T12:00:29.999' AS DATETIME2(7)) AS DATETIME)) AS fraction,CASE WHEN CAST(CAST('2000-01-01T12:00:29.999' AS DATETIME2(7)) AS DATETIME)=CAST('2000-01-01T12:00:29.999' AS DATETIME2(7)) THEN 1 ELSE 0 END AS equal_original",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "rounded",
+                "type": "VarChar",
+                "length": 33,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "fraction",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "equal_original",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "2000-01-01T12:00:30",
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "DATETIME-assignment-rounding",
+      "sql": "CREATE TABLE legacy_assignment(id INT,value DATETIME); INSERT INTO legacy_assignment VALUES(1,'2000-01-01T12:00:29.999'),(2,CAST('2000-01-01T12:00:29.999' AS DATETIME2(7))); SELECT id,CONVERT(VARCHAR(33),CAST(value AS DATETIME2(7)),126) AS rounded,DATEPART(ns,value) AS fraction FROM legacy_assignment ORDER BY id; DROP TABLE legacy_assignment",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "rounded",
+                "type": "VarChar",
+                "length": 33,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "fraction",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                "2000-01-01T12:00:30",
+                0
+              ],
+              [
+                2,
+                "2000-01-01T12:00:30",
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 2,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 2,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 4
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 198
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 2,
+          "curCmd": 195
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 2,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 199
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "DATETIME-separate-assignment-rounding",
+      "sql": "CREATE TABLE legacy_assignment(id INT,value DATETIME); INSERT INTO legacy_assignment VALUES(1,'2000-01-01T12:00:29.999'); INSERT INTO legacy_assignment VALUES(2,CAST('2000-01-01T12:00:29.999' AS DATETIME2(7))); SELECT id,CONVERT(VARCHAR(33),CAST(value AS DATETIME2(7)),126) AS rounded,DATEPART(ns,value) AS fraction FROM legacy_assignment ORDER BY id; DROP TABLE legacy_assignment",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "rounded",
+                "type": "VarChar",
+                "length": 33,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "fraction",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                "2000-01-01T12:00:30",
+                0
+              ],
+              [
+                2,
+                "2000-01-01T12:00:30",
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 2,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 4
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 198
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 195
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 195
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 2,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 199
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "SMALLDATETIME-typed-range-1752-12-31T23:59:59.9999999",
+      "sql": "SELECT CAST(CAST('1752-12-31T23:59:59.9999999' AS DATETIME2(7)) AS SMALLDATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 242,
+            "state": 3,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The conversion of a datetime2 data type to a smalldatetime data type resulted in an out-of-range value."
+          }
+        ],
+        "info": [],
+        "returnStatus": 242,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                242
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "SMALLDATETIME-typed-range-1899-12-31T23:59:59.9999999",
+      "sql": "SELECT CAST(CAST('1899-12-31T23:59:59.9999999' AS DATETIME2(7)) AS SMALLDATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "kind": "date",
+                  "value": "1900-01-01T00:00:00.000Z"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "SMALLDATETIME-typed-range-2079-06-06T23:59:29.9999999",
+      "sql": "SELECT CAST(CAST('2079-06-06T23:59:29.9999999' AS DATETIME2(7)) AS SMALLDATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "kind": "date",
+                  "value": "2079-06-06T23:59:00.000Z"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "SMALLDATETIME-typed-range-2079-06-06T23:59:30.0000000",
+      "sql": "SELECT CAST(CAST('2079-06-06T23:59:30.0000000' AS DATETIME2(7)) AS SMALLDATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 242,
+            "state": 3,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The conversion of a datetime2 data type to a smalldatetime data type resulted in an out-of-range value."
+          }
+        ],
+        "info": [],
+        "returnStatus": 242,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                242
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "SMALLDATETIME-typed-range-9999-12-31T23:59:59.9999999",
+      "sql": "SELECT CAST(CAST('9999-12-31T23:59:59.9999999' AS DATETIME2(7)) AS SMALLDATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 242,
+            "state": 3,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The conversion of a datetime2 data type to a smalldatetime data type resulted in an out-of-range value."
+          }
+        ],
+        "info": [],
+        "returnStatus": 242,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                242
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "SMALLDATETIME-nvarchar-2000-01-01T12:00:29.9983333",
+      "sql": "SELECT CAST(N'2000-01-01T12:00:29.9983333' AS SMALLDATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 295,
+            "state": 3,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Conversion failed when converting character string to smalldatetime data type."
+          }
+        ],
+        "info": [],
+        "returnStatus": {
+          "kind": "missing"
+        },
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                295
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "SMALLDATETIME-nvarchar-invalid",
+      "sql": "SELECT CAST(N'invalid' AS SMALLDATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 295,
+            "state": 3,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Conversion failed when converting character string to smalldatetime data type."
+          }
+        ],
+        "info": [],
+        "returnStatus": {
+          "kind": "missing"
+        },
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                295
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "SMALLDATETIME-string-rounded-expression",
+      "sql": "SELECT CONVERT(VARCHAR(33),CAST(CAST('2000-01-01T12:00:29.999' AS SMALLDATETIME) AS DATETIME2(7)),126) AS rounded,DATEPART(ns,CAST('2000-01-01T12:00:29.999' AS SMALLDATETIME)) AS fraction,CASE WHEN CAST('2000-01-01T12:00:29.999' AS SMALLDATETIME)=CAST('2000-01-01T12:00:29.999' AS DATETIME2(7)) THEN 1 ELSE 0 END AS equal_original",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "rounded",
+                "type": "VarChar",
+                "length": 33,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "fraction",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "equal_original",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "2000-01-01T12:01:00",
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "SMALLDATETIME-datetime2-rounded-expression",
+      "sql": "SELECT CONVERT(VARCHAR(33),CAST(CAST(CAST('2000-01-01T12:00:29.999' AS DATETIME2(7)) AS SMALLDATETIME) AS DATETIME2(7)),126) AS rounded,DATEPART(ns,CAST(CAST('2000-01-01T12:00:29.999' AS DATETIME2(7)) AS SMALLDATETIME)) AS fraction,CASE WHEN CAST(CAST('2000-01-01T12:00:29.999' AS DATETIME2(7)) AS SMALLDATETIME)=CAST('2000-01-01T12:00:29.999' AS DATETIME2(7)) THEN 1 ELSE 0 END AS equal_original",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "rounded",
+                "type": "VarChar",
+                "length": 33,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "fraction",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "equal_original",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "2000-01-01T12:00:00",
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "SMALLDATETIME-assignment-rounding",
+      "sql": "CREATE TABLE legacy_assignment(id INT,value SMALLDATETIME); INSERT INTO legacy_assignment VALUES(1,'2000-01-01T12:00:29.999'),(2,CAST('2000-01-01T12:00:29.999' AS DATETIME2(7))); SELECT id,CONVERT(VARCHAR(33),CAST(value AS DATETIME2(7)),126) AS rounded,DATEPART(ns,value) AS fraction FROM legacy_assignment ORDER BY id; DROP TABLE legacy_assignment",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "rounded",
+                "type": "VarChar",
+                "length": 33,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "fraction",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                "2000-01-01T12:00:00",
+                0
+              ],
+              [
+                2,
+                "2000-01-01T12:00:00",
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 2,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 2,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 4
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 198
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 2,
+          "curCmd": 195
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 2,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 199
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "SMALLDATETIME-separate-assignment-rounding",
+      "sql": "CREATE TABLE legacy_assignment(id INT,value SMALLDATETIME); INSERT INTO legacy_assignment VALUES(1,'2000-01-01T12:00:29.999'); INSERT INTO legacy_assignment VALUES(2,CAST('2000-01-01T12:00:29.999' AS DATETIME2(7))); SELECT id,CONVERT(VARCHAR(33),CAST(value AS DATETIME2(7)),126) AS rounded,DATEPART(ns,value) AS fraction FROM legacy_assignment ORDER BY id; DROP TABLE legacy_assignment",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "rounded",
+                "type": "VarChar",
+                "length": 33,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "fraction",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                "2000-01-01T12:01:00",
+                0
+              ],
+              [
+                2,
+                "2000-01-01T12:00:00",
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 2,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 4
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 198
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 195
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 195
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 2,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 199
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
     }
   ]
 }

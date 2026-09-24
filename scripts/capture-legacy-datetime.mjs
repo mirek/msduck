@@ -28,6 +28,21 @@ for (const target of ['DATETIME', 'SMALLDATETIME']) {
     cases.push({id: `${target}-range-${value}`, sql: `SELECT CAST('${value}' AS ${target}) AS value`})
   }
 }
+for (const target of ['DATETIME', 'SMALLDATETIME']) {
+  for (const text of ['1752-12-31T23:59:59.9999999', '1899-12-31T23:59:59.9999999', '2079-06-06T23:59:29.9999999', '2079-06-06T23:59:30.0000000', '9999-12-31T23:59:59.9999999']) {
+    cases.push({id: `${target}-typed-range-${text}`, sql: `SELECT CAST(CAST('${text}' AS DATETIME2(7)) AS ${target}) AS value`})
+  }
+  for (const text of ['2000-01-01T12:00:29.9983333', 'invalid']) {
+    cases.push({id: `${target}-nvarchar-${text}`, sql: `SELECT CAST(N'${text}' AS ${target}) AS value`})
+  }
+  for (const source of ['string', 'datetime2']) {
+    const text = '2000-01-01T12:00:29.999'
+    const input = source === 'string' ? `'${text}'` : `CAST('${text}' AS DATETIME2(7))`
+    cases.push({id: `${target}-${source}-rounded-expression`, sql: `SELECT CONVERT(VARCHAR(33),CAST(CAST(${input} AS ${target}) AS DATETIME2(7)),126) AS rounded,DATEPART(ns,CAST(${input} AS ${target})) AS fraction,CASE WHEN CAST(${input} AS ${target})=CAST('${text}' AS DATETIME2(7)) THEN 1 ELSE 0 END AS equal_original`})
+  }
+  cases.push({id: `${target}-assignment-rounding`, sql: `CREATE TABLE legacy_assignment(id INT,value ${target}); INSERT INTO legacy_assignment VALUES(1,'2000-01-01T12:00:29.999'),(2,CAST('2000-01-01T12:00:29.999' AS DATETIME2(7))); SELECT id,CONVERT(VARCHAR(33),CAST(value AS DATETIME2(7)),126) AS rounded,DATEPART(ns,value) AS fraction FROM legacy_assignment ORDER BY id; DROP TABLE legacy_assignment`})
+  cases.push({id: `${target}-separate-assignment-rounding`, sql: `CREATE TABLE legacy_assignment(id INT,value ${target}); INSERT INTO legacy_assignment VALUES(1,'2000-01-01T12:00:29.999'); INSERT INTO legacy_assignment VALUES(2,CAST('2000-01-01T12:00:29.999' AS DATETIME2(7))); SELECT id,CONVERT(VARCHAR(33),CAST(value AS DATETIME2(7)),126) AS rounded,DATEPART(ns,value) AS fraction FROM legacy_assignment ORDER BY id; DROP TABLE legacy_assignment`})
+}
 const output = resolve(process.argv[2] ?? 'artifacts/compatibility/legacy-datetime-reference')
 await mkdir(output, {recursive: true})
 await withReferenceContainer(async (config, container) => {
