@@ -24,6 +24,7 @@ impl Kind {
 pub struct Plan {
     pub query: Box<Query>,
     pub kind: Kind,
+    pub(crate) checked: bool,
 }
 struct Builder<'a> {
     binding: &'a dyn Fn(&Expr) -> Option<Kind>,
@@ -34,7 +35,10 @@ struct Builder<'a> {
 fn literal_null(expr: &Expr) -> bool {
     match expr {
         Expr::Value(value) => matches!(value.value, Value::Null),
-        Expr::Nested(inner) | Expr::Cast { expr: inner, .. } => literal_null(inner),
+        Expr::Nested(inner) => literal_null(inner),
+        Expr::Cast { expr: inner, .. } => {
+            literal_null(crate::variant_cast::source(inner).unwrap_or(inner))
+        }
         _ => false,
     }
 }
@@ -194,7 +198,8 @@ impl Builder<'_> {
                     DataType::BigInt(_) => Kind::BigInt,
                     _ => return None,
                 };
-                let child = self.expression(expr, depth + 1)?;
+                let source = crate::variant_cast::source(expr).unwrap_or(expr);
+                let child = self.expression(source, depth + 1)?;
                 if child.1 == target || child.1 == Kind::Int && target == Kind::BigInt {
                     Some(self.unary(
                         child.0,
@@ -220,6 +225,7 @@ pub fn plan(expression: &Expr, parameters: &HashMap<String, Kind>) -> Option<Pla
         Expr::Identifier(id) => parameters.get(&id.value.to_lowercase()).copied(),
         _ => None,
     })
+    .filter(|plan| plan.checked)
 }
 
 /// Bind scalar operands against explicit logical row scopes and parameter
@@ -228,6 +234,13 @@ pub fn plan(expression: &Expr, parameters: &HashMap<String, Kind>) -> Option<Pla
 /// The returned query may be correlated with its enclosing row source. It does
 /// not itself implement SELECT projection, ordering or predicate error policy.
 pub fn plan_in_scope(expression: &Expr, scope: &crate::binding_scope::Scope) -> Option<Plan> {
+    projection_operand(expression, scope).filter(|plan| plan.checked)
+}
+
+pub(crate) fn projection_operand(
+    expression: &Expr,
+    scope: &crate::binding_scope::Scope,
+) -> Option<Plan> {
     build(expression, &|expr| {
         let ids = match expr {
             Expr::Identifier(id) => vec![id],
@@ -257,7 +270,7 @@ fn build(expression: &Expr, binding: &dyn Fn(&Expr) -> Option<Kind>) -> Option<P
         checked: false,
     };
     let (last, kind) = builder.expression(expression, 0)?;
-    if !builder.checked || builder.nodes.len() > 256 {
+    if builder.nodes.len() > 256 {
         return None;
     }
     let ctes = builder
@@ -276,9 +289,36 @@ fn build(expression: &Expr, binding: &dyn Fn(&Expr) -> Option<Kind>) -> Option<P
         table.materialized = Some(CteAsMaterialized::Materialized);
     }
     for (index, expr) in builder.leaves {
+        let spelling = expr.to_string().to_lowercase();
+        let prefix = (0..64)
+            .map(|n| format!("__msduck_checked_leaf_{index}_{n}_"))
+            .find(|name| !spelling.contains(name))?;
+        // DuckDB permits SELECT-alias references. A leaf named `value` or
+        // `error_number` must resolve to the outer input, not this leaf's own
+        // output aliases. Rename locally, then expose the outcome schema at
+        // the CTE boundary.
+        tables[index].alias.columns = [
+            "value",
+            "error_number",
+            "error_state",
+            "error_severity",
+            "error_message",
+        ]
+        .into_iter()
+        .map(|name| TableAliasColumnDef {
+            name: Ident::new(name),
+            data_type: None,
+        })
+        .collect();
         let SetExpr::Select(select) = tables[index].query.body.as_mut() else {
             return None;
         };
+        for (column, item) in select.projection.iter_mut().enumerate() {
+            let SelectItem::ExprWithAlias { alias, .. } = item else {
+                return None;
+            };
+            *alias = Ident::new(format!("{prefix}{column}"));
+        }
         let SelectItem::ExprWithAlias {
             expr: Expr::Cast { expr: inner, .. },
             ..
@@ -288,5 +328,9 @@ fn build(expression: &Expr, binding: &dyn Fn(&Expr) -> Option<Kind>) -> Option<P
         };
         **inner = expr;
     }
-    Some(Plan { query, kind })
+    Some(Plan {
+        query,
+        kind,
+        checked: builder.checked,
+    })
 }

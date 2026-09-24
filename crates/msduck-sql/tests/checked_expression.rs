@@ -146,3 +146,37 @@ fn scoped_operands_respect_qualified_names_ambiguity_and_shadowing() {
     scope.rows = vec![Some(vec![source("a", Some(106))])];
     assert!(plan_in_scope(&expr("a.n/1"), &scope).is_none());
 }
+
+#[test]
+fn parser_marked_integer_casts_keep_checked_widening_and_reject_narrowing() {
+    let declarations = HashMap::from([("@n".into(), Kind::BigInt)]);
+    for (sql, expected) in [
+        ("SELECT CAST(NULL AS BIGINT)+1", Some(Kind::BigInt)),
+        ("SELECT CAST(2147483647+1 AS BIGINT)", Some(Kind::BigInt)),
+        ("SELECT CAST(@n+1 AS INT)", None),
+    ] {
+        let mut statement = Parser::parse_sql(&msduck_sql::dialect::ServerDialect, sql)
+            .unwrap()
+            .remove(0);
+        msduck_sql::variant_cast::mark(&mut statement);
+        let Statement::Query(query) = statement else {
+            panic!()
+        };
+        let SetExpr::Select(select) = *query.body else {
+            panic!()
+        };
+        let SelectItem::UnnamedExpr(expr) = &select.projection[0] else {
+            panic!()
+        };
+        let checked = plan(expr, &declarations);
+        assert_eq!(checked.as_ref().map(|p| p.kind), expected, "{sql}");
+        if let Some(checked) = checked {
+            assert!(
+                !checked
+                    .query
+                    .to_string()
+                    .contains("__msduck_explicit_integer_source")
+            );
+        }
+    }
+}

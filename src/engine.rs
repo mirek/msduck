@@ -887,7 +887,7 @@ impl Session {
                             return (out, false);
                         }
                         out.extend_from_slice(&failed.metadata);
-                        if matches!(failed.command, 0xc3..=0xc5) {
+                        if matches!(failed.command, 0xc1 | 0xc3..=0xc5) {
                             self.rowcount = 0;
                         }
                     }
@@ -1657,6 +1657,25 @@ impl Session {
         crate::concat_lower::annotated_unicode_casts(&mut statement);
         crate::query_catalog::bind_unicode_operations(&self.db, &mut statement, parameters)?;
         crate::for_json::lower_nested(&self.db, &mut statement, parameters)?;
+        let checked_projection = if output.is_none()
+            && json.is_none()
+            && assignments.is_empty()
+            && into.is_none()
+            && let Statement::Query(query) = &statement
+            && let Some(plan) = crate::checked_projection::plan(&self.db, query, parameters)?
+            && let Some(metadata) = crate::checked_projection::metadata(&plan, &result_fields)?
+        {
+            for expression in &plan.scalar_checks {
+                self.evaluate_expression(expression.clone(), parameters, false)
+                    .map_err(|error| {
+                        crate::query_error::attach_context(error, metadata.clone(), 0xc1)
+                    })?;
+            }
+            statement = Statement::Query(plan.query);
+            Some((plan.width, metadata))
+        } else {
+            None
+        };
         let mut translator = Translator {
             parameters,
             values: vec![],
@@ -1890,7 +1909,9 @@ impl Session {
             Vec::new()
         };
         let json_plan = json.as_ref().map(|json| json.plan(&names)).transpose()?;
-        let error_metadata = if json.is_none() && assignments.is_empty() && output_sink.is_none() {
+        let error_metadata = if let Some((_, metadata)) = &checked_projection {
+            Some(metadata.clone())
+        } else if json.is_none() && assignments.is_empty() && output_sink.is_none() {
             crate::query_error::describe(
                 projected.as_ref().unwrap_or(&prepared),
                 &result_fields,
@@ -2038,7 +2059,13 @@ impl Session {
             return Ok(Execution::statement(vec![], Some(count), 0xc1));
         }
         let schema = batches.get_schema();
-        let (out, count) = Self::encode_batches(batches, &schema, &result_fields, &result_types)?;
+        let (out, count) = Self::encode_batches_inner(
+            batches,
+            &schema,
+            &result_fields,
+            &result_types,
+            checked_projection.map(|(width, _)| width),
+        )?;
         crate::output_image::close(image)?;
         Ok(Execution::result_set(
             out,
@@ -2136,6 +2163,20 @@ impl Session {
         result_fields: &[crate::query_catalog::Field],
         result_types: &[Option<Type>],
     ) -> Result<(Vec<u8>, u64)> {
+        Self::encode_batches_inner(batches, schema, result_fields, result_types, None)
+    }
+
+    fn encode_batches_inner(
+        batches: impl Iterator<Item = duckdb::arrow::record_batch::RecordBatch>,
+        schema: &duckdb::arrow::datatypes::Schema,
+        result_fields: &[crate::query_catalog::Field],
+        result_types: &[Option<Type>],
+        checked_width: Option<usize>,
+    ) -> Result<(Vec<u8>, u64)> {
+        let public_schema = checked_width
+            .map(|width| schema.project(&(0..width).collect::<Vec<_>>()))
+            .transpose()?;
+        let schema = public_schema.as_ref().unwrap_or(schema);
         let columns = schema
             .fields()
             .iter()
@@ -2186,6 +2227,11 @@ impl Session {
         let mut count = 0;
         for batch in batches {
             for row in 0..batch.num_rows() {
+                if let Some(width) = checked_width
+                    && let Some(error) = crate::checked_projection::diagnostic(&batch, row, width)?
+                {
+                    return Err(crate::query_error::attach_context(error.into(), out, 0xc1));
+                }
                 out.push(0xd1);
                 for (i, column) in columns.iter().enumerate() {
                     encode_column(

@@ -6,6 +6,7 @@ pub mod binding_scope;
 pub mod catalog_shape;
 pub mod catalog_snapshot;
 pub mod checked_expression;
+pub mod checked_projection;
 pub mod concat;
 pub mod cte_columns;
 pub mod cte_recursion;
