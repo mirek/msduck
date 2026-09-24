@@ -276,6 +276,26 @@ pub fn statement<T: VisitMut>(
 /// legacy Unicode producer to STRUCT here would break still-text-only functions.
 /// Run after binding so wrappers cannot erase declarations during inference.
 pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
+    fn aggregate_result(expr: &Expr) -> bool {
+        match expr {
+            Expr::Nested(inner) | Expr::Collate { expr: inner, .. } => aggregate_result(inner),
+            Expr::Function(f) => matches!(
+                f.name.to_string().to_ascii_uppercase().as_str(),
+                "MIN" | "MAX"
+            ),
+            Expr::Subquery(query) => match query.body.as_ref() {
+                SetExpr::Select(select) => match select.projection.as_slice() {
+                    [
+                        SelectItem::UnnamedExpr(value)
+                        | SelectItem::ExprWithAlias { expr: value, .. },
+                    ] => aggregate_result(value),
+                    _ => false,
+                },
+                _ => false,
+            },
+            _ => false,
+        }
+    }
     #[derive(Default)]
     struct Normalize {
         recursive: Vec<bool>,
@@ -330,6 +350,7 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
             let json_consumer = matches!(expr, Expr::Function(function)
                 if matches!(function.name.to_string().to_ascii_uppercase().as_str(),
                     "ISJSON" | "JSON_VALUE" | "JSON_QUERY" | "JSON_PATH_EXISTS" | "STRING_ESCAPE"
+                    | "MIN" | "MAX"
                     | "__MSDUCK_MIN_BIN2_UNICODE" | "__MSDUCK_MAX_BIN2_UNICODE"
                     | "__MSDUCK_MIN_BIN2_ANSI" | "__MSDUCK_MAX_BIN2_ANSI"));
             // Only the direct migrated operand (through parentheses/casts) changes
@@ -348,6 +369,12 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
                 if msduck_sql::for_json::unicode_result(source));
             let extrema_result = matches!(expr, Expr::Cast { expr: source, .. }
                 if msduck_sql::projection::character_extrema::bound_result(source));
+            // This conversion preserves the selected payload independently of
+            // how the aggregate orders its inputs. It does not assign a BIN2
+            // collation to an unresolved linguistic aggregate. Numeric inputs
+            // still use the original CAST through the bind-time dispatch below.
+            let aggregate_result = matches!(expr, Expr::Cast { expr: source, .. }
+                if aggregate_result(source));
             let known_carrier = matches!(expr, Expr::Cast { expr: source, .. }
                 if matches!(source.as_ref(), Expr::Function(f)
                     if matches!(f.name.to_string().as_str(),
@@ -357,6 +384,7 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
             if (consumer
                 || json_result
                 || extrema_result
+                || aggregate_result
                 || known_carrier
                 || self.recursive.last() == Some(&true))
                 && let Expr::Cast {
@@ -367,6 +395,7 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
                 } = expr
                 && let Ok(Type::Character(target)) = msduck_sql::sql_type::declaration(data_type)
                 && (extrema_result
+                    || aggregate_result
                     || known_carrier
                     || matches!(target.family(), Family::Nchar | Family::Nvarchar))
             {
