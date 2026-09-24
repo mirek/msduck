@@ -1,0 +1,14 @@
+[
+  {
+    "id": 23899191,
+    "name": "Immutable agent claims",
+    "target": "tag",
+    "pattern": "refs/tags/agent-claims/**"
+  },
+  {
+    "id": 23899192,
+    "name": "Owner-published task registry",
+    "target": "branch",
+    "pattern": "refs/heads/agent-control"
+  }
+]

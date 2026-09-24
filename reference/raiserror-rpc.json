@@ -1,0 +1,601 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "doneInProc",
+        "rowCount": 1,
+        "more": true
+      },
+      {
+        "kind": "doneProc",
+        "rowCount": null,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": 0,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "query": "RAISERROR(N'message',0,7)",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 50000,
+            "state": 7,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "returnStatus": 0,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "RAISERROR(N'message',9,7) WITH SETERROR; SELECT @@ERROR AS e, @@ROWCOUNT AS r",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 50000,
+            "state": 7,
+            "class": 9,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'message',16,7)",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 7,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "info": [],
+        "returnStatus": 50000,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "RAISERROR(N'message',16,7); SELECT @@ERROR AS e, @@ROWCOUNT AS r",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 7,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'%q',16,7,1); SELECT @@ERROR AS e, @@ROWCOUNT AS r",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2787,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Invalid format specification: '%q'."
+          }
+        ],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "BEGIN TRY RAISERROR(N'%q',16,7,1); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n, ERROR_SEVERITY() AS c, ERROR_STATE() AS s, ERROR_MESSAGE() AS m; END CATCH",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "c",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "m",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                2787,
+                16,
+                1,
+                "Invalid format specification: '%q'."
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'message',19,7); SELECT @@ERROR AS e",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2754
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2754,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Error severity levels greater than 18 can only be specified by members of the sysadmin role, using the WITH LOG option."
+          }
+        ],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'message',16,7) WITH LOG; SELECT @@ERROR AS e",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 50000,
+            "state": 7,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "BEGIN TRY RAISERROR(N'message',9,7) WITH SETERROR; SELECT @@ERROR AS e; END TRY BEGIN CATCH SELECT 999 AS unexpected; END CATCH",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 50000,
+            "state": 7,
+            "class": 9,
+            "lineNumber": 1,
+            "message": "message"
+          }
+        ],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "RAISERROR(N'message',16,7); RETURN 42",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 178,
+            "state": 1,
+            "class": 15,
+            "lineNumber": 1,
+            "message": "A RETURN statement with a return value cannot be used in this context."
+          }
+        ],
+        "info": [],
+        "returnStatus": 178,
+        "rowCount": 0
+      }
+    }
+  ]
+}

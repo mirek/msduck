@@ -1,0 +1,321 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "query": "RAISERROR(N'x',NULL,1); SELECT @@ERROR AS e",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 156,
+            "state": 1,
+            "class": 15,
+            "lineNumber": 1,
+            "message": "Incorrect syntax near the keyword 'NULL'."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "RAISERROR(NULL,16,1); SELECT @@ERROR AS e",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 156,
+            "state": 1,
+            "class": 15,
+            "lineNumber": 1,
+            "message": "Incorrect syntax near the keyword 'NULL'."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "RAISERROR(N'x','16',1); SELECT @@ERROR AS e",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 102,
+            "state": 1,
+            "class": 15,
+            "lineNumber": 1,
+            "message": "Incorrect syntax near '16'."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "RAISERROR(N'%d',16,1,1.0); SELECT @@ERROR AS e",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2786,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The data type of substitution parameter 1 does not match the expected type of the format specification."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "DECLARE @x DECIMAL(5,2)=1; RAISERROR(N'plain',16,1,@x); SELECT @@ERROR AS e",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2748,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot specify decimal(5,2) data type (parameter 4) as a substitution parameter."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "RAISERROR(N'x',16,1,1+2)",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 102,
+            "state": 1,
+            "class": 15,
+            "lineNumber": 1,
+            "message": "Incorrect syntax near '+'."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "RAISERROR(N'x',16,1,(1))",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 102,
+            "state": 1,
+            "class": 15,
+            "lineNumber": 1,
+            "message": "Incorrect syntax near '('."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "RAISERROR(N'x',16,1,+1)",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 102,
+            "state": 1,
+            "class": 15,
+            "lineNumber": 1,
+            "message": "Incorrect syntax near '+'."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "DECLARE @x INT=1; RAISERROR(N'%d',16,1,-@x)",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 102,
+            "state": 1,
+            "class": 15,
+            "lineNumber": 1,
+            "message": "Incorrect syntax near '@x'."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "RAISERROR(N'x',16,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1)",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2747,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Too many substitution parameters for RAISERROR. Cannot exceed 20 substitution parameters."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    }
+  ]
+}

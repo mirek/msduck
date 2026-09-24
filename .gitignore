@@ -1,0 +1,12 @@
+/target/
+/node_modules/
+/artifacts/
+*.duckdb
+*.duckdb.wal
+.DS_Store
+
+/.env
+/.env.*
+!/.env.example
+
+/.msduck/

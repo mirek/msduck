@@ -1,0 +1,1295 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE typed_stage(id INT PRIMARY KEY,n INT); INSERT INTO typed_stage VALUES(10,7)",
+      "query": "UPDATE t SET n=2147483648 OUTPUT deleted.n,inserted.n FROM typed_stage t",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8115,
+            "state": 2,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Arithmetic overflow error converting expression to data type int."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 197
+        }
+      ],
+      "readback": "SELECT id,n FROM typed_stage ORDER BY id",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                10,
+                7
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE typed_stage(id INT PRIMARY KEY,n INT); INSERT INTO typed_stage VALUES(10,7)",
+      "query": "UPDATE t SET n=2147483648 OUTPUT deleted.n,inserted.n FROM typed_stage t; SELECT 99 AS after_error",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          },
+          {
+            "columns": [
+              {
+                "name": "after_error",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                99
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8115,
+            "state": 2,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Arithmetic overflow error converting expression to data type int."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 197
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ],
+      "readback": "SELECT id,n FROM typed_stage ORDER BY id",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                10,
+                7
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE typed_stage(id INT PRIMARY KEY,n INT); INSERT INTO typed_stage VALUES(10,7)",
+      "query": "UPDATE t SET n=CAST(2147483648 AS BIGINT) OUTPUT deleted.n,inserted.n FROM typed_stage t",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8115,
+            "state": 2,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Arithmetic overflow error converting expression to data type int."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 197
+        }
+      ],
+      "readback": "SELECT id,n FROM typed_stage ORDER BY id",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                10,
+                7
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE typed_stage(id INT PRIMARY KEY,n INT); INSERT INTO typed_stage VALUES(10,7)",
+      "query": "UPDATE t SET n=t.n/0 OUTPUT deleted.n,inserted.n FROM typed_stage t",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8134,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Divide by zero error encountered."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 197
+        }
+      ],
+      "readback": "SELECT id,n FROM typed_stage ORDER BY id",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                10,
+                7
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE typed_stage(id INT PRIMARY KEY,n INT); INSERT INTO typed_stage VALUES(10,7)",
+      "query": "UPDATE t SET n=1 OUTPUT inserted.n/0 AS n FROM typed_stage t",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8134,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Divide by zero error encountered."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 197
+        }
+      ],
+      "readback": "SELECT id,n FROM typed_stage ORDER BY id",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                10,
+                7
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE typed_stage(id INT PRIMARY KEY,n INT); INSERT INTO typed_stage VALUES(10,7)",
+      "query": "UPDATE t SET n=1 OUTPUT deleted.n,inserted.n FROM typed_stage t WHERE t.n/0=0",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8134,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Divide by zero error encountered."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 197
+        }
+      ],
+      "readback": "SELECT id,n FROM typed_stage ORDER BY id",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                10,
+                7
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE typed_stage(id INT PRIMARY KEY,n INT); INSERT INTO typed_stage VALUES(10,7)",
+      "query": "BEGIN TRY UPDATE t SET n=2147483648 OUTPUT deleted.n,inserted.n FROM typed_stage t; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS number,ERROR_STATE() AS state,@@ROWCOUNT AS rc; END CATCH",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          },
+          {
+            "columns": [
+              {
+                "name": "number",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "state",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                8115,
+                2,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 349
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 0,
+          "curCmd": 197
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 350
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 351
+        }
+      ],
+      "readback": "SELECT id,n FROM typed_stage ORDER BY id",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                10,
+                7
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE typed_stage(id INT PRIMARY KEY,n INT); INSERT INTO typed_stage VALUES(10,7)",
+      "query": "SET NOCOUNT ON; UPDATE t SET n=2147483648 OUTPUT deleted.n,inserted.n FROM typed_stage t",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8115,
+            "state": 2,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Arithmetic overflow error converting expression to data type int."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 185
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 197
+        }
+      ],
+      "readback": "SELECT id,n FROM typed_stage ORDER BY id",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                10,
+                7
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE typed_stage(id INT PRIMARY KEY,n INT); INSERT INTO typed_stage VALUES(10,7)",
+      "query": "UPDATE t SET n=CAST(1e30 AS INT) OUTPUT deleted.n,inserted.n FROM typed_stage t",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 232,
+            "state": 3,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Arithmetic overflow error for type int, value = 1000000000000000000000000000000.000000."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 197
+        }
+      ],
+      "readback": "SELECT id,n FROM typed_stage ORDER BY id",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                10,
+                7
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "setup": "SET NOCOUNT OFF; CREATE TABLE typed_stage(id INT PRIMARY KEY,n INT); INSERT INTO typed_stage VALUES(10,7)",
+      "query": "UPDATE t SET n=CAST('2147483648' AS INT) OUTPUT deleted.n,inserted.n FROM typed_stage t",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 248,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The conversion of the varchar value '2147483648' overflowed an int column."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 197
+        }
+      ],
+      "readback": "SELECT id,n FROM typed_stage ORDER BY id",
+      "after": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                10,
+                7
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    }
+  ]
+}

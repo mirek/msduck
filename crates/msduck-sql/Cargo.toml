@@ -1,0 +1,13 @@
+[package]
+name = "msduck-sql"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+msduck-core = { path = "../msduck-core" }
+sqlparser.workspace = true
+
+[dev-dependencies]
+serde_json = "1.0.151"

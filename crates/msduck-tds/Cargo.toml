@@ -1,0 +1,13 @@
+[package]
+name = "msduck-tds"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+msduck-core = { path = "../msduck-core" }
+zeroize = { version = "1.9.0", features = ["std"] }
+
+[dev-dependencies]
+serde_json = "1.0.151"

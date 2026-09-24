@@ -1,0 +1,30 @@
+name: SQL Server compatibility gap
+description: Record a reproducible behavior difference and the evidence needed to close it.
+labels: [compatibility]
+body:
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include SQL, parameters, session settings, and client/protocol details.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: SQL Server behavior
+      description: Include version and raw rows, metadata, diagnostics, or completion tokens.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: msduck behavior
+      description: Include the commit and reference/artifact links; preserve all differences.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Completion evidence
+      description: Which reference comparisons and regression checks prove the gap closed?

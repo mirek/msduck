@@ -1,0 +1,515 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "name": "SQL_Latin1_General_CP1_CI_AS",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT N'a' COLLATE SQL_Latin1_General_CP1_CI_AS AS n,CAST('a' AS VARCHAR(4)) COLLATE SQL_Latin1_General_CP1_CI_AS AS v",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "v",
+                "type": "VarChar",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "a",
+                "a"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "Latin1_General_100_CI_AS",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT N'a' COLLATE Latin1_General_100_CI_AS AS n,CAST('a' AS VARCHAR(4)) COLLATE Latin1_General_100_CI_AS AS v",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 2,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "v",
+                "type": "VarChar",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 2,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "a",
+                "a"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "Latin1_General_100_CS_AS",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT N'a' COLLATE Latin1_General_100_CS_AS AS n,CAST('a' AS VARCHAR(4)) COLLATE Latin1_General_100_CS_AS AS v",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 34,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 12,
+                  "version": 2,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "v",
+                "type": "VarChar",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 35,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 12,
+                  "version": 2,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "a",
+                "a"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "Latin1_General_100_CI_AI",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT N'a' COLLATE Latin1_General_100_CI_AI AS n,CAST('a' AS VARCHAR(4)) COLLATE Latin1_General_100_CI_AI AS v",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 15,
+                  "version": 2,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "v",
+                "type": "VarChar",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 15,
+                  "version": 2,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "a",
+                "a"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "Latin1_General_100_CS_AI",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT N'a' COLLATE Latin1_General_100_CS_AI AS n,CAST('a' AS VARCHAR(4)) COLLATE Latin1_General_100_CS_AI AS v",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 34,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 14,
+                  "version": 2,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "v",
+                "type": "VarChar",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 35,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 14,
+                  "version": 2,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "a",
+                "a"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "Latin1_General_100_BIN2",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT N'a' COLLATE Latin1_General_100_BIN2 AS n,CAST('a' AS VARCHAR(4)) COLLATE Latin1_General_100_BIN2 AS v",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 34,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 32,
+                  "version": 2,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "v",
+                "type": "VarChar",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 35,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 32,
+                  "version": 2,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "a",
+                "a"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    }
+  ]
+}

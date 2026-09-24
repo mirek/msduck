@@ -1,0 +1,923 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "name": "replace deferred property",
+      "expression": "REPLACE((CASE WHEN id=1 THEN a ELSE b END),N'q',N'z')",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(REPLACE((CASE WHEN id=1 THEN a ELSE b END),N'q',N'z'),'Collation')) AS c FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 4191,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve collation conflict for replace operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "replace deferred comparison",
+      "expression": "REPLACE((CASE WHEN id=1 THEN a ELSE b END),N'q',N'z')",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CASE WHEN REPLACE((CASE WHEN id=1 THEN a ELSE b END),N'q',N'z')=N'A' COLLATE Latin1_General_100_CS_AS THEN 1 ELSE 0 END AS n FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 4191,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve collation conflict for replace operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "replace deferred explicit property",
+      "expression": "REPLACE((CASE WHEN id=1 THEN a ELSE b END),N'q',N'z' COLLATE Latin1_General_100_BIN2)",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(REPLACE((CASE WHEN id=1 THEN a ELSE b END),N'q',N'z' COLLATE Latin1_General_100_BIN2),'Collation')) AS c FROM coll_scope",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "c",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "Latin1_General_100_BIN2"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "replace deferred explicit comparison",
+      "expression": "REPLACE((CASE WHEN id=1 THEN a ELSE b END),N'q',N'z' COLLATE Latin1_General_100_BIN2)",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CASE WHEN REPLACE((CASE WHEN id=1 THEN a ELSE b END),N'q',N'z' COLLATE Latin1_General_100_BIN2)=N'A' COLLATE Latin1_General_100_CS_AS THEN 1 ELSE 0 END AS n FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_BIN2\" in the equal to operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "stuff deferred property",
+      "expression": "STUFF((CASE WHEN id=1 THEN a ELSE b END),1,1,N'z')",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(STUFF((CASE WHEN id=1 THEN a ELSE b END),1,1,N'z'),'Collation')) AS c FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 4191,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve collation conflict for stuff operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "stuff deferred comparison",
+      "expression": "STUFF((CASE WHEN id=1 THEN a ELSE b END),1,1,N'z')",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CASE WHEN STUFF((CASE WHEN id=1 THEN a ELSE b END),1,1,N'z')=N'A' COLLATE Latin1_General_100_CS_AS THEN 1 ELSE 0 END AS n FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 4191,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve collation conflict for stuff operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "nullif deferred property",
+      "expression": "NULLIF((CASE WHEN id=1 THEN a ELSE b END),N'z')",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(NULLIF((CASE WHEN id=1 THEN a ELSE b END),N'z'),'Collation')) AS c FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 4191,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve collation conflict for equal to operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "nullif deferred comparison",
+      "expression": "NULLIF((CASE WHEN id=1 THEN a ELSE b END),N'z')",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CASE WHEN NULLIF((CASE WHEN id=1 THEN a ELSE b END),N'z')=N'A' COLLATE Latin1_General_100_CS_AS THEN 1 ELSE 0 END AS n FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 4191,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve collation conflict for equal to operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "nullif explicit right property",
+      "expression": "NULLIF(a,b COLLATE Latin1_General_100_BIN2)",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(NULLIF(a,b COLLATE Latin1_General_100_BIN2),'Collation')) AS c FROM coll_scope",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "c",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "Latin1_General_100_CI_AS"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "nullif explicit right comparison",
+      "expression": "NULLIF(a,b COLLATE Latin1_General_100_BIN2)",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CASE WHEN NULLIF(a,b COLLATE Latin1_General_100_BIN2)=N'A' COLLATE Latin1_General_100_CS_AS THEN 1 ELSE 0 END AS n FROM coll_scope",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "nullif explicit left property",
+      "expression": "NULLIF(a COLLATE Latin1_General_100_BIN2,b)",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(NULLIF(a COLLATE Latin1_General_100_BIN2,b),'Collation')) AS c FROM coll_scope",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "c",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "Latin1_General_100_BIN2"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "nullif explicit left comparison",
+      "expression": "NULLIF(a COLLATE Latin1_General_100_BIN2,b)",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CASE WHEN NULLIF(a COLLATE Latin1_General_100_BIN2,b)=N'A' COLLATE Latin1_General_100_CS_AS THEN 1 ELSE 0 END AS n FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_BIN2\" in the equal to operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "replace implicit repaired third property",
+      "expression": "REPLACE(a,b,N'z' COLLATE Latin1_General_100_BIN2)",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(REPLACE(a,b,N'z' COLLATE Latin1_General_100_BIN2),'Collation')) AS c FROM coll_scope",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "c",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "Latin1_General_100_BIN2"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "replace implicit repaired third comparison",
+      "expression": "REPLACE(a,b,N'z' COLLATE Latin1_General_100_BIN2)",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CASE WHEN REPLACE(a,b,N'z' COLLATE Latin1_General_100_BIN2)=N'A' COLLATE Latin1_General_100_CS_AS THEN 1 ELSE 0 END AS n FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_BIN2\" in the equal to operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "replace nested outer repair property",
+      "expression": "REPLACE(a,b,N'z') COLLATE Latin1_General_100_BIN2",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(REPLACE(a,b,N'z') COLLATE Latin1_General_100_BIN2,'Collation')) AS c FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_CI_AS\" in the replace operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "replace nested outer repair comparison",
+      "expression": "REPLACE(a,b,N'z') COLLATE Latin1_General_100_BIN2",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CASE WHEN REPLACE(a,b,N'z') COLLATE Latin1_General_100_BIN2=N'A' COLLATE Latin1_General_100_CS_AS THEN 1 ELSE 0 END AS n FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_CI_AS\" in the replace operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "stuff nested outer repair property",
+      "expression": "STUFF(a,1,1,b) COLLATE Latin1_General_100_BIN2",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(STUFF(a,1,1,b) COLLATE Latin1_General_100_BIN2,'Collation')) AS c FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_CI_AS\" in the stuff operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "stuff nested outer repair comparison",
+      "expression": "STUFF(a,1,1,b) COLLATE Latin1_General_100_BIN2",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CASE WHEN STUFF(a,1,1,b) COLLATE Latin1_General_100_BIN2=N'A' COLLATE Latin1_General_100_CS_AS THEN 1 ELSE 0 END AS n FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_CI_AS\" in the stuff operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "nullif nested outer repair property",
+      "expression": "NULLIF(a,b) COLLATE Latin1_General_100_BIN2",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(NULLIF(a,b) COLLATE Latin1_General_100_BIN2,'Collation')) AS c FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_CI_AS\" in the equal to operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "nullif nested outer repair comparison",
+      "expression": "NULLIF(a,b) COLLATE Latin1_General_100_BIN2",
+      "setup": "CREATE TABLE coll_scope(id INT,a NVARCHAR(10) COLLATE Latin1_General_100_CI_AS,b NVARCHAR(10) COLLATE Latin1_General_100_CS_AS,c NVARCHAR(10) COLLATE Latin1_General_100_BIN2); INSERT INTO coll_scope VALUES(1,N'a',N'A',N'a')",
+      "query": "SELECT CASE WHEN NULLIF(a,b) COLLATE Latin1_General_100_BIN2=N'A' COLLATE Latin1_General_100_CS_AS THEN 1 ELSE 0 END AS n FROM coll_scope",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_CI_AS\" in the equal to operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ]
+    }
+  ]
+}

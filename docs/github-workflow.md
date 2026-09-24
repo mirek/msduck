@@ -1,0 +1,43 @@
+# GitHub workflow
+
+Use one branch and pull request for each coherent behavior change. Push useful
+checkpoints and open draft PRs early; mark ready when the change and evidence are
+reviewable. Link the issue, describe remaining differences, and let CI finish
+before merging. Automatic review does not mean automatic merge.
+
+CI runs on PRs, pushes to main, and manual dispatch. The deterministic-crate job
+checks formatting, Clippy and pure tests without DuckDB. The full job checks
+workspace Clippy, Rust integration tests, independent Node clients and a raw
+compatibility audit. Stale runs are canceled on a newer push. Both jobs use a
+pinned Rust toolchain; full verification uses Node 24. Dependency/build caches
+reduce repeated DuckDB compilation. Logs, revision identity and raw captures
+are retained for 14 days. The audit is diagnostic, not an equivalence gate.
+
+GitHub-hosted Linux runners are the initial CI environment. The optional SSH
+builder remains available for development; its local configuration and credentials
+are not published or exposed to pull-request jobs.
+
+The owner can request Codex review on approved PRs. Under the owner-only intake
+policy, do not enable all-PR automatic review unless intake can exclude unapproved
+external content before retrieval. Bot review output requires owner triage before
+another agent reads it. An automatic request is not a completed review. Repository
+review rules live in AGENTS.md. See [the contribution workflow](agent-work.md).
+
+Use issues for actionable gaps with reference evidence and acceptance criteria;
+use the roadmap tracking issue to group larger work. The long-term scope remains
+in ROADMAP.md. Close an issue only when the promised behavior and evidence exist.
+Keep verification progress in PR checks and linked artifacts rather than creating
+an issue for every successful test run.
+
+The [development project](https://github.com/users/mirek/projects/2) now groups
+workstreams and bounded tasks. Readiness is informational: workers discover only
+the owner-approved registry and claim through `scripts/agent-work.mjs`.
+See [exclusive claims and owner-only intake](agent-work.md).
+
+During the owner-requested integration checkpoint (#93), the full
+**Workspace and clients** check is temporarily non-blocking for merging to main;
+**Deterministic crates** remains required with strict up-to-date checking.
+The full workflow still runs and its failures remain visible. See
+[the checkpoint](integration-checkpoint.md) for ancestry, revision-specific
+verification, retained failures and the requirement to restore the full gate
+once its reproducible failures are resolved.

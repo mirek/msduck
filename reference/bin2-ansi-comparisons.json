@@ -1,0 +1,847 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "name": "euro nbsp",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT CASE WHEN (CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS eq,CASE WHEN (CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS ne,CASE WHEN (CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS lt,CASE WHEN (CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS gt,CASE WHEN (CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS le,CASE WHEN (CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS ge",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "eq",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ne",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "lt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "gt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "le",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ge",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                1,
+                1,
+                0,
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "oe nbsp",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT CASE WHEN (CAST(N'Œ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'Œ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS eq,CASE WHEN (CAST(N'Œ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'Œ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS ne,CASE WHEN (CAST(N'Œ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'Œ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS lt,CASE WHEN (CAST(N'Œ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'Œ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS gt,CASE WHEN (CAST(N'Œ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'Œ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS le,CASE WHEN (CAST(N'Œ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'Œ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS ge",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "eq",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ne",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "lt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "gt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "le",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ge",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                1,
+                1,
+                0,
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "y dia nbsp",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT CASE WHEN (CAST(N'Ÿ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'Ÿ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS eq,CASE WHEN (CAST(N'Ÿ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'Ÿ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS ne,CASE WHEN (CAST(N'Ÿ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'Ÿ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS lt,CASE WHEN (CAST(N'Ÿ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'Ÿ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS gt,CASE WHEN (CAST(N'Ÿ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'Ÿ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS le,CASE WHEN (CAST(N'Ÿ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST(NCHAR(160) AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(N'Ÿ' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST(NCHAR(160) AS VARCHAR(10)))) THEN 0 ELSE NULL END AS ge",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "eq",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ne",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "lt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "gt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "le",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ge",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                1,
+                1,
+                0,
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "mixed unicode",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT CASE WHEN (CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (NCHAR(160)) THEN 1 WHEN NOT ((CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (NCHAR(160))) THEN 0 ELSE NULL END AS eq,CASE WHEN (CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (NCHAR(160)) THEN 1 WHEN NOT ((CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (NCHAR(160))) THEN 0 ELSE NULL END AS ne,CASE WHEN (CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (NCHAR(160)) THEN 1 WHEN NOT ((CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (NCHAR(160))) THEN 0 ELSE NULL END AS lt,CASE WHEN (CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (NCHAR(160)) THEN 1 WHEN NOT ((CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (NCHAR(160))) THEN 0 ELSE NULL END AS gt,CASE WHEN (CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (NCHAR(160)) THEN 1 WHEN NOT ((CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (NCHAR(160))) THEN 0 ELSE NULL END AS le,CASE WHEN (CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (NCHAR(160)) THEN 1 WHEN NOT ((CAST(N'€' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (NCHAR(160))) THEN 0 ELSE NULL END AS ge",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "eq",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ne",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "lt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "gt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "le",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ge",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                1,
+                0,
+                1,
+                0,
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "padding",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT CASE WHEN (CAST('a' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST('a ' AS CHAR(4))) THEN 1 WHEN NOT ((CAST('a' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST('a ' AS CHAR(4)))) THEN 0 ELSE NULL END AS eq,CASE WHEN (CAST('a' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST('a ' AS CHAR(4))) THEN 1 WHEN NOT ((CAST('a' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST('a ' AS CHAR(4)))) THEN 0 ELSE NULL END AS ne,CASE WHEN (CAST('a' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST('a ' AS CHAR(4))) THEN 1 WHEN NOT ((CAST('a' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST('a ' AS CHAR(4)))) THEN 0 ELSE NULL END AS lt,CASE WHEN (CAST('a' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST('a ' AS CHAR(4))) THEN 1 WHEN NOT ((CAST('a' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST('a ' AS CHAR(4)))) THEN 0 ELSE NULL END AS gt,CASE WHEN (CAST('a' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST('a ' AS CHAR(4))) THEN 1 WHEN NOT ((CAST('a' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST('a ' AS CHAR(4)))) THEN 0 ELSE NULL END AS le,CASE WHEN (CAST('a' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST('a ' AS CHAR(4))) THEN 1 WHEN NOT ((CAST('a' AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST('a ' AS CHAR(4)))) THEN 0 ELSE NULL END AS ge",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "eq",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ne",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "lt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "gt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "le",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ge",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                0,
+                0,
+                0,
+                1,
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "nul suffix",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT CASE WHEN (CAST('a'+CHAR(0) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST('a' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST('a'+CHAR(0) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST('a' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS eq,CASE WHEN (CAST('a'+CHAR(0) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST('a' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST('a'+CHAR(0) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST('a' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS ne,CASE WHEN (CAST('a'+CHAR(0) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST('a' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST('a'+CHAR(0) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST('a' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS lt,CASE WHEN (CAST('a'+CHAR(0) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST('a' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST('a'+CHAR(0) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST('a' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS gt,CASE WHEN (CAST('a'+CHAR(0) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST('a' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST('a'+CHAR(0) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST('a' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS le,CASE WHEN (CAST('a'+CHAR(0) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST('a' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST('a'+CHAR(0) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST('a' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS ge",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "eq",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ne",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "lt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "gt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "le",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ge",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                1,
+                1,
+                0,
+                1,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "null",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT CASE WHEN (CAST(NULL AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST('a' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(NULL AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST('a' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS eq,CASE WHEN (CAST(NULL AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST('a' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(NULL AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST('a' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS ne,CASE WHEN (CAST(NULL AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST('a' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(NULL AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST('a' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS lt,CASE WHEN (CAST(NULL AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST('a' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(NULL AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST('a' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS gt,CASE WHEN (CAST(NULL AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST('a' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(NULL AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST('a' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS le,CASE WHEN (CAST(NULL AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST('a' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(NULL AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST('a' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS ge",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "eq",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "ne",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "lt",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "gt",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "le",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "ge",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "surrogate cast",
+      "setup": "SET NOCOUNT OFF",
+      "query": "SELECT CASE WHEN (CAST(LEFT(N'🦆',1) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST('?' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(LEFT(N'🦆',1) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 = (CAST('?' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS eq,CASE WHEN (CAST(LEFT(N'🦆',1) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST('?' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(LEFT(N'🦆',1) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <> (CAST('?' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS ne,CASE WHEN (CAST(LEFT(N'🦆',1) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST('?' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(LEFT(N'🦆',1) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 < (CAST('?' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS lt,CASE WHEN (CAST(LEFT(N'🦆',1) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST('?' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(LEFT(N'🦆',1) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 > (CAST('?' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS gt,CASE WHEN (CAST(LEFT(N'🦆',1) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST('?' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(LEFT(N'🦆',1) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 <= (CAST('?' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS le,CASE WHEN (CAST(LEFT(N'🦆',1) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST('?' AS VARCHAR(10))) THEN 1 WHEN NOT ((CAST(LEFT(N'🦆',1) AS VARCHAR(10))) COLLATE Latin1_General_100_BIN2 >= (CAST('?' AS VARCHAR(10)))) THEN 0 ELSE NULL END AS ge",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "eq",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ne",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "lt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "gt",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "le",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "ge",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                0,
+                0,
+                0,
+                1,
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    }
+  ]
+}

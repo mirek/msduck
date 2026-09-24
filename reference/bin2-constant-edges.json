@@ -1,0 +1,1044 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 1
+  },
+  "results": [
+    {
+      "name": "default Unicode cast width",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (CAST(N'abcdefghijklmnopqrstuvwxyz012345' AS NVARCHAR)) COLLATE Latin1_General_100_BIN2=(N'abcdefghijklmnopqrstuvwxyz0123') THEN 1 WHEN NOT ((CAST(N'abcdefghijklmnopqrstuvwxyz012345' AS NVARCHAR)) COLLATE Latin1_General_100_BIN2=(N'abcdefghijklmnopqrstuvwxyz0123')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "default ANSI cast width",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (CAST('abcdefghijklmnopqrstuvwxyz012345' AS VARCHAR)) COLLATE Latin1_General_100_BIN2=('abcdefghijklmnopqrstuvwxyz0123') THEN 1 WHEN NOT ((CAST('abcdefghijklmnopqrstuvwxyz012345' AS VARCHAR)) COLLATE Latin1_General_100_BIN2=('abcdefghijklmnopqrstuvwxyz0123')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "fixed Unicode cast padding",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (CAST(N'a' AS NCHAR(4))) COLLATE Latin1_General_100_BIN2=(N'a') THEN 1 WHEN NOT ((CAST(N'a' AS NCHAR(4))) COLLATE Latin1_General_100_BIN2=(N'a')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "RIGHT raw low surrogate",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (RIGHT(N'🦆',1)) COLLATE Latin1_General_100_BIN2=(RIGHT(N'🦆',1)) THEN 1 WHEN NOT ((RIGHT(N'🦆',1)) COLLATE Latin1_General_100_BIN2=(RIGHT(N'🦆',1))) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "LEFT zero",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (LEFT(N'🦆',0)) COLLATE Latin1_General_100_BIN2=(N'') THEN 1 WHEN NOT ((LEFT(N'🦆',0)) COLLATE Latin1_General_100_BIN2=(N'')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "CHAR out of range",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (CHAR(256)) COLLATE Latin1_General_100_BIN2=('x') THEN 1 WHEN NOT ((CHAR(256)) COLLATE Latin1_General_100_BIN2=('x')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                null
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "NCHAR out of range",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (NCHAR(65536)) COLLATE Latin1_General_100_BIN2=(N'x') THEN 1 WHEN NOT ((NCHAR(65536)) COLLATE Latin1_General_100_BIN2=(N'x')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                null
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "SPACE zero",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (SPACE(0)) COLLATE Latin1_General_100_BIN2=('') THEN 1 WHEN NOT ((SPACE(0)) COLLATE Latin1_General_100_BIN2=('')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "SPACE negative",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (SPACE(-1)) COLLATE Latin1_General_100_BIN2=('') THEN 1 WHEN NOT ((SPACE(-1)) COLLATE Latin1_General_100_BIN2=('')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                null
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "SPACE positive",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (SPACE(3)) COLLATE Latin1_General_100_BIN2=(' ') THEN 1 WHEN NOT ((SPACE(3)) COLLATE Latin1_General_100_BIN2=(' ')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "Unicode plus",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (N'a'+N'b') COLLATE Latin1_General_100_BIN2=(N'ab') THEN 1 WHEN NOT ((N'a'+N'b') COLLATE Latin1_General_100_BIN2=(N'ab')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "ANSI plus cap",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (CAST('a' AS VARCHAR(8000))+CAST('b' AS VARCHAR(8000))) COLLATE Latin1_General_100_BIN2=('ab') THEN 1 WHEN NOT ((CAST('a' AS VARCHAR(8000))+CAST('b' AS VARCHAR(8000))) COLLATE Latin1_General_100_BIN2=('ab')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "Unicode plus NULL",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (N'a'+CAST(NULL AS NVARCHAR(4))) COLLATE Latin1_General_100_BIN2=(N'a') THEN 1 WHEN NOT ((N'a'+CAST(NULL AS NVARCHAR(4))) COLLATE Latin1_General_100_BIN2=(N'a')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                null
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "ANSI Euro to Unicode",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (CHAR(128)) COLLATE Latin1_General_100_BIN2=(N'€') THEN 1 WHEN NOT ((CHAR(128)) COLLATE Latin1_General_100_BIN2=(N'€')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "unpaired NCHAR",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (NCHAR(55358)) COLLATE Latin1_General_100_BIN2=(LEFT(N'🦆',1)) THEN 1 WHEN NOT ((NCHAR(55358)) COLLATE Latin1_General_100_BIN2=(LEFT(N'🦆',1))) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "invalid LEFT length",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (LEFT(N'a',-1)) COLLATE Latin1_General_100_BIN2=(N'a') THEN 1 WHEN NOT ((LEFT(N'a',-1)) COLLATE Latin1_General_100_BIN2=(N'a')) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 536,
+            "state": 6,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Invalid length parameter passed to the left function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "rowCount": {
+            "kind": "missing"
+          },
+          "curCmd": 253
+        }
+      ]
+    },
+    {
+      "name": "TRY_CAST invalid numeric text",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN (TRY_CAST(N'no' AS INT))=(1) THEN 1 WHEN NOT ((TRY_CAST(N'no' AS INT))=(1)) THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                null
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "runtime parameter",
+      "setup": "SELECT 1",
+      "query": "DECLARE @p NVARCHAR(4)=N'a'; SELECT CASE WHEN @p COLLATE Latin1_General_100_BIN2=N'a' THEN 1 WHEN NOT (@p COLLATE Latin1_General_100_BIN2=N'a') THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": true,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        },
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "linguistic condition",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN N'a' COLLATE Latin1_General_100_CI_AS=N'A' THEN 1 WHEN NOT (N'a' COLLATE Latin1_General_100_CI_AS=N'A') THEN 0 ELSE NULL END AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "rowCount": 1,
+          "curCmd": 193
+        }
+      ]
+    },
+    {
+      "name": "explicit collation conflict",
+      "setup": "SELECT 1",
+      "query": "SELECT CASE WHEN N'a' COLLATE Latin1_General_100_BIN2=N'a' COLLATE Latin1_General_100_CI_AS THEN 1 ELSE NULL END AS n",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 468,
+            "state": 9,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot resolve the collation conflict between \"Latin1_General_100_CI_AS\" and \"Latin1_General_100_BIN2\" in the equal to operation."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "tokens": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "rowCount": {
+            "kind": "missing"
+          },
+          "curCmd": 253
+        }
+      ]
+    }
+  ]
+}

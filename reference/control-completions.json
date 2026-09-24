@@ -1,0 +1,893 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "version": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 600,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "Microsoft SQL Server 2025 (RTM-CU7) (KB5096981) - 17.0.4065.4 (X64) \n\tJul  8 2026 23:26:08 \n\tCopyright (C) 2025 Microsoft Corporation\n\tEnterprise Developer Edition (64-bit) on Linux (Ubuntu 24.04.4 LTS) <X64>"
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": null,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 0
+  },
+  "results": [
+    {
+      "query": "PRINT 'a'; PRINT 'b'",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "a"
+          },
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "b"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "IF 1=0 PRINT 'skip'; PRINT 'after'",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "after"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "IF 1=1 PRINT 'yes'; PRINT 'after'",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "yes"
+          },
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "after"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "IF 1=0 SELECT 1 AS x; SELECT 2 AS y",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "y",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "IF 1=1 SELECT 1 AS x; SELECT 2 AS y",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "x",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "y",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "query": "IF 1=0 PRINT 'skip'",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "IF 1=1 PRINT 'yes'",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "yes"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "BEGIN PRINT 'a'; PRINT 'b'; END",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "a"
+          },
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "b"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "BEGIN SELECT 1 AS x; END",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "x",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "IF 1=1 BEGIN PRINT 'a'; PRINT 'b'; END; PRINT 'c'",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "a"
+          },
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "b"
+          },
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "c"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "BEGIN TRY PRINT 'a'; END TRY BEGIN CATCH PRINT 'caught'; END CATCH",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "a"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "BEGIN TRY SELECT 1 AS x; END TRY BEGIN CATCH SELECT 2 AS y; END CATCH",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "x",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "BEGIN TRY RAISERROR('oops',16,1); END TRY BEGIN CATCH PRINT 'caught'; END CATCH",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "caught"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "BEGIN TRY RAISERROR('oops',16,1); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n; END CATCH",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "BEGIN TRY RAISERROR('oops',16,1); END TRY BEGIN CATCH PRINT 'caught'; END CATCH; SELECT 3 AS z",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "z",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                3
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "caught"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "query": "WHILE 1=0 PRINT 'skip'; PRINT 'after'",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "after"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "DECLARE @i INT=0; WHILE @i<2 BEGIN SET @i=@i+1; PRINT 'loop'; END; SELECT @i AS i",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "i",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "loop"
+          },
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "loop"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "query": "SET NOCOUNT ON; IF 1=0 PRINT 'skip'; PRINT 'after'",
+      "reference": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 0,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "after"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "query": "SET NOCOUNT ON; BEGIN TRY SELECT 1 AS x; END TRY BEGIN CATCH PRINT 'caught'; END CATCH",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "x",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    }
+  ]
+}

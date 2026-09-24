@@ -1,0 +1,786 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "source": "character-concat.json",
+  "results": [
+    {
+      "name": "CHAR plus CHAR",
+      "query": "SELECT CAST('a' AS CHAR(2))+CAST('b' AS CHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "Char",
+                "length": 5,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "CHAR plus VARCHAR",
+      "query": "SELECT CAST('a' AS CHAR(2))+CAST('b' AS VARCHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "VarChar",
+                "length": 5,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "CHAR plus NCHAR",
+      "query": "SELECT CAST('a' AS CHAR(2))+CAST('b' AS NCHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NChar",
+                "length": 10,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "CHAR plus NVARCHAR",
+      "query": "SELECT CAST('a' AS CHAR(2))+CAST('b' AS NVARCHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 10,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "VARCHAR plus CHAR",
+      "query": "SELECT CAST('a' AS VARCHAR(2))+CAST('b' AS CHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "VarChar",
+                "length": 5,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "VARCHAR plus VARCHAR",
+      "query": "SELECT CAST('a' AS VARCHAR(2))+CAST('b' AS VARCHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "VarChar",
+                "length": 5,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "VARCHAR plus NCHAR",
+      "query": "SELECT CAST('a' AS VARCHAR(2))+CAST('b' AS NCHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 10,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "VARCHAR plus NVARCHAR",
+      "query": "SELECT CAST('a' AS VARCHAR(2))+CAST('b' AS NVARCHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 10,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "NCHAR plus CHAR",
+      "query": "SELECT CAST('a' AS NCHAR(2))+CAST('b' AS CHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NChar",
+                "length": 10,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "NCHAR plus VARCHAR",
+      "query": "SELECT CAST('a' AS NCHAR(2))+CAST('b' AS VARCHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 10,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "NCHAR plus NCHAR",
+      "query": "SELECT CAST('a' AS NCHAR(2))+CAST('b' AS NCHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NChar",
+                "length": 10,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "NCHAR plus NVARCHAR",
+      "query": "SELECT CAST('a' AS NCHAR(2))+CAST('b' AS NVARCHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 10,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "NVARCHAR plus CHAR",
+      "query": "SELECT CAST('a' AS NVARCHAR(2))+CAST('b' AS CHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 10,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "NVARCHAR plus VARCHAR",
+      "query": "SELECT CAST('a' AS NVARCHAR(2))+CAST('b' AS VARCHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 10,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "NVARCHAR plus NCHAR",
+      "query": "SELECT CAST('a' AS NVARCHAR(2))+CAST('b' AS NCHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 10,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "NVARCHAR plus NVARCHAR",
+      "query": "SELECT CAST('a' AS NVARCHAR(2))+CAST('b' AS NVARCHAR(3)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 10,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ANSI cap",
+      "query": "SELECT CAST('a' AS VARCHAR(6000))+CAST('b' AS VARCHAR(6000)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "VarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Unicode cap",
+      "query": "SELECT CAST('a' AS NVARCHAR(3000))+CAST('b' AS NVARCHAR(3000)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Unicode mixed cap",
+      "query": "SELECT CAST('a' AS NVARCHAR(3000))+CAST('b' AS VARCHAR(6000)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ANSI MAX",
+      "query": "SELECT CAST('a' AS VARCHAR(MAX))+CAST('b' AS VARCHAR(10)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "VarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Unicode MAX",
+      "query": "SELECT CAST('a' AS NVARCHAR(MAX))+CAST('b' AS VARCHAR(10)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "ANSI MAX Unicode",
+      "query": "SELECT CAST('a' AS VARCHAR(MAX))+CAST('b' AS NVARCHAR(10)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "null literal",
+      "query": "SELECT N'a'+NULL AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "typed null",
+      "query": "SELECT N'a'+CAST(NULL AS NVARCHAR(4)) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 10,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "raw Unicode unit",
+      "query": "SELECT LEFT(N'🦆',1)+N'x' AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "raw joined pair",
+      "query": "SELECT LEFT(N'🦆',1)+RIGHT(N'🦆',1) AS n",
+      "reference": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "NVarChar",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
