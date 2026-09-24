@@ -60,5 +60,25 @@ fn windows_observe_the_frame_once_and_keep_empty_count_zero() {
     assert!(sql.contains("COALESCE(list_extract"));
     assert!(sql.contains("CAST(0 AS BIGINT)"));
     assert!(sql.contains("COUNT(*) OVER w"));
+    assert!(sql.contains("__msduck_count_frame(v) OVER w"));
+    assert!(!sql.contains("list(v) OVER w"));
     assert!(sql.contains("ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING"));
+}
+
+#[test]
+fn count_window_keeps_volatile_operands_outside_the_result_lambda() {
+    let mut statement = Parser::parse_sql(
+        &GenericDialect {},
+        "SELECT COUNT(nextval('calls') + __msduck_count_pair) OVER (ORDER BY id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) FROM t",
+    ).unwrap().remove(0);
+    let ticket = Expr::Value(Value::Placeholder("$1".into()).into());
+    assert_eq!(
+        instrument(&mut statement, &ticket, |name| name == "count"),
+        1
+    );
+    let sql = statement.to_string();
+    assert_eq!(sql.matches("nextval('calls')").count(), 1);
+    assert!(sql.contains("[__msduck_count_frame(nextval('calls') + __msduck_count_pair) OVER"));
+    assert!(!sql.contains("list_aggregate"));
+    assert!(!sql.contains("list_count"));
 }

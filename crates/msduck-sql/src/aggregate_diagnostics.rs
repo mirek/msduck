@@ -39,11 +39,23 @@ fn template(sql: &str, replacements: &[(&str, Expr)]) -> Expr {
 
 fn window(mut function: Function, ticket: Expr) -> Expr {
     let name = function.name.to_string();
+    if name.eq_ignore_ascii_case("count") {
+        function.name = ObjectName::from(vec![Ident::new("__msduck_count_frame")]);
+        // The native aggregate carries count and NULL presence in bounded
+        // state. Observe the returned frame, never intermediate segment states.
+        return template(
+            "COALESCE(list_extract(list_transform([__msduck_window_pair], __msduck_count_pair -> CASE WHEN __msduck_observe_null(__msduck_ticket, __msduck_count_pair.eliminated) IS NOT NULL THEN __msduck_count_pair.value ELSE NULL END), 1), CAST(0 AS BIGINT))",
+            &[
+                ("__msduck_window_pair", Expr::Function(function)),
+                ("__msduck_ticket", ticket),
+            ],
+        );
+    }
     function.name = ObjectName::from(vec![Ident::new("list")]);
     // LIST retains NULLs and uses the original partition, ordering and frame.
     // Its operand is evaluated once per input row, outside the lambda. Observe
     // each resulting frame once; an empty frame cannot eliminate NULL.
-    let result = template(
+    template(
         "list_extract(list_transform([__msduck_window_values], __msduck_frame -> CASE WHEN __msduck_observe_null(__msduck_ticket, list_count(__msduck_frame) < len(__msduck_frame)) IS NOT NULL THEN list_aggregate(__msduck_frame, __msduck_aggregate_name) ELSE NULL END), 1)",
         &[
             ("__msduck_window_values", Expr::Function(function)),
@@ -53,16 +65,7 @@ fn window(mut function: Function, ticket: Expr) -> Expr {
                 Expr::Value(Value::SingleQuotedString(name.clone()).into()),
             ),
         ],
-    );
-    if name.eq_ignore_ascii_case("count") {
-        // LIST yields NULL for an empty frame, while COUNT returns zero.
-        template(
-            "COALESCE(__msduck_window_result, CAST(0 AS BIGINT))",
-            &[("__msduck_window_result", result)],
-        )
-    } else {
-        result
-    }
+    )
 }
 
 /// Observe unary aggregate arguments. COUNT(*) and unrelated functions are

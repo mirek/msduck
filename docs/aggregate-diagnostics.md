@@ -107,7 +107,7 @@ boundaries; this integration remains draft.
 
 ## Window frame correction under verification
 
-The window rewrite now collects the operand with LIST over the original
+The initial window correction collects the operand with LIST over the original
 partition, order and frame. A singleton lambda binds that resulting frame once,
 compares its length with its non-NULL count, and observes NULL elimination only
 for values in that frame. It applies the original aggregate to the frame with
@@ -130,6 +130,32 @@ than the original native aggregate. It is a correctness correction under
 verification, not a completed performance design; bounded-memory staging or
 native aggregate observation remains necessary before treating it as ready for
 large workloads. The other boundary defects above remain open.
+
+## Bounded COUNT window execution under verification
+
+COUNT windows now use `__msduck_count_frame`, a native aggregate returning
+`STRUCT(value BIGINT, eliminated BOOLEAN)`. Its state contains a count, NULL
+presence and an overflow flag, independent of the frame width. The ANY input
+adapter reads validity only; it never interprets the operand payload. Special
+NULL handling retains the distinction between an empty frame and an all-NULL
+frame. State combination carries both count and NULL presence.
+
+The deterministic rewrite preserves the original operand, partition, ordering
+and frame on this aggregate. A singleton lambda binds its result once, passes
+the returned NULL flag to the statement observer, and extracts the count.
+COALESCE preserves zero for an empty frame. Observation happens on the returned
+frame result, keeping intermediate segment-tree state construction free of
+diagnostic effects. COUNT(*) remains untouched. Other window aggregates retain
+the LIST implementation and its unresolved wide-frame cost.
+
+Four pure AST tests and eight native diagnostic tests pass on Linux, as does
+strict workspace/all-target Clippy. The native tests retain unused/consumed
+NULL frames, all-NULL typed operands, 6000 volatile evaluations, and exact
+counts across 100000 expanding frames. A generated-expression test counts
+6000 non-NULL sequence values and checks both prefix counts and sequence usage;
+it makes no assumption about which sequence value is assigned to each row.
+All twelve focused client tests and all 640 workspace Rust tests pass on Linux.
+The full standard client suite and diagnostic audit remain under verification.
 
 ## DML and assignment integration under verification
 
