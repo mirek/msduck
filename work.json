@@ -539,6 +539,26 @@
       "dependencies": [],
       "issue": 56,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHDqG"
+    },
+    {
+      "id": "unicode-currency-consumers-v1",
+      "title": "Preserve Unicode column text in currency conversions",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal and request for owner-published parallel work. Owner-run Linux suite at 7588ea1 has two currency regressions after Unicode storage; no external content was used. Start from owner-pushed 7588ea1 in an isolated worktree and acquire a new private claim.",
+      "scope": [
+        "src/money_range.rs",
+        "tests/unicode_currency_storage.rs",
+        "tests/unicode_currency_storage.test.mjs"
+      ],
+      "acceptance": [
+        "Reproduce and fix existing tedious tests currency text storage conversions retain atomic writes defaults and column sources, and conditional currency results convert text and enforce bounds before use. Preserve their existing expectations; tests/tedious.test.mjs is owned by another active claim.",
+        "The current __msduck_{name}_convert macros recognize VARCHAR only and route Unicode STRUCT carriers into decimal casts. Support stored NVARCHAR/NCHAR text without stringifying physical structs or losing UTF16 units. Preserve numeric sources, MONEY/SMALLMONEY widths, rounding, TRY conversion NULLs, exact diagnostics, assignment atomicity and conditional-expression behavior.",
+        "Add dedicated native/client coverage for column and computed carrier inputs, NULL/empty/padded text, numeric syntax and overflow, prepared execution, and volatile single evaluation across chunks. Reuse exact carrier type checks; arbitrary structs must not be accepted as Unicode.",
+        "Run appropriate workspace/fmt/Clippy and client checks at an exact revision; report unrelated JSON failures separately. If root lowering requires changes outside scope, publish a disjoint companion task before editing. Keep the remote builder lock and never overwrite a live test executable."
+      ],
+      "dependencies": [],
+      "issue": 57,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHEEa"
     }
   ]
 }
