@@ -63,8 +63,10 @@ impl<const SMALL: bool, const TRY: bool> VScalar for Check<SMALL, TRY> {
 }
 
 /// Parse text independently of DuckDB's decimal lexer and precision limit.
-struct Text<const SMALL: bool, const TRY: bool>;
-impl<const SMALL: bool, const TRY: bool> VScalar for Text<SMALL, TRY> {
+struct Text<const SMALL: bool, const TRY: bool, const UNICODE: bool = false>;
+impl<const SMALL: bool, const TRY: bool, const UNICODE: bool> VScalar
+    for Text<SMALL, TRY, UNICODE>
+{
     type State = ();
     fn invoke(
         _: &(),
@@ -73,28 +75,57 @@ impl<const SMALL: bool, const TRY: bool> VScalar for Text<SMALL, TRY> {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let len = input.len();
         let source = input.flat_vector(0);
+        let structure = UNICODE.then(|| input.struct_vector(0));
+        let stored = structure.as_ref().map(|s| s.child(0, len));
         let mut result = output.flat_vector();
         for row in 0..len {
             if source.row_is_null(row as u64) {
                 result.set_null(row);
                 continue;
             }
-            // The exact VARCHAR signature and flattened chunk bound this read.
-            let mut raw =
-                unsafe { source.as_slice_with_len::<duckdb::ffi::duckdb_string_t>(len)[row] };
-            let bytes = unsafe {
-                std::slice::from_raw_parts(
-                    duckdb::ffi::duckdb_string_t_data(&mut raw).cast::<u8>(),
-                    duckdb::ffi::duckdb_string_t_length(raw) as usize,
-                )
+            let parsed = if let Some(stored) = &stored {
+                // Exact named STRUCT signature; parent and child validity are
+                // separate. Malformed physical carriers are not conversion NULLs.
+                if stored.row_is_null(row as u64) {
+                    return Err("invalid Unicode carrier: NULL payload".into());
+                }
+                let bytes = crate::unicode_carrier::bytes(stored, row, len)?;
+                if bytes.len() % 2 != 0 {
+                    return Err("invalid Unicode carrier byte length".into());
+                }
+                let units: Vec<_> = bytes
+                    .chunks_exact(2)
+                    .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+                    .collect();
+                // Currency syntax contains no isolated surrogate units. Reject
+                // them as invalid text, without replacement or truncation.
+                String::from_utf16(&units)
+                    .map_err(|_| {
+                        msduck_core::diagnostic::SqlError::new(
+                            235,
+                            1,
+                            msduck_core::money::TEXT_SYNTAX,
+                        )
+                    })
+                    .and_then(|text| msduck_core::money::parse_text(&text))
+            } else {
+                // Exact VARCHAR signature and flattened chunk bound this read.
+                let mut raw =
+                    unsafe { source.as_slice_with_len::<duckdb::ffi::duckdb_string_t>(len)[row] };
+                let bytes = unsafe {
+                    std::slice::from_raw_parts(
+                        duckdb::ffi::duckdb_string_t_data(&mut raw).cast::<u8>(),
+                        duckdb::ffi::duckdb_string_t_length(raw) as usize,
+                    )
+                };
+                msduck_core::money::parse_text(std::str::from_utf8(bytes)?)
             };
-            let value =
-                msduck_core::money::parse_text(std::str::from_utf8(bytes)?).and_then(|value| {
-                    if SMALL {
-                        MoneyType::SmallMoney.check_scaled(i128::from(value))?;
-                    }
-                    Ok(value)
-                });
+            let value = parsed.and_then(|value| {
+                if SMALL {
+                    MoneyType::SmallMoney.check_scaled(i128::from(value))?;
+                }
+                Ok(value)
+            });
             match value {
                 Ok(value) if SMALL => unsafe {
                     result.as_mut_slice_with_len::<i64>(len)[row] = value;
@@ -114,7 +145,11 @@ impl<const SMALL: bool, const TRY: bool> VScalar for Text<SMALL, TRY> {
     }
     fn signatures() -> Vec<ScalarFunctionSignature> {
         vec![ScalarFunctionSignature::exact(
-            vec![duckdb::core::LogicalTypeId::Varchar.into()],
+            vec![if UNICODE {
+                crate::unicode_carrier::kind()
+            } else {
+                duckdb::core::LogicalTypeId::Varchar.into()
+            }],
             LogicalTypeHandle::decimal(if SMALL { 10 } else { 19 }, 4),
         )]
     }
@@ -129,6 +164,10 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
     db.register_scalar_function::<Text<true, false>>("__msduck_smallmoney_text")?;
     db.register_scalar_function::<Text<false, true>>("__msduck_try_money_text")?;
     db.register_scalar_function::<Text<true, true>>("__msduck_try_smallmoney_text")?;
+    db.register_scalar_function::<Text<false, false, true>>("__msduck_money_unicode")?;
+    db.register_scalar_function::<Text<true, false, true>>("__msduck_smallmoney_unicode")?;
+    db.register_scalar_function::<Text<false, true, true>>("__msduck_try_money_unicode")?;
+    db.register_scalar_function::<Text<true, true, true>>("__msduck_try_smallmoney_unicode")?;
     for name in ["money", "smallmoney", "try_money", "try_smallmoney"] {
         let cast = if name.starts_with("try_") {
             "TRY_CAST"
@@ -137,7 +176,7 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
         };
         // typeof is a bind-time property; only the selected branch evaluates
         // the operand. Preserve numeric conversion and its error identity.
-        db.execute_batch(&format!("CREATE OR REPLACE MACRO main.__msduck_{name}_convert(value) AS CASE WHEN typeof(value) = 'VARCHAR' THEN __msduck_{name}_text(CAST(value AS VARCHAR)) ELSE __msduck_{name}_range({cast}(value AS DECIMAL(38,4))) END"))?;
+        db.execute_batch(&format!("CREATE OR REPLACE MACRO main.__msduck_{name}_convert(value) AS CASE WHEN typeof(value) = 'VARCHAR' THEN __msduck_{name}_text(CAST(value AS VARCHAR)) WHEN typeof(value) = 'STRUCT(__msduck_utf16le BLOB)' THEN __msduck_{name}_unicode(CAST(value AS STRUCT(__msduck_utf16le BLOB))) ELSE __msduck_{name}_range({cast}(value AS DECIMAL(38,4))) END"))?;
     }
     Ok(())
 }
