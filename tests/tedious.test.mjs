@@ -9214,6 +9214,9 @@ test('system object and schema projections retain captured descriptors across ca
     assert.deepEqual(result.sets[0].columns.map(descriptor), expected, view)
   }
   await query(c, 'CREATE TABLE dbo.catalog_join(id INT); CREATE INDEX ix ON dbo.catalog_join(id)')
+  const dates = await query(c, "SELECT create_date,modify_date FROM sys.objects WHERE name='catalog_join'")
+  assert.equal(dates.rows.length, 1)
+  for (const value of dates.rows[0]) assert.ok(value instanceof Date && Number.isFinite(value.getTime()))
   const inventory = "SELECT s.name AS schema_name,o.name AS table_name,i.name AS index_name FROM sys.indexes i JOIN sys.objects o ON o.object_id=i.object_id JOIN sys.schemas s ON s.schema_id=o.schema_id WHERE o.name='catalog_join'"
   for (const sql of [inventory, `WITH inventory AS (${inventory}) SELECT * FROM inventory`, `${inventory} AND 1=0`]) {
     const result = canonical(await capture(c, sql))

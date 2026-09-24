@@ -2412,7 +2412,16 @@ impl Session {
             .iter()
             .enumerate()
             .map(|(index, field)| {
-                let kind = if let Some(kind) = metadata.declared(index)
+                let kind = if result_fields.len() == schema.fields().len()
+                    && result_fields[index]
+                        .info
+                        .as_ref()
+                        .and_then(|info| info.system_type_id)
+                        == Some(61)
+                    && matches!(field.data_type(), ArrowType::Timestamp(_, None))
+                {
+                    Type::LegacyDateTime
+                } else if let Some(kind) = metadata.declared(index)
                     && (matches!(field.data_type(), ArrowType::Utf8 | ArrowType::LargeUtf8)
                         || crate::unicode_carrier::is_arrow(field.data_type())
                             && matches!(kind, Type::Text | Type::Nvarchar(_) | Type::Nchar(_))
@@ -2424,7 +2433,8 @@ impl Session {
                                     Type::Varbinary(_) | Type::FixedBinary(_),
                                     ArrowType::Binary | ArrowType::LargeBinary
                                 )
-                        )) {
+                        ))
+                {
                     kind.clone()
                 } else if is_bool_field(field) {
                     Type::Bit
@@ -4391,6 +4401,16 @@ fn encode_value_mode(out: &mut Vec<u8>, kind: &Type, value: &Value, fixed: bool)
             let encoded = crate::datetime2::DateTime2::parse_iso(value)?.encode(*scale)?;
             out.push(encoded.len() as u8);
             out.extend(encoded);
+        }
+        (Type::LegacyDateTime, Value::Timestamp(unit, v)) => {
+            let nanos = i128::from(*v)
+                * match unit {
+                    TimeUnit::Second => 1_000_000_000,
+                    TimeUnit::Millisecond => 1_000_000,
+                    TimeUnit::Microsecond => 1_000,
+                    TimeUnit::Nanosecond => 1,
+                };
+            tds::legacy_datetime(out, nanos, fixed)?;
         }
         (Type::DateTime, Value::Timestamp(unit, v)) => {
             let nanos = i128::from(*v)
