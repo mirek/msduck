@@ -942,7 +942,7 @@
     {
       "id": "integration-checkpoint-v1",
       "title": "Consolidate owner PRs and establish a usable main-branch CI baseline",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction to prioritize merging accumulated PRs and consider relaxing CI gates, then make CI green. Assemble and review only existing owner-authored branches. The original result-alignment task is blocked and its same-worker implementation is stopped; retain its immutable claim and integrate its published patch under this successor. Existing root, documentation, reference, TDS and coordination scopes retain their original verified receipts.",
       "scope": [
         "docs/integration-checkpoint.md",
