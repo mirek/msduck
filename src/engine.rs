@@ -1550,6 +1550,7 @@ impl Session {
         let money_columns = crate::insert::money_columns(&statement, parameters);
         crate::update::expand_compound(&self.db, &mut statement)?;
         let money_assignments = crate::update::money_assignments(&statement, parameters);
+        crate::query_catalog::bind_binary_operations(&self.db, &mut statement, parameters)?;
         crate::concat_lower::statement(&mut statement, parameters).map_err(anyhow::Error::msg)?;
         crate::aggregate_columns::annotate(&self.db, &mut statement, parameters)
             .map_err(anyhow::Error::msg)?;

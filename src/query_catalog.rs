@@ -86,12 +86,15 @@ pub fn bind_query_with_parameters(
     Ok(fields)
 }
 
-fn contains_unicode_operations<T: Visit>(node: &T) -> bool {
-    struct Find;
+fn contains_unicode_operations<T: Visit>(node: &T, binary_only: bool) -> bool {
+    struct Find {
+        binary_only: bool,
+    }
     impl Visitor for Find {
         type Break = ();
         fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
-            if matches!(expr, Expr::Function(f) if matches!(f.name.to_string().to_ascii_uppercase().as_str(), "LOWER" | "UPPER" | "MIN" | "MAX"))
+            if !self.binary_only
+                && matches!(expr, Expr::Function(f) if matches!(f.name.to_string().to_ascii_uppercase().as_str(), "LOWER" | "UPPER" | "MIN" | "MAX"))
                 || matches!(
                     expr,
                     Expr::Cast {
@@ -108,7 +111,7 @@ fn contains_unicode_operations<T: Visit>(node: &T) -> bool {
             std::ops::ControlFlow::Continue(())
         }
     }
-    Visit::visit(node, &mut Find).is_break()
+    Visit::visit(node, &mut Find { binary_only }).is_break()
 }
 
 /// Bind a standalone initializer or predicate with no surrounding row source.
@@ -117,7 +120,7 @@ pub fn bind_unicode_expression(
     expression: &mut Expr,
     parameters: &std::collections::HashMap<String, crate::parameter::Parameter>,
 ) -> anyhow::Result<()> {
-    if !contains_unicode_operations(expression) {
+    if !contains_unicode_operations(expression, false) {
         return Ok(());
     }
     // Bind standalone initializers/predicates in an empty row scope, preserving
@@ -147,7 +150,26 @@ pub fn bind_unicode_operations<T: Visit + VisitMut>(
     node: &mut T,
     parameters: &std::collections::HashMap<String, crate::parameter::Parameter>,
 ) -> anyhow::Result<()> {
-    if !contains_unicode_operations(node) {
+    bind_operations(db, node, parameters, false)
+}
+
+/// Resolve character-to-binary declarations before character CAST lowering
+/// replaces public type syntax with backend functions.
+pub fn bind_binary_operations<T: Visit + VisitMut>(
+    db: &Connection,
+    node: &mut T,
+    parameters: &std::collections::HashMap<String, crate::parameter::Parameter>,
+) -> anyhow::Result<()> {
+    bind_operations(db, node, parameters, true)
+}
+
+fn bind_operations<T: Visit + VisitMut>(
+    db: &Connection,
+    node: &mut T,
+    parameters: &std::collections::HashMap<String, crate::parameter::Parameter>,
+    binary_only: bool,
+) -> anyhow::Result<()> {
+    if !contains_unicode_operations(node, binary_only) {
         return Ok(());
     }
     let catalog = snapshot(db, node)?;
@@ -161,17 +183,20 @@ pub fn bind_unicode_operations<T: Visit + VisitMut>(
         catalog: &'a CatalogSnapshot,
         scope: &'a Scope,
         depth: usize,
+        binary_only: bool,
     }
     impl VisitorMut for Annotate<'_> {
         type Break = msduck_core::diagnostic::SqlError;
         fn pre_visit_query(&mut self, query: &mut Query) -> std::ops::ControlFlow<Self::Break> {
             if self.depth == 0
+                && !self.binary_only
                 && let Err(error) =
                     infer::character_extrema::annotate(self.catalog, query, self.scope)
             {
                 return std::ops::ControlFlow::Break(error);
             }
             if self.depth == 0
+                && !self.binary_only
                 && let Err(error) =
                     infer::annotate_unicode_case_inputs(self.catalog, query, self.scope)
             {
@@ -197,6 +222,7 @@ pub fn bind_unicode_operations<T: Visit + VisitMut>(
             catalog: &catalog,
             scope: &scope,
             depth: 0,
+            binary_only,
         },
     ) {
         std::ops::ControlFlow::Continue(()) => Ok(()),

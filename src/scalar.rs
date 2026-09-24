@@ -23,6 +23,7 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
     db.register_scalar_function::<crate::value_window::Offset>("__msduck_lag_offset")?;
     crate::integer_aggregate::register(db)?;
     crate::character_aggregate::register(db)?;
+    crate::ansi_binary::register(db)?;
     crate::decimal_aggregate::register(db)?;
     crate::decimal_division::register(db)?;
     crate::replicate::register(db)?;
