@@ -915,6 +915,29 @@
       "dependencies": [],
       "issue": 89,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHqci"
+    },
+    {
+      "id": "checked-projection-v1",
+      "title": "Carry checked integer outcomes through SELECT projections",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Scoped checked expressions at 414738d preserve per-row arithmetic diagnostics without invalidating DuckDB; integrate public SELECT projections and retain exact reference evidence.",
+      "scope": [
+        "crates/msduck-sql/src/checked_projection.rs",
+        "crates/msduck-sql/tests/checked_projection.rs",
+        "src/checked_projection.rs",
+        "tests/checked_projection.rs",
+        "scripts/capture-checked-projection.mjs",
+        "tests/checked_projection.test.mjs",
+        "tests/reference/checked-projection.json"
+      ],
+      "acceptance": [
+        "Build deterministic projection plans using declared row scopes, hygienic aliases and checked value/diagnostic fields; preserve original public metadata and unsupported-shape fallback.",
+        "Integrate root Arrow diagnostic handling under original #26 engine ownership. Existing expression planner and SQL exports remain under their original claims.",
+        "Capture and replay SQL Server scalar and relational SELECT arithmetic, NULL, multi-column, empty-source, error-prefix and transaction behavior; preserve unresolved differences. Run deterministic/native/client checks and queue exact-revision workspace validation."
+      ],
+      "dependencies": [],
+      "issue": 91,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHuQY"
     }
   ]
 }
