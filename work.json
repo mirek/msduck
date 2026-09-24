@@ -958,6 +958,23 @@
       "dependencies": [],
       "issue": 93,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHyoH"
+    },
+    {
+      "id": "character-aggregate-carrier-v1",
+      "title": "Preserve character aggregate payloads at declared cast boundaries",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal and priority to repair full CI after integration. Owner-run reproduction on the merged tree shows MAX over a typed OPENJSON view stringifies its physical UTF16 carrier. Original concat-integration-v1 worker retains src/concat_lower.rs and existing client test scope; this task supplies new regression coverage. No external content consumed.",
+      "scope": [
+        "tests/character_aggregate_carrier.rs"
+      ],
+      "acceptance": [
+        "Preserve character MIN/MAX result payloads through declared casts without stringifying UTF16 carrier structures. Do not substitute BIN2 for linguistic collations or infer result types from values.",
+        "Cover NULL and empty inputs, views and derived results, Unicode code units and ordinary ANSI inputs; retain existing OPENJSON client expectations. Record unresolved linguistic ordering separately.",
+        "Run focused native/client tests and strict formatting/Clippy; submit full verification for the exact revision."
+      ],
+      "dependencies": [],
+      "issue": 95,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PH0sk"
     }
   ]
 }
