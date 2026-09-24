@@ -603,6 +603,25 @@
       "dependencies": [],
       "issue": 61,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHKie"
+    },
+    {
+      "id": "unicode-for-json-aggregation-v1",
+      "title": "Aggregate FOR JSON rows without Unicode-to-text coercion",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal and request for independently claimable work. First-party PR59 evidence shows FOR JSON must preserve exact UTF16 carrier rows; native serialization is owned by unicode-json-consumers-v1 (#56). Start from owner-pushed work/unicode-json-consumers-v1 at 1e5c411 or a verified successor. No external submission is approved.",
+      "scope": [
+        "crates/msduck-sql/src/for_json.rs",
+        "crates/msduck-sql/tests/for_json_carriers.rs"
+      ],
+      "acceptance": [
+        "Replace the current string_agg(row, comma)/empty-string aggregation in deterministic FOR JSON lowering with one ordered row-list aggregate and an empty-list value for zero rows. Do not cast serialized row carriers to VARCHAR or concatenate physical STRUCT display text.",
+        "Keep the contract: __msduck_json_row returns one exact UTF16 carrier per source row; __msduck_json_array and __msduck_json_unwrapped will consume a LIST of those carriers plus the existing root-option marker. Root native adapters are being migrated separately under #56; do not edit their files or claim runtime completion before integration.",
+        "Preserve source projection, ORDER BY, row limits, CTE scope, generated alias collision avoidance, fragment markers and ROOT/WITHOUT_ARRAY_WRAPPER behavior. Evaluate the row serializer only once per source row. Keep backend execution, catalog access and IO out of msduck-sql.",
+        "Add meaningful deterministic AST regressions for ordered/limited sources, empty aggregate fallback, options and alias collisions, using the retained existing lowering as the baseline for unrelated semantics. Run deterministic tests, formatting and strict Clippy; record exact revision and the native integration dependency."
+      ],
+      "dependencies": [],
+      "issue": 62,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHOZl"
     }
   ]
 }
