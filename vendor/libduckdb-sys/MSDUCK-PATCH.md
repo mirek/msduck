@@ -72,3 +72,13 @@ Regression: `tests/duckdb_nested_alter.rs` covers direct ADD followed by NOT NUL
 real NULL rejection, rollback, concurrent catalog conflicts and database reopen.
 `tests/unicode_storage.rs` covers the public adapter, including duplicate columns
 and rollback of earlier additions in a multi-column statement.
+
+The private `msduck_pending_cancel_read_and_drain` entry point is applied by
+`msduck_pending_drain.rs`, invoked by the bundled cc builder after extraction.
+It validates and locks an active pending SELECT before interrupting and draining
+its executor, retains any background error before query-state destruction, and
+preserves explicit transactions only for pure cancellation. Non-SELECT or
+backend-marked modifying statements are rejected without effects. This API is not
+available on linked/system or bundled-cmake builds. See
+[the adapter notes](../../docs/native-pending-error-drain.md) for caller ownership,
+error handling, verification and unsupported side-effecting SELECTs.
