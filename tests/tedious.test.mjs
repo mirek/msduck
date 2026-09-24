@@ -4347,7 +4347,11 @@ test('sys.tables and sys.views partition objects and retain highest column IDs',
   await query(c,'ROLLBACK')
   assert.deepEqual((await query(c,"SELECT name FROM sys.views WHERE name=N'view_catalog_probe'")).rows,[['view_catalog_probe']])
   const empty=await query(c,'SELECT max_column_id_used,lock_escalation,is_replicated,history_table_id FROM sys.tables WHERE 1=0')
-  assert.deepEqual(empty.columns[0].map(c=>c.dataLength),[4,1,1,4])
+  const reference=JSON.parse(readFileSync(new URL('../reference/object-catalog-width.json',import.meta.url),'utf8'))
+  const declared=reference.results.find(r=>r.sql==='SELECT * FROM sys.tables WHERE 1=0').result.sets[0].columns
+  const names=['max_column_id_used','lock_escalation','is_replicated','history_table_id']
+  assert.deepEqual(empty.columns[0].map(c=>[c.colName,c.type.name,c.dataLength??null,c.flags]),
+    names.map(name=>{const c=declared.find(c=>c.name===name);return [c.name,c.type,c.length,c.flags]}))
   await assert.rejects(query(c,'DROP VIEW sys.tables'),e=>e.message.includes('cannot be changed'))
   await assert.rejects(query(c,'DROP VIEW sys.views'),e=>e.message.includes('cannot be changed'))
   await query(c,'DROP VIEW view_catalog_probe; DROP TABLE table_catalog_probe; CREATE TABLE table_catalog_probe(a INT)')
