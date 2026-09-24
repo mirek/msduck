@@ -21,7 +21,7 @@ test('prepared currency conversion reads current Unicode column values on each e
   const c = await start(t)
   await query(c, "CREATE TABLE prepared_unicode_currency(id INT,v NVARCHAR(30)); INSERT INTO prepared_unicode_currency VALUES(1,N'€3.12505'),(2,NULL)")
   let done
-  const request = new Request('SELECT CAST(v AS MONEY) AS m FROM prepared_unicode_currency WHERE id=@id', (...args) => done(...args))
+  const request = new Request('SELECT SUM(TRY_CAST(v AS MONEY)) AS m FROM prepared_unicode_currency WHERE id=@id', (...args) => done(...args))
   request.addParameter('id', TYPES.Int)
   await new Promise((resolve, reject) => {
     request.once('prepared', resolve)
@@ -46,4 +46,13 @@ test('prepared currency conversion reads current Unicode column values on each e
     done = error => error ? reject(error) : resolve()
     c.unprepare(request)
   })
+})
+
+
+test('currency conversion retains nested text producers and numeric cast errors', async t => {
+  const c = await start(t)
+  assert.deepEqual((await query(c, "SELECT CAST(REPLICATE(CAST(1 AS NVARCHAR(2)),2) AS MONEY)")).rows, [[11]])
+  await assert.rejects(query(c, 'SELECT TRY_CAST(CAST(123 AS NVARCHAR(1)) AS MONEY)'), e => e.number === 8115)
+  await query(c, "CREATE TABLE nested_currency(v NVARCHAR(30)); INSERT INTO nested_currency VALUES(N'£1.25')")
+  assert.deepEqual((await query(c, 'SELECT SUM(TRY_CAST((v) AS MONEY)) FROM nested_currency')).rows, [[1.25]])
 })

@@ -271,27 +271,46 @@ pub fn statement<T: VisitMut>(
     }
 }
 
-/// Recursive set members must agree on physical Unicode representation. Run
-/// after logical operand annotation: the wrappers must not erase CTE types while
-/// the binder is still resolving recursive references. Keep the original CAST
-/// inside the wrapper so its conversion/width checks remain in effect.
-pub fn recursive_carriers<T: VisitMut>(node: &mut T) {
-    struct Normalize(Vec<bool>);
+/// Preserve Unicode carriers through currency operand annotations and recursive
+/// set members. Other consumers migrate with their native adapter; forcing every
+/// legacy Unicode producer to STRUCT here would break still-text-only functions.
+/// Run after binding so wrappers cannot erase declarations during inference.
+pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
+    #[derive(Default)]
+    struct Normalize {
+        recursive: Vec<bool>,
+        currency: Vec<bool>,
+    }
     impl VisitorMut for Normalize {
         type Break = ();
         fn pre_visit_query(&mut self, query: &mut Query) -> std::ops::ControlFlow<()> {
-            self.0.push(
-                self.0.last().copied().unwrap_or(false)
+            self.recursive.push(
+                self.recursive.last().copied().unwrap_or(false)
                     || query.with.as_ref().is_some_and(|w| w.recursive),
             );
             std::ops::ControlFlow::Continue(())
         }
         fn post_visit_query(&mut self, _: &mut Query) -> std::ops::ControlFlow<()> {
-            self.0.pop();
+            self.recursive.pop();
+            std::ops::ControlFlow::Continue(())
+        }
+        fn pre_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<()> {
+            let currency_cast = matches!(expr,
+                Expr::Cast { data_type, .. } | Expr::Convert { data_type: Some(data_type), .. }
+                    if msduck_sql::money_cast::money_type(data_type).is_some());
+            // Only the direct currency operand (through parentheses) changes
+            // representation. Descendant text producers own their own adapters.
+            self.currency.push(
+                currency_cast
+                    || matches!(expr, Expr::Nested(_))
+                        && self.currency.last().copied().unwrap_or(false),
+            );
             std::ops::ControlFlow::Continue(())
         }
         fn post_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<()> {
-            if self.0.last() == Some(&true)
+            self.currency.pop();
+            let currency = self.currency.last() == Some(&true);
+            if (currency || self.recursive.last() == Some(&true))
                 && let Expr::Cast {
                     expr: source,
                     data_type,
@@ -305,7 +324,7 @@ pub fn recursive_carriers<T: VisitMut>(node: &mut T) {
                 // source once; ordinary numeric conversions retain the original
                 // CAST, while an existing carrier never passes through VARCHAR.
                 let sql = format!(
-                    "CASE WHEN typeof(__msduck_recursive_source)='STRUCT(__msduck_utf16le BLOB)' THEN CAST(__msduck_recursive_source AS STRUCT(__msduck_utf16le BLOB)) ELSE __msduck_carrier_input(CAST(__msduck_recursive_source AS {data_type})) END"
+                    "CASE WHEN typeof(__msduck_cast_source)='STRUCT(__msduck_utf16le BLOB)' THEN CAST(__msduck_cast_source AS STRUCT(__msduck_utf16le BLOB)) ELSE __msduck_carrier_input(CAST(__msduck_cast_source AS {data_type})) END"
                 );
                 let mut dispatch =
                     sqlparser::parser::Parser::new(&sqlparser::dialect::DuckDbDialect {})
@@ -317,8 +336,7 @@ pub fn recursive_carriers<T: VisitMut>(node: &mut T) {
                 impl VisitorMut for Substitute {
                     type Break = ();
                     fn post_visit_expr(&mut self, e: &mut Expr) -> std::ops::ControlFlow<()> {
-                        if matches!(e,Expr::Identifier(id) if id.value=="__msduck_recursive_source")
-                        {
+                        if matches!(e,Expr::Identifier(id) if id.value=="__msduck_cast_source") {
                             *e = self.0.clone();
                         }
                         std::ops::ControlFlow::Continue(())
@@ -341,5 +359,5 @@ pub fn recursive_carriers<T: VisitMut>(node: &mut T) {
             std::ops::ControlFlow::Continue(())
         }
     }
-    let _ = node.visit(&mut Normalize(Vec::new()));
+    let _ = node.visit(&mut Normalize::default());
 }
