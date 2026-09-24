@@ -261,6 +261,9 @@ impl Session {
             if crate::dialect::loop_control(&statement).is_some() {
                 continue; // Placement was checked by batch_variables.
             }
+            if msduck_sql::drop_index_syntax::request(&statement).is_some() {
+                continue; // Bind table/index identities only when executed.
+            }
             if let Some(call) = msduck_sql::raiserror::call(&statement) {
                 for expression in [call.message, call.severity, call.state]
                     .into_iter()
@@ -565,6 +568,11 @@ impl Session {
         let statements = match parse_batch(sql) {
             Ok(s) => s,
             Err(e) => {
+                if e.downcast_ref::<SqlError>().is_some() {
+                    self.last_error = emit_error(&mut out, &e);
+                    tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
+                    return (out, false);
+                }
                 let message = e.to_string();
                 self.error(
                     &mut out,
@@ -1299,6 +1307,10 @@ impl Session {
         statement: Statement,
         parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Execution> {
+        if let Some(request) = msduck_sql::drop_index_syntax::request(&statement) {
+            self.require_committable()?;
+            return self.execute_drop_index(request);
+        }
         if self.transaction_doomed {
             let command = match &statement {
                 Statement::Insert(_) => Some(0xc3),
@@ -1373,6 +1385,72 @@ impl Session {
         }
         result
     }
+    fn execute_drop_index(
+        &mut self,
+        request: msduck_sql::drop_index::Request,
+    ) -> Result<Execution> {
+        use msduck_sql::drop_index as bind;
+        let managed = crate::index_catalog::acquire_complete(&self.db)?;
+        let tables = self.db.prepare("SELECT o.object_id,s.name,o.name FROM sys.objects o JOIN sys.schemas s USING(schema_id) WHERE o.type='U'")?
+            .query_map([], |r| Ok(bind::Table { id:r.get::<_,i32>(0)? as u64, schema:r.get(1)?, name:r.get(2)? }))?
+            .collect::<duckdb::Result<Vec<_>>>()?;
+        let indexes = managed
+            .iter()
+            .map(|i| bind::Index {
+                table_id: i.object_id as u64,
+                id: i.index_id as u64,
+                name: i.name.clone(),
+                clustered: false,
+                constraint_backed: false,
+                backend_name: ObjectName::from(vec![
+                    Ident::with_quote('"', &i.backend_schema),
+                    Ident::with_quote('"', &i.backend_name),
+                ]),
+            })
+            .collect::<Vec<_>>();
+        let plan = bind::bind(
+            &request,
+            &tables,
+            &indexes,
+            &["dbo"],
+            str::eq_ignore_ascii_case,
+        )
+        .map_err(|error| match error {
+            bind::Error::Unsupported(message) => anyhow::anyhow!(message),
+            bind::Error::Sql(d) => SqlError::from_utf16(
+                d.number,
+                d.state,
+                d.class,
+                d.message.encode_utf16().collect(),
+            )
+            .into(),
+        })?;
+        for drop in plan.drops {
+            let index = managed
+                .iter()
+                .find(|i| i.object_id as u64 == drop.table_id && i.index_id as u64 == drop.index_id)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Bound index identity is absent from its catalog snapshot")
+                })?;
+            let owner = if self.transactions == 0 {
+                crate::index_catalog::Transaction::Owned
+            } else {
+                crate::index_catalog::Transaction::CallerOwned
+            };
+            crate::index_catalog::drop_index(&self.db, index, owner)?;
+        }
+        if let Some(d) = plan.terminal {
+            return Err(SqlError::from_utf16(
+                d.number,
+                d.state,
+                d.class,
+                d.message.encode_utf16().collect(),
+            )
+            .into());
+        }
+        Ok(Execution::statement(vec![], None, 201))
+    }
+
     fn execute_inner(
         &mut self,
         statement: Statement,

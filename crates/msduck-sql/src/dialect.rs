@@ -257,6 +257,9 @@ impl Dialect for ServerDialect {
         })())
     }
     fn parse_statement(&self, parser: &mut Parser) -> Option<Result<Statement, ParserError>> {
+        if crate::drop_index_syntax::starts(parser) {
+            return Some(crate::drop_index_syntax::parse(parser));
+        }
         if crate::raiserror::starts(parser) {
             return Some(crate::raiserror::parse(parser));
         }

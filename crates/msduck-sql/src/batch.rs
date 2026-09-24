@@ -18,7 +18,9 @@ pub fn parse(sql: &str) -> Result<Vec<Statement>> {
             return Ok(statements);
         }
         ensure!(statements.len() < 10000, "too many statements in batch");
-        let mut statement = parser.parse_statement()?;
+        let mut statement = parser
+            .parse_statement()
+            .map_err(crate::drop_index_syntax::parse_error)?;
         explicit_defaults(&mut statement);
         crate::variant_cast::mark(&mut statement);
         crate::window_frame::validate_syntax(&statement).map_err(anyhow::Error::msg)?;
