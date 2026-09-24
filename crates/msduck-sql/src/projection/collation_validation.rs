@@ -87,33 +87,72 @@ struct Bindings {
     binary: Vec<(usize, BinaryInput)>,
     extrema: Vec<(usize, super::character_extrema::Input)>,
 }
+enum BinaryDirection {
+    FromCharacter { unicode: bool },
+    ToUnicode { style: Expr, trying: bool },
+}
 struct BinaryInput {
-    unicode: bool,
+    direction: BinaryDirection,
     target: DataType,
     width: i32,
     fixed: bool,
 }
 fn binary_input(catalog: &CatalogSnapshot, expr: &Expr, scope: &Scope) -> Option<BinaryInput> {
-    let (source, target) = match expr {
+    let (source, target, style, trying) = match expr {
         Expr::Cast {
             expr,
             data_type,
             format: None,
-            ..
-        } => (expr.as_ref(), data_type),
+            kind,
+        } => (
+            expr.as_ref(),
+            data_type,
+            crate::expr::number(0),
+            matches!(kind, CastKind::TryCast | CastKind::SafeCast),
+        ),
         Expr::Convert {
             expr,
             data_type: Some(data_type),
             charset: None,
             styles,
+            is_try,
             ..
-        } if styles.is_empty()
-            || matches!(styles.as_slice(), [Expr::Value(v)] if matches!(&v.value, Value::Number(n, _) if n == "0")) =>
-        {
-            (expr.as_ref(), data_type)
-        }
+        } if styles.len() <= 1 => (
+            expr.as_ref(),
+            data_type,
+            styles
+                .first()
+                .cloned()
+                .unwrap_or_else(|| crate::expr::number(0)),
+            *is_try,
+        ),
         _ => return None,
     };
+    let unicode_width = if matches!(target, DataType::Nvarchar(_)) {
+        crate::expression_metadata::character::nvarchar_cast_width(target)
+            .ok()
+            .map(|n| (n.map(i32::from).unwrap_or(-1), false))
+    } else {
+        crate::expression_metadata::character::nchar_cast_width(target)
+            .ok()
+            .flatten()
+            .map(|n| (i32::from(n), true))
+    };
+    if let Some((width, fixed)) = unicode_width {
+        let info = member_expression(catalog, source, &[], scope)?;
+        if !matches!(info.system_type_id, Some(165 | 173)) {
+            return None;
+        }
+        return Some(BinaryInput {
+            direction: BinaryDirection::ToUnicode { style, trying },
+            target: target.clone(),
+            width,
+            fixed,
+        });
+    }
+    if !matches!(&style, Expr::Value(v) if matches!(&v.value, Value::Number(n, _) if n == "0")) {
+        return None;
+    }
     let (width, fixed) = match target {
         DataType::Varbinary(Some(BinaryLength::Max)) => (-1, false),
         DataType::Varbinary(None) => (30, false),
@@ -147,7 +186,7 @@ fn binary_input(catalog: &CatalogSnapshot, expr: &Expr, scope: &Scope) -> Option
         _ => return None,
     };
     Some(BinaryInput {
-        unicode,
+        direction: BinaryDirection::FromCharacter { unicode },
         target: target.clone(),
         width,
         fixed,
@@ -527,7 +566,7 @@ pub fn annotate_unicode_case_inputs(
     Ok(())
 }
 
-/// Lower statically bound character-to-binary conversions with default style.
+/// Lower statically bound conversions between binary and character values.
 /// Byte lengths may split a UTF-16 unit; fixed binary pads on the right.
 pub fn lower_unicode_binary_conversions(
     catalog: &CatalogSnapshot,
@@ -558,16 +597,40 @@ pub fn lower_unicode_binary_conversions(
                 else {
                     unreachable!("planned binary conversion")
                 };
-                let value = crate::expr::binary_function(
-                    match (input.unicode, input.fixed) {
-                        (true, true) => "__msduck_unicode_binary",
-                        (true, false) => "__msduck_unicode_varbinary",
-                        (false, true) => "__msduck_ansi_binary",
-                        (false, false) => "__msduck_ansi_varbinary",
-                    },
-                    crate::expr::unary_function("__msduck_carrier_input", operand(*source.clone())),
-                    crate::expr::number(input.width),
-                );
+                let value = match input.direction {
+                    BinaryDirection::FromCharacter { unicode } => crate::expr::binary_function(
+                        match (unicode, input.fixed) {
+                            (true, true) => "__msduck_unicode_binary",
+                            (true, false) => "__msduck_unicode_varbinary",
+                            (false, true) => "__msduck_ansi_binary",
+                            (false, false) => "__msduck_ansi_varbinary",
+                        },
+                        crate::expr::unary_function(
+                            "__msduck_carrier_input",
+                            operand(*source.clone()),
+                        ),
+                        crate::expr::number(input.width),
+                    ),
+                    BinaryDirection::ToUnicode { style, trying } => {
+                        let mut call = crate::expr::binary_function(
+                            match (input.fixed, trying) {
+                                (false, false) => "__msduck_binary_nvarchar",
+                                (true, false) => "__msduck_binary_nchar",
+                                (false, true) => "__msduck_try_binary_nvarchar",
+                                (true, true) => "__msduck_try_binary_nchar",
+                            },
+                            operand(*source.clone()),
+                            crate::expr::number(input.width),
+                        );
+                        if let Expr::Function(f) = &mut call
+                            && let FunctionArguments::List(args) = &mut f.args
+                        {
+                            args.args
+                                .push(FunctionArg::Unnamed(FunctionArgExpr::Expr(style)));
+                        }
+                        call
+                    }
+                };
                 *expr = Expr::Cast {
                     kind: CastKind::Cast,
                     expr: Box::new(value),
