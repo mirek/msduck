@@ -114,3 +114,70 @@ fn user_objects_join_the_union_transactionally() {
         2743
     );
 }
+
+#[test]
+fn built_in_and_user_catalog_ids_survive_reopen() {
+    let path = std::env::temp_dir().join(format!(
+        "msduck-all-objects-{}-{}.duckdb",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos(),
+    ));
+    let (user_id, builtin_clock) = {
+        let server = Server::open(path.to_str().unwrap()).unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        assert!(
+            session
+                .batch_response(
+                    "CREATE TABLE dbo.catalog_persist(id INT)",
+                    &Default::default(),
+                    false,
+                    None,
+                )
+                .1
+        );
+        let id = session
+            .db
+            .query_row(
+                "SELECT object_id FROM sys.all_objects WHERE name='catalog_persist'",
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .unwrap();
+        let clock = session
+            .db
+            .query_row(
+                "SELECT CAST(create_date AS VARCHAR) FROM sys.objects WHERE name='wpr_bucket_table'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap();
+        (id, clock)
+    };
+    let server = Server::open(path.to_str().unwrap()).unwrap();
+    let db = server.connection().unwrap();
+    assert_eq!(count(&db, "SELECT count(*) FROM sys.all_objects"), 2743);
+    assert_eq!(
+        db.query_row(
+            "SELECT object_id FROM sys.all_objects WHERE name='catalog_persist'",
+            [],
+            |row| row.get::<_, i32>(0),
+        )
+        .unwrap(),
+        user_id
+    );
+    assert_eq!(
+        db.query_row(
+            "SELECT CAST(create_date AS VARCHAR) FROM sys.objects WHERE name='wpr_bucket_table'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap(),
+        builtin_clock
+    );
+    drop(db);
+    drop(server);
+    std::fs::remove_file(path).unwrap();
+}
