@@ -28,13 +28,28 @@ The captures establish:
 - For this nonclustered index, `MAXDOP = 1` emits 3748 while `ONLINE = OFF`
   succeeds. Other options and clustered index behavior are not established.
 
-The deterministic binder and its tests remain implementation work. Its adapter
-contract must accept explicit table/index identity records and return ordered
-operations with a possible terminal diagnostic. It must not silently strip ON,
-look up an index by name alone, fabricate success for unknown catalog state, or
-collapse quoted identifiers. Execution must preserve successful earlier drops
-when a later binding failure occurs; wrapping the entire statement in a
-transaction that rolls back those drops would contradict the captures.
+The isolated deterministic module provides `parse` for one complete statement
+and `bind` over a complete caller-supplied table/index catalog. The caller also
+supplies schema search order and identifier equality, so neither collation nor
+default schema is hidden in the binder. Backend index names are explicit AST
+identities supplied by the catalog; requested ON qualifiers are never stripped
+to derive a backend name. Quoted dots and backend identifier escaping survive.
+
+The plan contains ordered backend DROP statements and an optional terminal
+diagnostic. Execute the successful prefix, then emit that diagnostic. Preserve
+successful earlier drops when a later binding failure occurs; wrapping the
+entire statement in a transaction that rolls them back would contradict the
+captures. Ordinary backend failures still stop execution and need adapter-owned
+error handling. A plan does not itself execute, commit or emit completion tokens.
+
+The binder rejects ambiguous catalog records. Incomplete snapshots are invalid
+inputs, never evidence of absence. Cross-database names, options beyond the
+captured forms, clustered-index options and constraint-backed indexes remain
+explicitly unsupported. Unsupported inputs do not yield an executable plan.
+The tests compare exact captured diagnostics and remaining index inventories
+for all 24 cases, plus explicit identifier comparison, schema precedence,
+ambiguous catalogs and escaped backend identities. Tests include the module by
+path until the separately owned SQL export integration is ready.
 
 This task does not edit the SQL export module or root engine. Root integration,
 transaction policy, catalog acquisition and end-to-end execution verification
