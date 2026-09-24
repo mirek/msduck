@@ -73,7 +73,7 @@ fn scalar_conversions_match_retained_sql_server_values_and_errors() {
         }
         checked += 1;
     }
-    assert_eq!(checked, 48);
+    assert_eq!(checked, 56);
 }
 
 #[test]
