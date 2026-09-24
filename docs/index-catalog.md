@@ -82,8 +82,22 @@ backend names without a logical record require explicit recovery.
 
 `acquire` remains a managed-index read. `acquire_complete` additionally rejects
 unmanaged and constraint-backed indexes, so a partial snapshot cannot silently
-reach the DROP binder. Constraint-backed reconciliation and public
-`sys.indexes`/`sys.index_columns` views remain implementation work.
+reach the DROP binder. Constraint-backed reconciliation remains implementation work.
+
+`publish_views` now installs `sys.indexes` and `sys.index_columns` for heaps and
+ordinary managed indexes. Both views check catalog completeness during reads
+and raise on unsupported unmanaged or constraint-backed states. Six captured
+setup/index stages match exactly for both row projections, including quoted
+names and same logical names on different tables. Native comparisons preserve
+Boolean semantics by reading Arrow bool8 extension metadata, as the engine
+already does; the initial generic value reader lost that metadata and the raw
+failed comparison was retained.
+
+These are row comparisons, not complete wire-descriptor verification. The root
+logical declaration/property adapter still needs catalog field metadata for
+exact sysname/NVARCHAR widths, nullability and descriptor flags. Startup and
+DDL hooks also remain unintegrated. Do not infer those properties from the
+passing native row comparisons.
 
 A persistent reopen test initially failed because DuckDB table OIDs changed
 across restart. Current ownership joins use live native OIDs, but persistent
@@ -91,6 +105,6 @@ identity relies on the logical object ID and recorded incarnation. The caller
 must synchronize logical objects after each DDL mutation. The reopen regression
 now proves that the logical index identity remains usable after restart.
 
-At runtime checkpoint `6807d5e`, all seven focused Linux native tests, all 647
+At runtime checkpoint `b6d47ce`, all eight focused Linux native tests, all 648
 workspace Rust tests, strict workspace Clippy and formatting passed. The initial
 local native build was cancelled for disk pressure; no local pass is claimed.
