@@ -53,7 +53,7 @@ The separate multi-target DROP binder requires earlier successful drops to
 survive a later missing-target error when the caller has no explicit transaction.
 
 This task owns `src/index_catalog.rs` and an isolated native integration test,
-plus these captures/docs. The register/acquire/create/drop/sync APIs and four native regressions now exist.
+plus these captures/docs. The register/acquire/create/drop/sync APIs and nine native regressions now exist.
 They are not yet exported or wired into root startup/DDL execution. Root server initialization, engine DDL hooks, SQL
 exports/dialect and manifests remain under their existing claims and must be
 integrated separately. Unsupported index kinds must remain explicit; a partial
@@ -115,8 +115,11 @@ length, precision, scale, collation and nullability to captured sys.all_columns,
 and provenance flags to direct empty-result descriptors. Sysname retains user
 type ID256; type_desc uses Latin1_General_CI_AS_KS_WS independently of the caller's
 catalog collation. The root query-catalog hook and the corresponding TDS
-collation mapping remain integration work. The five reference columns not yet
-published by these views remain an explicit schema gap.
+collation mapping remain integration work. The views now publish all 23 sys.indexes columns and all 10 sys.index_columns
+columns in captured order. Expanded projections captured twice confirm the
+additional ordinary-index flags, NULL compression_delay and zero columnstore
+and data-clustering ordinals. All prior observations remain unchanged.
+These declarations do not establish support for columnstore or clustered indexes.
 
 The capture now reads system declarations through sys.all_columns, asserts they
 are nonempty, and captures direct empty-result descriptors. These probes run

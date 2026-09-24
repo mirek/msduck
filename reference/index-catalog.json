@@ -1,8 +1,8 @@
 {
   "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
   "identicalFreshCaptures": 2,
-  "indexSql": "SELECT s.name AS schema_name,o.name AS table_name,i.name,i.index_id,i.type,i.type_desc,i.is_unique,i.data_space_id,i.ignore_dup_key,i.is_primary_key,i.is_unique_constraint,i.fill_factor,i.is_padded,i.is_disabled,i.is_hypothetical,i.allow_row_locks,i.allow_page_locks,i.has_filter,i.filter_definition,i.auto_created,i.optimize_for_sequential_key FROM sys.indexes i JOIN sys.objects o ON o.object_id=i.object_id JOIN sys.schemas s ON s.schema_id=o.schema_id WHERE o.type='U' AND s.name IN ('dbo','alt') ORDER BY s.name,o.name,i.index_id",
-  "columnSql": "SELECT s.name AS schema_name,o.name AS table_name,i.name AS index_name,ic.index_id,ic.index_column_id,ic.column_id,c.name AS column_name,ic.key_ordinal,ic.partition_ordinal,ic.is_descending_key,ic.is_included_column FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id=ic.object_id AND i.index_id=ic.index_id JOIN sys.objects o ON o.object_id=ic.object_id JOIN sys.schemas s ON s.schema_id=o.schema_id LEFT JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE o.type='U' AND s.name IN ('dbo','alt') ORDER BY s.name,o.name,ic.index_id,ic.index_column_id",
+  "indexSql": "SELECT s.name AS schema_name,o.name AS table_name,i.name,i.index_id,i.type,i.type_desc,i.is_unique,i.data_space_id,i.ignore_dup_key,i.is_primary_key,i.is_unique_constraint,i.fill_factor,i.is_padded,i.is_disabled,i.is_hypothetical,i.allow_row_locks,i.allow_page_locks,i.has_filter,i.filter_definition,i.auto_created,i.optimize_for_sequential_key,i.is_ignored_in_optimization,i.compression_delay,i.suppress_dup_key_messages FROM sys.indexes i JOIN sys.objects o ON o.object_id=i.object_id JOIN sys.schemas s ON s.schema_id=o.schema_id WHERE o.type='U' AND s.name IN ('dbo','alt') ORDER BY s.name,o.name,i.index_id",
+  "columnSql": "SELECT s.name AS schema_name,o.name AS table_name,i.name AS index_name,ic.index_id,ic.index_column_id,ic.column_id,c.name AS column_name,ic.key_ordinal,ic.partition_ordinal,ic.is_descending_key,ic.is_included_column,ic.column_store_order_ordinal,ic.data_clustering_ordinal FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id=ic.object_id AND i.index_id=ic.index_id JOIN sys.objects o ON o.object_id=ic.object_id JOIN sys.schemas s ON s.schema_id=o.schema_id LEFT JOIN sys.columns c ON c.object_id=ic.object_id AND c.column_id=ic.column_id WHERE o.type='U' AND s.name IN ('dbo','alt') ORDER BY s.name,o.name,ic.index_id,ic.index_column_id",
   "results": [
     {
       "id": "schema",
@@ -322,6 +322,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": []
@@ -472,6 +499,24 @@
               {
                 "name": "is_included_column",
                 "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
                 "length": 1,
                 "precision": null,
                 "scale": null,
@@ -827,6 +872,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -851,6 +923,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -874,6 +949,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -1024,6 +1102,24 @@
               {
                 "name": "is_included_column",
                 "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
                 "length": 1,
                 "precision": null,
                 "scale": null,
@@ -1365,6 +1461,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -1389,6 +1512,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -1412,6 +1538,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -1435,6 +1564,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -1585,6 +1717,24 @@
               {
                 "name": "is_included_column",
                 "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
                 "length": 1,
                 "precision": null,
                 "scale": null,
@@ -1926,6 +2076,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -1950,6 +2127,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -1973,6 +2153,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -1996,6 +2179,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -2019,6 +2205,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -2174,6 +2363,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -2188,7 +2395,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -2524,6 +2733,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -2548,6 +2784,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -2571,6 +2810,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -2594,6 +2836,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -2617,6 +2862,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -2640,6 +2888,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -2795,6 +3046,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -2809,7 +3078,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -2822,7 +3093,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -3159,6 +3432,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -3183,6 +3483,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -3206,6 +3509,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -3229,6 +3535,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -3252,6 +3561,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -3275,6 +3587,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -3430,6 +3745,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -3444,7 +3777,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -3457,7 +3792,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -3809,6 +4146,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -3833,6 +4197,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -3856,6 +4223,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -3879,6 +4249,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -3902,6 +4275,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -3925,6 +4301,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -4080,6 +4459,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -4094,7 +4491,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -4107,7 +4506,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -4444,6 +4845,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -4468,6 +4896,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -4491,6 +4922,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -4514,6 +4948,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -4537,6 +4974,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -4560,6 +5000,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -4715,6 +5158,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -4729,7 +5190,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -4742,7 +5205,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -5078,6 +5543,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -5102,6 +5594,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -5125,6 +5620,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -5148,6 +5646,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -5171,6 +5672,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -5194,6 +5698,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -5217,6 +5724,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -5372,6 +5882,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -5386,7 +5914,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -5399,7 +5929,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -5412,7 +5944,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -5748,6 +6282,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -5772,6 +6333,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -5795,6 +6359,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -5818,6 +6385,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -5841,6 +6411,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -5864,6 +6437,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -5887,6 +6463,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -5910,6 +6489,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -6065,6 +6647,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -6079,7 +6679,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -6092,7 +6694,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -6105,7 +6709,9 @@
                 1,
                 0,
                 true,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -6118,7 +6724,9 @@
                 2,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -6131,7 +6739,9 @@
                 0,
                 0,
                 false,
-                true
+                true,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -6144,7 +6754,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -6480,6 +7092,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -6504,6 +7143,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -6527,6 +7169,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -6550,6 +7195,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -6573,6 +7221,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -6596,6 +7247,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -6619,6 +7273,9 @@
                 true,
                 "([value] IS NOT NULL)",
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -6642,6 +7299,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -6665,6 +7325,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -6820,6 +7483,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -6834,7 +7515,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -6847,7 +7530,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -6860,7 +7545,9 @@
                 1,
                 0,
                 true,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -6873,7 +7560,9 @@
                 2,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -6886,7 +7575,9 @@
                 0,
                 0,
                 false,
-                true
+                true,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -6899,7 +7590,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -6912,7 +7605,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -7256,6 +7951,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -7280,6 +8002,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -7303,6 +8028,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -7326,6 +8054,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -7349,6 +8080,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -7372,6 +8106,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -7395,6 +8132,9 @@
                 true,
                 "([value] IS NOT NULL)",
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -7418,6 +8158,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -7441,6 +8184,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -7596,6 +8342,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -7610,7 +8374,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -7623,7 +8389,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -7636,7 +8404,9 @@
                 1,
                 0,
                 true,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -7649,7 +8419,9 @@
                 2,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -7662,7 +8434,9 @@
                 0,
                 0,
                 false,
-                true
+                true,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -7675,7 +8449,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -7688,7 +8464,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -8038,6 +8816,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -8062,6 +8867,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -8085,6 +8893,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -8108,6 +8919,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -8131,6 +8945,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -8154,6 +8971,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -8177,6 +8997,9 @@
                 true,
                 "([value] IS NOT NULL)",
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -8200,6 +9023,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -8223,6 +9049,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -8246,6 +9075,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -8401,6 +9233,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -8415,7 +9265,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -8428,7 +9280,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -8441,7 +9295,9 @@
                 1,
                 0,
                 true,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -8454,7 +9310,9 @@
                 2,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -8467,7 +9325,9 @@
                 0,
                 0,
                 false,
-                true
+                true,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -8480,7 +9340,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -8493,7 +9355,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -8506,7 +9370,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -8842,6 +9708,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -8866,6 +9759,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -8889,6 +9785,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -8912,6 +9811,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -8935,6 +9837,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -8958,6 +9863,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -8981,6 +9889,9 @@
                 true,
                 "([value] IS NOT NULL)",
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -9004,6 +9915,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -9027,6 +9941,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -9182,6 +10099,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -9196,7 +10131,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -9209,7 +10146,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -9222,7 +10161,9 @@
                 1,
                 0,
                 true,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -9235,7 +10176,9 @@
                 2,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -9248,7 +10191,9 @@
                 0,
                 0,
                 false,
-                true
+                true,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -9261,7 +10206,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -9274,7 +10221,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -9624,6 +10573,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -9648,6 +10624,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -9671,6 +10650,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -9694,6 +10676,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -9717,6 +10702,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -9740,6 +10728,9 @@
                 true,
                 "([value] IS NOT NULL)",
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -9763,6 +10754,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -9786,6 +10780,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -9941,6 +10938,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -9955,7 +10970,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -9968,7 +10985,9 @@
                 1,
                 0,
                 true,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -9981,7 +11000,9 @@
                 2,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -9994,7 +11015,9 @@
                 0,
                 0,
                 false,
-                true
+                true,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -10007,7 +11030,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -10020,7 +11045,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -10356,6 +11383,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -10380,6 +11434,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -10403,6 +11460,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -10426,6 +11486,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -10449,6 +11512,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -10472,6 +11538,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -10495,6 +11564,9 @@
                 true,
                 "([value] IS NOT NULL)",
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -10518,6 +11590,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -10541,6 +11616,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -10696,6 +11774,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -10710,7 +11806,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -10723,7 +11821,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -10736,7 +11836,9 @@
                 1,
                 0,
                 true,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -10749,7 +11851,9 @@
                 2,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -10762,7 +11866,9 @@
                 0,
                 0,
                 false,
-                true
+                true,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -10775,7 +11881,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -10788,7 +11896,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -11124,6 +12234,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -11148,6 +12285,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -11171,6 +12311,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -11194,6 +12337,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -11217,6 +12363,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -11240,6 +12389,9 @@
                 true,
                 "([value] IS NOT NULL)",
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -11263,6 +12415,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -11286,6 +12441,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -11441,6 +12599,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -11455,7 +12631,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -11468,7 +12646,9 @@
                 1,
                 0,
                 true,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -11481,7 +12661,9 @@
                 2,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -11494,7 +12676,9 @@
                 0,
                 0,
                 false,
-                true
+                true,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -11507,7 +12691,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -11520,7 +12706,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -11856,6 +13044,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -11880,6 +13095,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -11903,6 +13121,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -11926,6 +13147,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -11949,6 +13173,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -11972,6 +13199,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -11995,6 +13225,9 @@
                 true,
                 "([value] IS NOT NULL)",
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -12018,6 +13251,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -12041,6 +13277,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -12196,6 +13435,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -12210,7 +13467,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -12223,7 +13482,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -12236,7 +13497,9 @@
                 1,
                 0,
                 true,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -12249,7 +13512,9 @@
                 2,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -12262,7 +13527,9 @@
                 0,
                 0,
                 false,
-                true
+                true,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -12275,7 +13542,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -12288,7 +13557,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -12624,6 +13895,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -12648,6 +13946,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -12671,6 +13972,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -12694,6 +13998,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -12717,6 +14024,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -12740,6 +14050,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -12763,6 +14076,9 @@
                 true,
                 "([value] IS NOT NULL)",
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -12786,6 +14102,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -12809,6 +14128,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -12964,6 +14286,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -12978,7 +14318,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -12991,7 +14333,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -13004,7 +14348,9 @@
                 1,
                 0,
                 true,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -13017,7 +14363,9 @@
                 2,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -13030,7 +14378,9 @@
                 0,
                 0,
                 false,
-                true
+                true,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -13043,7 +14393,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -13056,7 +14408,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -13392,6 +14746,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -13416,6 +14797,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -13439,6 +14823,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -13462,6 +14849,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -13485,6 +14875,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -13508,6 +14901,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -13531,6 +14927,9 @@
                 true,
                 "([value] IS NOT NULL)",
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -13554,6 +14953,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -13577,6 +14979,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -13732,6 +15137,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -13746,7 +15169,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -13759,7 +15184,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -13772,7 +15199,9 @@
                 1,
                 0,
                 true,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -13785,7 +15214,9 @@
                 2,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -13798,7 +15229,9 @@
                 0,
                 0,
                 false,
-                true
+                true,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -13811,7 +15244,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -13824,7 +15259,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -14160,6 +15597,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -14184,6 +15648,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -14207,6 +15674,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -14230,6 +15700,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -14253,6 +15726,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -14276,6 +15752,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -14299,6 +15778,9 @@
                 true,
                 "([value] IS NOT NULL)",
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -14322,6 +15804,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -14345,6 +15830,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -14368,6 +15856,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -14391,6 +15882,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -14546,6 +16040,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -14560,7 +16072,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -14573,7 +16087,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -14586,7 +16102,9 @@
                 1,
                 0,
                 true,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -14599,7 +16117,9 @@
                 2,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -14612,7 +16132,9 @@
                 0,
                 0,
                 false,
-                true
+                true,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -14625,7 +16147,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -14638,7 +16162,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -14651,7 +16177,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -14664,7 +16192,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -15008,6 +16538,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -15032,6 +16589,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -15055,6 +16615,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -15078,6 +16641,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -15101,6 +16667,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -15124,6 +16693,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -15147,6 +16719,9 @@
                 true,
                 "([value] IS NOT NULL)",
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -15170,6 +16745,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -15193,6 +16771,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -15216,6 +16797,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -15239,6 +16823,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -15394,6 +16981,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -15408,7 +17013,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -15421,7 +17028,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -15434,7 +17043,9 @@
                 1,
                 0,
                 true,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -15447,7 +17058,9 @@
                 2,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -15460,7 +17073,9 @@
                 0,
                 0,
                 false,
-                true
+                true,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -15473,7 +17088,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -15486,7 +17103,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -15499,7 +17118,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -15512,7 +17133,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -15911,6 +17534,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -15935,6 +17585,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -15958,6 +17611,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -15981,6 +17637,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -16004,6 +17663,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -16027,6 +17689,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -16050,6 +17715,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -16073,6 +17741,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -16228,6 +17899,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -16242,7 +17931,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -16255,7 +17946,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -16268,7 +17961,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -16281,7 +17976,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -16617,6 +18314,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -16641,6 +18365,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -16664,6 +18391,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -16687,6 +18417,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -16710,6 +18443,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -16733,6 +18469,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -16756,6 +18495,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -16779,6 +18521,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -16802,6 +18547,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -16957,6 +18705,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -16971,7 +18737,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -16984,7 +18752,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -16997,7 +18767,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -17010,7 +18782,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -17023,7 +18797,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -17373,6 +19149,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -17397,6 +19200,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -17420,6 +19226,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -17443,6 +19252,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -17466,6 +19278,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -17489,6 +19304,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -17512,6 +19330,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -17667,6 +19488,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -17681,7 +19520,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -17694,7 +19535,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -17707,7 +19550,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -17720,7 +19565,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -18056,6 +19903,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -18080,6 +19954,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -18103,6 +19980,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -18126,6 +20006,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -18149,6 +20032,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -18172,6 +20058,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -18195,6 +20084,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -18218,6 +20110,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -18241,6 +20136,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -18396,6 +20294,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -18410,7 +20326,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -18423,7 +20341,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -18436,7 +20356,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -18449,7 +20371,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -18462,7 +20386,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }
@@ -18826,6 +20752,33 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -18850,6 +20803,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -18873,6 +20829,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -18896,6 +20855,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -18919,6 +20881,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -18942,6 +20907,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -18965,6 +20933,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ],
               [
@@ -18988,6 +20959,9 @@
                 false,
                 null,
                 false,
+                false,
+                false,
+                null,
                 false
               ]
             ]
@@ -19143,6 +21117,24 @@
                 "scale": null,
                 "flags": 33,
                 "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
               }
             ],
             "rows": [
@@ -19157,7 +21149,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -19170,7 +21164,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -19183,7 +21179,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ],
               [
                 "dbo",
@@ -19196,7 +21194,9 @@
                 1,
                 0,
                 false,
-                false
+                false,
+                0,
+                0
               ]
             ]
           }

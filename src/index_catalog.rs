@@ -367,9 +367,10 @@ pub fn publish_views(db: &Connection) -> Result<()> {
           CAST(CASE WHEN r.index_id=0 THEN 'HEAP' ELSE 'NONCLUSTERED' END AS VARCHAR) AS type_desc,
           r.is_unique,CAST(1 AS INTEGER) AS data_space_id,false AS ignore_dup_key,
           false AS is_primary_key,false AS is_unique_constraint,CAST(0 AS UTINYINT) AS fill_factor,
-          false AS is_padded,false AS is_disabled,false AS is_hypothetical,
+          false AS is_padded,false AS is_disabled,false AS is_hypothetical,false AS is_ignored_in_optimization,
           true AS allow_row_locks,true AS allow_page_locks,false AS has_filter,
-          CAST(NULL AS VARCHAR) AS filter_definition,false AS auto_created,false AS optimize_for_sequential_key
+          CAST(NULL AS VARCHAR) AS filter_definition,CAST(NULL AS INTEGER) AS compression_delay,
+          false AS suppress_dup_key_messages,false AS auto_created,false AS optimize_for_sequential_key
         FROM (SELECT object_id,CAST(NULL AS VARCHAR) AS name,CAST(0 AS INTEGER) AS index_id,false AS is_unique
               FROM sys.objects WHERE type='U'
               UNION ALL SELECT object_id,name,index_id,is_unique FROM main.__msduck_live_indexes) r
@@ -377,7 +378,8 @@ pub fn publish_views(db: &Connection) -> Result<()> {
         CREATE OR REPLACE VIEW sys.index_columns AS
         SELECT i.object_id,i.index_id,k.ordinal AS index_column_id,k.column_id,
           CAST(k.ordinal AS UTINYINT) AS key_ordinal,CAST(0 AS UTINYINT) AS partition_ordinal,
-          false AS is_descending_key,false AS is_included_column
+          false AS is_descending_key,false AS is_included_column,
+          CAST(0 AS UTINYINT) AS column_store_order_ordinal,CAST(0 AS UTINYINT) AS data_clustering_ordinal
         FROM main.__msduck_live_indexes i JOIN main.__msduck_index_keys k USING(incarnation)
         WHERE main.__msduck_index_catalog_ready()")?;
     Ok(())
@@ -414,10 +416,13 @@ pub fn fields(
                 ("is_padded", 104, 104, 1, 1, true, true),
                 ("is_disabled", 104, 104, 1, 1, true, true),
                 ("is_hypothetical", 104, 104, 1, 1, true, true),
+                ("is_ignored_in_optimization", 104, 104, 1, 1, true, true),
                 ("allow_row_locks", 104, 104, 1, 1, true, true),
                 ("allow_page_locks", 104, 104, 1, 1, true, true),
                 ("has_filter", 104, 104, 1, 1, true, true),
                 ("filter_definition", 231, 231, -1, 0, true, true),
+                ("compression_delay", 56, 56, 4, 10, true, true),
+                ("suppress_dup_key_messages", 104, 104, 1, 1, true, true),
                 ("auto_created", 104, 104, 1, 1, true, true),
                 ("optimize_for_sequential_key", 104, 104, 1, 1, true, true),
             ],
@@ -430,6 +435,8 @@ pub fn fields(
                 ("partition_ordinal", 48, 48, 1, 3, false, false),
                 ("is_descending_key", 104, 104, 1, 1, true, true),
                 ("is_included_column", 104, 104, 1, 1, true, true),
+                ("column_store_order_ordinal", 48, 48, 1, 3, true, true),
+                ("data_clustering_ordinal", 48, 48, 1, 3, true, true),
             ],
             _ => return None,
         };

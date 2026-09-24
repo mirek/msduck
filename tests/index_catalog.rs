@@ -312,6 +312,20 @@ fn published_column_declarations_and_origin_match_captured_system_metadata() {
         let descriptors = fixture["declarations"][view]["wire"]["sets"][0]["columns"]
             .as_array()
             .unwrap();
+        assert_eq!(
+            actual_names,
+            declarations
+                .iter()
+                .map(|r| r[0].as_str().unwrap().to_owned())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            actual_names,
+            descriptors
+                .iter()
+                .map(|c| c["name"].as_str().unwrap().to_owned())
+                .collect::<Vec<_>>()
+        );
         for field in fields {
             let row = declarations.iter().find(|r| r[0] == field.name).unwrap();
             let info = field.info.unwrap();
