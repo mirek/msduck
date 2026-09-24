@@ -201,7 +201,7 @@ a separate warning channel. Preparation does not receive an execution scope.
 All twenty exact DML/assignment reference programs pass against the rebuilt
 server. The complete focused suite passes all twelve tests, retaining the
 original 126 programs, ten window programs, prepared execution and character
-extrema. The complete boundary replay now matches 35/50 programs: two setup
+extrema. At the preceding DML checkpoint, the complete boundary replay matched 35/50 programs: two setup
 failures and 55 differences across thirteen executions remain, with no new or
 worsened case compared with `43d9c9d`. This does not yet resolve stored-view
 expansion, joined OUTPUT paths or partial-error warning ordering.
@@ -226,3 +226,38 @@ observations to `artifacts/compatibility/aggregate-all-boundaries.json` before
 asserting exact equality. No expected failure is converted into a match. The
 full comparison is explicitly skipped in ordinary CI; the implemented subsets
 remain mandatory. This replaces the workstation-specific temporary replay.
+
+## Stored-view metadata follow-up
+
+At `ba24b78`, views retain their logical SQL definitions and acquire fresh result
+properties from those definitions during binding. Definitions are associated
+with catalog object IDs and maintained transactionally. Nested view properties
+follow dependency ALTER and rollback; legacy views without a retained definition
+remain unknown. Direct computed expressions, stored/identity columns, aggregate
+outputs and CTE/derived outputs retain their different captured provenance.
+This metadata work does not expand view bodies for execution or observe their
+aggregate warnings.
+
+Linux verification at that revision passed 646 workspace Rust tests, strict
+workspace Clippy, the all-target build, 13 focused tests and all 404 standard
+client tests. The 325-case audit has zero differences from `94efebb`. The full
+fifty-program boundary comparison improved to 39 exact matches, with two setup
+failures and 45 differences across nine executions. Its raw results are identical
+to the intermediate view candidate. The failing full comparison remains explicit.
+
+The broader 81-case view replay exposed three additional cast descriptor
+mismatches: serialized logical SQL retained a parser annotation, then reparsing
+added a second annotation. `8a233f3` removes that annotation before persistence,
+so binding restores it exactly once. Its native catalog regression, all 484
+library tests and strict Clippy passed locally; full Linux/client verification
+for this correction remains pending. Do not use the `ba24b78` pass as evidence
+for later revisions. The subsequent DDL completion correction has separate
+verification and does not implement view-body observation.
+
+The first-party view fixtures and reproducible capture command are in
+[PR #106](https://github.com/mirek/msduck/pull/106). They also retain caller CTE
+isolation, qualified/quoted names, duplicate exposed-name errors and invalid
+dependency errors. Future expansion must independently bind stored bodies;
+naive derived-table substitution can capture names from the caller. Missing
+view warnings, qualified-star handling, exact binding errors and the other
+retained full-boundary gaps remain implementation work.
