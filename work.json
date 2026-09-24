@@ -1575,6 +1575,25 @@
       "dependencies": [],
       "issue": 164,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PKD64"
+    },
+    {
+      "id": "attention-boundaries-reference-v1",
+      "title": "Capture idle repeated Attention and pre-EOM IGNORE boundaries",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal. The cancellation lifecycle currently rejects idle/repeated Attention because existing owner-captured evidence covers active requests only. Capture the missing wire boundaries before responsive transport integration; no external submission is input.",
+      "scope": [
+        "scripts/capture-attention-boundaries.mjs",
+        "reference/attention-boundaries.json",
+        "docs/attention-boundaries-reference.md"
+      ],
+      "acceptance": [
+        "Use the pinned SQL Server container and isolated sessions/databases. Capture post-login raw request/response packets and EOM boundaries for idle Attention, repeated Attention bursts, and IGNORE on a fragmented request. Keep credentials out of traces.",
+        "Establish active WAITFOR from a separate observer before active repeated-Attention cases; distinguish client burst order from unproven server scheduling. Capture transaction/session state and earlier/later write visibility without treating deadlines as proof of execution.",
+        "Preserve raw events and all differences across repeated and independent captures. Bind only verified server identities. Document unsupported completion/backpressure/disconnect classes and any nonrepeatable observations explicitly. No runtime server/lifecycle changes."
+      ],
+      "dependencies": [],
+      "issue": 169,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PKIkw"
     }
   ]
 }
