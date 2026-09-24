@@ -145,3 +145,16 @@ programs and prepared-execution isolation, retaining a separate CI log. These
 files also remain directly runnable. The complete fifty-program boundary replay
 still retains the unresolved failures described above; it is not a passing CI
 gate. `npm test` alone does not include the focused suites.
+
+Run the complete boundary comparison with the existing server build:
+
+```sh
+MSDUCK_AGGREGATE_BOUNDARY_AUDIT=1 node --test tests/aggregate_diagnostics.test.mjs
+```
+
+This command currently fails on the known gaps. It runs all fifty programs,
+retains setup errors as well as execution differences, and writes the complete
+observations to `artifacts/compatibility/aggregate-all-boundaries.json` before
+asserting exact equality. No expected failure is converted into a match. The
+full comparison is explicitly skipped in ordinary CI; the implemented subsets
+remain mandatory. This replaces the workstation-specific temporary replay.

@@ -40,22 +40,37 @@ async function replayBoundaries(t, samples, artifact, expectedCount) {
   const connection = await start(t)
   const records = []
   for (const sample of samples) {
+    let setupFailure
     for (const sql of [...sample.setup, `SET ANSI_WARNINGS ${sample.mode}`]) {
-      assert.deepEqual((await capture(connection, sql)).errors, [], sql)
+      const result = await orderedCapture(connection, sql)
+      if (result.errors.length) {
+        setupFailure = { sql, result }
+        break
+      }
     }
     const actual = []
-    for (const _ of sample.executions) {
+    for (const _ of setupFailure ? [] : sample.executions) {
       const result = await orderedCapture(connection, sample.sql)
       const state = await orderedCapture(connection, 'SELECT @@ERROR AS last_error,@@ROWCOUNT AS last_rowcount,@@TRANCOUNT AS transaction_count,XACT_STATE() AS transaction_state')
       const contents = await orderedCapture(connection, sample.followup)
       actual.push({ result, state, contents })
     }
-    records.push({ id: sample.id, actual, expected: sample.executions, differences: differences(actual, sample.executions) })
+    records.push({ id: sample.id, setupFailure, actual, expected: sample.executions, differences: setupFailure ? [] : differences(actual, sample.executions) })
   }
   await mkdir('artifacts/compatibility', { recursive: true })
   await writeFile(`artifacts/compatibility/${artifact}.json`, JSON.stringify(records, null, 2) + '\n')
-  assert.deepEqual(records.flatMap(record => record.differences.map(difference => ({ id: record.id, ...difference }))), [])
+  assert.deepEqual(records.flatMap(record => record.setupFailure
+    ? [{ id: record.id, setupFailure: record.setupFailure }]
+    : record.differences.map(difference => ({ id: record.id, ...difference }))), [])
 }
+
+test('complete aggregate execution boundaries match SQL Server', {
+  skip: process.env.MSDUCK_AGGREGATE_BOUNDARY_AUDIT !== '1'
+    ? 'opt-in full boundary audit includes unresolved compatibility gaps; see docs/aggregate-diagnostics.md'
+    : false,
+}, async t => {
+  await replayBoundaries(t, boundaries.results, 'aggregate-all-boundaries', 50)
+})
 
 test('window diagnostics match consumed frames including empty frames and COUNT', async t => {
   await replayBoundaries(t, boundaries.results.filter(sample => sample.id.includes('-window-')), 'aggregate-window-boundaries', 10)
