@@ -9179,3 +9179,46 @@ test('DROP INDEX RPC errors retain completion tokens and continue after missing 
   assert.deepEqual(tokens, [done('DONEINPROC', true, true, 201), done('DONEPROC', false, false, 224)])
   assert.deepEqual((await query(c, 'SELECT @@ROWCOUNT,@@ERROR')).rows, [[0,3701]])
 })
+
+
+test('system object and schema projections retain captured descriptors across catalog joins', { timeout: 20000 }, async t => {
+  const { canonical } = await import('../scripts/lib/compatibility.mjs')
+  const c = await start(t)
+  const descriptor = column => [column.name, column.type, column.length, column.precision, column.scale, column.flags,
+    column.collation ? ['lcid','flags','version','sortId'].map(key => column.collation[key]) : null]
+  // Empty descriptors and declarations captured twice against SQL Server.
+  for (const [view, expected] of [
+    ['schemas', [
+      ["name","NVarChar",256,null,null,8,[1033,13,0,52]],
+      ["schema_id","Int",null,null,null,8,null],
+      ["principal_id","IntN",4,null,null,9,null],
+    ]],
+    ['objects', [
+      ["name","NVarChar",256,null,null,8,[1033,13,0,52]],
+      ["object_id","Int",null,null,null,8,null],
+      ["principal_id","IntN",4,null,null,9,null],
+      ["schema_id","Int",null,null,null,8,null],
+      ["parent_object_id","Int",null,null,null,8,null],
+      ["type","Char",2,null,null,33,[1033,1,0,0]],
+      ["type_desc","NVarChar",120,null,null,9,[1033,1,0,0]],
+      ["create_date","DateTime",null,null,null,8,null],
+      ["modify_date","DateTime",null,null,null,8,null],
+      ["is_ms_shipped","Bit",null,null,null,32,null],
+      ["is_published","Bit",null,null,null,32,null],
+      ["is_schema_published","Bit",null,null,null,32,null],
+    ]],
+  ]) {
+    const result = canonical(await capture(c, `SELECT * FROM sys.${view} WHERE 1=0`))
+    assert.deepEqual(result.errors, [])
+    assert.deepEqual(result.sets[0].rows, [])
+    assert.deepEqual(result.sets[0].columns.map(descriptor), expected, view)
+  }
+  await query(c, 'CREATE TABLE dbo.catalog_join(id INT); CREATE INDEX ix ON dbo.catalog_join(id)')
+  const inventory = "SELECT s.name AS schema_name,o.name AS table_name,i.name AS index_name FROM sys.indexes i JOIN sys.objects o ON o.object_id=i.object_id JOIN sys.schemas s ON s.schema_id=o.schema_id WHERE o.name='catalog_join'"
+  for (const sql of [inventory, `WITH inventory AS (${inventory}) SELECT * FROM inventory`, `${inventory} AND 1=0`]) {
+    const result = canonical(await capture(c, sql))
+    assert.deepEqual(result.errors, [])
+    assert.deepEqual(result.sets[0].rows, sql.endsWith('AND 1=0') ? [] : [['dbo','catalog_join','ix']])
+    assert.deepEqual(result.sets[0].columns.map(column => [column.type,column.length,column.flags]), [['NVarChar',256,8],['NVarChar',256,8],['NVarChar',256,9]])
+  }
+})

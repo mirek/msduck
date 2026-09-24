@@ -321,6 +321,78 @@ pub(crate) fn snapshot<T: Visit>(db: &Connection, query: &T) -> duckdb::Result<C
     snapshot_with_views(db, query, &mut ViewBinding::default())
 }
 
+// SQL Server system-view declarations and projection origins, captured with
+// sys.all_columns and empty SELECT * results. Resource strings have a different
+// collation from database-owned sysname values.
+fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Field>> {
+    use msduck_core::{
+        catalog::TypeMetadata,
+        collation::Label,
+        result::{Origin, Properties},
+    };
+    // name, system/user type, bytes, precision, scale, nullable, computed
+    let definitions = match view.to_ascii_lowercase().as_str() {
+        "schemas" => vec![
+            ("name", 231, 256, 256, 0, 0, false, false),
+            ("schema_id", 56, 56, 4, 10, 0, false, false),
+            ("principal_id", 56, 56, 4, 10, 0, true, false),
+        ],
+        "objects" => vec![
+            ("name", 231, 256, 256, 0, 0, false, false),
+            ("object_id", 56, 56, 4, 10, 0, false, false),
+            ("principal_id", 56, 56, 4, 10, 0, true, false),
+            ("schema_id", 56, 56, 4, 10, 0, false, false),
+            ("parent_object_id", 56, 56, 4, 10, 0, false, false),
+            ("type", 175, 175, 2, 0, 0, true, true),
+            ("type_desc", 231, 231, 120, 0, 0, true, false),
+            ("create_date", 61, 61, 8, 23, 3, false, false),
+            ("modify_date", 61, 61, 8, 23, 3, false, false),
+            ("is_ms_shipped", 104, 104, 1, 1, 0, false, true),
+            ("is_published", 104, 104, 1, 1, 0, false, true),
+            ("is_schema_published", 104, 104, 1, 1, 0, false, true),
+        ],
+        _ => return None,
+    };
+    Some(
+        definitions
+            .into_iter()
+            .map(
+                |(name, system, user, length, precision, scale, nullable, computed)| {
+                    let collation_name = matches!(system, 175 | 231).then(|| {
+                        if matches!(name, "type" | "type_desc") {
+                            "Latin1_General_CI_AS_KS_WS"
+                        } else {
+                            catalog_collation
+                        }
+                        .to_owned()
+                    });
+                    Field {
+                        name: name.into(),
+                        info: Some(TypeMetadata {
+                            system_type_id: Some(system),
+                            user_type_id: Some(user),
+                            max_length: Some(length),
+                            precision: Some(precision),
+                            scale: Some(scale),
+                            collation_name: collation_name.clone(),
+                        }),
+                        collation: collation_name.map(|name| Ok(Label::Implicit(name))),
+                        properties: Properties {
+                            nullable: Some(nullable),
+                            origin: if computed {
+                                Origin::Expression
+                            } else {
+                                Origin::Stored
+                            },
+                        },
+                        json_fragment: false,
+                    }
+                },
+            )
+            .collect(),
+    )
+}
+
 fn snapshot_with_views<T: Visit>(
     db: &Connection,
     query: &T,
@@ -363,6 +435,7 @@ fn snapshot_with_views<T: Visit>(
             && schema.value.eq_ignore_ascii_case("sys")
             && let Some(collation) = catalog.default_collation.as_deref()
             && let Some(fields) = crate::index_catalog::fields(&view.value, collation)
+                .or_else(|| object_catalog_fields(&view.value, collation))
         {
             catalog.tables.insert(name, fields);
             continue;
