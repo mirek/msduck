@@ -7,6 +7,35 @@ use sqlparser::ast::*;
 pub use msduck_sql::binding_scope::{Field, QueryScopes, Scope};
 use msduck_sql::projection as infer;
 
+/// Retain logical definitions, not execution tickets or a stale property cache.
+pub fn register(db: &Connection) -> duckdb::Result<()> {
+    db.execute_batch("CREATE TABLE IF NOT EXISTS main.__msduck_view_definitions(object_id INTEGER PRIMARY KEY,query_sql VARCHAR NOT NULL)")?;
+    sync(db)
+}
+
+pub fn sync(db: &Connection) -> duckdb::Result<()> {
+    db.execute_batch("DELETE FROM main.__msduck_view_definitions d WHERE NOT EXISTS(SELECT 1 FROM sys.objects o WHERE o.object_id=d.object_id AND o.type='V')")
+}
+
+pub fn record_view_definition(db: &Connection, statement: &Statement) -> duckdb::Result<()> {
+    let (name, query) = match statement {
+        Statement::CreateView(view) => (&view.name, &view.query),
+        Statement::AlterView { name, query, .. } => (name, query),
+        _ => return Ok(()),
+    };
+    db.execute(
+        "INSERT OR REPLACE INTO main.__msduck_view_definitions SELECT object_id,? FROM sys.objects WHERE object_id=__msduck_object_id(?,NULL) AND type='V'",
+        duckdb::params![query.to_string(), name.to_string()],
+    )?;
+    Ok(())
+}
+
+#[derive(Default)]
+struct ViewBinding {
+    active: std::collections::HashSet<i32>,
+    properties: std::collections::HashMap<i32, Option<Vec<msduck_core::result::Properties>>>,
+}
+
 /// Adapt only aligned, resolved logical labels to known wire descriptors.
 /// Unknown labels and unsupported mappings retain the existing wire fallback;
 /// this adapter is not SQL collation validation or comparison dispatch.
@@ -271,6 +300,14 @@ pub fn lower_recursion<T: Visit + VisitMut + Clone>(
 
 /// Acquire inputs once. No query expressions are evaluated while collecting metadata.
 pub(crate) fn snapshot<T: Visit>(db: &Connection, query: &T) -> duckdb::Result<CatalogSnapshot> {
+    snapshot_with_views(db, query, &mut ViewBinding::default())
+}
+
+fn snapshot_with_views<T: Visit>(
+    db: &Connection,
+    query: &T,
+    views: &mut ViewBinding,
+) -> duckdb::Result<CatalogSnapshot> {
     struct Tables(std::collections::BTreeSet<String>);
     impl Visitor for Tables {
         type Break = ();
@@ -301,7 +338,7 @@ pub(crate) fn snapshot<T: Visit>(db: &Connection, query: &T) -> duckdb::Result<C
         .and_then(|t| t.collation_name.clone());
     let mut columns = db.prepare("SELECT c.name,c.system_type_id,c.user_type_id,c.max_length,c.precision,c.scale,c.collation_name,c.is_nullable,c.is_identity,o.type FROM sys.columns c JOIN sys.objects o ON c.object_id=o.object_id WHERE c.object_id=__msduck_object_id(?,NULL) ORDER BY c.column_id")?;
     for name in names.0 {
-        let fields = columns
+        let mut fields = columns
             .query_map([&name], |row| {
                 Ok(Field {
                     collation: row
@@ -327,6 +364,38 @@ pub(crate) fn snapshot<T: Visit>(db: &Connection, query: &T) -> duckdb::Result<C
                 })
             })?
             .collect::<duckdb::Result<Vec<_>>>()?;
+        let definition = db.prepare("SELECT d.object_id,d.query_sql FROM main.__msduck_view_definitions d JOIN sys.objects o ON o.object_id=d.object_id WHERE o.object_id=__msduck_object_id(?,NULL) AND o.type='V'")?
+            .query_map([&name], |row| Ok((row.get::<_,i32>(0)?,row.get::<_,String>(1)?)))?
+            .next().transpose()?;
+        if let Some((id, sql)) = definition {
+            if !views.properties.contains_key(&id)
+                && views.active.len() < 32
+                && views.active.insert(id)
+            {
+                let statements =
+                    msduck_sql::batch::parse(&sql).map_err(|_| duckdb::Error::InvalidQuery)?;
+                let properties = if let [Statement::Query(query)] = statements.as_slice() {
+                    let inputs = snapshot_with_views(db, query.as_ref(), views)?;
+                    infer::view_fields(&inputs, query).map(|fields| {
+                        fields
+                            .into_iter()
+                            .map(|field| field.properties)
+                            .collect::<Vec<_>>()
+                    })
+                } else {
+                    None
+                };
+                views.active.remove(&id);
+                views.properties.insert(id, properties);
+            }
+            if let Some(Some(properties)) = views.properties.get(&id)
+                && properties.len() == fields.len()
+            {
+                for (field, properties) in fields.iter_mut().zip(properties) {
+                    field.properties = *properties;
+                }
+            }
+        }
         catalog.tables.insert(name, fields);
     }
     Ok(catalog)
@@ -383,6 +452,160 @@ pub fn record(db: &Connection, name: &str, fields: &[Field]) -> duckdb::Result<(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn view_properties_survive_restart_and_follow_transactional_definitions() {
+        use msduck_core::result::{Origin, Properties};
+        let path = std::env::temp_dir().join(format!(
+            "msduck-view-properties-{}-{}.duckdb",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let run = |session: &mut crate::engine::Session, sql: &str| {
+            let (tokens, ok) = session.batch_response(sql, &Default::default(), false, None);
+            assert!(ok, "{sql}: {tokens:?}");
+        };
+        let properties = |session: &crate::engine::Session, sql: &str| {
+            let mut statements = msduck_sql::batch::parse(sql).unwrap();
+            let sqlparser::ast::Statement::Query(query) = statements.remove(0) else {
+                unreachable!()
+            };
+            super::projection(&session.db, &query).unwrap().unwrap()[0].properties
+        };
+        let server = crate::server::Server::open(path.to_str().unwrap()).unwrap();
+        let mut session = crate::engine::Session::new(server.connection().unwrap()).unwrap();
+        run(
+            &mut session,
+            "CREATE TABLE dbo.provenance_base(id INT NOT NULL,v INT)",
+        );
+        let logical = properties(&session, "SELECT MIN(v) AS result FROM dbo.provenance_base");
+        let computed = Properties {
+            nullable: logical.nullable,
+            origin: Origin::Stored,
+        };
+        let stored = properties(&session, "SELECT id FROM dbo.provenance_base");
+        assert_eq!(computed.nullable, Some(true));
+        assert_ne!(computed.origin, Origin::Unknown);
+        assert_eq!(
+            stored,
+            Properties {
+                nullable: Some(false),
+                origin: Origin::Stored
+            }
+        );
+        run(
+            &mut session,
+            "CREATE VIEW dbo.provenance_view(projected_value) AS SELECT MIN(v) AS result FROM dbo.provenance_base",
+        );
+        run(
+            &mut session,
+            "CREATE VIEW dbo.provenance_nested AS SELECT projected_value FROM dbo.provenance_view",
+        );
+        for name in ["provenance_view", "provenance_nested"] {
+            assert_eq!(
+                properties(&session, &format!("SELECT projected_value FROM dbo.{name}")),
+                computed
+            );
+        }
+        run(&mut session, "BEGIN TRAN");
+        run(
+            &mut session,
+            "ALTER VIEW dbo.provenance_view AS SELECT id AS projected_value FROM dbo.provenance_base",
+        );
+        assert_eq!(
+            properties(&session, "SELECT projected_value FROM dbo.provenance_view"),
+            stored
+        );
+        assert_eq!(
+            properties(
+                &session,
+                "SELECT projected_value FROM dbo.provenance_nested"
+            ),
+            stored
+        );
+        run(&mut session, "ROLLBACK");
+        assert_eq!(
+            properties(&session, "SELECT projected_value FROM dbo.provenance_view"),
+            computed
+        );
+        assert!(
+            !session
+                .batch_response(
+                    "ALTER VIEW dbo.provenance_view AS SELECT missing FROM dbo.provenance_base",
+                    &Default::default(),
+                    false,
+                    None
+                )
+                .1
+        );
+        assert_eq!(
+            properties(&session, "SELECT projected_value FROM dbo.provenance_view"),
+            computed
+        );
+        run(&mut session, "CREATE TABLE dbo.provenance_unrelated(v INT)");
+        drop(session);
+        drop(server);
+        let server = crate::server::Server::open(path.to_str().unwrap()).unwrap();
+        let mut session = crate::engine::Session::new(server.connection().unwrap()).unwrap();
+        assert_eq!(
+            properties(&session, "SELECT projected_value FROM dbo.provenance_view"),
+            computed
+        );
+        assert_eq!(
+            properties(
+                &session,
+                "SELECT projected_value FROM dbo.provenance_nested"
+            ),
+            computed
+        );
+        run(
+            &mut session,
+            "DROP VIEW dbo.provenance_nested; DROP VIEW dbo.provenance_view",
+        );
+        run(
+            &mut session,
+            "CREATE VIEW dbo.provenance_view AS SELECT id AS projected_value FROM dbo.provenance_base",
+        );
+        assert_eq!(
+            properties(&session, "SELECT projected_value FROM dbo.provenance_view"),
+            stored
+        );
+        // A pre-migration view with no saved provenance must remain unknown.
+        session
+            .db
+            .execute("DELETE FROM main.__msduck_view_definitions", [])
+            .unwrap();
+        assert_eq!(
+            properties(&session, "SELECT projected_value FROM dbo.provenance_view"),
+            Properties::default()
+        );
+        run(
+            &mut session,
+            "ALTER VIEW dbo.provenance_view AS SELECT MIN(v) AS projected_value FROM dbo.provenance_base",
+        );
+        assert_eq!(
+            properties(&session, "SELECT projected_value FROM dbo.provenance_view"),
+            computed
+        );
+        run(&mut session, "DROP VIEW dbo.provenance_view");
+        assert_eq!(
+            session
+                .db
+                .query_row(
+                    "SELECT count(*) FROM main.__msduck_view_definitions",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            0
+        );
+        drop(session);
+        drop(server);
+        std::fs::remove_file(path).unwrap();
+    }
+
     #[test]
     fn view_and_into_declarations_survive_restart_and_unrelated_ddl() {
         let path = std::env::temp_dir().join(format!(

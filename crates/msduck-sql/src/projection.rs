@@ -86,6 +86,28 @@ fn declaration_scopes(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -
 }
 
 pub fn query_fields(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -> Option<Vec<Field>> {
+    query_fields_in(catalog, query, outer, false)
+}
+
+/// View outputs retain computed and identity provenance. Aggregate/relational
+/// outputs become view columns; ordinary derived row sources still erase
+/// computed provenance before reaching this boundary.
+pub fn view_fields(catalog: &CatalogSnapshot, query: &Query) -> Option<Vec<Field>> {
+    let mut fields = query_fields_in(catalog, query, &Scope::default(), true)?;
+    for field in &mut fields {
+        if field.properties.origin == msduck_core::result::Origin::Derived {
+            field.properties.origin = msduck_core::result::Origin::Stored;
+        }
+    }
+    Some(fields)
+}
+
+fn query_fields_in(
+    catalog: &CatalogSnapshot,
+    query: &Query,
+    outer: &Scope,
+    view_definition: bool,
+) -> Option<Vec<Field>> {
     if matches!(query.for_clause, Some(ForClause::Json { .. })) {
         return Some(vec![Field {
             collation: None,
@@ -111,7 +133,7 @@ pub fn query_fields(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -> 
     }) {
         return None;
     }
-    body_fields(catalog, &query.body, &scope)
+    body_fields(catalog, &query.body, &scope, view_definition)
 }
 /// Anchor/member inference adds literal types to the ordinary projection rules
 /// without executing expressions or inferring a recursive fixed point.
@@ -473,14 +495,19 @@ fn expression_collation(
     }
 }
 
-fn body_fields(catalog: &CatalogSnapshot, body: &SetExpr, scope: &Scope) -> Option<Vec<Field>> {
+fn body_fields(
+    catalog: &CatalogSnapshot,
+    body: &SetExpr,
+    scope: &Scope,
+    view_definition: bool,
+) -> Option<Vec<Field>> {
     let select = match body {
         SetExpr::Select(s) => s,
-        SetExpr::Query(q) => return query_fields(catalog, q, scope),
+        SetExpr::Query(q) => return query_fields_in(catalog, q, scope, view_definition),
         SetExpr::SetOperation { left, right, .. } => {
             let (Some(left), Some(right)) = (
-                body_fields(catalog, left, scope),
-                body_fields(catalog, right, scope),
+                body_fields(catalog, left, scope, view_definition),
+                body_fields(catalog, right, scope, view_definition),
             ) else {
                 return None;
             };
@@ -620,7 +647,9 @@ fn body_fields(catalog: &CatalogSnapshot, body: &SetExpr, scope: &Scope) -> Opti
                     }
                 }
                 // SQL Server omits fComputed for these result type families.
-                if properties.origin == msduck_core::result::Origin::Expression
+                if !view_definition
+                    && expression_name(e).is_none()
+                    && properties.origin == msduck_core::result::Origin::Expression
                     && info
                         .as_ref()
                         .is_some_and(|info| matches!(info.system_type_id, Some(41 | 42 | 43 | 98)))
@@ -650,10 +679,11 @@ fn body_fields(catalog: &CatalogSnapshot, body: &SetExpr, scope: &Scope) -> Opti
                             &|value| grouping.properties(value, &sources, &scope.rows),
                         );
                         let aggregate = matches!(input, Expr::Function(f) if source_properties.origin == msduck_core::result::Origin::Derived || matches!(f.name.to_string().to_ascii_uppercase().as_str(), "GROUPING" | "GROUPING_ID"));
-                        if aggregate
-                            || source_info
-                                .as_ref()
-                                .is_some_and(|i| i.system_type_id == Some(98))
+                        if !view_definition
+                            && (aggregate
+                                || source_info
+                                    .as_ref()
+                                    .is_some_and(|i| i.system_type_id == Some(98)))
                         {
                             properties.origin = msduck_core::result::Origin::Derived;
                         } else if source_info.is_none()
@@ -828,10 +858,12 @@ fn source_with_correlation(
         }
         _ => return None,
     };
-    // An expression exposed as a row-source column is a derived field;
-    // direct stored/identity provenance survives aliases and CTE boundaries.
+    // CTE/derived expression columns lose computed provenance. A real catalog
+    // view may expose computed columns, whose flags survive the outer SELECT.
+    let catalog_source = matches!(factor, TableFactor::Table { name, args: None, .. }
+        if name.0.len() != 1 || !scope.contains_key(&qualified(name)));
     for field in &mut fields {
-        if field.properties.origin == msduck_core::result::Origin::Expression {
+        if !catalog_source && field.properties.origin == msduck_core::result::Origin::Expression {
             field.properties.origin = msduck_core::result::Origin::Derived;
         }
     }
@@ -1228,6 +1260,157 @@ fn expand_stars_impl(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn view_projection_properties_match_captured_sql_server_shapes() {
+        use msduck_core::result::{Origin, Properties};
+        let mut catalog = catalog();
+        for (name, id) in [("bigint", 127), ("decimal", 106), ("sql_variant", 98)] {
+            catalog.types.insert(
+                name.into(),
+                Info {
+                    system_type_id: Some(id),
+                    user_type_id: Some(i32::from(id)),
+                    ..Default::default()
+                },
+            );
+        }
+        let int = catalog.cast_info(&DataType::Int(None));
+        catalog.tables.insert(
+            "dbo.probe_base".into(),
+            [
+                ("id", Origin::Identity, false),
+                ("v", Origin::Stored, true),
+                ("nn", Origin::Stored, false),
+            ]
+            .into_iter()
+            .map(|(name, origin, nullable)| Field {
+                name: name.into(),
+                info: int.clone(),
+                collation: None,
+                json_fragment: false,
+                properties: Properties {
+                    nullable: Some(nullable),
+                    origin,
+                },
+            })
+            .collect(),
+        );
+        // Each shape was captured identically in two fresh SQL Server databases.
+        for (sql, expected) in [
+            (
+                "SELECT id,v,nn FROM dbo.probe_base",
+                vec![
+                    (Origin::Identity, false),
+                    (Origin::Stored, true),
+                    (Origin::Stored, false),
+                ],
+            ),
+            (
+                "SELECT MIN(v),MAX(nn),COUNT(v),SUM(v) FROM dbo.probe_base",
+                vec![(Origin::Stored, true); 4],
+            ),
+            (
+                "SELECT 1,id+1,CAST(id AS BIGINT),v+1,ISNULL(v,0) FROM dbo.probe_base",
+                vec![
+                    (Origin::Expression, false),
+                    (Origin::Expression, true),
+                    (Origin::Expression, true),
+                    (Origin::Expression, true),
+                    (Origin::Expression, false),
+                ],
+            ),
+            (
+                "SELECT CAST(MIN(v) AS BIGINT),MIN(v)+1,ISNULL(MIN(v),0) FROM dbo.probe_base",
+                vec![
+                    (Origin::Expression, true),
+                    (Origin::Expression, true),
+                    (Origin::Expression, false),
+                ],
+            ),
+            (
+                "SELECT nn FROM dbo.probe_base UNION ALL SELECT nn FROM dbo.probe_base",
+                vec![(Origin::Stored, false)],
+            ),
+            (
+                "SELECT nn FROM dbo.probe_base GROUP BY nn",
+                vec![(Origin::Stored, false)],
+            ),
+            (
+                "SELECT ROW_NUMBER() OVER(ORDER BY id),SUM(v) OVER() FROM dbo.probe_base",
+                vec![(Origin::Stored, true); 2],
+            ),
+            (
+                "SELECT CAST('12:34:56.1234567' AS TIME(7)),CAST(1 AS DECIMAL(12,3)),CAST(1 AS SQL_VARIANT)",
+                vec![(Origin::Expression, true); 3],
+            ),
+            (
+                "WITH c AS (SELECT CAST('12:34' AS TIME) AS t,1 AS n) SELECT t,n FROM c",
+                vec![(Origin::Stored, true), (Origin::Stored, false)],
+            ),
+            (
+                "SELECT t,n FROM (SELECT CAST('12:34' AS TIME) AS t,1 AS n) d",
+                vec![(Origin::Stored, true), (Origin::Stored, false)],
+            ),
+        ] {
+            let fields = view_fields(&catalog, &query(sql)).unwrap();
+            assert_eq!(
+                fields
+                    .iter()
+                    .map(|f| (f.properties.origin, f.properties.nullable))
+                    .collect::<Vec<_>>(),
+                expected
+                    .into_iter()
+                    .map(|(origin, nullable)| (origin, Some(nullable)))
+                    .collect::<Vec<_>>(),
+                "{sql}"
+            );
+        }
+        let fields = view_fields(
+            &catalog,
+            &query("SELECT CAST('12:34' AS TIME) AS t,CAST(1 AS SQL_VARIANT) AS v"),
+        )
+        .unwrap();
+        catalog.tables.insert("dbo.typed_view".into(), fields);
+        for sql in [
+            "SELECT t,v FROM dbo.typed_view",
+            "SELECT * FROM dbo.typed_view",
+        ] {
+            for fields in [
+                view_fields(&catalog, &query(sql)).unwrap(),
+                query_fields(&catalog, &query(sql), &Scope::default()).unwrap(),
+            ] {
+                assert!(
+                    fields
+                        .iter()
+                        .all(|f| f.properties == Properties::expression(true)),
+                    "{sql}"
+                );
+            }
+        }
+        assert_eq!(
+            query_fields(
+                &catalog,
+                &query("SELECT CAST('12:34' AS TIME)"),
+                &Scope::default()
+            )
+            .unwrap()[0]
+                .properties
+                .origin,
+            Origin::Derived
+        );
+        assert_eq!(
+            query_fields(
+                &catalog,
+                &query("SELECT CAST(MIN(v) AS BIGINT) FROM dbo.probe_base"),
+                &Scope::default()
+            )
+            .unwrap()[0]
+                .properties
+                .origin,
+            Origin::Derived
+        );
+    }
+
     #[test]
     fn concatenation_declarations_match_live_reference_and_bind_bin2() {
         let mut catalog = catalog();

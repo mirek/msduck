@@ -1310,10 +1310,12 @@ impl Session {
             )?;
             if catalog_ddl {
                 crate::object_catalog::sync(&self.db)?;
+                crate::query_catalog::sync(&self.db)?;
                 crate::object_catalog::touch(&self.db, &statement)?;
                 crate::declared_columns::record(&self.db, &statement)?;
                 if let Some((name, fields)) = view_columns {
                     crate::query_catalog::record(&self.db, &name, &fields)?;
+                    crate::query_catalog::record_view_definition(&self.db, &statement)?;
                 }
             }
             if own_transaction {

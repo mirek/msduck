@@ -76,6 +76,13 @@ test('window diagnostics match consumed frames including empty frames and COUNT'
   await replayBoundaries(t, boundaries.results.filter(sample => sample.id.includes('-window-')), 'aggregate-window-boundaries', 10)
 })
 
+test('stored aggregate view descriptors retain logical projection properties', async t => {
+  // The ON/consumed cases also require view-body observation, still tracked by
+  // the complete comparison. These four cases isolate descriptor persistence.
+  const selected = new Set(['OFF-stored-view', 'OFF-stored-view-unused', 'OFF-stored-view-twice', 'ON-stored-view-unused'])
+  await replayBoundaries(t, boundaries.results.filter(sample => selected.has(sample.id)), 'aggregate-view-metadata-boundaries', 4)
+})
+
 test('DML and scalar assignment diagnostics match reference state and completion order', async t => {
   const selected = new Set(['insert-select', 'insert-empty-source', 'insert-grouped', 'update-scalar', 'update-no-targets', 'delete-subquery', 'select-into', 'select-assignment', 'set-subquery', 'declare-subquery'])
   await replayBoundaries(t, boundaries.results.filter(sample => selected.has(sample.id.slice(sample.mode.length + 1))), 'aggregate-consumer-boundaries', 20)
