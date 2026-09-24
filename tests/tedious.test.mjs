@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { TYPES, Request, Connection } from 'tedious'
 import { start, query } from './support/client.mjs'
-import { capture } from '../scripts/lib/compatibility.mjs'
+import { capture, canonical } from '../scripts/lib/compatibility.mjs'
 
 test('tedious login, typed results, RPC values and recovery', { timeout: 30000 }, async t => {
   const c = await start(t)
@@ -9103,4 +9103,26 @@ test('Unicode binary conversions preserve raw units byte bounds and scoped decla
   assert.deepEqual(await p.run({s:'🦆'}), [[Buffer.from('3ed886dd','hex'),Buffer.from('3ed886','hex')]])
   assert.deepEqual(await p.run({s:null}), [[null,null]])
   await p.release()
+})
+
+
+test('index catalog exposes captured descriptors and transactional table-owned names', { timeout: 20000 }, async t => {
+  const c = await start(t)
+  const { readFile } = await import('node:fs/promises')
+  const fixture = JSON.parse(await readFile(new URL('../reference/index-catalog.json', import.meta.url), 'utf8'))
+  for (const view of ['indexes', 'index_columns']) {
+    const result = canonical(await capture(c, fixture.declarations[view].wireSql))
+    assert.deepEqual(result, fixture.declarations[view].wire)
+  }
+  await query(c, 'CREATE TABLE dbo.catalog_a(id INT); CREATE TABLE dbo.catalog_b(id INT)')
+  await query(c, 'CREATE INDEX shared ON dbo.catalog_a(id); CREATE UNIQUE INDEX shared ON dbo.catalog_b(id)')
+  const sql = "SELECT name,index_id,type_desc,is_unique,compression_delay FROM sys.indexes WHERE name IS NOT NULL ORDER BY is_unique"
+  const expected = [['shared',2,'NONCLUSTERED',false,null],['shared',2,'NONCLUSTERED',true,null]]
+  assert.deepEqual((await query(c, sql)).rows, expected)
+  await query(c, 'BEGIN TRAN; CREATE INDEX transient ON dbo.catalog_a(id); ROLLBACK')
+  assert.deepEqual((await query(c, sql)).rows, expected)
+  await query(c, 'BEGIN TRAN; DROP TABLE dbo.catalog_a; ROLLBACK')
+  assert.deepEqual((await query(c, sql)).rows, expected)
+  await query(c, 'DROP TABLE dbo.catalog_a')
+  assert.deepEqual((await query(c, sql)).rows, [expected[1]])
 })
