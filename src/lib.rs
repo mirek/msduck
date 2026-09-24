@@ -49,6 +49,7 @@ pub(crate) use msduck_sql::delete;
 mod ansi_binary;
 mod binary_unicode;
 mod character_aggregate;
+mod checked_integer;
 mod decimal_aggregate;
 mod decimal_division;
 mod eomonth;
