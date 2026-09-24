@@ -775,6 +775,31 @@
       "dependencies": [],
       "issue": 75,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHdx4"
+    },
+    {
+      "id": "binary-unicode-conversion-v1",
+      "title": "Implement SQL binary to Unicode conversion with exact byte and style semantics",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Owner-generated PR76 boundary replay leaves binary-to-Unicode CONVERT untranslated. Fresh pinned SQL Server probes establish odd-byte zero extension, surrogate preservation, fixed padding and style behavior. No external content approved.",
+      "scope": [
+        "src/binary_unicode.rs",
+        "tests/binary_unicode.rs",
+        "crates/msduck-core/src/binary_unicode.rs",
+        "crates/msduck-core/tests/binary_unicode.rs",
+        "crates/msduck-sql/tests/binary_unicode_binding.rs",
+        "scripts/capture-binary-unicode.mjs",
+        "tests/reference/binary-unicode.json",
+        "tests/binary_unicode.test.mjs"
+      ],
+      "acceptance": [
+        "Capture pinned SQL Server binary-to-NVARCHAR/NCHAR behavior for styles 0/1/2, unsupported and NULL styles, TRY, NULL, fixed/default/MAX widths, odd byte counts and surrogate units; preserve raw rows, descriptors and diagnostics.",
+        "Implement bounded deterministic conversion rules and native carrier adapters without UTF8 stringification; preserve single evaluation and exact width semantics. Core export and root export/registration use existing same-worker integration claims.",
+        "Bind known binary operands through original #45 scoped visitor claim in its original checkout; root binder/normalizer use #26. Unknown source declarations remain unresolved. Keep unsupported diagnostics explicit.",
+        "Replay all 140 existing best-fit public boundary cases unchanged, run dedicated client/native/pure regressions, workspace/Clippy/client/audit checks and preserve remaining gaps."
+      ],
+      "dependencies": [],
+      "issue": 77,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHf5I"
     }
   ]
 }
