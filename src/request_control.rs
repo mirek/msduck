@@ -294,4 +294,101 @@ mod tests {
         );
         next.retire().unwrap();
     }
+    #[test]
+    fn interrupted_transaction_cleanup_is_not_targeted_by_delayed_pulses() {
+        use std::sync::atomic::AtomicBool;
+        let db = duckdb::Connection::open_in_memory().unwrap();
+        db.execute_batch("SET threads=1; CREATE TABLE cancellation_probe(n INTEGER)")
+            .unwrap();
+        let observer = db.try_clone().unwrap();
+        db.execute_batch("BEGIN TRANSACTION; INSERT INTO cancellation_probe VALUES(1)")
+            .unwrap();
+        let control = Arc::new(Control::new(id(), db.interrupt_handle()));
+        let worker_control = control.clone();
+        let release = Arc::new(Barrier::new(2));
+        let worker_release = release.clone();
+        let (armed_tx, armed_rx) = mpsc::channel();
+        let (done_tx, done_rx) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let result=worker_control.run_native(|| {
+                armed_tx.send(()).unwrap();
+                worker_release.wait();
+                db.query_row("SELECT sum(CAST(a.i AS DOUBLE)*b.i) FROM range(1000000) a(i), range(1000000) b(i)",[],|r|r.get::<_,f64>(0))
+            }).unwrap();
+            done_tx.send(()).unwrap();
+            (db, result)
+        });
+        armed_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(control.cancel().unwrap());
+        release.wait();
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            control.pulse().unwrap();
+            if done_rx.recv_timeout(Duration::from_millis(5)).is_ok() {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "transaction query failed to quiesce"
+            );
+        }
+        let (db, result) = worker.join().unwrap();
+        let error = result.unwrap_err();
+        assert!(
+            error.to_string().to_ascii_lowercase().contains("interrupt"),
+            "{error}"
+        );
+        let retained = db.query_row("SELECT count(*) FROM cancellation_probe", [], |r| {
+            r.get::<_, i64>(0)
+        });
+        // This is a pinned DuckDB limitation, not the SQL Server target:
+        // interruption invalidates the whole explicit transaction.
+        let retained_error = retained.unwrap_err();
+        assert!(
+            retained_error
+                .to_string()
+                .contains("Current transaction is aborted"),
+            "{retained_error}"
+        );
+        assert_eq!(
+            observer
+                .query_row("SELECT count(*) FROM cancellation_probe", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        let stopped = Arc::new(AtomicBool::new(false));
+        let inactive_pulses = Arc::new(AtomicUsize::new(0));
+        let background_control = control.clone();
+        let background_stopped = stopped.clone();
+        let pulses = inactive_pulses.clone();
+        let (started_tx, started_rx) = mpsc::channel();
+        let driver = thread::spawn(move || {
+            assert!(!background_control.pulse().unwrap());
+            pulses.fetch_add(1, Ordering::SeqCst);
+            started_tx.send(()).unwrap();
+            while !background_stopped.load(Ordering::SeqCst) {
+                assert!(!background_control.pulse().unwrap());
+                pulses.fetch_add(1, Ordering::SeqCst);
+                thread::yield_now();
+            }
+        });
+        started_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        // Keep servicing the old request during cleanup, before retirement.
+        let rollback = db.execute_batch("ROLLBACK");
+        let reusable = db.query_row("SELECT 42", [], |r| r.get::<_, i32>(0));
+        control.retire().unwrap();
+        stopped.store(true, Ordering::SeqCst);
+        driver.join().unwrap();
+        rollback.unwrap();
+        assert_eq!(reusable.unwrap(), 42);
+        assert!(inactive_pulses.load(Ordering::SeqCst) > 0);
+        assert_eq!(
+            observer
+                .query_row("SELECT count(*) FROM cancellation_probe", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+    }
 }
