@@ -185,7 +185,12 @@ strict workspace/all-target Clippy and the build. Native coverage includes all
 six functions, empty/unused/consumed NULL frames, type preservation, signed and
 fractional values, grouped execution with four workers, overflow in used versus
 unused states, 6000 volatile evaluations, and 100000 expanding SUM frames.
-Reference replay and full Rust/client/audit verification remain in progress.
+At `94efebb`, all 644 workspace Rust tests, all twelve focused client tests and
+all 404 standard client tests pass on Linux. The 325-case audit has zero
+differences from `094a9a7`. The complete fifty-program boundary replay is also
+byte-for-byte unchanged from the preceding capture: 35 exact matches, two setup
+failures and 55 differences across thirteen executions. These retained failures
+are not converted into successes; bounded window state does not resolve them.
 
 ## DML and assignment integration under verification
 
