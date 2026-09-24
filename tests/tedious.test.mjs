@@ -2597,10 +2597,10 @@ test('MIN MAX preserve integer widths through outer expressions and aggregates',
   assert.deepEqual((await query(c, 'SELECT low,high FROM dbo.extrema_view')).rows, [[2,'9007199254740997']])
 })
 
-test('aggregates reject BIT inputs with 8117 while COUNT and explicit widening remain valid', { timeout: 20000 }, async t => {
-  const c = await start(t)
-  await query(c, 'CREATE TABLE dbo.bit_aggregates (b BIT); INSERT INTO dbo.bit_aggregates VALUES (0),(1),(NULL)')
-  for (const fn of ['SUM','AVG','MIN','MAX']) {
+for (const fn of ['SUM','AVG','MIN','MAX']) {
+  test(`${fn} rejects BIT inputs with 8117 and preserves the connection`, { timeout: 20000 }, async t => {
+    const c = await start(t)
+    await query(c, 'CREATE TABLE dbo.bit_aggregates (b BIT); INSERT INTO dbo.bit_aggregates VALUES (0),(1),(NULL)')
     for (const sql of [
       `SELECT ${fn}(b) FROM dbo.bit_aggregates`,
       `SELECT ${fn}(b) FROM dbo.bit_aggregates WHERE 1=0`,
@@ -2618,7 +2618,13 @@ test('aggregates reject BIT inputs with 8117 while COUNT and explicit widening r
     }
     await assert.rejects(prepare(c, `SELECT ${fn}(@b)`, [['b', TYPES.Bit]]), error => error.number === 8117)
     await assert.rejects(query(c, `SELECT ${fn}(@b)`, [['b', TYPES.Bit, null]]), error => error.number === 8117)
-  }
+    assert.deepEqual((await query(c, 'SELECT COUNT(*) FROM dbo.bit_aggregates')).rows, [[3]])
+  })
+}
+
+test('BIT aggregate COUNT and explicit widening remain valid', { timeout: 20000 }, async t => {
+  const c = await start(t)
+  await query(c, 'CREATE TABLE dbo.bit_aggregates (b BIT); INSERT INTO dbo.bit_aggregates VALUES (0),(1),(NULL)')
   assert.deepEqual((await query(c, `SELECT COUNT(b),COUNT_BIG(b),SUM(CAST(b AS INT)),AVG(CAST(b AS INT)),
     MIN(CAST(b AS TINYINT)),MAX(CAST(b AS TINYINT)),SUM(COALESCE(b,0)) FROM dbo.bit_aggregates`)).rows, [[2,'2',1,0,0,1,1]])
   // An integer row promotes a mixed BIT/integer VALUES column to integer.
