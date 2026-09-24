@@ -19,5 +19,11 @@ exercise unmodified T-SQL predicates and exact sys.objects responses, including
 binary values and descriptors. Tests also retain rows from sys.tables and
 sys.views, whose complete descriptor compatibility remains unfinished.
 
+The retained IN/NOT IN cases also exercise lists containing NULL. ANSI list
+membership uses the same trailing-space equality as a scalar comparison, while
+retaining SQL three-valued logic. The deterministic binder trims each operand
+once and preserves the membership operator; mixed-type, unresolved and BIN2
+comparisons remain on their existing paths.
+
 Verification is revision-specific in the integration PR. Reference captures
 establish SQL Server behavior; they do not establish a passing server replay.

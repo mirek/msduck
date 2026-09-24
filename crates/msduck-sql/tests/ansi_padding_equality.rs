@@ -80,10 +80,30 @@ fn padding_does_not_change_order_like_unicode_numeric_or_bin2_paths() {
         "SELECT v FROM dbo.t WHERE v=i",
         "SELECT v FROM dbo.t WHERE missing='U'",
         "SELECT v FROM dbo.t WHERE v COLLATE Latin1_General_100_BIN2='U'",
+        "SELECT v FROM dbo.t WHERE v IN (n,'U')",
+        "SELECT v FROM dbo.t WHERE v IN (i,'U')",
+        "SELECT v FROM dbo.t WHERE v IN (missing,'U')",
+        "SELECT v FROM dbo.t WHERE v COLLATE Latin1_General_100_BIN2 IN ('U')",
     ] {
         assert!(!lower(sql).contains("__msduck_rtrim"), "{sql}");
     }
     // Forward aliases are not visible in the preceding ON predicate.
     let result = lower("SELECT a.v FROM dbo.t a JOIN dbo.t b ON c.v=a.v JOIN dbo.t c ON c.v=b.v");
     assert_eq!(result.matches("__msduck_rtrim").count(), 2, "{result}");
+}
+
+#[test]
+fn membership_preserves_nulls_negation_and_single_evaluation() {
+    assert_eq!(
+        lower("SELECT v FROM dbo.t WHERE v NOT IN ('U', NULL)"),
+        "SELECT v FROM dbo.t WHERE __msduck_rtrim(v, ' ') NOT IN (__msduck_rtrim('U', ' '), __msduck_rtrim(NULL, ' '))"
+    );
+    for sql in [
+        "SELECT v FROM dbo.t WHERE UPPER(v) IN ('U', 'V')",
+        "WITH q AS (SELECT v FROM dbo.t) SELECT v FROM q WHERE UPPER(v) IN ('U', 'V')",
+    ] {
+        let result = lower(sql);
+        assert_eq!(result.matches("UPPER(v)").count(), 1, "{result}");
+        assert_eq!(result.matches("__msduck_rtrim").count(), 3, "{result}");
+    }
 }

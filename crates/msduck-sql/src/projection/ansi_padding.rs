@@ -159,19 +159,27 @@ fn plan(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -> Result<Vec<u
         }
 
         fn post_visit_expr(&mut self, expr: &Expr) -> ControlFlow<SqlError> {
-            if let Expr::BinaryOp {
-                left,
-                op: BinaryOperator::Eq | BinaryOperator::NotEq,
-                right,
-            } = expr
-            {
+            let operands: Option<Vec<&Expr>> = match expr {
+                Expr::BinaryOp {
+                    left,
+                    op: BinaryOperator::Eq | BinaryOperator::NotEq,
+                    right,
+                } => Some(vec![left.as_ref(), right.as_ref()]),
+                Expr::InList { expr, list, .. } => {
+                    Some(std::iter::once(expr.as_ref()).chain(list.iter()).collect())
+                }
+                _ => None,
+            };
+            if let Some(operands) = operands {
                 let scope = &self.queries.last().unwrap().body;
-                let operands = [left.as_ref(), right.as_ref()];
-                let types = operands.map(|value| {
-                    member_expression(self.catalog, value, &[], scope)
-                        .and_then(|info| info.system_type_id)
-                });
-                let ansi = operands.into_iter().zip(types).all(|(value, kind)| {
+                let types: Vec<_> = operands
+                    .iter()
+                    .map(|value| {
+                        member_expression(self.catalog, value, &[], scope)
+                            .and_then(|info| info.system_type_id)
+                    })
+                    .collect();
+                let ansi = operands.iter().zip(&types).all(|(value, kind)| {
                     conditional::literal_null(value) || matches!(kind, Some(167 | 175))
                 }) && types.iter().any(|kind| matches!(kind, Some(167 | 175)));
                 let bin2 = operands.iter().any(|value| {
@@ -220,9 +228,9 @@ pub fn lower(catalog: &CatalogSnapshot, query: &mut Query, outer: &Scope) -> Res
         position: usize,
         pending: std::iter::Peekable<std::vec::IntoIter<usize>>,
     }
-    fn operand(value: &mut Box<Expr>) {
-        let input = std::mem::replace(value.as_mut(), crate::expr::number(0));
-        **value = crate::expr::binary_function(
+    fn operand(value: &mut Expr) {
+        let input = std::mem::replace(value, crate::expr::number(0));
+        *value = crate::expr::binary_function(
             "__msduck_rtrim",
             input,
             Expr::Value(Value::SingleQuotedString(" ".into()).into()),
@@ -233,11 +241,19 @@ pub fn lower(catalog: &CatalogSnapshot, query: &mut Query, outer: &Scope) -> Res
         fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
             if self.pending.peek() == Some(&self.position) {
                 self.pending.next();
-                let Expr::BinaryOp { left, right, .. } = expr else {
-                    unreachable!("planned equality")
-                };
-                operand(left);
-                operand(right);
+                match expr {
+                    Expr::BinaryOp { left, right, .. } => {
+                        operand(left);
+                        operand(right);
+                    }
+                    Expr::InList { expr, list, .. } => {
+                        operand(expr);
+                        for value in list {
+                            operand(value);
+                        }
+                    }
+                    _ => unreachable!("planned equality or membership"),
+                }
             }
             self.position += 1;
             ControlFlow::Continue(())

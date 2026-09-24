@@ -12,6 +12,10 @@ const queries = [
   "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type='V'",
   "SELECT name,type FROM sys.tables WHERE name='width_user'",
   "SELECT name,type FROM sys.views WHERE name='width_view'",
+  "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type IN ('U','X') ORDER BY name",
+  "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type NOT IN ('U') ORDER BY name",
+  "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type IN ('U',NULL) ORDER BY name",
+  "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type NOT IN ('U',NULL) ORDER BY name",
 ]
 const output = resolve(process.argv[2] ?? 'artifacts/compatibility/object-catalog-width-reference')
 await mkdir(output, {recursive: true})

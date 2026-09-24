@@ -388,6 +388,257 @@
         "returnStatus": null,
         "rowCount": 1
       }
+    },
+    {
+      "sql": "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type IN ('U','X') ORDER BY name",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "width_user",
+                "U "
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "sql": "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type NOT IN ('U') ORDER BY name",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "width_view",
+                "V "
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "sql": "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type IN ('U',NULL) ORDER BY name",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "width_user",
+                "U "
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "sql": "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type NOT IN ('U',NULL) ORDER BY name",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
     }
   ]
 }
