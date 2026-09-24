@@ -1217,6 +1217,27 @@
       "dependencies": [],
       "issue": 123,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJXcD"
+    },
+    {
+      "id": "object-catalog-type-width-v1",
+      "title": "Preserve CHAR(2) object type values and internal catalog predicates",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Client verification exposed sys.objects.type values shorter than captured CHAR(2) metadata. Correct public catalog rows and adapt backend predicates without weakening wire width validation. Existing same-worker engine/query/index claims retain their files.",
+      "scope": [
+        "src/object_catalog.rs",
+        "src/table_catalog.sql",
+        "scripts/capture-object-catalog-width.mjs",
+        "reference/object-catalog-width.json",
+        "docs/object-catalog-width.md"
+      ],
+      "acceptance": [
+        "Capture populated table/view type values, lengths and filters against SQL Server and retain reproducible evidence.",
+        "Expose CHAR(2) padded public type values while preserving internal table/view selection, transactional catalogs and stable logical object IDs.",
+        "Validate public client queries, catalog joins and index lifecycle; preserve strict wire width checks."
+      ],
+      "dependencies": [],
+      "issue": 125,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJYmn"
     }
   ]
 }
