@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import {test} from 'node:test'
 import {execFileSync} from 'node:child_process'
 import {mkdtempSync, readFileSync, rmSync} from 'node:fs'
 import {tmpdir} from 'node:os'
@@ -45,10 +44,10 @@ function tlsOptions(t) {
 
 // Registered from the existing tedious suite so normal CI discovery/sharding
 // executes these cases without a second independent test-file entry point.
-export function registerAttentionBoundaries() {
+export function registerAttentionBoundaries(register) {
  for(const transport of ['tcp','tls']) for(const expected of observations.filter(x=>!x.entry.boundary.startsWith('active'))) {
   const {boundary,transaction}=expected.entry
-  test(`wire Attention boundary: ${transport} ${boundary} ${transaction}`,{timeout:30000},async t=>{
+  register(`wire Attention boundary: ${transport} ${boundary} ${transaction}`,{timeout:30000},async t=>{
    const c=await start(t,transport==='tls'?tlsOptions(t):{})
    const setup=await capture(c,`CREATE TABLE dbo.boundary_probe(n INT); SET DATEFIRST 2; SET XACT_ABORT ${transaction==='on'?'ON':'OFF'}; ${transaction==='none'?'':'BEGIN TRANSACTION;'} INSERT dbo.boundary_probe VALUES(1)`)
    assert.deepEqual(setup.errors,[])

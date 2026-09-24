@@ -9301,4 +9301,4 @@ for (const entry of preparedScopeCases) {
 }
 
 const {registerAttentionBoundaries}=await import('./attention_boundaries.test.mjs')
-registerAttentionBoundaries()
+registerAttentionBoundaries((name, options, run) => test(name, options, run))
