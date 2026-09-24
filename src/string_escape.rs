@@ -51,12 +51,7 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
     if matches!(unwrapped, Expr::Value(value) if matches!(value.value, Value::Null)) {
         return Err(NULL_FORMAT.into());
     }
-    let text = |expr: &Expr| Expr::Cast {
-        kind: CastKind::Cast,
-        expr: Box::new(expr.clone()),
-        data_type: DataType::Text,
-        format: None,
-    };
+    let text = |expr: &Expr| crate::engine::unary_function("__msduck_carrier_input", expr.clone());
     *expr = crate::engine::binary_function("__msduck_string_escape", text(source), text(format));
     Ok(())
 }
@@ -68,6 +63,9 @@ impl VScalar for Escape {
         input: &mut DataChunkHandle,
         output: &mut dyn WritableVector,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        if crate::unicode_carrier::is_logical(&input.flat_vector(0).logical_type()) {
+            return escape_unicode(input, output);
+        }
         let len = input.len();
         let values = [input.flat_vector(0), input.flat_vector(1)];
         let mut result = output.flat_vector();
@@ -95,12 +93,88 @@ impl VScalar for Escape {
         Ok(())
     }
     fn signatures() -> Vec<ScalarFunctionSignature> {
-        vec![ScalarFunctionSignature::exact(
-            vec![Id::Varchar.into(), Id::Varchar.into()],
-            Id::Varchar.into(),
-        )]
+        vec![
+            ScalarFunctionSignature::exact(
+                vec![Id::Varchar.into(), Id::Varchar.into()],
+                Id::Varchar.into(),
+            ),
+            ScalarFunctionSignature::exact(
+                vec![
+                    crate::unicode_carrier::kind(),
+                    crate::unicode_carrier::kind(),
+                ],
+                crate::unicode_carrier::kind(),
+            ),
+        ]
     }
 }
+fn escape_unicode(
+    input: &mut DataChunkHandle,
+    output: &mut dyn WritableVector,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::unicode_carrier::{CELL_LIMIT, CHUNK_LIMIT, bytes};
+    let len = input.len();
+    let parents = [input.flat_vector(0), input.flat_vector(1)];
+    let structures = [input.struct_vector(0), input.struct_vector(1)];
+    let values = [structures[0].child(0, len), structures[1].child(0, len)];
+    // Retain bounded output buffers until DuckDB has copied every BLOB.
+    let mut encoded = Vec::with_capacity(len);
+    let mut remaining = CHUNK_LIMIT;
+    for row in 0..len {
+        if parents.iter().any(|v| v.row_is_null(row as u64)) {
+            encoded.push(None);
+            continue;
+        }
+        let mut units = [Vec::new(), Vec::new()];
+        for (index, value) in values.iter().enumerate() {
+            if value.row_is_null(row as u64) {
+                return Err("invalid Unicode carrier: NULL payload".into());
+            }
+            let raw = bytes(value, row, len)?;
+            if raw.len() % 2 != 0 {
+                return Err("invalid Unicode carrier byte length".into());
+            }
+            units[index] = raw
+                .chunks_exact(2)
+                .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+                .collect();
+        }
+        // Validate the format before reporting any resource limit, without
+        // allocating the escaped text. An empty source has the same format rule.
+        json_escape::escape_utf16(&[], &units[1])?;
+        let size: usize = units[0]
+            .iter()
+            .map(|&unit| match unit {
+                8 | 9 | 10 | 12 | 13 | 34 | 47 | 92 => 4,
+                0..=31 => 12,
+                _ => 2,
+            })
+            .sum();
+        if size > CELL_LIMIT || size > remaining {
+            return Err("STRING_ESCAPE result exceeds the configured output limit".into());
+        }
+        remaining -= size;
+        let escaped = json_escape::escape_utf16(&units[0], &units[1])?;
+        encoded.push(Some(
+            escaped
+                .iter()
+                .flat_map(|unit| unit.to_le_bytes())
+                .collect::<Vec<_>>(),
+        ));
+    }
+    let mut result = output.struct_vector();
+    let mut payload = result.child(0, len);
+    for (row, value) in encoded.iter().enumerate() {
+        if let Some(value) = value {
+            payload.insert(row, value.as_slice());
+        } else {
+            result.set_null(row);
+            payload.set_null(row);
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

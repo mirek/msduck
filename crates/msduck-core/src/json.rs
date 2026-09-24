@@ -202,6 +202,18 @@ pub fn valid(text: &[u8], mode: u8) -> bool {
     }
 }
 
+/// Validate SQL Server JSON stored as UTF-16 code units. Structural syntax is
+/// ASCII; every non-ASCII code unit is ordinary string content and invalid
+/// outside a quoted string. In particular, SQL Server accepts isolated surrogate
+/// units in strings. Map only for grammar recognition, never for returned text.
+pub fn valid_utf16(text: &[u16], mode: u8) -> bool {
+    let syntax: Vec<u8> = text
+        .iter()
+        .map(|&unit| if unit <= 0x7f { unit as u8 } else { 0x80 })
+        .collect();
+    valid(&syntax, mode)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -239,5 +251,37 @@ mod tests {
         let text = "[".repeat(20000) + "0" + &"]".repeat(20000);
         assert!(valid(text.as_bytes(), 0));
         assert!(!valid(&text.as_bytes()[..text.len() - 1], 0));
+    }
+    #[test]
+    fn utf16_grammar_preserves_sql_server_surrogate_acceptance() {
+        // reference/unicode-json-storage.json: both raw and escaped isolated
+        // units are valid JSON; non-ASCII code units are not JSON whitespace.
+        for unit in 0x80..=u16::MAX {
+            assert!(valid_utf16(
+                &[b'[' as u16, b'"' as u16, unit, b'"' as u16, b']' as u16],
+                0
+            ));
+            assert!(!valid_utf16(&[unit], 1));
+        }
+        for text in [
+            r#"{"s":"\ud800"}"#,
+            r#"{"s":"\udc00\ud800"}"#,
+            "[true,false,null,1e20]",
+            "[\"雪🦆\"]",
+        ] {
+            let units: Vec<_> = text.encode_utf16().collect();
+            for mode in 0..=4 {
+                assert_eq!(valid_utf16(&units, mode), valid(text.as_bytes(), mode));
+            }
+        }
+        for unit in 0..32 {
+            assert!(!valid_utf16(&[b'"' as u16, unit, b'"' as u16], 4));
+        }
+        assert!(!valid_utf16(
+            &"{\"s\":\"ok\",\"bad\":invalid}"
+                .encode_utf16()
+                .collect::<Vec<_>>(),
+            0
+        ));
     }
 }

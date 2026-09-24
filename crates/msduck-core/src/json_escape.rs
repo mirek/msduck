@@ -38,6 +38,52 @@ pub fn escape<'a>(source: &'a str, format: &str) -> Result<Cow<'a, str>, &'stati
     Ok(Cow::Owned(output))
 }
 
+/// Escape UTF-16 contents without replacing, pairing or escaping surrogate
+/// units. SQL Server leaves all non-control Unicode units unchanged, including
+/// isolated high/low surrogates (see the Unicode JSON reference capture).
+pub fn escape_utf16<'a>(source: &'a [u16], format: &[u16]) -> Result<Cow<'a, [u16]>, &'static str> {
+    if format.len() != 4
+        || !format.iter().zip(b"json").all(|(&unit, &ascii)| {
+            unit == u16::from(ascii) || unit == u16::from(ascii.to_ascii_uppercase())
+        })
+    {
+        return Err(INVALID_FORMAT);
+    }
+    if !source
+        .iter()
+        .any(|&unit| unit < 32 || matches!(unit, 34 | 47 | 92))
+    {
+        return Ok(Cow::Borrowed(source));
+    }
+    let mut output = Vec::with_capacity(source.len());
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    for &unit in source {
+        let short = match unit {
+            34 => Some(b'"'),
+            92 => Some(b'\\'),
+            47 => Some(b'/'),
+            8 => Some(b'b'),
+            12 => Some(b'f'),
+            10 => Some(b'n'),
+            13 => Some(b'r'),
+            9 => Some(b't'),
+            _ => None,
+        };
+        if let Some(escaped) = short {
+            output.extend([u16::from(b'\\'), u16::from(escaped)]);
+        } else if unit < 32 {
+            output.extend(b"\\u00".iter().copied().map(u16::from));
+            output.extend([
+                u16::from(HEX[usize::from(unit / 16)]),
+                u16::from(HEX[usize::from(unit % 16)]),
+            ]);
+        } else {
+            output.push(unit);
+        }
+    }
+    Ok(Cow::Owned(output))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -67,5 +113,39 @@ mod tests {
         }
         let input = "\0🦆/".repeat(5000);
         assert_eq!(escape(&input, "json").unwrap(), "\\u0000🦆\\/".repeat(5000));
+    }
+    #[test]
+    fn utf16_escape_keeps_raw_units_and_matches_existing_unicode_rules() {
+        let format: Vec<_> = "JSON".encode_utf16().collect();
+        for source in [
+            vec![0xd83e],
+            vec![0xdd86],
+            vec![0xdd86, 0xd83e],
+            vec![0xd83e, 0xdd86],
+            vec![0xd83e, 120],
+        ] {
+            assert_eq!(escape_utf16(&source, &format).unwrap().as_ref(), &source);
+        }
+        let source = [0xd83e, 0, 47, 0xdd86];
+        assert_eq!(
+            escape_utf16(&source, &format).unwrap().as_ref(),
+            &[0xd83e, 92, 117, 48, 48, 48, 48, 92, 47, 0xdd86]
+        );
+        let source = (0..=31).map(char::from).collect::<String>() + "\"/\\雪🦆";
+        let units: Vec<_> = source.encode_utf16().collect();
+        assert_eq!(
+            escape_utf16(&units, &format).unwrap().as_ref(),
+            escape(&source, "json")
+                .unwrap()
+                .encode_utf16()
+                .collect::<Vec<_>>()
+        );
+        for format in [
+            vec![],
+            vec![106, 115, 111, 110, 32],
+            vec![106, 115, 111, 0xd800],
+        ] {
+            assert_eq!(escape_utf16(&[], &format), Err(INVALID_FORMAT));
+        }
     }
 }

@@ -49,12 +49,7 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
     };
     *expr = crate::engine::unary_function(
         &format!("__msduck_isjson_{mode}"),
-        Expr::Cast {
-            kind: CastKind::Cast,
-            expr: Box::new(value.clone()),
-            data_type: DataType::Text,
-            format: None,
-        },
+        crate::engine::unary_function("__msduck_carrier_input", value.clone()),
     );
     Ok(())
 }
@@ -68,22 +63,40 @@ impl<const MODE: u8> VScalar for IsJson<MODE> {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let len = input.len();
         let source = input.flat_vector(0);
+        let structure = crate::unicode_carrier::is_logical(&source.logical_type())
+            .then(|| input.struct_vector(0));
+        let stored = structure.as_ref().map(|s| s.child(0, len));
         let mut result = output.flat_vector();
         for row in 0..len {
             if source.row_is_null(row as u64) {
                 result.set_null(row);
                 continue;
             }
-            // Exact VARCHAR input: keep copied inline storage alive while borrowing bytes.
-            let mut text =
-                unsafe { source.as_slice_with_len::<duckdb::ffi::duckdb_string_t>(len)[row] };
-            let bytes = unsafe {
-                std::slice::from_raw_parts(
-                    duckdb::ffi::duckdb_string_t_data(&mut text).cast::<u8>(),
-                    duckdb::ffi::duckdb_string_t_length(text) as usize,
-                )
+            let value = if let Some(stored) = &stored {
+                if stored.row_is_null(row as u64) {
+                    return Err("invalid Unicode carrier: NULL payload".into());
+                }
+                let bytes = crate::unicode_carrier::bytes(stored, row, len)?;
+                if bytes.len() % 2 != 0 {
+                    return Err("invalid Unicode carrier byte length".into());
+                }
+                let units: Vec<_> = bytes
+                    .chunks_exact(2)
+                    .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+                    .collect();
+                i32::from(msduck_core::json::valid_utf16(&units, MODE))
+            } else {
+                // Exact VARCHAR signature: copied inline storage stays alive.
+                let mut text =
+                    unsafe { source.as_slice_with_len::<duckdb::ffi::duckdb_string_t>(len)[row] };
+                let bytes = unsafe {
+                    std::slice::from_raw_parts(
+                        duckdb::ffi::duckdb_string_t_data(&mut text).cast::<u8>(),
+                        duckdb::ffi::duckdb_string_t_length(text) as usize,
+                    )
+                };
+                i32::from(valid(bytes, MODE))
             };
-            let value = i32::from(valid(bytes, MODE));
             unsafe {
                 result.as_mut_slice_with_len::<i32>(len)[row] = value;
             }
@@ -91,10 +104,13 @@ impl<const MODE: u8> VScalar for IsJson<MODE> {
         Ok(())
     }
     fn signatures() -> Vec<ScalarFunctionSignature> {
-        vec![ScalarFunctionSignature::exact(
-            vec![Id::Varchar.into()],
-            Id::Integer.into(),
-        )]
+        vec![
+            ScalarFunctionSignature::exact(vec![Id::Varchar.into()], Id::Integer.into()),
+            ScalarFunctionSignature::exact(
+                vec![crate::unicode_carrier::kind()],
+                Id::Integer.into(),
+            ),
+        ]
     }
 }
 pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
