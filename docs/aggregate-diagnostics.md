@@ -249,8 +249,11 @@ The broader 81-case view replay exposed three additional cast descriptor
 mismatches: serialized logical SQL retained a parser annotation, then reparsing
 added a second annotation. `8a233f3` removes that annotation before persistence,
 so binding restores it exactly once. Its native catalog regression, all 484
-library tests and strict Clippy passed locally; full Linux/client verification
-for this correction remains pending. Do not use the `ba24b78` pass as evidence
+library tests and strict Clippy passed locally. A separate 81-case wire replay
+against its private executable confirms exactly three changed observations:
+computed cast flags change from 1 to the captured 33. All other rows, descriptors,
+errors and completion streams are unchanged; 30/81 complete cases now match.
+Full Linux/client verification for this correction remains pending. Do not use the `ba24b78` pass as evidence
 for later revisions. The subsequent DDL completion correction has separate
 verification and does not implement view-body observation.
 
