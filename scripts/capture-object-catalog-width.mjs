@@ -16,6 +16,8 @@ const queries = [
   "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type NOT IN ('U') ORDER BY name",
   "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type IN ('U',NULL) ORDER BY name",
   "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type NOT IN ('U',NULL) ORDER BY name",
+  "SELECT * FROM sys.tables WHERE 1=0",
+  "SELECT * FROM sys.views WHERE 1=0",
 ]
 const output = resolve(process.argv[2] ?? 'artifacts/compatibility/object-catalog-width-reference')
 await mkdir(output, {recursive: true})
@@ -26,16 +28,26 @@ await withReferenceContainer(async (config, container) => {
       for (const sql of setup) assert.deepEqual(canonical(await capture(connection, sql)).errors, [])
       const results = []
       for (const sql of queries) results.push({sql, result: canonical(await capture(connection, sql))})
-      return results
+      const declarations = []
+      for (const view of ['tables', 'views']) {
+        const sql = `SELECT name,column_id,system_type_id,user_type_id,max_length,precision,scale,collation_name,is_nullable FROM sys.all_columns WHERE object_id=OBJECT_ID(N'sys.${view}') ORDER BY column_id`
+        const result = canonical(await capture(connection, sql))
+        assert.deepEqual(result.errors, [])
+        declarations.push({view, sql, result})
+        const columns = result.sets[0].rows.slice(12).map(row => `[${row[0].replaceAll(']', ']]')}]`)
+        const values = `SELECT name,${columns.join(',')} FROM sys.${view} WHERE name='${view === 'tables' ? 'width_user' : 'width_view'}'`
+        results.push({sql: values, result: canonical(await capture(connection, values))})
+      }
+      return {results, declarations}
     }))
   }
   assert.deepEqual(runs[0], runs[1], 'Fresh object catalog captures differ')
-  const actual = {image: container.image, identicalFreshCaptures: 2, setup, results: runs[0]}
+  const actual = {image: container.image, identicalFreshCaptures: 2, setup, ...runs[0]}
   await writeFile(resolve(output, 'runs.json'), JSON.stringify(runs, null, 2) + '\n')
   await writeFile(resolve(output, 'object-catalog-width.json'), JSON.stringify(actual, null, 2) + '\n')
   let fixture
   try { fixture = JSON.parse(await readFile(new URL('../reference/object-catalog-width.json', import.meta.url), 'utf8')) }
   catch (error) { if (error.code !== 'ENOENT') throw error }
   if (fixture) assert.deepEqual(actual, fixture, 'Retained object catalog capture differs')
-  console.log(`Captured ${queries.length} catalog observations twice identically${fixture ? ' and matched retained fixture' : ''}`)
+  console.log(`Captured ${actual.results.length} catalog observations twice identically${fixture ? ' and matched retained fixture' : ''}`)
 })

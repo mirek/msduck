@@ -16,8 +16,18 @@ The wire encoder continues to reject CHAR values with the wrong width.
 Native fixture observers use the same explicit predicate adjustment when
 querying DuckDB directly; expected captured rows are unchanged. Client tests
 exercise unmodified T-SQL predicates and exact sys.objects responses, including
-binary values and descriptors. Tests also retain rows from sys.tables and
-sys.views, whose complete descriptor compatibility remains unfinished.
+binary values and descriptors. Captured sys.all_columns declarations and empty
+SELECT * responses cover all 48 sys.tables and 23 sys.views columns exposed by
+the pinned reference image. Their common object fields share one declaration
+source; extension fields retain captured widths, nullability, computed/stored
+origins and resource collation. Client tests compare complete responses for
+both views, without the earlier descriptor exception.
+
+The ordinary non-LOB table capture establishes lob_data_space_id = 0 and the
+three default data-retention values (-1, -1, INFINITE). The ordinary view adds
+the captured is_tracked_by_cdc and has_snapshot columns. Physical LOB placement,
+configured retention and unsupported table/view kinds are not established by
+these default-object observations.
 
 The retained IN/NOT IN cases also exercise lists containing NULL. ANSI list
 membership uses the same trailing-space equality as a scalar comparison, while

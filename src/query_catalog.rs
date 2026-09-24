@@ -337,7 +337,13 @@ fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Fiel
         result::{Origin, Properties},
     };
     // name, system/user type, bytes, precision, scale, nullable, computed
-    let definitions = match view.to_ascii_lowercase().as_str() {
+    let view = view.to_ascii_lowercase();
+    let mut fields = if matches!(view.as_str(), "tables" | "views") {
+        object_catalog_fields("objects", catalog_collation)?
+    } else {
+        Vec::new()
+    };
+    let definitions = match view.as_str() {
         "schemas" => vec![
             ("name", 231, 256, 256, 0, 0, false, false),
             ("schema_id", 56, 56, 4, 10, 0, false, false),
@@ -357,46 +363,156 @@ fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Fiel
             ("is_published", 104, 104, 1, 1, 0, false, true),
             ("is_schema_published", 104, 104, 1, 1, 0, false, true),
         ],
+        "tables" => vec![
+            ("lob_data_space_id", 56, 56, 4, 10, 0, false, true),
+            ("filestream_data_space_id", 56, 56, 4, 10, 0, true, false),
+            ("max_column_id_used", 56, 56, 4, 10, 0, false, false),
+            ("lock_on_bulk_load", 104, 104, 1, 1, 0, false, true),
+            ("uses_ansi_nulls", 104, 104, 1, 1, 0, true, true),
+            ("is_replicated", 104, 104, 1, 1, 0, true, true),
+            ("has_replication_filter", 104, 104, 1, 1, 0, true, true),
+            ("is_merge_published", 104, 104, 1, 1, 0, true, true),
+            ("is_sync_tran_subscribed", 104, 104, 1, 1, 0, true, true),
+            (
+                "has_unchecked_assembly_data",
+                104,
+                104,
+                1,
+                1,
+                0,
+                false,
+                true,
+            ),
+            ("text_in_row_limit", 56, 56, 4, 10, 0, true, false),
+            (
+                "large_value_types_out_of_row",
+                104,
+                104,
+                1,
+                1,
+                0,
+                true,
+                true,
+            ),
+            ("is_tracked_by_cdc", 104, 104, 1, 1, 0, true, true),
+            ("lock_escalation", 48, 48, 1, 3, 0, true, true),
+            ("lock_escalation_desc", 231, 231, 120, 0, 0, true, false),
+            ("is_filetable", 104, 104, 1, 1, 0, true, true),
+            ("is_memory_optimized", 104, 104, 1, 1, 0, true, true),
+            ("durability", 48, 48, 1, 3, 0, true, true),
+            ("durability_desc", 231, 231, 120, 0, 0, true, false),
+            ("temporal_type", 48, 48, 1, 3, 0, true, true),
+            ("temporal_type_desc", 231, 231, 120, 0, 0, true, true),
+            ("history_table_id", 56, 56, 4, 10, 0, true, true),
+            (
+                "is_remote_data_archive_enabled",
+                104,
+                104,
+                1,
+                1,
+                0,
+                true,
+                true,
+            ),
+            ("is_external", 104, 104, 1, 1, 0, false, true),
+            ("history_retention_period", 56, 56, 4, 10, 0, true, true),
+            (
+                "history_retention_period_unit",
+                56,
+                56,
+                4,
+                10,
+                0,
+                true,
+                true,
+            ),
+            (
+                "history_retention_period_unit_desc",
+                231,
+                231,
+                20,
+                0,
+                0,
+                true,
+                true,
+            ),
+            ("is_node", 104, 104, 1, 1, 0, true, true),
+            ("is_edge", 104, 104, 1, 1, 0, true, true),
+            ("data_retention_period", 56, 56, 4, 10, 0, true, true),
+            ("data_retention_period_unit", 56, 56, 4, 10, 0, true, true),
+            (
+                "data_retention_period_unit_desc",
+                231,
+                231,
+                20,
+                0,
+                0,
+                true,
+                true,
+            ),
+            ("ledger_type", 48, 48, 1, 3, 0, true, true),
+            ("ledger_type_desc", 231, 231, 120, 0, 0, true, true),
+            ("ledger_view_id", 56, 56, 4, 10, 0, true, false),
+            ("is_dropped_ledger_table", 104, 104, 1, 1, 0, true, true),
+        ],
+        "views" => vec![
+            ("is_replicated", 104, 104, 1, 1, 0, true, true),
+            ("has_replication_filter", 104, 104, 1, 1, 0, true, true),
+            ("has_opaque_metadata", 104, 104, 1, 1, 0, false, true),
+            (
+                "has_unchecked_assembly_data",
+                104,
+                104,
+                1,
+                1,
+                0,
+                false,
+                true,
+            ),
+            ("with_check_option", 104, 104, 1, 1, 0, false, true),
+            ("is_date_correlation_view", 104, 104, 1, 1, 0, false, true),
+            ("is_tracked_by_cdc", 104, 104, 1, 1, 0, true, true),
+            ("has_snapshot", 104, 104, 1, 1, 0, true, true),
+            ("ledger_view_type", 48, 48, 1, 3, 0, true, true),
+            ("ledger_view_type_desc", 231, 231, 120, 0, 0, true, true),
+            ("is_dropped_ledger_view", 104, 104, 1, 1, 0, true, true),
+        ],
         _ => return None,
     };
-    Some(
-        definitions
-            .into_iter()
-            .map(
-                |(name, system, user, length, precision, scale, nullable, computed)| {
-                    let collation_name = matches!(system, 175 | 231).then(|| {
-                        if matches!(name, "type" | "type_desc") {
-                            "Latin1_General_CI_AS_KS_WS"
-                        } else {
-                            catalog_collation
-                        }
-                        .to_owned()
-                    });
-                    Field {
-                        name: name.into(),
-                        info: Some(TypeMetadata {
-                            system_type_id: Some(system),
-                            user_type_id: Some(user),
-                            max_length: Some(length),
-                            precision: Some(precision),
-                            scale: Some(scale),
-                            collation_name: collation_name.clone(),
-                        }),
-                        collation: collation_name.map(|name| Ok(Label::Implicit(name))),
-                        properties: Properties {
-                            nullable: Some(nullable),
-                            origin: if computed {
-                                Origin::Expression
-                            } else {
-                                Origin::Stored
-                            },
-                        },
-                        json_fragment: false,
-                    }
+    fields.extend(definitions.into_iter().map(
+        |(name, system, user, length, precision, scale, nullable, computed)| {
+            let collation_name = matches!(system, 175 | 231).then(|| {
+                if name != "name" {
+                    "Latin1_General_CI_AS_KS_WS"
+                } else {
+                    catalog_collation
+                }
+                .to_owned()
+            });
+            Field {
+                name: name.into(),
+                info: Some(TypeMetadata {
+                    system_type_id: Some(system),
+                    user_type_id: Some(user),
+                    max_length: Some(length),
+                    precision: Some(precision),
+                    scale: Some(scale),
+                    collation_name: collation_name.clone(),
+                }),
+                collation: collation_name.map(|name| Ok(Label::Implicit(name))),
+                properties: Properties {
+                    nullable: Some(nullable),
+                    origin: if computed {
+                        Origin::Expression
+                    } else {
+                        Origin::Stored
+                    },
                 },
-            )
-            .collect(),
-    )
+                json_fragment: false,
+            }
+        },
+    ));
+    Some(fields)
 }
 
 fn snapshot_with_views<T: Visit>(

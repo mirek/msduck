@@ -9263,7 +9263,6 @@ test('object catalog CHAR type values retain padding and filter semantics', { ti
     const actual = canonical(await capture(c, sql))
     assert.deepEqual(actual.errors, result.errors, sql)
     assert.deepEqual(actual.sets.map(s => s.rows), result.sets.map(s => s.rows), sql)
-    // Full sys.tables/sys.views descriptors remain a separate catalog gap.
-    if (sql.includes('FROM sys.objects')) assert.deepEqual(actual, result, sql)
+    assert.deepEqual(actual, result, sql)
   }
 })
