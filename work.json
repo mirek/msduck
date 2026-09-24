@@ -938,6 +938,26 @@
       "dependencies": [],
       "issue": 91,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHuQY"
+    },
+    {
+      "id": "integration-checkpoint-v1",
+      "title": "Consolidate owner PRs and establish a usable main-branch CI baseline",
+      "state": "ready",
+      "authorization": "Direct owner instruction to prioritize merging accumulated PRs and consider relaxing CI gates, then make CI green. Assemble and review only existing owner-authored branches. The original result-alignment task is blocked and its same-worker implementation is stopped; retain its immutable claim and integrate its published patch under this successor. Existing root, documentation, reference, TDS and coordination scopes retain their original verified receipts.",
+      "scope": [
+        "docs/integration-checkpoint.md",
+        "src/result_metadata.rs",
+        "src/query_error.rs",
+        "docs/result-metadata.md"
+      ],
+      "acceptance": [
+        "Account for every owner PR head using ancestry or patch comparison and preserve original commits in an integration branch; do not discard unmatched side branches.",
+        "Resolve the published result-alignment patch against current checked projection encoding, using original root ownership for engine/lib wiring.",
+        "Review CI status metadata and first-party reproduction; separate known compatibility gaps from compilation/regression requirements without silently masking new failures. Record exact revision coverage and the concrete merge plan."
+      ],
+      "dependencies": [],
+      "issue": 93,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHyoH"
     }
   ]
 }
