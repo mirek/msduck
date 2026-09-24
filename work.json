@@ -1579,7 +1579,7 @@
     {
       "id": "attention-boundaries-reference-v1",
       "title": "Capture idle repeated Attention and pre-EOM IGNORE boundaries",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal. The cancellation lifecycle currently rejects idle/repeated Attention because existing owner-captured evidence covers active requests only. Capture the missing wire boundaries before responsive transport integration; no external submission is input.",
       "scope": [
         "scripts/capture-attention-boundaries.mjs",
