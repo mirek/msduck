@@ -377,15 +377,13 @@ fn duplicate_index_diagnostic_preserves_requested_names_and_catalog_state() {
     let fixture: serde_json::Value =
         serde_json::from_str(include_str!("../reference/index-catalog.json")).unwrap();
     let mut s = setup();
-    assert!(
-        s.batch_response(
-            "CREATE SCHEMA alt; CREATE TABLE alt.[odd.table]([odd.column] INT,other INT)",
-            &Default::default(),
-            false,
-            None
-        )
-        .1
-    );
+    for sql in [
+        "CREATE SCHEMA alt",
+        "CREATE TABLE alt.[odd.table]([odd.column] INT,other INT)",
+    ] {
+        let (out, ok) = s.batch_response(sql, &Default::default(), false, None);
+        assert!(ok, "{sql}: {out:?}");
+    }
     make(&s, "CREATE INDEX ix ON dbo.a(id)").unwrap();
     make(
         &s,
