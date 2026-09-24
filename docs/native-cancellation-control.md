@@ -83,3 +83,12 @@ establish the exact corresponding differences. Do not implement cancellation by
 unconditionally rolling back the whole transaction or replaying prior statements:
 that could discard or repeat observable work. Engine integration needs a deliberate
 transaction-preserving strategy where reference behavior requires it.
+
+The compiled vendored DuckDB source corroborates this observation:
+`ClientContext::ExecuteTaskInternal` in `src/main/client_context.cpp` explicitly
+sets `invalidate_transaction = true` for a user-generated INTERRUPT, then passes
+that flag to `EndQueryInternal`. Using the pending-query API while still issuing
+`duckdb_interrupt` does not by itself avoid this path. A different cancellation
+strategy or carefully justified backend change needs separate reference evidence
+and transaction/atomicity tests; resetting the interrupt flag cannot restore a
+transaction that was already invalidated.
