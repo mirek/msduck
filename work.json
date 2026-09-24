@@ -658,6 +658,25 @@
       "dependencies": [],
       "issue": 65,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHUuP"
+    },
+    {
+      "id": "character-extrema-native-v1",
+      "title": "Add bounded native BIN2 character extrema with original payload retention",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Reference task #65/PR66 establishes that physical carrier-byte ordering is invalid. Build the native aggregation component using existing deterministic BIN2 comparison; linguistic weights and public SQL binding remain explicit subsequent requirements. Start from owner-pushed 28b7a9b or a verified successor. No external input is approved.",
+      "scope": [
+        "src/character_aggregate.rs",
+        "tests/character_aggregate.rs"
+      ],
+      "acceptance": [
+        "Implement native Unicode and CP1252 BIN2 MIN/MAX over exact Unicode carrier payloads using existing deterministic core comparison. Preserve NULL/empty groups, original selected bytes, SQL trailing-space equality, window/parallel combine behavior and single input evaluation. Do not substitute equality keys for ordering.",
+        "Bound per-value payload and retained aggregate memory, check parent/child NULL validity and even UTF16 byte lengths, and provide correct state destruction/recovery on errors. Avoid unbounded row-list materialization.",
+        "Test native grouping, windows, empty/all-NULL inputs, malformed carriers, multi-chunk single evaluation, ordering boundaries and merge/destructor behavior against captured BIN2 evidence. Do not claim linguistic-collation or public-SQL completion.",
+        "Expose an explicit registration helper. Root module/registration integration belongs to this worker existing #26/#35 claims; other workers must coordinate instead of editing those scopes. Run native regressions, formatting and strict Clippy; record exact tested revision and unfinished binding/collation work."
+      ],
+      "dependencies": [],
+      "issue": 67,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHVlv"
     }
   ]
 }
