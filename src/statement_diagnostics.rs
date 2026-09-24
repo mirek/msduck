@@ -165,6 +165,57 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_identity_lambda_preserves_types_and_evaluates_its_operand_once() {
+        let db = Connection::open_in_memory().unwrap();
+        let registry = Registry::default();
+        registry.register(&db).unwrap();
+        let wrap = |value: &str| {
+            format!(
+                "list_extract(list_transform([{value}], diagnostic_value -> CASE WHEN __msduck_observe_null(?, diagnostic_value IS NULL) THEN NULL ELSE diagnostic_value END),1)"
+            )
+        };
+        db.execute_batch("CREATE SEQUENCE lambda_calls").unwrap();
+        let scope = registry.begin().unwrap();
+        let sql = format!(
+            "SELECT sum({}) FROM range(6000) d(i)",
+            wrap("CASE WHEN nextval('lambda_calls')%17=0 THEN NULL ELSE i END")
+        );
+        let total: i64 = db
+            .query_row(&sql, [scope.ticket().as_slice()], |r| r.get(0))
+            .unwrap();
+        assert_eq!(total, (0..6000).filter(|n| (n + 1) % 17 != 0).sum::<i64>());
+        assert!(scope.null_eliminated());
+        assert_eq!(
+            db.query_row("SELECT currval('lambda_calls')", [], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            6000
+        );
+        for (value, null) in [
+            ("1::TINYINT", false),
+            ("NULL::INTEGER", true),
+            ("123.456::DECIMAL(38,10)", false),
+            ("'🦆'::VARCHAR", false),
+            ("from_hex('0080ff')", false),
+            ("'12:34:56.1234567'::TIME_NS", false),
+            ("struct_pack(__msduck_utf16le := from_hex('3ed8'))", false),
+            ("NULL::STRUCT(__msduck_utf16le BLOB)", true),
+        ] {
+            let scope = registry.begin().unwrap();
+            let sql = format!(
+                "SELECT typeof(actual)=typeof(expected), actual IS NOT DISTINCT FROM expected FROM (SELECT {} AS actual,{value} AS expected)",
+                wrap(value)
+            );
+            let result: (bool, bool) = db
+                .query_row(&sql, [scope.ticket().as_slice()], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })
+                .unwrap();
+            assert_eq!(result, (true, true), "{value}");
+            assert_eq!(scope.null_eliminated(), null, "{value}");
+        }
+    }
+
+    #[test]
     fn scopes_are_bounded_isolated_and_released_during_unwind() {
         let registry = Registry::default();
         let scopes: Vec<_> = (0..LIMIT).map(|_| registry.begin().unwrap()).collect();

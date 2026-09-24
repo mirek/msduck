@@ -39,3 +39,25 @@ evaluate volatile operands twice. Window frames, correlated execution, errors,
 cancellation and DML consumers need exact reference coverage. The reference
 contract is in [PR #98](https://github.com/mirek/msduck/pull/98); this integration
 must retain its raw diagnostics and ordering rather than ignore them for a pass.
+
+## Single-evaluation operand mechanism
+
+A native regression proves this backend expression evaluates its operand once:
+
+```sql
+list_extract(list_transform([operand], diagnostic_value ->
+  CASE WHEN __msduck_observe_null(ticket, diagnostic_value IS NULL)
+       THEN NULL ELSE diagnostic_value END), 1)
+```
+
+The operand occurs outside the lambda and is materialized as one list element;
+the lambda's two references read that element. A 6000-row volatile sequence
+probe confirms one evaluation per input row. Native type/value checks retain
+integer, DECIMAL(38,10), VARCHAR, binary, TIME_NS and Unicode STRUCT payloads,
+including an unpaired surrogate and a typed NULL carrier. This avoids requiring
+a second source query or global materialization merely to inspect NULLness.
+
+The binder must still construct the expression as AST, preserve original logical
+metadata, bind the ticket independently of parameter values, and verify placement
+against the reference matrix. This mechanism alone does not prove window-frame,
+optimizer, partial-error or warning-completion behavior.
