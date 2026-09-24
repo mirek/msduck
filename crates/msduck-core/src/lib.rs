@@ -6,6 +6,7 @@ pub mod bounded_aggregate;
 pub mod case_mapping;
 pub mod catalog;
 pub mod character;
+pub mod checked_integer;
 pub mod collation;
 pub mod concat;
 pub mod datetime2;
