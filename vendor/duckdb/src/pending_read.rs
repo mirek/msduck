@@ -14,7 +14,9 @@ use std::{
 /// drain has no established reuse guarantee, so its connection must be closed.
 #[derive(Debug)]
 pub enum CancellableReadError {
+    /// An ordinary binding or execution error; preserve normal SQL error handling.
     Query(Error),
+    /// Native drain or cleanup failed; do not execute further SQL on this connection.
     ConnectionUnusable(Error),
 }
 impl std::fmt::Display for CancellableReadError {
