@@ -35,7 +35,8 @@ async function orderedCapture(connection, sql) {
 const fixture = JSON.parse(await readFile(new URL('../reference/aggregate-warnings.json', import.meta.url), 'utf8'))
 const boundaries = JSON.parse(await readFile(new URL('../reference/aggregate-warning-boundaries.json', import.meta.url), 'utf8'))
 
-async function replayBoundaries(t, samples, artifact) {
+async function replayBoundaries(t, samples, artifact, expectedCount) {
+  assert.equal(samples.length, expectedCount, 'reference selection must retain every promised case')
   const connection = await start(t)
   const records = []
   for (const sample of samples) {
@@ -57,12 +58,12 @@ async function replayBoundaries(t, samples, artifact) {
 }
 
 test('window diagnostics match consumed frames including empty frames and COUNT', async t => {
-  await replayBoundaries(t, boundaries.results.filter(sample => sample.id.includes('-window-')), 'aggregate-window-boundaries')
+  await replayBoundaries(t, boundaries.results.filter(sample => sample.id.includes('-window-')), 'aggregate-window-boundaries', 10)
 })
 
 test('DML and scalar assignment diagnostics match reference state and completion order', async t => {
   const selected = new Set(['insert-select', 'insert-empty-source', 'insert-grouped', 'update-scalar', 'update-no-targets', 'delete-subquery', 'select-into', 'select-assignment', 'set-subquery', 'declare-subquery'])
-  await replayBoundaries(t, boundaries.results.filter(sample => selected.has(sample.id.slice(sample.mode.length + 1))), 'aggregate-consumer-boundaries')
+  await replayBoundaries(t, boundaries.results.filter(sample => selected.has(sample.id.slice(sample.mode.length + 1))), 'aggregate-consumer-boundaries', 20)
 })
 
 test('prepared aggregate executions keep diagnostic state isolated and honor setting changes', async t => {

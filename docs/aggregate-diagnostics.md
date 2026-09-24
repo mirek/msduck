@@ -130,6 +130,10 @@ The native session regression passes for ordinary INSERT, UPDATE, DELETE,
 SET and DECLARE, with ANSI_WARNINGS ON/OFF and an UPDATE with no target rows.
 Assignment evaluators share the caller-owned statement scope instead of creating
 a separate warning channel. Preparation does not receive an execution scope.
-Twenty exact DML/assignment reference programs are included in the client replay;
-verification against the rebuilt server is pending. This does not yet resolve
-stored-view expansion, joined OUTPUT paths or partial-error warning ordering.
+All twenty exact DML/assignment reference programs pass against the rebuilt
+server. The complete focused suite passes all twelve tests, retaining the
+original 126 programs, ten window programs, prepared execution and character
+extrema. The complete boundary replay now matches 35/50 programs: two setup
+failures and 55 differences across thirteen executions remain, with no new or
+worsened case compared with `43d9c9d`. This does not yet resolve stored-view
+expansion, joined OUTPUT paths or partial-error warning ordering.
