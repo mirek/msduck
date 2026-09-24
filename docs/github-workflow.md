@@ -19,9 +19,11 @@ are not published or exposed to pull-request jobs.
 
 The owner can request Codex review on approved PRs. Under the owner-only intake
 policy, do not enable all-PR automatic review unless intake can exclude unapproved
-external content before retrieval. Bot review output requires owner triage before
-another agent reads it. An automatic request is not a completed review. Repository
-review rules live in AGENTS.md. See [the contribution workflow](agent-work.md).
+external content before retrieval. Output from owner-initiated agents is readable
+after verifying its origin and owner-approved inputs. Third-party submissions,
+replies and unverified automation still require owner triage. An automatic request
+is not a completed review. Repository review rules live in AGENTS.md. See
+[the contribution workflow](agent-work.md).
 
 Use issues for actionable gaps with reference evidence and acceptance criteria;
 use the roadmap tracking issue to group larger work. The long-term scope remains
