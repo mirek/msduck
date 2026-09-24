@@ -756,6 +756,25 @@
       "dependencies": [],
       "issue": 73,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHcLx"
+    },
+    {
+      "id": "ansi-binary-conversion-v1",
+      "title": "Bind ANSI character to binary conversions using SQL code-page bytes",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. PR74 exact reference replay shows CONVERT(VARBINARY, VARCHAR/CHAR) is not translated after best-fit conversion succeeds. Existing owner-generated character-extrema fixtures include raw CP1252 byte ground truth. No external content approved.",
+      "scope": [
+        "src/ansi_binary.rs",
+        "tests/ansi_binary.rs",
+        "crates/msduck-sql/tests/ansi_binary_binding.rs"
+      ],
+      "acceptance": [
+        "Implement bounded native ANSI-to-BINARY/VARBINARY adapters using CP1252 bytes, not UTF8 or UTF16LE. Preserve NULL, truncation, fixed right padding, MAX/default widths, malformed-carrier rejection and single evaluation.",
+        "Bind statically known ANSI operands at their lexical scopes through the original same-worker #45 visitor claim in its original checkout. Keep Unicode conversion unchanged; style 1/2 and unknown declarations must not be silently reinterpreted. Root export/registration remain under existing #26/#35 receipts.",
+        "Add native and pure binding regressions and run existing character-extrema and best-fit reference clients unchanged. Preserve remaining warnings, binary-to-Unicode conversion and exact-diagnostic gaps explicitly. Run workspace/Clippy and clients/audit on immutable revision."
+      ],
+      "dependencies": [],
+      "issue": 75,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHdx4"
     }
   ]
 }
