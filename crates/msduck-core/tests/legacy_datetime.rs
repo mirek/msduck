@@ -4,7 +4,7 @@ pub use msduck_core::{datetime2, diagnostic};
 #[path = "../src/legacy_datetime.rs"]
 mod legacy_datetime;
 use datetime2::DateTime2;
-use legacy_datetime::{Target, Value, from_datetime2, from_iso, try_from_iso};
+use legacy_datetime::{CharacterKind, Target, Value, from_datetime2, from_iso, try_from_iso};
 
 fn driver_date(value: Value) -> String {
     let (days, units) = value.storage_parts();
@@ -37,13 +37,18 @@ fn scalar_conversions_match_retained_sql_server_values_and_errors() {
         } else {
             Target::DateTime
         };
+        let source = if sql.contains("N'") {
+            CharacterKind::NVarChar
+        } else {
+            CharacterKind::VarChar
+        };
         let text = sql.split('\'').nth(1).unwrap();
         let actual = if sql.starts_with("SELECT TRY_CAST(") {
-            Ok(try_from_iso(target, Some(text)))
+            Ok(try_from_iso(target, source, Some(text)))
         } else if sql.contains(" AS DATETIME2(7)") {
             from_datetime2(target, Some(DateTime2::parse_iso(text).unwrap()))
         } else {
-            from_iso(target, Some(text))
+            from_iso(target, source, Some(text))
         };
         let errors = case["result"]["errors"].as_array().unwrap();
         if let Some(error) = errors.first() {
@@ -73,15 +78,21 @@ fn scalar_conversions_match_retained_sql_server_values_and_errors() {
         }
         checked += 1;
     }
-    assert_eq!(checked, 56);
+    assert_eq!(checked, 60);
 }
 
 #[test]
 fn values_preserve_nulls_and_exact_storage_units() {
     for target in [Target::DateTime, Target::SmallDateTime] {
-        assert_eq!(from_iso(target, None).unwrap(), None);
+        assert_eq!(
+            from_iso(target, CharacterKind::VarChar, None).unwrap(),
+            None
+        );
         assert_eq!(from_datetime2(target, None).unwrap(), None);
-        assert_eq!(try_from_iso(target, Some("invalid")), None);
+        assert_eq!(
+            try_from_iso(target, CharacterKind::VarChar, Some("invalid")),
+            None
+        );
     }
     for (text, parts) in [
         ("1899-12-31T23:59:59.997", (-1, 25_919_999)),
@@ -90,7 +101,7 @@ fn values_preserve_nulls_and_exact_storage_units() {
         ("1753-01-01T00:00:00", (-53_690, 0)),
     ] {
         assert_eq!(
-            from_iso(Target::DateTime, Some(text))
+            from_iso(Target::DateTime, CharacterKind::VarChar, Some(text))
                 .unwrap()
                 .unwrap()
                 .storage_parts(),
@@ -99,7 +110,7 @@ fn values_preserve_nulls_and_exact_storage_units() {
     }
     let text = "1900-01-01T00:00:29.999";
     assert_eq!(
-        from_iso(Target::SmallDateTime, Some(text))
+        from_iso(Target::SmallDateTime, CharacterKind::VarChar, Some(text))
             .unwrap()
             .unwrap()
             .storage_parts(),

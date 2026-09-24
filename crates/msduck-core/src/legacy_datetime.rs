@@ -12,6 +12,12 @@ const DATETIME_MAX_DAY: i64 = 2_958_463;
 const DATETIME_DAY_UNITS: i64 = 25_920_000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CharacterKind {
+    VarChar,
+    NVarChar,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
     DateTime,
     SmallDateTime,
@@ -71,12 +77,18 @@ impl Value {
 
 /// Convert an explicitly typed DATETIME2 value, with NULL preserved.
 pub fn from_datetime2(target: Target, value: Option<DateTime2>) -> Result<Option<Value>, SqlError> {
-    value.map(|value| convert(target, value, false)).transpose()
+    value
+        .map(|value| convert(target, value, "datetime2", false))
+        .transpose()
 }
 
 /// Convert ISO character input using legacy character-source rounding.
 /// Other conversion styles and locale-dependent syntax are outside this API.
-pub fn from_iso(target: Target, text: Option<&str>) -> Result<Option<Value>, SqlError> {
+pub fn from_iso(
+    target: Target,
+    source: CharacterKind,
+    text: Option<&str>,
+) -> Result<Option<Value>, SqlError> {
     let Some(text) = text else { return Ok(None) };
     if text
         .split_once('.')
@@ -85,17 +97,25 @@ pub fn from_iso(target: Target, text: Option<&str>) -> Result<Option<Value>, Sql
         return Err(target.syntax());
     }
     let value = DateTime2::parse_iso(text).map_err(|_| target.syntax())?;
-    convert(target, value, true).map(Some)
+    let source = match source {
+        CharacterKind::VarChar => "varchar",
+        CharacterKind::NVarChar => "nvarchar",
+    };
+    convert(target, value, source, true).map(Some)
 }
 
 /// TRY conversion suppresses conversion failures, but does not choose a source
 /// type, locale, style or unsupported conversion on behalf of the caller.
-pub fn try_from_iso(target: Target, text: Option<&str>) -> Option<Value> {
-    from_iso(target, text).ok().flatten()
+pub fn try_from_iso(target: Target, source: CharacterKind, text: Option<&str>) -> Option<Value> {
+    from_iso(target, source, text).ok().flatten()
 }
 
-fn convert(target: Target, value: DateTime2, character: bool) -> Result<Value, SqlError> {
-    let source = if character { "varchar" } else { "datetime2" };
+fn convert(
+    target: Target,
+    value: DateTime2,
+    source: &str,
+    character: bool,
+) -> Result<Value, SqlError> {
     let mut days = value.ticks() / DAY - EPOCH_DAY;
     let time = value.ticks() % DAY;
     // Multiplication is bounded by one day of 100ns ticks, not the full date.
