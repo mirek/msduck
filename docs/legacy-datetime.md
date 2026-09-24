@@ -1,6 +1,6 @@
 # Legacy datetime conversion evidence
 
-`reference/legacy-datetime.json` contains 60 RPC observations captured twice
+`reference/legacy-datetime.json` contains 68 RPC observations captured twice
 identically from the pinned SQL Server container. Reproduce them with
 `node scripts/capture-legacy-datetime.mjs`. The generator compares fresh results
 with the retained fixture and records raw repetitions separately. Each case
@@ -41,6 +41,10 @@ Observed rules include:
   one multirow VALUES expression stores `12:00:00` for both: common-source
   type conversion precedes assignment to the destination. DATETIME stores
   `12:00:30` for both source forms and both insert arrangements.
+- At the lower DATETIME boundary, DATETIME2 `1752-12-31T23:59:59.9983333`
+  fails with 242/state3/class16, while the next 100ns unit (`.9983334`)
+  rounds into 1753. At the upper boundary, `.9983334` saturates at the last
+  DATETIME tick, matching the separately captured `.9999999` result.
 - NVARCHAR invalid and seven-digit fractional strings retain the captured
   241/295 diagnostics. Out-of-range DATETIME2-to-SMALLDATETIME conversion
   reports 242/state3/class16 and names `datetime2` as the source type.
