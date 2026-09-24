@@ -82,3 +82,16 @@ tests and strict workspace/all-target Clippy pass.
 These checks cover the captured window and optimizer shapes, not every frame
 or rewrite. Partial errors, stored aggregate views and DML remain incomplete;
 full workspace/client/audit verification is recorded separately by revision.
+
+At `e10a8cd`, all 634 workspace Rust tests pass. The 325-case local diagnostic
+audit changes only by adding 25 warning-8153 messages compared with `5e18a0e`;
+that audit is not a SQL Server equivalence test.
+
+The additional 50 boundary programs in [PR #104](https://github.com/mirek/msduck/pull/104)
+expose concrete remaining defects: the current pre-window operand observer emits
+three false warnings for NULLs consumed by no frame, and diagnostics are missing
+from stored views, ordinary DML, SET/DECLARE subqueries and partial failures.
+That replay matches 25/50 programs, with two setup failures and 129 differences
+across the remaining 23 programs. It also retains independent descriptor and
+error-detail gaps. The original 126-case pass must not be generalized to these
+boundaries; this integration remains draft.
