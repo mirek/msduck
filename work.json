@@ -1476,6 +1476,25 @@
       "dependencies": [],
       "issue": 156,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJ7-o"
+    },
+    {
+      "id": "native-pending-error-drain-v1",
+      "title": "Add explicit native pending-read drain preserving racing errors",
+      "state": "ready",
+      "authorization": "Direct owner full compatibility goal. PR157 proves worker-owned interrupt/drain preserves read transactions, but pending destruction discards racing executor errors. Add a narrow guarded backend operation before runtime integration. Existing root duckdb-nested-alter-v1 claim owns build patch integration and patch ledger; no scope transfer.",
+      "scope": [
+        "vendor/libduckdb-sys/msduck_pending_drain.rs",
+        "tests/native_pending_error_drain.rs",
+        "docs/native-pending-error-drain.md"
+      ],
+      "acceptance": [
+        "Patch the pinned bundled source through exact-match drift assertions to add worker-owned pending SELECT drain: lock context, reject stale/noneligible results before effects, interrupt and join tasks, copy native error before query-state destruction, preserve pure cancellation transactions.",
+        "Test transaction preservation and parallel cleanup, genuine native errors, stale pending handles and non-SELECT rejection with bounded child-process execution. Keep racing error evidence and cleanup errors visible.",
+        "Run Linux focused/workspace/Clippy/format checks; document ABI, caller ownership, backend portability and unresolved writes/volatile-side-effect limitations. No server activation or silent backend error suppression."
+      ],
+      "dependencies": [],
+      "issue": 158,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJ9T5"
     }
   ]
 }
