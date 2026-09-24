@@ -1594,6 +1594,24 @@
       "dependencies": [],
       "issue": 169,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PKIkw"
+    },
+    {
+      "id": "idle-ignore-completion-v1",
+      "title": "Match live idle Attention and IGNORE completion fields",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Owner-captured reference at 96697c9 proves idle command253 Attention ACK and command0 DONE_ERROR for pre-EOM IGNORE. Existing original root aggregate-warning-integration-v1 owns src/server.rs and concat-integration-v1 owns tests/tedious.test.mjs integration.",
+      "scope": [
+        "tests/attention_boundaries.test.mjs",
+        "docs/attention-boundaries.md"
+      ],
+      "acceptance": [
+        "Add reference-backed independent raw-wire regressions for idle one/two Attention packets and IGNORE with empty/nonempty terminal payload, across autocommit and explicit XACT_ABORT OFF/ON transactions. Test TCP and TLS and retain exact completion bytes/message boundaries.",
+        "Correct only the live idle ACK command and IGNORE completion status through the original same-worker server claim. Verify earlier writes, transaction count, DATEFIRST and subsequent client reuse; do not imply active wire cancellation is implemented.",
+        "Demonstrate the existing wrong bytes using an immutable prior server build, then run focused clients, formatting, full workspace, strict Clippy, independent clients and diagnostic audit for the implementation revision. Test registration in the existing client suite stays under its original same-worker claim."
+      ],
+      "dependencies": [],
+      "issue": 171,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PKKZx"
     }
   ]
 }
