@@ -60,10 +60,22 @@ node --test tests/client-shards.test.mjs
 They cover exhaustive deterministic partitioning, exact name matching, duplicate
 names across files, nested execution, intentional skips, missing/repeated events,
 assertions, crashes, unsupported discovery and cancellation during discovery and
-test execution. Measured complete-suite benchmarks, including a two-CPU run,
-remain required before recommending concurrency or changing CI. Balanced sums
-of historical test durations alone do not establish a speedup.
+test execution. A two-CPU comparison remains required before recommending
+concurrency for CI. Balanced sums of historical test durations alone do not
+establish a speedup.
 
 Harness verification: all eight regressions pass on Node 24.13.0 (Linux) and
 Node 26.5.0 (macOS). This proves runner behavior for those regression cases; the
-full 404-test benchmark is still in progress.
+four-worker full-suite benchmark below provides separate execution evidence.
+
+On Linux Node 24.13.0, four workers completed all 404 unchanged client tests in
+362188 ms, with zero failures, skips, cancellations, missing/repeated test
+identities or changed source/executable hashes. The private executable was
+built from `8a233f3ab255c7bdfa9af969fb2ec12898033e62`, with SHA-256
+`7eba0d2804232fcd5bb634e5c8052dfc8ce454ed7ebf131859107940fb096c52`.
+The earlier unsharded run of that runtime passed all 404 tests in 1164028 ms,
+an observed wall-time ratio of 3.21. These runs shared a 32-CPU Linux host with
+other verification work and did not have identical host load; this is one
+measurement, not a general performance guarantee or a GitHub runner result.
+The two-CPU comparison uses the same immutable executable for sequential
+unsharded and two-worker runs and is still pending.
