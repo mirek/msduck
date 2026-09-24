@@ -1440,6 +1440,24 @@
       "dependencies": [],
       "issue": 152,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJ5CW"
+    },
+    {
+      "id": "native-pending-cancellation-v1",
+      "title": "Probe transaction-preserving cancellation of pending native reads",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Reference PR153 confirms cancelled computations preserve explicit transactions with XACT_ABORT OFF. Inspect and test DuckDB pending execution cleanup without native interrupt before runtime integration.",
+      "scope": [
+        "tests/native_pending_cancellation.rs",
+        "docs/native-pending-cancellation.md"
+      ],
+      "acceptance": [
+        "Exercise pending execution tasks for a long read, abandon the unfinished result without duckdb_interrupt, then prove prior explicit-transaction writes survive and can commit; verify connection reuse and cross-connection visibility.",
+        "Cover autocommit and explicit rollback, single and multiple execution threads. Retain actual errors and fail on unexpected completion; avoid production changes or claiming write cancellation safety.",
+        "Inspect vendored pending-result and context cleanup implementation; document cancellation latency and write/commit/streaming limitations. Run formatting, focused native tests, workspace tests and strict Clippy on Linux."
+      ],
+      "dependencies": [],
+      "issue": 154,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJ6xw"
     }
   ]
 }
