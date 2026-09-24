@@ -1,6 +1,6 @@
 # Table-owned index catalog
 
-`reference/index-catalog.json` retains 24 first-party SQL Server catalog
+`reference/index-catalog.json` retains 27 first-party SQL Server catalog
 snapshots captured identically in two fresh databases against the pinned image.
 The explicit projections retain column descriptors, flags and values from
 `sys.indexes` and `sys.index_columns`, together with each operation's raw
@@ -37,12 +37,12 @@ Observed behavior includes:
   index-column ordinals. These captures are requirements, not implementation
   claims for those features.
 
-The adapter implementation is pending. Its persistent identity mapping must
-separate the logical table-owned index name and SQL Server index ID from a
-qualified DuckDB backend name and an incarnation identity. Backend names must
-not leak into the public catalog. An old bound drop must not silently target a
-replacement that reused the same logical ID. Acquire the catalog and execute
-against one consistent transaction, and verify the expected incarnation.
+The initial adapter is implemented in `src/index_catalog.rs`. Its persistent
+identity mapping separates the logical table-owned index name and SQL Server index ID from a
+qualified DuckDB backend name and a monotonically allocated incarnation.
+`drop_index` verifies the complete expected identity before mutation, including
+that incarnation. Tests prove stale drops do not delete replacements and
+same-named indexes on different tables remain independent.
 
 Creation/drop must mutate physical indexes and catalog rows under the same
 transaction outcome. Standalone operations may own a transaction; operations
@@ -53,8 +53,34 @@ The separate multi-target DROP binder requires earlier successful drops to
 survive a later missing-target error when the caller has no explicit transaction.
 
 This task owns `src/index_catalog.rs` and an isolated native integration test,
-plus these captures/docs. Register/acquire/create/drop/sync APIs and their tests
-remain to be implemented. Root server initialization, engine DDL hooks, SQL
+plus these captures/docs. The register/acquire/create/drop/sync APIs and four native regressions now exist.
+They are not yet exported or wired into root startup/DDL execution. Root server initialization, engine DDL hooks, SQL
 exports/dialect and manifests remain under their existing claims and must be
 integrated separately. Unsupported index kinds must remain explicit; a partial
 catalog must not be presented as complete SQL Server index compatibility.
+
+`create` currently accepts ordinary ascending column indexes and unique integer
+keys. It rejects INCLUDE, filters, descending keys and unimplemented options
+before mutation. For unique integer keys, physical key expressions pair an
+IS NULL discriminator with a zero-filled value: NULL compares equal to NULL
+while remaining distinct from zero. Three additional reference programs confirm
+that a second NULL fails with SQL Server error 2601; the original 24 programs
+are unchanged. Exact runtime translation of this diagnostic remains engine work.
+Other unique key types need their SQL Server comparison rules before support.
+
+Transaction ownership is explicit (`Owned` or `CallerOwned`). The latter is a
+contract requiring an already-active caller transaction. The vendored driver's
+`is_autocommit()` returns a constant true, so the adapter does not rely on it.
+The engine must pass its own transaction state. Sequence allocation may leave
+gaps on rollback; incarnations must never be recycled.
+
+The current adapter acquires only indexes created through its APIs. It does not
+yet reconcile pre-existing/unmanaged indexes or constraint-backed indexes and
+does not install `sys.indexes` or `sys.index_columns`. Consequently its acquired
+rows are not yet a complete catalog suitable for the DROP binder's complete-
+snapshot contract. Those reconciliation/public-view steps and wire comparisons
+remain required before root integration can claim this task complete.
+
+At checkpoint `7024c8c`, all four focused Linux native tests and strict workspace
+Clippy passed. The full Rust workspace check is still running. The initial local
+native build was cancelled for disk pressure; no local pass is claimed.
