@@ -8,6 +8,58 @@ unsafe extern "C" {
     fn msduck_pending_cancel_read_and_drain(result: ffi::duckdb_pending_result) -> i32;
 }
 
+#[derive(Default)]
+struct FailureGate {
+    entered: std::sync::atomic::AtomicBool,
+    release: std::sync::atomic::AtomicBool,
+}
+
+unsafe extern "C" fn background_failure(
+    info: ffi::duckdb_function_info,
+    _input: ffi::duckdb_data_chunk,
+    _output: ffi::duckdb_vector,
+) {
+    use std::sync::atomic::Ordering;
+    // Extra info owns an Arc until the database drops the registered function.
+    let gate =
+        unsafe { &*(ffi::duckdb_scalar_function_get_extra_info(info) as *const FailureGate) };
+    gate.entered.store(true, Ordering::Release);
+    while !gate.release.load(Ordering::Acquire) {
+        std::thread::yield_now();
+    }
+    unsafe {
+        ffi::duckdb_scalar_function_set_error(
+            info,
+            c"msduck deliberate background failure".as_ptr(),
+        )
+    };
+}
+
+unsafe extern "C" fn drop_failure_gate(data: *mut std::ffi::c_void) {
+    drop(unsafe { std::sync::Arc::from_raw(data as *const FailureGate) });
+}
+
+fn register_failure(connection: &Connection<'_>, gate: std::sync::Arc<FailureGate>) {
+    unsafe {
+        let mut function = ffi::duckdb_create_scalar_function();
+        let mut ty = ffi::duckdb_create_logical_type(ffi::DUCKDB_TYPE_DUCKDB_TYPE_BIGINT);
+        ffi::duckdb_scalar_function_set_name(function, c"msduck_gated_failure".as_ptr());
+        ffi::duckdb_scalar_function_add_parameter(function, ty);
+        ffi::duckdb_scalar_function_set_return_type(function, ty);
+        ffi::duckdb_scalar_function_set_volatile(function);
+        ffi::duckdb_scalar_function_set_extra_info(
+            function,
+            std::sync::Arc::into_raw(gate) as *mut _,
+            Some(drop_failure_gate),
+        );
+        ffi::duckdb_scalar_function_set_function(function, Some(background_failure));
+        let status = ffi::duckdb_register_scalar_function(connection.0, function);
+        ffi::duckdb_destroy_scalar_function(&mut function);
+        ffi::duckdb_destroy_logical_type(&mut ty);
+        assert_eq!(status, 0);
+    }
+}
+
 struct Database(ffi::duckdb_database);
 impl Database {
     fn new() -> Self {
@@ -241,7 +293,8 @@ fn explicit_error_drain_preserves_prior_transaction_work() {
     let db = Database::new();
     let connection = db.connect();
     connection.query("SET threads=1");
-    let stale = Pending::read(&connection);
+    eprintln!("stale result rejection");
+    let stale = Pending::sql(&connection, "SELECT 1");
     let current = Pending::read(&connection);
     assert_eq!(
         unsafe { msduck_pending_cancel_read_and_drain(stale.result) },
@@ -257,6 +310,7 @@ fn explicit_error_drain_preserves_prior_transaction_work() {
     drop(current);
     drop(stale);
 
+    eprintln!("non-SELECT rejection");
     connection.query("CREATE TABLE write_probe(n INTEGER)");
     let write = Pending::sql(&connection, "INSERT INTO write_probe VALUES (9)");
     assert_eq!(
@@ -272,6 +326,7 @@ fn explicit_error_drain_preserves_prior_transaction_work() {
     drop(write);
     assert_eq!(connection.scalar("SELECT n FROM write_probe"), 9);
 
+    eprintln!("preexisting error retention");
     let failed = Pending::sql(
         &connection,
         "SELECT CAST(i::VARCHAR || 'x' AS INTEGER) FROM range(1000000) t(i)",
@@ -297,4 +352,37 @@ fn explicit_error_drain_preserves_prior_transaction_work() {
         after,
         "native error must not become cancellation"
     );
+    drop(failed);
+    connection.query("SET threads=4");
+    eprintln!("background error retention");
+    let gate = std::sync::Arc::new(FailureGate::default());
+    register_failure(&connection, gate.clone());
+    let racing = Pending::sql(
+        &connection,
+        "SELECT SUM(msduck_gated_failure(i)) FROM range(100000000) t(i)",
+    );
+    let deadline = Instant::now() + Duration::from_secs(10);
+    // Never poll ExecuteTask here: background execution must enter the callback.
+    while !gate.entered.load(std::sync::atomic::Ordering::Acquire) {
+        assert!(
+            Instant::now() < deadline,
+            "background callback did not start"
+        );
+        std::thread::yield_now();
+    }
+    gate.release
+        .store(true, std::sync::atomic::Ordering::Release);
+    assert_eq!(
+        unsafe { msduck_pending_cancel_read_and_drain(racing.result) },
+        1
+    );
+    let error = unsafe { CStr::from_ptr(ffi::duckdb_pending_error(racing.result)) };
+    assert!(
+        error
+            .to_string_lossy()
+            .contains("msduck deliberate background failure"),
+        "retained error: {error:?}"
+    );
+    // The callback ran on a background worker and no result poll transferred
+    // its error. The drain itself must retrieve it before destroying executor state.
 }

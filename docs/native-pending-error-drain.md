@@ -31,6 +31,7 @@ Native tests cover explicit transaction commit/rollback and autocommit with one
 and four threads, retained earlier writes, subsequent writes and cross-connection
 visibility. Additional cases reject stale handles without cancelling a newer query,
 reject an INSERT without preventing its ordinary completion, and retain a genuine
-conversion error. The test process has a 20-second watchdog. Deterministically
-injecting a background error during the drain remains a required follow-up test;
-preexisting-error coverage alone does not establish that race.
+conversion error. The test process has a 20-second watchdog. A gated scalar callback establishes actual background execution before it is
+released to fail concurrently with drain. No pending task poll transfers that error;
+the explicit drain must retain the callback failure rather than replace it with
+an interrupt. This is an additional check beyond preexisting-error coverage.
