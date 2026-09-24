@@ -677,6 +677,26 @@
       "dependencies": [],
       "issue": 67,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHVlv"
+    },
+    {
+      "id": "character-extrema-binding-v1",
+      "title": "Bind public BIN2 character MIN/MAX to exact native aggregation",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Native task #67/PR68 and reference #65/PR66 provide exact BIN2 aggregation; bind only proven BIN2 operands from logical declarations. Start from owner-pushed 79c5744 or verified successor. This worker retains #39 projection export, #45 shared scope visitor and #26 root integration claims; their original receipts remain in their existing checkouts. No external content is approved.",
+      "scope": [
+        "crates/msduck-sql/src/projection/character_extrema.rs",
+        "crates/msduck-sql/tests/character_extrema.rs",
+        "tests/character_extrema.test.mjs"
+      ],
+      "acceptance": [
+        "Build a deterministic scoped plan for MIN/MAX over known CHAR/VARCHAR/NCHAR/NVARCHAR operands with Latin1_General_100_BIN2 collation. Preserve public aggregate/type structure until late translation; never infer collation or width from values. Leave unknown or linguistic collations unresolved rather than silently using BIN2.",
+        "Retain grouping, windows, DISTINCT validity, NULLs, source evaluation count and exact selected payloads. Preserve catalog/derived/CTE/parameter/APPLY/correlated scope metadata and existing aggregate preflight errors. Use native task67 adapters for final aggregation.",
+        "Add pure binding and public client regressions with captured BIN2 evidence, raw surrogate/byte-order boundaries, fixed widths, empty groups, derived scopes, prepared execution and errors. Keep original default-collation OPENJSON assertion unchanged; linguistic weights are still required for that gap.",
+        "Shared scope visitor modifications remain under this worker #45 claim in its original checkout; projection exports under #39 and root normalization/translation under #26. Do not copy claim receipts or expand active scopes. Run deterministic/native/client checks and report exact revision and remaining gaps."
+      ],
+      "dependencies": [],
+      "issue": 69,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHYXS"
     }
   ]
 }
