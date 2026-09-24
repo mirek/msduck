@@ -178,6 +178,7 @@ pub struct Session {
     transaction_name: String,
     xact_abort: bool,
     ansi_warnings: bool,
+    datefirst: i32,
     transaction_doomed: bool,
     caught_error: Option<SqlError>,
 }
@@ -206,6 +207,7 @@ impl Session {
             transaction_name: String::new(),
             xact_abort: false,
             ansi_warnings: true,
+            datefirst: 7,
             transaction_doomed: false,
             caught_error: None,
         })
@@ -564,12 +566,30 @@ impl Session {
     ) -> (Vec<u8>, bool) {
         let saved_nocount = self.nocount;
         let saved_xact_abort = self.xact_abort;
+        let saved_ansi_warnings = self.ansi_warnings;
+        let saved_datefirst = self.datefirst;
         let result = self.batch_response_inner(sql, parameters, rpc, handle);
         if rpc {
             self.nocount = saved_nocount;
             self.xact_abort = saved_xact_abort;
+            self.ansi_warnings = saved_ansi_warnings;
+            if self.datefirst != saved_datefirst
+                && let Err(error) = self.set_datefirst(saved_datefirst)
+            {
+                let mut out = Vec::new();
+                self.last_error = emit_error(&mut out, &error);
+                tds::done(&mut out, 0xfe, 2, 0, 0);
+                return (out, false);
+            }
         }
         result
+    }
+
+    fn set_datefirst(&mut self, first: i32) -> Result<()> {
+        self.db
+            .execute_batch(&format!("SET VARIABLE __msduck_datefirst = {first}"))?;
+        self.datefirst = first;
+        Ok(())
     }
 
     fn batch_response_inner(
@@ -910,6 +930,23 @@ impl Session {
                         );
                         tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
                         return (out, false);
+                    }
+                    if !rpc
+                        && matches!(statement, Statement::Set(_))
+                        && statement
+                            .to_string()
+                            .eq_ignore_ascii_case("SET LANGUAGE US_ENGLISH")
+                    {
+                        tds::diagnostic_utf16(
+                            &mut out,
+                            tds::DiagnosticKind::Information,
+                            0,
+                            1,
+                            5703,
+                            &"Changed language setting to us_english."
+                                .encode_utf16()
+                                .collect::<Vec<_>>(),
+                        );
                     }
                     out.extend(tokens);
                     self.last_error = 0;
@@ -1694,16 +1731,14 @@ impl Session {
                     (1..=7).contains(&first),
                     "DATEFIRST must be between 1 and 7"
                 );
-                self.db
-                    .execute_batch(&format!("SET VARIABLE __msduck_datefirst = {first}"))?;
+                self.set_datefirst(first)?;
                 return Ok(Execution::statement(vec![], None, 0));
             }
             if statement
                 .to_string()
                 .eq_ignore_ascii_case("SET LANGUAGE US_ENGLISH")
             {
-                self.db
-                    .execute_batch("SET VARIABLE __msduck_datefirst = 7")?;
+                self.set_datefirst(7)?;
             }
             let normalized = statement.to_string().to_uppercase().replace(" = ", " ");
             if matches!(
@@ -4471,6 +4506,34 @@ fn plp(out: &mut Vec<u8>, data: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rpc_settings_restore_after_native_transaction_failure() {
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        assert!(session.batch_response(
+            "CREATE TABLE dbo.scope_tx(n INT PRIMARY KEY); INSERT INTO dbo.scope_tx VALUES(1)",
+            &HashMap::new(), false, None,
+        ).1);
+        assert!(!session.batch_response(
+            "SET DATEFIRST 3; SET ANSI_WARNINGS OFF; BEGIN TRAN; INSERT INTO dbo.scope_tx VALUES(1)",
+            &HashMap::new(), true, None,
+        ).1);
+        assert_eq!(session.datefirst, 7);
+        assert!(session.ansi_warnings);
+        assert!(
+            session
+                .batch_response("ROLLBACK", &HashMap::new(), true, None)
+                .1
+        );
+        let first: i32 = session
+            .db
+            .query_row("SELECT getvariable('__msduck_datefirst')", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(first, 7);
+    }
+
     fn alignment_fields(count: usize) -> Vec<crate::query_catalog::Field> {
         (0..count)
             .map(|_| crate::query_catalog::Field {

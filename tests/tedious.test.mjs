@@ -3679,16 +3679,16 @@ test('DATEFIRST controls session week fields and reports TINYINT metadata', { ti
   await query(c,"CREATE VIEW dbo.datefirst_view AS SELECT DATEPART(weekday,'2007-04-21') AS d")
   const prepared=await prepare(c,"SELECT @@DATEFIRST,DATEPART(week,'2007-04-21'),DATEPART(weekday,'2007-04-21'),DATEPART(iso_week,'2007-04-21')",[])
   for(let first=1;first<=7;first++) {
-    await query(c,`SET DATEFIRST ${first}`)
+    assert.deepEqual((await capture(c,`SET DATEFIRST ${first}`)).errors,[])
     assert.deepEqual(await prepared.run({}),[[first,weeks[first-1],days[first-1],16]])
     assert.deepEqual((await query(c,'SELECT d FROM dbo.datefirst_view')).rows,[[days[first-1]]])
   }
-  await query(c,'DECLARE @first INT=3; SET DATEFIRST @first')
+  assert.deepEqual((await capture(c,'DECLARE @first INT=3; SET DATEFIRST @first')).errors,[])
   assert.deepEqual((await query(c,'SELECT @@DATEFIRST')).rows,[[3]])
   assert.deepEqual((await query(c,'SELECT 7/@@DATEFIRST')).rows,[[2]])
   const other=await start(t)
   assert.deepEqual((await query(other,'SELECT @@DATEFIRST')).rows,[[7]])
-  await query(c,'SET LANGUAGE US_ENGLISH')
+  assert.deepEqual((await capture(c,'SET LANGUAGE US_ENGLISH')).errors,[])
   assert.deepEqual((await query(c,'SELECT @@DATEFIRST')).rows,[[7]])
   await prepared.release()
 })
@@ -3697,6 +3697,7 @@ test('DATEFIRST preparation is inert and invalid values preserve session state',
   const c=await start(t)
   const prepared=await prepare(c,'SET DATEFIRST @first; SELECT @@DATEFIRST',[['first',TYPES.Int]])
   assert.deepEqual((await query(c,'SELECT @@DATEFIRST')).rows,[[7]])
+  assert.deepEqual((await capture(c,'SET DATEFIRST 2')).errors,[])
   assert.deepEqual(await prepared.run({first:2}),[[2]])
   for(const first of [0,8,-1,null]) {
     await assert.rejects(prepared.run({first}))
@@ -3704,7 +3705,7 @@ test('DATEFIRST preparation is inert and invalid values preserve session state',
   }
   assert.deepEqual(await prepared.run({first:5}),[[5]])
   await prepared.release()
-  await query(c,'BEGIN TRAN; SET DATEFIRST 1; ROLLBACK')
+  assert.deepEqual((await capture(c,'BEGIN TRAN; SET DATEFIRST 1; ROLLBACK')).errors,[])
   assert.deepEqual((await query(c,'SELECT @@DATEFIRST')).rows,[[1]])
 })
 
@@ -3780,7 +3781,7 @@ test('DATEPART integer inputs use legacy datetime day offsets', { timeout: 20000
   const empty=await query(c,'SELECT DATEPART(year,n) FROM dbo.datepart_integer WHERE 1=0')
   assert.deepEqual(empty.rows,[])
   assert.equal(empty.columns[0][0].dataLength,4)
-  await query(c,'SET DATEFIRST 1')
+  assert.deepEqual((await capture(c,'SET DATEFIRST 1')).errors,[])
   assert.deepEqual((await query(c,'SELECT DATEPART(weekday,0),DATEPART(week,6),DATEPART(iso_week,0)')).rows,[[1,1,1]])
 })
 
@@ -3821,7 +3822,7 @@ test('DATENAME honors session weeks and validates typed temporal fields', { time
   for(const [i,month] of months.entries()) assert.deepEqual((await query(c,`SELECT DATENAME(month,DATEFROMPARTS(2026,${i+1},1))`)).rows,[[month]])
   const prepared=await prepare(c,"SELECT DATENAME(weekday,CAST(@value AS DATETIME2(7))),DATENAME(week,CAST(@value AS DATETIME2(7))),DATENAME(iso_week,CAST(@value AS DATETIME2(7)))",[['value',TYPES.NVarChar]])
   for(let first=1;first<=7;first++) {
-    await query(c,`SET DATEFIRST ${first}`)
+    assert.deepEqual((await capture(c,`SET DATEFIRST ${first}`)).errors,[])
     assert.deepEqual(await prepared.run({value:'2007-04-21'}),[['Saturday',first===1||first===7?'16':'17','16']])
   }
   await assert.rejects(prepared.run({value:'bad'}),e=>e.number===241)
@@ -5510,7 +5511,7 @@ test('DATEDIFF and DATEDIFF_BIG count exact temporal boundaries with typed overf
   assert.deepEqual(reversed.rows,[[...Array(12).fill('-1'),'-100']])
   reversed.columns[0].forEach(col=>assert.equal(col.dataLength,8))
   for(const first of [1,7]) {
-    await query(c,`SET DATEFIRST ${first}`)
+    assert.deepEqual((await capture(c,`SET DATEFIRST ${first}`)).errors,[])
     assert.deepEqual((await query(c,"SELECT DATEDIFF(week,'2024-01-06','2024-01-07'),DATEDIFF(week,'2024-01-07','2024-01-08'),DATEDIFF(week,'2023-12-31','2024-01-01')")).rows,[[1,0,0]])
   }
   assert.deepEqual((await query(c,"SELECT DATEDIFF(day,'2036-03-01','2036-02-28'),DATEDIFF(hour,'12:59:59.9999999','13:00:00'),DATEDIFF(day,CAST('12:00:00' AS TIME(7)),CAST('13:00:00' AS TIME(7))),DATEDIFF(day,0,1),DATEDIFF(day,NULL,'2024-01-01'),DATEDIFF_BIG(ns,'2024-01-01',NULL)")).rows,[[-2,1,0,1,null,null]])
@@ -5906,7 +5907,7 @@ test('DATEPART and DATENAME retain DATETIMEOFFSET local fields and signed offset
   await query(c,"CREATE TABLE dbo.dto_parts(id INT,d DATETIMEOFFSET(7)); INSERT INTO dbo.dto_parts VALUES(1,'2024-01-01T00:15:30-00:30'),(2,'2024-01-01T00:15:30Z'),(3,NULL)")
   assert.deepEqual((await query(c,'SELECT DATEPART(tz,d),DATENAME(tz,d),DATENAME(weekday,d) FROM dbo.dto_parts ORDER BY id')).rows,[[-30,'-00:30','Monday'],[0,'+00:00','Monday'],[null,null,null]])
   for(const [first,day] of [[1,1],[7,2]]) {
-    await query(c,`SET DATEFIRST ${first}`)
+    assert.deepEqual((await capture(c,`SET DATEFIRST ${first}`)).errors,[])
     assert.deepEqual((await query(c,'SELECT DATEPART(weekday,d),DATEPART(iso_week,d) FROM dbo.dto_parts WHERE id=1')).rows,[[day,1]])
   }
   const empty=await query(c,'SELECT DATEPART(tz,d),DATENAME(tz,d) FROM dbo.dto_parts WHERE 1=0')
@@ -9278,5 +9279,14 @@ for (const entry of JSON.parse(readFileSync(new URL('../reference/object-catalog
     for (const {sql, result} of entry.results) {
       assert.deepEqual(canonical(await capture(c, sql)), result, sql)
     }
+  })
+}
+
+const sessionScopeCases=JSON.parse(readFileSync(new URL('../reference/rpc-session-scope.json',import.meta.url),'utf8')).results
+for (const entry of sessionScopeCases) {
+  test(`session setting scope: ${entry.name}`, {timeout:20000}, async t => {
+    const {captureStep}=await import('../scripts/capture-rpc-session-scope.mjs')
+    const c=await start(t)
+    for (const step of entry.steps) assert.deepEqual(await captureStep(c,step),step.result,`${entry.name}: ${step.sql}`)
   })
 }

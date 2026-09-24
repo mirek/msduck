@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import { Request, TYPES } from 'tedious'
-import { start, query } from './support/client.mjs'
+import { start } from './support/client.mjs'
 import { capture, canonical, differences } from '../scripts/lib/compatibility.mjs'
 
 async function orderedCapture(connection, sql) {
@@ -107,7 +107,7 @@ test('prepared aggregate executions keep diagnostic state isolated and honor set
     ['OFF', null, 2, []],
     ['ON', null, 2, [8153]],
   ]) {
-    await query(connection, `SET ANSI_WARNINGS ${mode}`)
+    assert.deepEqual((await orderedCapture(connection, `SET ANSI_WARNINGS ${mode}`)).errors, [])
     info.length = 0
     const rows = []
     const row = cells => rows.push(cells.map(cell => cell.value))
@@ -131,7 +131,7 @@ test('prepared aggregate executions keep diagnostic state isolated and honor set
 for (const mode of ['ON', 'OFF']) {
   test(`aggregate warnings ANSI_WARNINGS ${mode} match SQL Server results and event order`, async t => {
     const connection = await start(t)
-    await query(connection, `SET ANSI_WARNINGS ${mode}`)
+    assert.deepEqual((await orderedCapture(connection, `SET ANSI_WARNINGS ${mode}`)).errors, [])
     const results = []
     for (const sample of fixture.results.filter(sample => sample.mode === mode)) {
       const actual = await orderedCapture(connection, sample.sql)
