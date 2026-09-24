@@ -962,7 +962,7 @@
     {
       "id": "character-aggregate-carrier-v1",
       "title": "Preserve character aggregate payloads at declared cast boundaries",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal and priority to repair full CI after integration. Owner-run reproduction on the merged tree shows MAX over a typed OPENJSON view stringifies its physical UTF16 carrier. Original concat-integration-v1 worker retains src/concat_lower.rs and existing client test scope; this task supplies new regression coverage. No external content consumed.",
       "scope": [
         "tests/character_aggregate_carrier.rs"
