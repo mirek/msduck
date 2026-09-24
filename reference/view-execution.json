@@ -1,0 +1,900 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "identicalFreshCaptures": 2,
+  "results": [
+    {
+      "id": "base",
+      "sql": "CREATE TABLE dbo.view_input(v INT); INSERT INTO dbo.view_input VALUES(1),(NULL),(2); CREATE TABLE dbo.view_sink(v INT)",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 3,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      }
+    },
+    {
+      "id": "schema",
+      "sql": "CREATE SCHEMA other",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "unqualified-definition",
+      "sql": "CREATE VIEW dbo.view_unqualified AS SELECT MIN(v) AS result FROM view_input",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "nested-definition",
+      "sql": "CREATE VIEW dbo.view_nested AS SELECT result FROM dbo.view_unqualified",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "local-cte-definition",
+      "sql": "CREATE VIEW dbo.view_local_cte AS WITH view_input AS (SELECT MIN(v) AS result FROM dbo.view_input) SELECT result FROM view_input",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "dot-definition",
+      "sql": "CREATE VIEW dbo.[view.with.dot](answer) AS SELECT MIN(v) FROM dbo.view_input",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "same-dbo-definition",
+      "sql": "CREATE VIEW dbo.same AS SELECT MIN(v) AS result FROM dbo.view_input",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "same-other-definition",
+      "sql": "CREATE VIEW other.same AS SELECT MAX(v) AS result FROM dbo.view_input",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "ordinary",
+      "sql": "SELECT result FROM dbo.view_unqualified",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "outer-cte-table-shadow",
+      "sql": "WITH view_input AS (SELECT 99 AS v) SELECT result FROM dbo.view_unqualified",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "outer-cte-view-shadow",
+      "sql": "WITH view_unqualified AS (SELECT 42 AS result) SELECT result FROM view_unqualified",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 0,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "outer-cte-qualified-view",
+      "sql": "WITH view_unqualified AS (SELECT 42 AS result) SELECT result FROM dbo.view_unqualified",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "local-cte",
+      "sql": "WITH view_input AS (SELECT 99 AS v) SELECT result FROM dbo.view_local_cte",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "nested",
+      "sql": "WITH view_input AS (SELECT 99 AS v) SELECT result FROM dbo.view_nested",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "aliased",
+      "sql": "SELECT a.result FROM dbo.view_unqualified AS a",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "qualified",
+      "sql": "SELECT dbo.view_unqualified.result FROM dbo.view_unqualified",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "qualified-star",
+      "sql": "SELECT dbo.view_unqualified.* FROM dbo.view_unqualified",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "quoted-dot",
+      "sql": "SELECT dbo.[view.with.dot].answer FROM dbo.[view.with.dot]",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "answer",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "schema-collision",
+      "sql": "SELECT dbo.same.result AS lo,other.same.result AS hi FROM dbo.same CROSS JOIN other.same",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 1013,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The objects \"other.same\" and \"dbo.same\" in the FROM clause have the same exposed names. Use correlation names to distinguish them."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "ambiguous-short-name",
+      "sql": "SELECT same.result FROM dbo.same CROSS JOIN other.same",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 1013,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The objects \"other.same\" and \"dbo.same\" in the FROM clause have the same exposed names. Use correlation names to distinguish them."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "correlated",
+      "sql": "SELECT (SELECT a.result) AS result FROM dbo.view_unqualified AS a",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "pruned",
+      "sql": "SELECT result FROM dbo.view_nested WHERE 1=0",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "insert",
+      "sql": "INSERT INTO dbo.view_sink SELECT result FROM dbo.view_nested",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "insert-readback",
+      "sql": "SELECT v FROM dbo.view_sink",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "v",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "assignment",
+      "sql": "DECLARE @v INT; SET @v=(SELECT result FROM dbo.view_nested); SELECT @v AS result",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "id": "warnings-off",
+      "sql": "SET ANSI_WARNINGS OFF",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "off-nested",
+      "sql": "WITH view_input AS (SELECT 99 AS v) SELECT result FROM dbo.view_nested",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    }
+  ]
+}
