@@ -110,3 +110,38 @@ fn unique_integer_keys_treat_null_as_one_key_distinct_from_zero() {
             .unwrap();
     assert_eq!(count, 2);
 }
+
+#[test]
+fn persistent_logical_identity_survives_database_reopen() {
+    let path = std::env::temp_dir().join(format!(
+        "msduck-index-reopen-{}-{}.duckdb",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let expected;
+    {
+        let server = Server::open(path.to_str().unwrap()).unwrap();
+        let mut s = Session::new(server.connection().unwrap()).unwrap();
+        let (response, ok) = s.batch_response(
+            "CREATE TABLE dbo.a(id INT)",
+            &Default::default(),
+            false,
+            None,
+        );
+        assert!(ok, "{response:?}");
+        register(&s.db).unwrap();
+        expected = make(&s, "CREATE UNIQUE INDEX ix ON dbo.a(id)").unwrap();
+    }
+    {
+        let server = Server::open(path.to_str().unwrap()).unwrap();
+        let s = Session::new(server.connection().unwrap()).unwrap();
+        register(&s.db).unwrap();
+        assert_eq!(acquire(&s.db).unwrap(), vec![expected.clone()]);
+        drop_index(&s.db, &expected, Transaction::Owned).unwrap();
+        assert!(acquire(&s.db).unwrap().is_empty());
+    }
+    std::fs::remove_file(path).unwrap();
+}
