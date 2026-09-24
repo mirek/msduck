@@ -1421,6 +1421,25 @@
       "dependencies": [],
       "issue": 148,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJ1fO"
+    },
+    {
+      "id": "attention-compute-reference-v1",
+      "title": "Capture SQL Server cancellation during active computation",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. First-party DuckDB probe at f8e7372 shows native interruption aborts explicit transactions; existing SQL Server WAITFOR captures do not establish equivalent computing-query behavior. Capture the matching execution class before engine integration.",
+      "scope": [
+        "scripts/capture-attention-compute.mjs",
+        "reference/attention-compute.json",
+        "docs/attention-compute-reference.md"
+      ],
+      "acceptance": [
+        "Capture active row-producing computation cancellation for batch/direct RPC/prepared execution, explicit/autocommit transactions, XACT_ABORT ON/OFF and TRY/CATCH, confirming the exact active SELECT through a second connection before sending Attention.",
+        "Preserve raw packets, response message boundaries, completion/metadata tokens, transaction descriptors and follow-up rows/state. Keep nondeterministic scheduler observations separate from stable protocol comparisons; unknown tokens fail rather than disappear.",
+        "Capture twice in fresh pinned SQL Server databases and independently recapture the retained fixture. Record comparison with the native DuckDB transaction probe and remaining write/commit/streaming/race gaps without claiming runtime cancellation implementation."
+      ],
+      "dependencies": [],
+      "issue": 152,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJ5CW"
     }
   ]
 }
