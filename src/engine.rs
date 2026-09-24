@@ -407,8 +407,8 @@ impl Session {
             let money_assignments = crate::update::money_assignments(&statement, &parameters);
             crate::aggregate_columns::annotate(&self.db, &mut statement, &parameters)
                 .map_err(anyhow::Error::msg)?;
-            crate::concat_lower::annotated_unicode_casts(&mut statement);
             crate::query_catalog::bind_unicode_operations(&self.db, &mut statement, &parameters)?;
+            crate::concat_lower::annotated_unicode_casts(&mut statement);
             crate::for_json::lower_nested(&self.db, &mut statement, &parameters)?;
             let mut translator = Translator {
                 parameters: &parameters,
@@ -496,8 +496,8 @@ impl Session {
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
             .map_err(anyhow::Error::msg)?;
-        crate::concat_lower::annotated_unicode_casts(&mut expression);
         crate::query_catalog::bind_unicode_expression(&self.db, &mut expression, parameters)?;
+        crate::concat_lower::annotated_unicode_casts(&mut expression);
         crate::for_json::lower_nested(&self.db, &mut expression, parameters)?;
         let mut translator = Translator {
             parameters,
@@ -1654,8 +1654,8 @@ impl Session {
         crate::concat_lower::statement(&mut statement, parameters).map_err(anyhow::Error::msg)?;
         crate::aggregate_columns::annotate(&self.db, &mut statement, parameters)
             .map_err(anyhow::Error::msg)?;
-        crate::concat_lower::annotated_unicode_casts(&mut statement);
         crate::query_catalog::bind_unicode_operations(&self.db, &mut statement, parameters)?;
+        crate::concat_lower::annotated_unicode_casts(&mut statement);
         crate::for_json::lower_nested(&self.db, &mut statement, parameters)?;
         let checked_projection = if output.is_none()
             && json.is_none()
@@ -2263,8 +2263,8 @@ impl Session {
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
             .map_err(anyhow::Error::msg)?;
-        crate::concat_lower::annotated_unicode_casts(&mut expression);
         crate::query_catalog::bind_unicode_expression(&self.db, &mut expression, parameters)?;
+        crate::concat_lower::annotated_unicode_casts(&mut expression);
         crate::for_json::lower_nested(&self.db, &mut expression, parameters)?;
         let mut translator = Translator {
             parameters,

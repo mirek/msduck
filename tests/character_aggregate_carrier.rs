@@ -88,3 +88,31 @@ fn aggregate_character_casts_preserve_numeric_conversion_and_ansi_payloads() {
         .unwrap();
     assert_eq!(value, "€ab");
 }
+
+#[test]
+fn engine_binds_bin2_before_converting_aggregate_operands_to_carriers() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    execute(
+        &mut session,
+        "CREATE TABLE bin2_aggregate(s NVARCHAR(8) COLLATE Latin1_General_100_BIN2); INSERT INTO bin2_aggregate VALUES(N'ÿ'),(N'Ā'),(NULL)",
+    );
+    for (index, source) in ["bin2_aggregate", "(SELECT s FROM bin2_aggregate) d"]
+        .into_iter()
+        .enumerate()
+    {
+        execute(
+            &mut session,
+            &format!("SELECT MIN(s) AS lo,MAX(s) AS hi INTO bin2_result_{index} FROM {source}"),
+        );
+        let values: (Vec<u8>, Vec<u8>) = session
+            .db
+            .query_row(
+                &format!("SELECT lo.__msduck_utf16le,hi.__msduck_utf16le FROM bin2_result_{index}"),
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(values, (vec![255, 0], vec![0, 1]));
+    }
+}
