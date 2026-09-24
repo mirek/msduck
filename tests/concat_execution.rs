@@ -10,7 +10,8 @@ fn nested_unicode_casts_preserve_distinct_widths_and_fixed_padding() {
         &Default::default(),false,None,
     );
     assert!(ok, "{response:?}");
-    let rows: Vec<(Option<Vec<u8>>,Option<Vec<u8>>)> = session.db
+    type ByteColumns = (Option<Vec<u8>>, Option<Vec<u8>>);
+    let rows: Vec<ByteColumns> = session.db
         .prepare("SELECT varying.__msduck_utf16le,fixed.__msduck_utf16le FROM cast_chain_result ORDER BY varying NULLS FIRST").unwrap()
         .query_map([],|r|Ok((r.get(0)?,r.get(1)?))).unwrap()
         .collect::<duckdb::Result<_>>().unwrap();

@@ -310,16 +310,13 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
                     ..
                 } = expr
                 {
-                    loop {
-                        let Expr::Cast {
-                            expr: inner,
-                            data_type: inner_type,
-                            kind: CastKind::Cast,
-                            format: None,
-                        } = source.as_ref()
-                        else {
-                            break;
-                        };
+                    while let Expr::Cast {
+                        expr: inner,
+                        data_type: inner_type,
+                        kind: CastKind::Cast,
+                        format: None,
+                    } = source.as_ref()
+                    {
                         if inner_type != data_type {
                             break;
                         }
