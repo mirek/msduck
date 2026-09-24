@@ -630,11 +630,8 @@ impl Session {
                         if self.catch_error(&mut pending, &error) {
                             continue;
                         }
-                        self.error(
-                            &mut out,
-                            error_number(&error.to_string()),
-                            &error.to_string(),
-                        );
+                        self.last_error = emit_error(&mut out, &error);
+                        self.rollback_doomed(&mut out);
                         tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
                         return (out, false);
                     }
@@ -736,11 +733,8 @@ impl Session {
                     if self.catch_error(&mut pending, &error) {
                         continue;
                     }
-                    self.error(
-                        &mut out,
-                        error_number(&error.to_string()),
-                        &error.to_string(),
-                    );
+                    self.last_error = emit_error(&mut out, &error);
+                    self.rollback_doomed(&mut out);
                     tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
                     return (out, false);
                 }
@@ -754,6 +748,7 @@ impl Session {
                             continue;
                         }
                         self.last_error = emit_error(&mut out, &error);
+                        self.rollback_doomed(&mut out);
                         tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
                         return (out, false);
                     }
@@ -770,7 +765,10 @@ impl Session {
                 executed_leaf = true;
                 self.rowcount = 0;
                 let is_error = raised.delivery == msduck_core::raiserror::Delivery::Error;
-                if is_error && self.catch_error(&mut pending, &raised.diagnostic.clone().into()) {
+                if is_error
+                    && pending.iter().any(|work| work.catch_handler.is_some())
+                    && self.catch_error(&mut pending, &raised.diagnostic.clone().into())
+                {
                     if let Some(offset) = control_done(&mut out, rpc, self.nocount, 246) {
                         last_done = Some(offset);
                     }
@@ -934,12 +932,7 @@ impl Session {
                     }
                     self.last_error = emit_error(&mut out, &e);
                     if self.transaction_doomed {
-                        match self.rollback_transaction("") {
-                            Ok(tokens) => out.extend(tokens),
-                            Err(error) => {
-                                emit_error(&mut out, &error);
-                            }
-                        }
+                        self.rollback_doomed(&mut out);
                         tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
                         return (out, false);
                     }
@@ -1015,12 +1008,7 @@ impl Session {
             if let Some(offset) = last_done {
                 out[offset + 1] |= 1;
             }
-            match self.rollback_transaction("") {
-                Ok(tokens) => out.extend(tokens),
-                Err(error) => {
-                    emit_error(&mut out, &error);
-                }
-            }
+            self.rollback_doomed(&mut out);
             self.error(&mut out, 3998, "Uncommittable transaction is detected at the end of the batch. The transaction is rolled back.");
             tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
             self.caught_error = None;
@@ -1119,6 +1107,16 @@ impl Session {
         }
         self.transactions += 1;
         Ok(out)
+    }
+    fn rollback_doomed(&mut self, out: &mut Vec<u8>) {
+        if self.transaction_doomed {
+            match self.rollback_transaction("") {
+                Ok(tokens) => out.extend(tokens),
+                Err(error) => {
+                    emit_error(out, &error);
+                }
+            }
+        }
     }
     fn require_committable(&self) -> Result<()> {
         if self.transaction_doomed {

@@ -67,3 +67,51 @@ fn doomed_batch_end_rolls_back_and_next_transaction_can_commit() {
         3
     );
 }
+
+#[test]
+fn uncaught_raiserror_keeps_xact_abort_transaction_committable() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let (_, ok) = session.batch_response(
+        "CREATE TABLE dbo.uncaught_raise(i INT); SET XACT_ABORT ON;
+         BEGIN TRAN; INSERT dbo.uncaught_raise VALUES(1);
+         RAISERROR('application error',16,1); INSERT dbo.uncaught_raise VALUES(2)",
+        &Default::default(),
+        false,
+        None,
+    );
+    assert!(!ok);
+    assert_eq!(session.transactions, 1);
+    session.commit_transaction().unwrap();
+    assert_eq!(
+        session
+            .db
+            .query_row("SELECT count(*) FROM dbo.uncaught_raise", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        2
+    );
+}
+
+#[test]
+fn uncaught_condition_error_rolls_back_xact_abort_transaction() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let (_, ok) = session.batch_response(
+        "CREATE TABLE dbo.condition_abort(i INT); SET XACT_ABORT ON;
+         BEGIN TRAN; INSERT dbo.condition_abort VALUES(1); IF 1/0=0 SELECT 42",
+        &Default::default(),
+        false,
+        None,
+    );
+    assert!(!ok);
+    assert_eq!(session.transactions, 0);
+    assert_eq!(
+        session
+            .db
+            .query_row("SELECT count(*) FROM dbo.condition_abort", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+}

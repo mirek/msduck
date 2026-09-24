@@ -6410,15 +6410,15 @@ test('character storage enforces widths padding trailing spaces and atomic write
   await query(c,"INSERT INTO dbo.character_store VALUES(1,'a','a',N'🦆',N'🦆'),(2,'abc   ','abc   ',N'abc   ',N'abc   '),(3,'','',N'',N''),(4,NULL,NULL,NULL,NULL)")
   assert.deepEqual((await query(c,'SELECT * FROM dbo.character_store ORDER BY id')).rows,[[1,'a','a  ','🦆','🦆 '],[2,'abc','abc','abc','abc'],[3,'','   ','','   '],[4,null,null,null,null]])
   for(const [column,value] of [['v',"'abcd'"],['c',"'abcd'"],['n',"N'🦆🦆'"],['nc',"N'🦆🦆'"]]) {
-    await assert.rejects(query(c,`INSERT INTO dbo.character_store(id,${column}) VALUES(10,'ok'),(11,${value})`),e=>e.number===8152)
+    await assert.rejects(query(c,`INSERT INTO dbo.character_store(id,${column}) VALUES(10,'ok'),(11,${value})`),e=>e.number===2628)
     assert.deepEqual((await query(c,'SELECT COUNT(*) FROM dbo.character_store WHERE id>=10')).rows,[[0]])
-    await assert.rejects(query(c,`UPDATE dbo.character_store SET ${column}=${value} WHERE id IN(1,2)`),e=>e.number===8152)
+    await assert.rejects(query(c,`UPDATE dbo.character_store SET ${column}=${value} WHERE id IN(1,2)`),e=>e.number===2628)
   }
   assert.deepEqual((await query(c,'SELECT * FROM dbo.character_store WHERE id=1')).rows,[[1,'a','a  ','🦆','🦆 ']])
   await query(c,"UPDATE dbo.character_store SET c='b',nc=N'x',v='xyz   ' WHERE id=1")
   assert.deepEqual((await query(c,'SELECT v,c,nc FROM dbo.character_store WHERE id=1')).rows,[['xyz','b  ','x  ']])
   const p=await prepare(c,'INSERT INTO dbo.character_store(id,nc) VALUES(@id,@text)',[['id',TYPES.Int],['text',TYPES.NVarChar]])
-  await assert.rejects(p.run({id:20,text:'abcd'}),e=>e.number===8152)
+  await assert.rejects(p.run({id:20,text:'abcd'}),e=>e.number===2628)
   await p.run({id:20,text:'z'});await p.release()
   assert.deepEqual((await query(c,'SELECT nc FROM dbo.character_store WHERE id=20')).rows,[['z  ']])
   await query(c,"CREATE TABLE dbo.character_defaults(id INT,v VARCHAR(3) DEFAULT 'x',c CHAR(3) DEFAULT 'y',n NCHAR(3) DEFAULT N'z'); INSERT INTO dbo.character_defaults(id) VALUES(1); INSERT INTO dbo.character_defaults DEFAULT VALUES")
@@ -6435,7 +6435,7 @@ test('character storage enforces widths padding trailing spaces and atomic write
   assert.equal((await query(c,'SELECT v FROM dbo.character_alter WHERE 1=0')).columns[0][0].dataLength,10)
   await query(c,"UPDATE dbo.character_alter SET v=N'a'; ALTER TABLE dbo.character_alter ALTER COLUMN v NCHAR(3)")
   assert.deepEqual((await query(c,'SELECT v FROM dbo.character_alter')).rows,[['a  ']])
-  assert.deepEqual((await query(c,"BEGIN TRY INSERT INTO dbo.character_store(id,v) VALUES(30,'too long') END TRY BEGIN CATCH SELECT ERROR_NUMBER() END CATCH")).rows,[[8152]])
+  assert.deepEqual((await query(c,"BEGIN TRY INSERT INTO dbo.character_store(id,v) VALUES(30,'too long') END TRY BEGIN CATCH SELECT ERROR_NUMBER() END CATCH")).rows,[[2628]])
 })
 
 test('DATALENGTH counts SQL bytes preserves spaces and MAX metadata', {timeout:30000}, async t=>{

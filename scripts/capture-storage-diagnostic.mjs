@@ -44,6 +44,12 @@ await withReferenceContainer(async(config,container)=>{
    ['arithmetic',"SELECT 1/0 AS n"],
   ]) probes.push({id:`${setting}-${label}`,sql:`SET XACT_ABORT ${setting}; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY ${statement}; END TRY BEGIN CATCH ${state}; ROLLBACK; END CATCH; SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs`});
   for(const severity of [10,11,16]) probes.push({id:`ON-raiserror-${severity}-commit`,sql:`SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); SELECT XACT_STATE() AS before_error; BEGIN TRY RAISERROR('application error',${severity},1); END TRY BEGIN CATCH ${state}; END CATCH; BEGIN TRY COMMIT; SELECT 1 AS committed; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS commit_error,XACT_STATE() AS xs; ROLLBACK; END CATCH`});
+  for(const setting of ['OFF','ON']) for(const [label,body] of [
+   ['uncaught-raiserror',"RAISERROR('application error',16,1); SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs"],
+   ['uncaught-throw',"THROW 50001,'application error',1; SELECT 42 AS continued"],
+   ['uncaught-condition',"IF 1/0=0 SELECT 42 AS continued"],
+   ['caught-condition',`BEGIN TRY IF 1/0=0 SELECT 42 AS continued; END TRY BEGIN CATCH ${state}; ROLLBACK; END CATCH`],
+  ]) probes.push({id:`${setting}-${label}`,sql:`SET XACT_ABORT ${setting}; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); ${body}`});
   for(const probe of probes) {
    const isolated=await connect(config);
    try {
