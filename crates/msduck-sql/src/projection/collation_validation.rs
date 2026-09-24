@@ -89,7 +89,7 @@ struct Bindings {
 }
 enum BinaryDirection {
     FromCharacter { unicode: bool },
-    ToUnicode { style: Expr, trying: bool },
+    ToUnicode { style: Box<Expr>, trying: bool },
 }
 struct BinaryInput {
     direction: BinaryDirection,
@@ -144,7 +144,10 @@ fn binary_input(catalog: &CatalogSnapshot, expr: &Expr, scope: &Scope) -> Option
             return None;
         }
         return Some(BinaryInput {
-            direction: BinaryDirection::ToUnicode { style, trying },
+            direction: BinaryDirection::ToUnicode {
+                style: Box::new(style),
+                trying,
+            },
             target: target.clone(),
             width,
             fixed,
@@ -626,7 +629,7 @@ pub fn lower_unicode_binary_conversions(
                             && let FunctionArguments::List(args) = &mut f.args
                         {
                             args.args
-                                .push(FunctionArg::Unnamed(FunctionArgExpr::Expr(style)));
+                                .push(FunctionArg::Unnamed(FunctionArgExpr::Expr(*style)));
                         }
                         call
                     }
