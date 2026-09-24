@@ -1328,6 +1328,25 @@
       "dependencies": [],
       "issue": 137,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJtP0"
+    },
+    {
+      "id": "attention-reference-v1",
+      "title": "Capture SQL Server Attention cancellation and reuse",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Owner-authored cancellation design at 4437ca3 identifies missing active cancellation; capture first-party SQL Server ground truth before runtime changes. No third-party content used.",
+      "scope": [
+        "scripts/capture-attention.mjs",
+        "reference/attention.json",
+        "docs/attention-reference.md"
+      ],
+      "acceptance": [
+        "Capture raw post-login TDS packets and message boundaries plus client cancellation outcomes and reuse for batch, direct RPC and prepared execution, with observer-confirmed running execution rather than fixed sleeps.",
+        "Capture explicit/autocommit transactions, XACT_ABORT ON/OFF and TRY/CATCH, retained settings and prepared reuse; preserve raw differences and distinguish deterministic observations from timing-dependent traces.",
+        "Repeat captures in fresh pinned SQL Server databases and independently recapture retained observations. Document remaining idle, IGNORE, completion-race, repeated-Attention, disconnect, write/backpressure and TLS coverage instead of claiming full cancellation fidelity."
+      ],
+      "dependencies": [],
+      "issue": 140,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJw_l"
     }
   ]
 }
