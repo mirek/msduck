@@ -32,3 +32,10 @@ pre-EOM IGNORE, completion races and disconnect. The opt-in entry point must not
 be treated as general batch cancellation or enabled on the live wire until those
 admission and transport policies are defined. A bound plan must exclude unsupported
 side effects; backend SELECT/read-only flags alone do not prove this property.
+
+The original reference query uses `sys.all_objects`, which is not implemented in
+the current server. The engine regression therefore uses a populated user table
+and a native marker to reproduce the computing-read cancellation class. It compares
+captured protocol/state observations, not unchanged execution of the original SQL.
+The missing system catalog view remains a compatibility gap; no stand-in view or
+fabricated catalog rows were added by this task.

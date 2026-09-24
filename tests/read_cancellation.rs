@@ -109,12 +109,16 @@ fn cancelled_computations_match_reference_completion_and_preserve_session_work()
         let abort = e["xactAbort"].as_bool().unwrap();
         let in_try = e["tryCatch"].as_bool().unwrap();
         let setup = format!(
-            "CREATE TABLE dbo.cancel_probe(n INT); SET XACT_ABORT {}; SET DATEFIRST 2; {}",
+            "CREATE TABLE dbo.cancel_probe(n INT); CREATE TABLE dbo.compute_input(object_id INT); SET XACT_ABORT {}; SET DATEFIRST 2; {}",
             if abort { "ON" } else { "OFF" },
             if explicit { "BEGIN TRANSACTION" } else { "" }
         );
         let (setup_tokens, ok) = session.batch_response(&setup, &Default::default(), false, None);
         assert!(ok, "{setup_tokens:?}");
+        session
+            .db
+            .execute_batch("INSERT INTO dbo.compute_input SELECT i::INTEGER FROM range(1000) t(i)")
+            .unwrap();
         let descriptor = session.transaction_descriptor;
         let mode = match e["mode"].as_str().unwrap() {
             "batch" => Mode::Batch,
@@ -122,7 +126,7 @@ fn cancelled_computations_match_reference_completion_and_preserve_session_work()
             "prepared" => Mode::Prepared,
             _ => unreachable!(),
         };
-        let body = "INSERT dbo.cancel_probe VALUES(1); IF @hold=1 SELECT SUM(CAST(msduck_cancel_marker(a.object_id) AS FLOAT)*b.object_id) AS work FROM sys.all_objects a CROSS JOIN sys.all_objects b CROSS JOIN sys.all_objects c; INSERT dbo.cancel_probe VALUES(2); SELECT 42 AS completed";
+        let body = "INSERT dbo.cancel_probe VALUES(1); IF @hold=1 SELECT SUM(CAST(msduck_cancel_marker(a.object_id) AS FLOAT)*b.object_id) AS work FROM dbo.compute_input a CROSS JOIN dbo.compute_input b CROSS JOIN dbo.compute_input c; INSERT dbo.cancel_probe VALUES(2); SELECT 42 AS completed";
         let sql = if in_try {
             format!(
                 "BEGIN TRY {body} END TRY BEGIN CATCH INSERT dbo.cancel_probe VALUES(3); SELECT ERROR_NUMBER() AS caught END CATCH"
