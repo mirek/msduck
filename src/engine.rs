@@ -179,6 +179,7 @@ pub struct Session {
     xact_abort: bool,
     ansi_warnings: bool,
     datefirst: i32,
+    backend_datefirst: std::cell::Cell<i32>,
     transaction_doomed: bool,
     caught_error: Option<SqlError>,
 }
@@ -208,6 +209,7 @@ impl Session {
             xact_abort: false,
             ansi_warnings: true,
             datefirst: 7,
+            backend_datefirst: std::cell::Cell::new(7),
             transaction_doomed: false,
             caught_error: None,
         })
@@ -573,22 +575,31 @@ impl Session {
             self.nocount = saved_nocount;
             self.xact_abort = saved_xact_abort;
             self.ansi_warnings = saved_ansi_warnings;
-            if self.datefirst != saved_datefirst
-                && let Err(error) = self.set_datefirst(saved_datefirst)
-            {
-                let mut out = Vec::new();
-                self.last_error = emit_error(&mut out, &error);
-                tds::done(&mut out, 0xfe, 2, 0, 0);
-                return (out, false);
-            }
+            // Restoring caller state must not execute SQL in an aborted native
+            // transaction or replace the request's original diagnostics.
+            self.datefirst = saved_datefirst;
         }
         result
     }
 
     fn set_datefirst(&mut self, first: i32) -> Result<()> {
-        self.db
-            .execute_batch(&format!("SET VARIABLE __msduck_datefirst = {first}"))?;
+        let previous = self.datefirst;
         self.datefirst = first;
+        if let Err(error) = self.sync_datefirst() {
+            self.datefirst = previous;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn sync_datefirst(&self) -> Result<()> {
+        if self.backend_datefirst.get() != self.datefirst {
+            self.db.execute_batch(&format!(
+                "SET VARIABLE __msduck_datefirst = {}",
+                self.datefirst
+            ))?;
+            self.backend_datefirst.set(self.datefirst);
+        }
         Ok(())
     }
 
@@ -1279,6 +1290,7 @@ impl Session {
             self.transaction_name.clear();
         }
         self.transactions -= 1;
+        self.sync_datefirst()?;
         Ok(out)
     }
     pub fn rollback_transaction(&mut self, name: &str) -> Result<Vec<u8>> {
@@ -1297,6 +1309,7 @@ impl Session {
         self.transaction_doomed = false;
         self.transaction_descriptor = 0;
         self.transaction_name.clear();
+        self.sync_datefirst()?;
         Ok(out)
     }
     pub fn transaction_request(&mut self, request: tds::TransactionRequest) -> Result<Vec<u8>> {
@@ -1398,6 +1411,14 @@ impl Session {
         statement: Statement,
         parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Execution> {
+        if !matches!(
+            statement,
+            Statement::Rollback { .. }
+                | Statement::Commit { .. }
+                | Statement::StartTransaction { .. }
+        ) {
+            self.sync_datefirst()?;
+        }
         if let Some(request) = msduck_sql::drop_index_syntax::request(&statement) {
             self.require_committable()?;
             return self.execute_drop_index(request);
@@ -2581,6 +2602,7 @@ impl Session {
         predicate: bool,
         diagnostics: Option<&crate::statement_diagnostics::Scope>,
     ) -> Result<Value> {
+        self.sync_datefirst()?;
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
             .map_err(anyhow::Error::msg)?;
