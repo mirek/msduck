@@ -213,12 +213,28 @@ pub(super) fn projection(columns: &[OpenJsonTableColumn]) -> Result<Vec<SelectIt
                 Expr::CompoundIdentifier(vec![Ident::new("x"), Ident::new("r")]),
                 crate::engine::unary_function("__msduck_carrier_input", Expr::Value(Value::SingleQuotedString(path).into())),
             );
-            let expr = Expr::Cast {
+            let kind = declared_type(&column.r#type);
+            let expr = if let Ok(msduck_core::types::Type::Character(target)) = msduck_sql::sql_type::declaration(&kind) {
+                use msduck_core::character::{Family, Length};
+                crate::engine::binary_function(
+                    match target.family() {
+                        Family::Nvarchar => "__msduck_cast_carrier_nvarchar",
+                        Family::Nchar => "__msduck_cast_carrier_nchar",
+                        Family::Varchar => "__msduck_cast_carrier_varchar",
+                        Family::Char => "__msduck_cast_carrier_char",
+                    },
+                    value,
+                    msduck_sql::expr::number(match target.length() {
+                        Length::Max => -1,
+                        Length::Bounded(n) => i32::from(n),
+                    }),
+                )
+            } else { Expr::Cast {
                 kind: CastKind::Cast,
                 expr: Box::new(value),
-                data_type: declared_type(&column.r#type),
+                data_type: kind,
                 format: None,
-            };
+            }};
             Ok(SelectItem::ExprWithAlias {
                 expr,
                 alias: column.name.clone(),
