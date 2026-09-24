@@ -975,6 +975,25 @@
       "dependencies": [],
       "issue": 95,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PH0sk"
+    },
+    {
+      "id": "aggregate-warnings-reference-v1",
+      "title": "Capture SQL Server aggregate NULL-elimination warning semantics",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal and priority to make verification green. Owner-run BIN2 extrema reference replay has exact rows and metadata but lacks warning 8153. Capture first-party ground truth before changing execution; no external content consumed.",
+      "scope": [
+        "scripts/capture-aggregate-warnings.mjs",
+        "reference/aggregate-warnings.json",
+        "docs/aggregate-warnings.md"
+      ],
+      "acceptance": [
+        "Capture ANSI_WARNINGS ON/OFF, mixed/all-NULL/empty inputs, grouped and windowed aggregates, DISTINCT, COUNT and multiple aggregates/statements, filtering and correlated subqueries against pinned SQL Server.",
+        "Retain exact metadata rows diagnostics completions and follow-up error/rowcount state; reproduce on two fresh containers.",
+        "Document evidence-driven execution requirements and remaining implementation work without treating successful capture as compatibility completion."
+      ],
+      "dependencies": [],
+      "issue": 97,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PH22W"
     }
   ]
 }
