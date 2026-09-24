@@ -3,6 +3,15 @@ import { test } from 'node:test'
 import { start, query } from './support/client.mjs'
 import { TYPES } from 'tedious'
 
+async function loadCapturedSource(c,item) {
+  const captured = operation => item.operations.find(op => op.operation === operation).result.sets[0].rows[0][0]
+  await query(c,`DROP TABLE IF EXISTS dbo.unicode_json_source; CREATE TABLE dbo.unicode_json_source(s ${item.type},j NVARCHAR(MAX),p NVARCHAR(100),f NVARCHAR(10))`)
+  await query(c,"INSERT INTO dbo.unicode_json_source VALUES(@s,@j,N'$.s',N'json')",[
+    ['s',TYPES.NVarChar,captured('source'),{length:4000}],
+    ['j',TYPES.NVarChar,captured('document'),{length:4000}],
+  ])
+}
+
 test('stored JSON validation and escaping preserve isolated Unicode units on the wire', async t => {
   const c = await start(t)
   await query(c, "CREATE TABLE json_wire(id INT,s NVARCHAR(MAX),j NVARCHAR(MAX)); INSERT INTO json_wire VALUES(1,LEFT(N'🦆',1),N'{\"s\":\"'+LEFT(N'🦆',1)+N'\"}'),(2,RIGHT(N'🦆',1),N'{\"s\":\"'+RIGHT(N'🦆',1)+N'\"}'),(3,NULL,NULL)")
@@ -47,12 +56,7 @@ test('OPENJSON default and explicit rows preserve captured Unicode values and bi
   for (const item of fixture.results) {
     // Load captured source units directly so JSON row replay does not depend on
     // the separate document-construction UPDATE regression below.
-    const captured = operation => item.operations.find(op => op.operation === operation).result.sets[0].rows[0][0]
-    await query(c,`DROP TABLE IF EXISTS dbo.unicode_json_source; CREATE TABLE dbo.unicode_json_source(s ${item.type},j NVARCHAR(MAX),p NVARCHAR(100),f NVARCHAR(10))`)
-    await query(c,"INSERT INTO dbo.unicode_json_source VALUES(@s,@j,N'$.s',N'json')",[
-      ['s',TYPES.NVarChar,captured('source'),{length:4000}],
-      ['j',TYPES.NVarChar,captured('document'),{length:4000}],
-    ])
+    await loadCapturedSource(c,item)
     for (const operation of item.operations.filter(op => ['OPENJSON','OPENJSON WITH'].includes(op.operation))) {
       await compareRows(operation)
     }
@@ -84,4 +88,33 @@ test('JSON document construction from stored Unicode values completes inside UPD
       value?.kind === 'binary' ? Buffer.from(value.value,'hex') : value))
     assert.deepEqual((await query(c,document.sql)).rows,expected,`${item.type}: ${item.sample}`)
   }
+})
+
+test('FOR JSON preserves captured raw Unicode strings and promoted fragment spelling', async t => {
+  const { readFile } = await import('node:fs/promises')
+  const fixture = JSON.parse(await readFile(new URL('../reference/unicode-json-storage.json',import.meta.url),'utf8'))
+  const c = await start(t)
+  const compare = async operation => {
+    assert.equal(operation.result.errors.length,0)
+    const expected = operation.result.sets.flatMap(set => set.rows.map(row => row.map(value =>
+      value?.kind === 'binary' ? Buffer.from(value.value,'hex') : value)))
+    assert.deepEqual((await query(c,operation.sql)).rows,expected,operation.sql)
+  }
+  for (const item of fixture.results) {
+    await loadCapturedSource(c,item)
+    for (const operation of item.operations.filter(op => ['FOR JSON','FOR JSON fragment'].includes(op.operation))) {
+      await compare(operation)
+    }
+  }
+  for (const item of fixture.escaped.filter(item => item.sample !== 'invalid trailing')) {
+    await query(c,item.setup)
+    await compare(item.operations.find(op => op.operation === 'FOR JSON fragment'))
+  }
+  await query(c,"UPDATE dbo.unicode_json_source SET s=LEFT(N'🦆',1)")
+  const top = await query(c,'SELECT s AS value FROM dbo.unicode_json_source FOR JSON PATH')
+  assert.deepEqual(top.rows, [['[{"value":"\ud83e"}]']])
+  assert.equal(top.columns[0][0].colName,'JSON_F52E2B61-18A1-11d1-B105-00805F49916B')
+  assert.deepEqual((await query(c,"DECLARE @payload NVARCHAR(MAX)=(SELECT s AS value FROM dbo.unicode_json_source FOR JSON PATH); SELECT @payload")).rows, [['[{"value":"\ud83e"}]']])
+  assert.deepEqual((await query(c,"SELECT (SELECT n FROM (VALUES(3),(1),(2)) x(n) ORDER BY n OFFSET 1 ROWS FETCH NEXT 2 ROWS ONLY FOR JSON PATH) AS j")).rows,[['[{"n":2},{"n":3}]']])
+  assert.deepEqual((await query(c,"SELECT (SELECT 1 AS n WHERE 1=0 FOR JSON PATH) AS j,(SELECT 1 AS n WHERE 1=0 FOR JSON PATH,WITHOUT_ARRAY_WRAPPER) AS unwrapped")).rows,[['[]','']])
 })

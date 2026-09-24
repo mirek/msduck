@@ -59,6 +59,26 @@ pub fn fragment(expr: &Expr) -> bool {
     }
 }
 
+/// FOR JSON always returns NVARCHAR(MAX), including non-promoted unwrapped text.
+/// Recognize only its original clause or exact lowered result functions.
+pub fn unicode_result(expr: &Expr) -> bool {
+    match expr {
+        Expr::Nested(inner) => unicode_result(inner),
+        Expr::Function(function) => matches!(
+            function.name.to_string().as_str(),
+            "__msduck_json_array" | "__msduck_json_unwrapped"
+        ),
+        Expr::Subquery(query) => {
+            matches!(query.for_clause, Some(ForClause::Json { .. }))
+                || matches!(query.body.as_ref(), SetExpr::Select(select)
+                    if matches!(select.projection.as_slice(),
+                        [SelectItem::ExprWithAlias { expr, .. }] | [SelectItem::UnnamedExpr(expr)]
+                            if unicode_result(expr)))
+        }
+        _ => false,
+    }
+}
+
 /// Remove a supported outer clause; nested clauses are lowered separately.
 pub fn take(statement: &mut Statement) -> Result<Option<Options>> {
     let options = if let Statement::Query(query) = statement {
@@ -166,8 +186,17 @@ pub fn lower(query: &mut Query, names: Vec<String>, spec: String, options: &Opti
         })
         .collect();
     let row = binary_function("__msduck_json_row", row, literal(spec));
-    let aggregate = binary_function("string_agg", row, literal(",".into()));
-    let aggregate = binary_function("coalesce", aggregate, literal(String::new()));
+    // Keep exact UTF-16 row carriers through aggregation. Ordering and limits
+    // remain in the preserved source query; serialize each source row once.
+    let aggregate = unary_function("list", row);
+    let aggregate = binary_function(
+        "coalesce",
+        aggregate,
+        Expr::Array(Array {
+            elem: vec![],
+            named: false,
+        }),
+    );
     let function = if options.without_array_wrapper {
         "__msduck_json_unwrapped"
     } else {

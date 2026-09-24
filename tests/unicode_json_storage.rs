@@ -318,3 +318,122 @@ fn openjson_unicode_rejects_invalid_storage_and_validates_whole_document() {
         );
     }
 }
+
+#[test]
+fn for_json_nested_carriers_preserve_raw_units_and_fragment_spelling() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let (response, ok) = session.batch_response(
+        "CREATE TABLE for_json_units(id INT,s NVARCHAR(8),j NVARCHAR(MAX)); INSERT INTO for_json_units VALUES(1,LEFT(N'🦆',1),N'{\"a\":[\"\\ud800\"]}'),(2,NULL,NULL); SELECT id,(SELECT s AS v,JSON_QUERY(j,'$.a') AS a FOR JSON PATH,INCLUDE_NULL_VALUES) AS payload INTO for_json_result FROM for_json_units",
+        &Default::default(),false,None,
+    );
+    assert!(ok, "{response:?}");
+    let rows: Vec<Vec<u8>> = session
+        .db
+        .prepare("SELECT payload.__msduck_utf16le FROM for_json_result ORDER BY id")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    let mut expected: Vec<u16> = "[{\"v\":\"".encode_utf16().collect();
+    expected.push(0xd83e);
+    expected.extend("\",\"a\":[\"\\ud800\"]}]".encode_utf16());
+    assert_eq!(
+        rows,
+        vec![
+            expected
+                .iter()
+                .flat_map(|u| u.to_le_bytes())
+                .collect::<Vec<_>>(),
+            "[{\"v\":null,\"a\":null}]"
+                .encode_utf16()
+                .flat_map(u16::to_le_bytes)
+                .collect(),
+        ]
+    );
+}
+
+#[test]
+fn for_json_native_lists_preserve_order_across_chunks_and_evaluate_once() {
+    let server = Server::open(":memory:").unwrap();
+    let session = Session::new(server.connection().unwrap()).unwrap();
+    session
+        .db
+        .execute_batch("CREATE SEQUENCE json_row_calls")
+        .unwrap();
+    let bytes: Vec<u8> = session.db.query_row("SELECT (__msduck_json_array(list(__msduck_json_row(row(nextval('json_row_calls')),'[[\"n\"],[false],false,[null]]') ORDER BY i DESC),'0')).__msduck_utf16le FROM range(6000) r(i)",[],|r|r.get(0)).unwrap();
+    let units: Vec<_> = bytes
+        .chunks_exact(2)
+        .map(|b| u16::from_le_bytes([b[0], b[1]]))
+        .collect();
+    let rows: serde_json::Value =
+        serde_json::from_str(&String::from_utf16(&units).unwrap()).unwrap();
+    let expected: Vec<_> = (1..=6000)
+        .rev()
+        .map(|n| serde_json::json!({"n":n}))
+        .collect();
+    assert_eq!(rows, serde_json::Value::Array(expected));
+    assert_eq!(
+        session
+            .db
+            .query_row("SELECT currval('json_row_calls')", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        6000
+    );
+    let wrong:i64=session.db.query_row("SELECT count(*) FROM range(6000) r(i) WHERE (__msduck_json_array([__msduck_pack_unicode(printf('{\"n\":%d}',i))],'0')).__msduck_utf16le IS DISTINCT FROM (__msduck_pack_unicode(printf('[{\"n\":%d}]',i))).__msduck_utf16le",[],|r|r.get(0)).unwrap();
+    assert_eq!(wrong, 0);
+    let bytes:Vec<u8> = session.db.query_row("SELECT (__msduck_json_array(list_slice([__msduck_pack_unicode('{}'),__msduck_pack_unicode(' {\"n\":1} '),__msduck_pack_unicode('{}')],2,2),'0')).__msduck_utf16le",[],|r|r.get(0)).unwrap();
+    assert_eq!(
+        bytes,
+        "[ {\"n\":1} ]"
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn for_json_rejects_malformed_carriers_and_bounded_output_recovers() {
+    let server = Server::open(":memory:").unwrap();
+    let session = Session::new(server.connection().unwrap()).unwrap();
+    for payload in ["NULL::BLOB", "from_hex('00')"] {
+        for sql in [
+            format!(
+                "SELECT __msduck_json_row(row(struct_pack(__msduck_utf16le := {payload})),'[[\"s\"],[false],false,[null]]')"
+            ),
+            format!("SELECT __msduck_json_array([struct_pack(__msduck_utf16le := {payload})],'0')"),
+        ] {
+            assert!(
+                session
+                    .db
+                    .prepare(&sql)
+                    .and_then(|mut s| s.query([]).map(|_| ()))
+                    .is_err(),
+                "{sql}"
+            );
+        }
+    }
+    for sql in [
+        "SELECT __msduck_json_array([NULL::STRUCT(__msduck_utf16le BLOB)],'0')",
+        "SELECT __msduck_json_array([__msduck_pack_unicode('{} trailing')],'0')",
+        "SELECT __msduck_json_row(row(__msduck_pack_unicode(repeat(chr(0),1400000))),'[[\"s\"],[false],false,[null]]')",
+    ] {
+        assert!(
+            session
+                .db
+                .prepare(sql)
+                .and_then(|mut s| s.query([]).map(|_| ()))
+                .is_err(),
+            "{sql}"
+        );
+        assert_eq!(
+            session
+                .db
+                .query_row("SELECT 42", [], |r| r.get::<_, i32>(0))
+                .unwrap(),
+            42
+        );
+    }
+}

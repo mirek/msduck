@@ -127,6 +127,9 @@ pub fn kind(
             variable_character(kind(retained_argument(value)?, parameters, column)?)
         }
         value if string_escape_call(value) => Some(DataType::Nvarchar(Some(CharacterLength::Max))),
+        value if crate::for_json::unicode_result(value) => {
+            Some(DataType::Nvarchar(Some(CharacterLength::Max)))
+        }
         Expr::Function(f) => {
             if let Some(kind) = crate::replicate::result_type(expr, parameters, column)
                 .or_else(|| crate::left_right::result_type(expr, parameters, column))

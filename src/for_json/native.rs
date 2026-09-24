@@ -1,7 +1,10 @@
 //! Native vector boundary for JSON row serialization inside scalar subqueries.
 use super::*;
 use duckdb::{
-    core::{DataChunkHandle, FlatVector, Inserter, LogicalTypeId as Id, StructVector},
+    core::{
+        DataChunkHandle, FlatVector, Inserter, LogicalTypeHandle as LogicalType,
+        LogicalTypeId as Id, StructVector,
+    },
     vscalar::{ScalarFunctionSignature, VScalar},
     vtab::arrow::WritableVector,
 };
@@ -105,6 +108,21 @@ fn value(
         Id::TimestampMs => Value::Timestamp(TimeUnit::Millisecond, read!(i64)),
         Id::TimestampNs => Value::Timestamp(TimeUnit::Nanosecond, read!(i64)),
         Id::Struct => {
+            if crate::unicode_carrier::is_logical(&logical) {
+                let nested = structure.struct_vector_child(column);
+                let payload = nested.child(0, len);
+                ensure!(
+                    !payload.row_is_null(row as u64),
+                    "invalid Unicode carrier: NULL payload"
+                );
+                let bytes = crate::unicode_carrier::bytes(&payload, row, len)
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                ensure!(bytes.len() % 2 == 0, "invalid Unicode carrier byte length");
+                return Ok((
+                    Value::Struct(vec![("__msduck_utf16le".into(), Value::Blob(bytes))].into()),
+                    None,
+                ));
+            }
             ensure!(
                 logical.num_children() > 0,
                 "unsupported empty JSON structure"
@@ -218,7 +236,9 @@ impl VScalar for Row {
             );
             let source = input.struct_vector(0);
             let specs = input.flat_vector(1);
-            let result = output.flat_vector();
+            let result = output.struct_vector();
+            let payload = result.child(0, len);
+            let mut remaining = crate::unicode_carrier::CHUNK_LIMIT;
             let mut cached = None;
             for row in 0..len {
                 let encoded = text(&specs, row, len)?;
@@ -264,7 +284,9 @@ impl VScalar for Row {
                 }
                 let mut writer = descriptor.writer(plan)?;
                 descriptor.row(&mut writer, names, &values, &types)?;
-                result.insert(row, writer.finish().as_str());
+                let units = writer.finish();
+                let bytes = encoded_units(&units, &mut remaining)?;
+                payload.insert(row, bytes.as_slice());
             }
             Ok(())
         })()
@@ -273,7 +295,7 @@ impl VScalar for Row {
     fn signatures() -> Vec<ScalarFunctionSignature> {
         vec![ScalarFunctionSignature::exact(
             vec![Id::Any.into(), Id::Varchar.into()],
-            Id::Varchar.into(),
+            crate::unicode_carrier::kind(),
         )]
     }
 }
@@ -287,22 +309,56 @@ impl<const ARRAY: bool> VScalar for Wrap<ARRAY> {
     ) -> Result<(), Box<dyn std::error::Error>> {
         (|| -> Result<()> {
             let len = input.len();
-            let source = input.flat_vector(0);
+            let source = input.list_vector(0);
+            let child_count = source.len();
+            let entries = source.child(child_count);
+            let carriers = source.struct_child(child_count);
+            let bytes = carriers.child(0, child_count);
             let root = input.flat_vector(1);
-            let result = output.flat_vector();
+            let result = output.struct_vector();
+            let payload = result.child(0, len);
+            let mut remaining = crate::unicode_carrier::CHUNK_LIMIT;
             for row in 0..len {
-                let rows = if source.row_is_null(row as u64) {
-                    String::new()
-                } else {
-                    text(&source, row, len)?
-                };
                 let root = text(&root, row, len)?;
-                let value = json::wrap_rows(&rows, root.strip_prefix('1'), !ARRAY)?;
-                ensure!(
-                    value.len() <= tds::MAX_MESSAGE,
-                    "result exceeds current 16 MiB response limit"
-                );
-                result.insert(row, value.as_str());
+                let mut rows = Vec::new();
+                if !source.row_is_null(row as u64) {
+                    let (offset, count) = source.try_get_entry(row)?;
+                    let end = offset
+                        .checked_add(count)
+                        .filter(|&end| end <= child_count)
+                        .ok_or_else(|| anyhow::anyhow!("invalid FOR JSON row-list bounds"))?;
+                    let mut staging = crate::unicode_carrier::CHUNK_LIMIT;
+                    for index in offset..end {
+                        ensure!(
+                            !entries.row_is_null(index as u64) && !bytes.row_is_null(index as u64),
+                            "invalid NULL FOR JSON row carrier"
+                        );
+                        let raw = crate::unicode_carrier::bytes(&bytes, index, child_count)
+                            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+                        ensure!(raw.len() % 2 == 0, "invalid Unicode carrier byte length");
+                        staging = staging
+                            .checked_sub(raw.len())
+                            .and_then(|n| n.checked_sub(std::mem::size_of::<Vec<u16>>()))
+                            .ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "FOR JSON row list exceeds the configured input limit"
+                                )
+                            })?;
+                        rows.push(
+                            raw.chunks_exact(2)
+                                .map(|b| u16::from_le_bytes([b[0], b[1]]))
+                                .collect::<Vec<_>>(),
+                        );
+                    }
+                }
+                let units = json::wrap_rows_utf16(
+                    rows.iter().map(Vec::as_slice),
+                    root.strip_prefix('1'),
+                    !ARRAY,
+                    (tds::MAX_MESSAGE - 256) / 2,
+                )?;
+                let bytes = encoded_units(&units, &mut remaining)?;
+                payload.insert(row, bytes.as_slice());
             }
             Ok(())
         })()
@@ -310,10 +366,25 @@ impl<const ARRAY: bool> VScalar for Wrap<ARRAY> {
     }
     fn signatures() -> Vec<ScalarFunctionSignature> {
         vec![ScalarFunctionSignature::exact(
-            vec![Id::Varchar.into(), Id::Varchar.into()],
-            Id::Varchar.into(),
+            vec![
+                LogicalType::list(&crate::unicode_carrier::kind()),
+                Id::Varchar.into(),
+            ],
+            crate::unicode_carrier::kind(),
         )]
     }
+}
+fn encoded_units(units: &[u16], remaining: &mut usize) -> Result<Vec<u8>> {
+    let size = units
+        .len()
+        .checked_mul(2)
+        .ok_or_else(|| anyhow::anyhow!("FOR JSON output size overflow"))?;
+    ensure!(
+        size <= crate::unicode_carrier::CELL_LIMIT && size <= *remaining,
+        "FOR JSON result exceeds the configured output limit"
+    );
+    *remaining -= size;
+    Ok(units.iter().flat_map(|u| u.to_le_bytes()).collect())
 }
 pub fn register(db: &Connection) -> duckdb::Result<()> {
     db.register_scalar_function::<Row>("__msduck_json_row")?;

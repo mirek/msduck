@@ -73,3 +73,28 @@ fn repeated_unicode_cast_annotations_evaluate_volatile_source_once() {
         6000
     );
 }
+
+#[test]
+fn for_json_subquery_casts_keep_each_explicit_width_before_storage() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let (response,ok) = session.batch_response(
+        "SELECT CAST(CAST((SELECT LEFT(N'🦆',1) AS s FOR JSON PATH,WITHOUT_ARRAY_WRAPPER) AS NVARCHAR(7)) AS NCHAR(9)) AS s INTO cast_json_result",
+        &Default::default(),false,None,
+    );
+    assert!(ok, "{response:?}");
+    let bytes: Vec<u8> = session
+        .db
+        .query_row("SELECT s.__msduck_utf16le FROM cast_json_result", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    let units: [u16; 9] = [123, 34, 115, 34, 58, 34, 0xd83e, 32, 32];
+    assert_eq!(
+        bytes,
+        units
+            .into_iter()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>()
+    );
+}

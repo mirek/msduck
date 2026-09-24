@@ -342,7 +342,13 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
         fn post_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<()> {
             self.consumer.pop();
             let consumer = self.consumer.last() == Some(&true);
-            if (consumer || self.recursive.last() == Some(&true))
+            let json_result = matches!(expr, Expr::Cast { expr: source, .. }
+                if msduck_sql::for_json::unicode_result(source));
+            let known_carrier = matches!(expr, Expr::Cast { expr: source, .. }
+                if matches!(source.as_ref(), Expr::Function(f)
+                    if matches!(f.name.to_string().as_str(),
+                        "__msduck_cast_carrier_nvarchar" | "__msduck_cast_carrier_nchar")));
+            if (consumer || json_result || known_carrier || self.recursive.last() == Some(&true))
                 && let Expr::Cast {
                     expr: source,
                     data_type,
@@ -374,10 +380,7 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
                         std::ops::ControlFlow::Continue(())
                     }
                 }
-                let known_carrier = matches!(source.as_ref(), Expr::Function(f)
-                    if matches!(f.name.to_string().as_str(),
-                        "__msduck_cast_carrier_nvarchar" | "__msduck_cast_carrier_nchar"));
-                if known_carrier {
+                if known_carrier || json_result {
                     // A nested normalized cast already has the exact physical type.
                     // Repeating a typeof dispatch would multiply the source AST.
                     dispatch = *source.clone();

@@ -8,7 +8,9 @@ use duckdb::{
     Connection,
     types::{TimeUnit, Value},
 };
-use msduck_core::for_json::{self as json, Fragment, Number, Options, PathPlan, Writer};
+use msduck_core::for_json::{
+    self as json, Number, Options, PathPlan, Utf16Fragment as Fragment, Utf16Writer as Writer,
+};
 use msduck_sql::for_json as syntax;
 use sqlparser::ast::{SelectItem, Statement};
 use std::collections::{HashMap, HashSet};
@@ -67,7 +69,10 @@ impl Output {
         Ok(PathPlan::new(names).map_err(syntax::diagnostic)?)
     }
     pub fn writer<'a>(&self, plan: &'a PathPlan) -> Result<Writer<'a>> {
-        Ok(Writer::new(plan, self.options.clone()).map_err(syntax::diagnostic)?)
+        Ok(
+            Writer::new(plan, self.options.clone(), (tds::MAX_MESSAGE - 256) / 2)
+                .map_err(syntax::diagnostic)?,
+        )
     }
     pub fn row(
         &self,
@@ -79,18 +84,39 @@ impl Output {
         let strings = values
             .iter()
             .enumerate()
-            .map(|(i, value)| spelling(value, types.get(i).and_then(Option::as_ref)))
+            .map(|(i, value)| {
+                if is_unicode(value) {
+                    Ok(String::new())
+                } else {
+                    spelling(value, types.get(i).and_then(Option::as_ref))
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let units = values
+            .iter()
+            .zip(&strings)
+            .map(|(value, text)| {
+                if is_unicode(value) {
+                    crate::unicode_carrier::units(value)
+                } else {
+                    Ok(text.encode_utf16().collect())
+                }
+            })
             .collect::<Result<Vec<_>>>()?;
         let row = values
             .iter()
             .zip(&strings)
+            .zip(&units)
             .zip(names)
-            .map(|((value, text), name)| {
+            .map(|(((value, text), units), name)| {
                 Ok(match value {
-                    Value::Null => json::Value::Null,
-                    Value::Boolean(v) => json::Value::Boolean(*v),
-                    Value::Text(_) if self.fragments.contains(name) => {
-                        json::Value::Json(Fragment::new(text)?)
+                    Value::Null => json::Utf16Value::Null,
+                    Value::Boolean(v) => json::Utf16Value::Boolean(*v),
+                    value
+                        if (matches!(value, Value::Text(_)) || is_unicode(value))
+                            && self.fragments.contains(name) =>
+                    {
+                        json::Utf16Value::Json(Fragment::new(units)?)
                     }
                     Value::TinyInt(_)
                     | Value::SmallInt(_)
@@ -103,21 +129,21 @@ impl Output {
                     | Value::UBigInt(_)
                     | Value::Float(_)
                     | Value::Double(_)
-                    | Value::Decimal(_) => json::Value::Number(Number::new(text)?),
-                    _ => json::Value::Text(text),
+                    | Value::Decimal(_) => json::Utf16Value::Number(Number::new(text)?),
+                    _ => json::Utf16Value::Text(units),
                 })
             })
             .collect::<Result<Vec<_>>>()?;
         writer.push(&row)?;
         ensure!(
-            writer.buffered_bytes() <= tds::MAX_MESSAGE,
+            writer.buffered_units() <= (tds::MAX_MESSAGE - 256) / 2,
             "result exceeds current 16 MiB response limit"
         );
         Ok(())
     }
-    pub fn encode(text: String) -> Result<Vec<u8>> {
+    pub fn encode(text: Vec<u16>) -> Result<Vec<u8>> {
         ensure!(
-            text.encode_utf16().count() <= (tds::MAX_MESSAGE - 256) / 2,
+            text.len() <= (tds::MAX_MESSAGE - 256) / 2,
             "result exceeds current 16 MiB response limit"
         );
         let mut out = Vec::new();
@@ -131,9 +157,12 @@ impl Output {
             }],
         )?;
         out.push(0xd1);
-        crate::engine::encode_value(&mut out, &Type::Text, &Value::Text(text))?;
+        tds::unicode_value(&mut out, &Type::Text, Some(&text))?;
         Ok(out)
     }
+}
+fn is_unicode(value: &Value) -> bool {
+    matches!(value, Value::Struct(fields) if fields.keys().any(|name| name == "__msduck_utf16le"))
 }
 fn nanos(unit: TimeUnit, value: i64) -> i128 {
     i128::from(value)
