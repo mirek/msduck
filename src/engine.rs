@@ -147,6 +147,7 @@ impl<'a> Work<'a> {
 }
 pub struct Session {
     pub db: Connection,
+    diagnostics: crate::statement_diagnostics::Registry,
     pub nocount: bool,
     pub transactions: u32,
     pub rowcount: u64,
@@ -159,7 +160,8 @@ pub struct Session {
     caught_error: Option<SqlError>,
 }
 impl Session {
-    pub fn new(db: Connection) -> Result<Self> {
+    pub fn new(connection: crate::server::Connection) -> Result<Self> {
+        let (db, diagnostics) = connection.into_parts();
         db.execute_batch("SET schema = 'dbo'; SET arrow_lossless_conversion = true; SET VARIABLE __msduck_datefirst = 7")?;
         db.execute_batch(
             "CREATE TEMP MACRO __msduck_time_round(value, quantum) AS
@@ -172,6 +174,7 @@ impl Session {
             CREATE TEMP MACRO __msduck_int_mod(a,b) AS CASE WHEN b=0 THEN error('Divide by zero error encountered.') ELSE a % b END")?;
         Ok(Self {
             db,
+            diagnostics,
             nocount: false,
             transactions: 0,
             rowcount: 0,
@@ -183,6 +186,12 @@ impl Session {
             transaction_doomed: false,
             caught_error: None,
         })
+    }
+
+    /// Open an explicit context for one execution. Preparing SQL must not open
+    /// or mutate a current-session context in the shared native catalog.
+    pub fn diagnostic_scope(&self) -> Result<crate::statement_diagnostics::Scope> {
+        self.diagnostics.begin().map_err(anyhow::Error::msg)
     }
     pub fn batch(
         &mut self,

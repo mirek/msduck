@@ -23,11 +23,11 @@ retains no native pointers after returning.
 
 ## Required integration
 
-The observer is not automatically registered in ordinary sessions and public SQL
-is not rewritten yet. This change does not emit warning 8153 or complete the
-aggregate-warning feature. The next integration must pass the same registry
-explicitly from the database owner to each session and create a scope for each
-statement execution. It must preserve statement scope through internal helper
+The server registers the observer once and carries the matching registry into
+its connection wrappers and sessions. Public SQL is not rewritten yet. This
+change does not emit warning 8153 or complete the aggregate-warning feature.
+The remaining integration must create a scope for each statement that requires
+observation. It must preserve statement scope through internal helper
 queries, collect the flag after execution, apply the session's ANSI_WARNINGS
 policy, and emit at most one warning before that statement's DONE token. See
 [the warning reference contract](https://github.com/mirek/msduck/blob/8e399bb/docs/aggregate-warnings.md)

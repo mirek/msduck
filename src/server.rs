@@ -1,6 +1,6 @@
 use crate::{engine::Session, tds};
 use anyhow::{Result, ensure};
-use duckdb::Connection;
+use duckdb::Connection as BackendConnection;
 use std::{
     collections::HashMap,
     net::{TcpListener, TcpStream},
@@ -12,18 +12,45 @@ use zeroize::Zeroize;
 /// The owner connection keeps an in-memory database alive; each client gets an
 /// independent DuckDB connection and transaction context via try_clone().
 pub struct Server {
-    owner: Arc<Mutex<Connection>>,
+    owner: Arc<Mutex<BackendConnection>>,
+    diagnostics: crate::statement_diagnostics::Registry,
     tls: Option<Arc<rustls::ServerConfig>>,
     administrator: Option<Arc<crate::authentication::Administrator>>,
+}
+
+/// A backend connection paired with its database-owned execution services.
+/// Cloning through this wrapper retains the matching diagnostic registry.
+pub struct Connection {
+    db: BackendConnection,
+    diagnostics: crate::statement_diagnostics::Registry,
+}
+impl std::ops::Deref for Connection {
+    type Target = BackendConnection;
+    fn deref(&self) -> &Self::Target {
+        &self.db
+    }
+}
+impl Connection {
+    pub fn try_clone(&self) -> duckdb::Result<Self> {
+        Ok(Self {
+            db: self.db.try_clone()?,
+            diagnostics: self.diagnostics.clone(),
+        })
+    }
+    pub(crate) fn into_parts(self) -> (BackendConnection, crate::statement_diagnostics::Registry) {
+        (self.db, self.diagnostics)
+    }
 }
 impl Server {
     pub fn open(path: &str) -> Result<Self> {
         let owner = if path == ":memory:" {
-            Connection::open_in_memory()?
+            BackendConnection::open_in_memory()?
         } else {
-            Connection::open(path)?
+            BackendConnection::open(path)?
         };
         crate::scalar::register(&owner)?;
+        let diagnostics = crate::statement_diagnostics::Registry::default();
+        diagnostics.register(&owner)?;
         owner.execute_batch("CREATE SCHEMA IF NOT EXISTS dbo")?;
         crate::schema_catalog::register(&owner)?;
         crate::object_catalog::register(&owner)?;
@@ -31,6 +58,7 @@ impl Server {
         crate::declared_columns::register(&owner)?;
         Ok(Self {
             owner: Arc::new(Mutex::new(owner)),
+            diagnostics,
             tls: None,
             administrator: None,
         })
@@ -50,11 +78,7 @@ impl Server {
     pub fn serve(self, listener: TcpListener) -> Result<()> {
         for stream in listener.incoming() {
             let stream = stream?;
-            let db = self
-                .owner
-                .lock()
-                .map_err(|_| anyhow::anyhow!("database lock poisoned"))?
-                .try_clone()?;
+            let db = self.connection()?;
             let tls = self.tls.clone();
             let administrator = self.administrator.clone();
             thread::spawn(move || {
@@ -66,11 +90,15 @@ impl Server {
         Ok(())
     }
     pub fn connection(&self) -> Result<Connection> {
-        Ok(self
+        let db = self
             .owner
             .lock()
             .map_err(|_| anyhow::anyhow!("database lock poisoned"))?
-            .try_clone()?)
+            .try_clone()?;
+        Ok(Connection {
+            db,
+            diagnostics: self.diagnostics.clone(),
+        })
     }
 }
 pub fn serve_connection(stream: TcpStream, db: Connection) -> Result<()> {
@@ -213,4 +241,69 @@ fn login_failure(out: &mut Vec<u8>) {
             message_utf16: None,
         },
     );
+}
+
+#[cfg(test)]
+mod diagnostic_context_tests {
+    use super::*;
+
+    #[test]
+    fn connection_clones_keep_their_database_diagnostics() {
+        let server = Server::open(":memory:").unwrap();
+        let connection = server.connection().unwrap();
+        let first = Session::new(connection.try_clone().unwrap()).unwrap();
+        let second = Session::new(connection).unwrap();
+        let a = first.diagnostic_scope().unwrap();
+        let b = second.diagnostic_scope().unwrap();
+        assert!(
+            first
+                .db
+                .query_row(
+                    "SELECT __msduck_observe_null(?,true)",
+                    [a.ticket().as_slice()],
+                    |r| r.get::<_, bool>(0)
+                )
+                .unwrap()
+        );
+        assert!(a.null_eliminated());
+        assert!(!b.null_eliminated());
+        assert!(
+            !second
+                .db
+                .query_row(
+                    "SELECT __msduck_observe_null(?,false)",
+                    [b.ticket().as_slice()],
+                    |r| r.get::<_, bool>(0)
+                )
+                .unwrap()
+        );
+        assert!(!b.null_eliminated());
+
+        let other_server = Server::open(":memory:").unwrap();
+        let other = Session::new(other_server.connection().unwrap()).unwrap();
+        assert!(
+            other
+                .db
+                .query_row(
+                    "SELECT __msduck_observe_null(?,true)",
+                    [b.ticket().as_slice()],
+                    |r| r.get::<_, bool>(0)
+                )
+                .is_err()
+        );
+        let stale = *b.ticket();
+        drop(b);
+        assert!(
+            second
+                .db
+                .query_row(
+                    "SELECT __msduck_observe_null(?,true)",
+                    [stale.as_slice()],
+                    |r| r.get::<_, bool>(0)
+                )
+                .is_err()
+        );
+        let fresh = second.diagnostic_scope().unwrap();
+        assert!(!fresh.null_eliminated());
+    }
 }
