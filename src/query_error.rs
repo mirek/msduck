@@ -1,7 +1,7 @@
 //! Preserve a described result prefix when native query execution fails.
 use crate::{
     query_catalog::Field,
-    tds::{self, Column, Type},
+    tds::{self, Type},
 };
 use duckdb::{
     Statement,
@@ -93,11 +93,12 @@ pub fn describe_fields(fields: &[Field], declared: &[Option<Type>]) -> Option<Ve
     if fields.is_empty() || (!declared.is_empty() && declared.len() != fields.len()) {
         return None;
     }
+    let aligned = crate::result_metadata::Aligned::new(fields.len(), fields, declared);
     let columns = fields
         .iter()
         .enumerate()
         .map(|(index, field)| {
-            let kind = declared.get(index).cloned().flatten().or_else(|| {
+            let kind = aligned.declared(index).cloned().or_else(|| {
                 let info = field.info.as_ref()?;
                 Some(match info.system_type_id? {
                     48 => Type::Int(1),
@@ -124,12 +125,7 @@ pub fn describe_fields(fields: &[Field], declared: &[Option<Type>]) -> Option<Ve
                     _ => return None,
                 })
             })?;
-            Some(Column {
-                name: field.name.clone(),
-                kind,
-                properties: field.properties,
-                collation: crate::query_catalog::wire_collation(fields, fields.len(), index),
-            })
+            Some(aligned.column(index, field.name.clone(), kind))
         })
         .collect::<Option<Vec<_>>>()?;
     let mut metadata = Vec::new();
@@ -181,23 +177,12 @@ pub fn describe(
     declared: &[Option<Type>],
 ) -> Option<Vec<u8>> {
     let prepared = statement.prepared_columns().ok()?;
-    let width = prepared.len();
+    let aligned = crate::result_metadata::Aligned::new(prepared.len(), fields, declared);
     let columns = prepared
         .into_iter()
         .enumerate()
         .map(|(index, (name, kind))| {
-            Some(Column {
-                collation: crate::query_catalog::wire_collation(fields, width, index),
-                name: fields
-                    .get(index)
-                    .filter(|_| fields.len() == width)
-                    .map_or(name, |field| field.name.clone()),
-                properties: fields
-                    .get(index)
-                    .map(|field| field.properties)
-                    .unwrap_or_default(),
-                kind: wire(&kind, declared.get(index).and_then(Option::as_ref))?,
-            })
+            Some(aligned.column(index, name, wire(&kind, aligned.declared(index))?))
         })
         .collect::<Option<Vec<_>>>()?;
     let mut metadata = Vec::new();
@@ -208,6 +193,7 @@ pub fn describe(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tds::Column;
     #[test]
     fn logical_error_descriptors_require_complete_aligned_fields() {
         let field = Field {

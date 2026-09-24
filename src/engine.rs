@@ -2177,49 +2177,38 @@ impl Session {
             .map(|width| schema.project(&(0..width).collect::<Vec<_>>()))
             .transpose()?;
         let schema = public_schema.as_ref().unwrap_or(schema);
+        let metadata = crate::result_metadata::Aligned::new(
+            schema.fields().len(),
+            result_fields,
+            result_types,
+        );
         let columns = schema
             .fields()
             .iter()
             .enumerate()
             .map(|(index, field)| {
-                Ok(Column {
-                    collation: crate::query_catalog::wire_collation(
-                        result_fields,
-                        schema.fields().len(),
-                        index,
-                    ),
-                    properties: result_fields
-                        .get(index)
-                        .map(|field| field.properties)
-                        .unwrap_or_default(),
-                    name: result_fields
-                        .get(index)
-                        .filter(|_| result_fields.len() == schema.fields().len())
-                        .map(|field| field.name.clone())
-                        .unwrap_or_else(|| field.name().clone()),
-                    kind: if let Some(Some(kind)) = result_types.get(index)
-                        && (matches!(field.data_type(), ArrowType::Utf8 | ArrowType::LargeUtf8)
-                            || crate::unicode_carrier::is_arrow(field.data_type())
-                                && matches!(kind, Type::Text | Type::Nvarchar(_) | Type::Nchar(_))
-                            || matches!(
-                                (kind, field.data_type()),
-                                (Type::Time(_), ArrowType::Time64(_))
-                                    | (Type::Money(_), ArrowType::Decimal128(_, 4))
-                                    | (
-                                        Type::Varbinary(_) | Type::FixedBinary(_),
-                                        ArrowType::Binary | ArrowType::LargeBinary
-                                    )
-                            ))
-                    {
-                        kind.clone()
-                    } else if is_bool_field(field) {
-                        Type::Bit
-                    } else if is_uuid_field(field) {
-                        Type::Guid
-                    } else {
-                        wire_type(field.data_type())?
-                    },
-                })
+                let kind = if let Some(kind) = metadata.declared(index)
+                    && (matches!(field.data_type(), ArrowType::Utf8 | ArrowType::LargeUtf8)
+                        || crate::unicode_carrier::is_arrow(field.data_type())
+                            && matches!(kind, Type::Text | Type::Nvarchar(_) | Type::Nchar(_))
+                        || matches!(
+                            (kind, field.data_type()),
+                            (Type::Time(_), ArrowType::Time64(_))
+                                | (Type::Money(_), ArrowType::Decimal128(_, 4))
+                                | (
+                                    Type::Varbinary(_) | Type::FixedBinary(_),
+                                    ArrowType::Binary | ArrowType::LargeBinary
+                                )
+                        )) {
+                    kind.clone()
+                } else if is_bool_field(field) {
+                    Type::Bit
+                } else if is_uuid_field(field) {
+                    Type::Guid
+                } else {
+                    wire_type(field.data_type())?
+                };
+                Ok(metadata.column(index, field.name().clone(), kind))
             })
             .collect::<Result<Vec<_>>>()?;
         let mut out = vec![];
@@ -4171,6 +4160,126 @@ fn plp(out: &mut Vec<u8>, data: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn alignment_fields(count: usize) -> Vec<crate::query_catalog::Field> {
+        (0..count)
+            .map(|_| crate::query_catalog::Field {
+                name: "unrelated".into(),
+                info: None,
+                json_fragment: false,
+                properties: msduck_core::result::Properties::expression(false),
+                collation: Some(Ok(msduck_core::collation::Label::Explicit(
+                    "Latin1_General_100_BIN2".into(),
+                ))),
+            })
+            .collect()
+    }
+
+    fn alignment_result(
+        db: &Connection,
+        sql: &str,
+        fields: &[crate::query_catalog::Field],
+        declared: &[Option<Type>],
+    ) -> Result<(Vec<u8>, u64)> {
+        let mut statement = db.prepare(sql)?;
+        let batches = statement.query_arrow([])?;
+        let schema = batches.get_schema();
+        Session::encode_batches(batches, &schema, fields, declared)
+    }
+
+    #[test]
+    fn descriptor_alignment_success_rejects_partial_facts() {
+        let db = Connection::open_in_memory().unwrap();
+        for sql in [
+            "SELECT CAST(NULL AS INTEGER) AS n, 'long value' AS s",
+            "SELECT 'long value' AS s, CAST(NULL AS INTEGER) AS n",
+        ] {
+            let baseline = alignment_result(&db, sql, &[], &[]).unwrap();
+            for count in [1, 3] {
+                assert_eq!(
+                    alignment_result(&db, sql, &alignment_fields(count), &[]).unwrap(),
+                    baseline,
+                    "mismatched field count {count}: {sql}"
+                );
+                assert_eq!(
+                    alignment_result(&db, sql, &[], &vec![Some(Type::Nvarchar(1)); count]).unwrap(),
+                    baseline,
+                    "mismatched override count {count}: {sql}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn descriptor_alignment_errors_reject_partial_facts() {
+        let db = Connection::open_in_memory().unwrap();
+        for sql in [
+            "SELECT CAST(NULL AS INTEGER) AS n, 'long value' AS s",
+            "SELECT 'long value' AS s, CAST(NULL AS INTEGER) AS n",
+        ] {
+            let statement = db.prepare(sql).unwrap();
+            let baseline = crate::query_error::describe(&statement, &[], &[]).unwrap();
+            for count in [1, 3] {
+                assert_eq!(
+                    crate::query_error::describe(&statement, &alignment_fields(count), &[])
+                        .unwrap(),
+                    baseline,
+                    "mismatched field count {count}: {sql}"
+                );
+                assert_eq!(
+                    crate::query_error::describe(
+                        &statement,
+                        &[],
+                        &vec![Some(Type::Nvarchar(1)); count],
+                    )
+                    .unwrap(),
+                    baseline,
+                    "mismatched override count {count}: {sql}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn descriptor_alignment_preserves_complete_facts_on_success_and_error() {
+        let db = Connection::open_in_memory().unwrap();
+        let sql = "SELECT CAST(NULL AS INTEGER) AS n, 'text' AS s";
+        let mut fields = alignment_fields(2);
+        for field in &mut fields {
+            field.name = "duplicate".into();
+            field.properties = msduck_core::result::Properties::expression(true);
+        }
+        let declared = [None, Some(Type::Nvarchar(8))];
+        let expected_columns = vec![
+            Column {
+                name: "duplicate".into(),
+                kind: Type::Int(4),
+                properties: fields[0].properties,
+                collation: tds::collation::Collation::for_name("Latin1_General_100_BIN2"),
+            },
+            Column {
+                name: "duplicate".into(),
+                kind: Type::Nvarchar(8),
+                properties: fields[1].properties,
+                collation: tds::collation::Collation::for_name("Latin1_General_100_BIN2"),
+            },
+        ];
+        let mut metadata = Vec::new();
+        tds::metadata(&mut metadata, &expected_columns).unwrap();
+        let statement = db.prepare(sql).unwrap();
+        assert_eq!(
+            crate::query_error::describe(&statement, &fields, &declared),
+            Some(metadata.clone())
+        );
+        let (out, count) = alignment_result(&db, sql, &fields, &declared).unwrap();
+        assert_eq!(count, 1);
+        assert!(out.starts_with(&metadata));
+        let empty = format!("{sql} WHERE false");
+        assert_eq!(
+            alignment_result(&db, &empty, &fields, &declared).unwrap(),
+            (metadata, 0)
+        );
+    }
+
     #[test]
     fn public_bin2_comparisons_match_live_rows_with_nullable_case_metadata() {
         let reference: serde_json::Value =
