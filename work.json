@@ -1054,6 +1054,27 @@
       "dependencies": [],
       "issue": 103,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PIDoP"
+    },
+    {
+      "id": "view-binding-reference-v1",
+      "title": "Preserve SQL Server view metadata and lexical binding reference captures",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal; first-party captures executed in this owner session, twice in fresh isolated reference databases. No external submissions consumed.",
+      "scope": [
+        "reference/view-properties.json",
+        "reference/view-execution.json",
+        "reference/view-invalid-binding.json",
+        "scripts/capture-view-binding.mjs",
+        "docs/view-binding-reference.md"
+      ],
+      "acceptance": [
+        "Preserve raw rows, descriptors, warnings, errors and completion data from the three retained first-party view suites.",
+        "Provide a reproducible capture command against the pinned SQL Server image, requiring two identical fresh captures and retaining sequential case order.",
+        "Document metadata rebinding, CTE isolation, qualified aliases, invalid dependency errors and remaining implementation gaps; do not claim server compatibility from reference capture."
+      ],
+      "dependencies": [],
+      "issue": 105,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PIrSo"
     }
   ]
 }
