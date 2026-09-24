@@ -28,3 +28,24 @@ This evidence establishes a runtime gap, not a completed fix. It does not
 establish all SET options, non-English language behavior, stored-procedure
 nesting, prepared execution, transaction failures or Attention/cancellation.
 Those boundaries need additional evidence before claiming general restoration.
+
+## Prepared execution
+
+Two additional traces use tedious prepare/execute/unprepare with eight total
+executions. They retain state probes before and after preparation, complete
+execution responses, reuse probes after every execution and a final unprepare
+probe. All captures were repeated twice and independently recaptured.
+
+The prepared DATEFIRST trace covers valid values, THROW, zero, NULL and recovery;
+the ANSI_WARNINGS trace covers successful execution, THROW and reuse. Preparation
+does not change the settings, and execution restores the caller's settings.
+SQL Server reports error 2742, state 1, class 16 with message
+`SET DATEFIRST 0 is out of range.` for both zero and NULL. Later statements still
+execute with the unchanged DATEFIRST value. The retained invalid executions
+return RPC status -6.
+
+Runtime revision `783cf874401274fdd01a00fa443217ec03f051f1` matches the entire
+ANSI_WARNINGS trace and six of eight complete execution/reuse observations.
+The zero and NULL cases instead report error 50000 and end the request, omitting
+the subsequent result and completion events. These are retained compatibility
+gaps; the fixture does not normalize them away.
