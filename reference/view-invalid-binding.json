@@ -1,0 +1,376 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "identicalFreshCaptures": 2,
+  "results": [
+    {
+      "id": "base",
+      "sql": "CREATE TABLE dbo.binding_base(id INT NOT NULL,v INT); INSERT INTO dbo.binding_base VALUES(1,7); CREATE TABLE dbo.binding_outer(v INT); INSERT INTO dbo.binding_outer VALUES(99)",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "id": "view",
+      "sql": "CREATE VIEW dbo.binding_view AS SELECT MIN(v) AS result FROM dbo.binding_base",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "before",
+      "sql": "SELECT result FROM dbo.binding_view",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                7
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "drop",
+      "sql": "ALTER TABLE dbo.binding_base DROP COLUMN v",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "broken",
+      "sql": "SELECT result FROM dbo.binding_view",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 207,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Invalid column name 'v'."
+          },
+          {
+            "number": 4413,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Could not use view or function 'dbo.binding_view' because of binding errors."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "outer-name",
+      "sql": "SELECT (SELECT result FROM dbo.binding_view) AS result FROM dbo.binding_outer",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 207,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Invalid column name 'v'."
+          },
+          {
+            "number": 4413,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 17,
+            "message": "Could not use view or function 'dbo.binding_view' because of binding errors."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "outer-join",
+      "sql": "SELECT a.result FROM dbo.binding_outer AS o CROSS JOIN dbo.binding_view AS a",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 207,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Invalid column name 'v'."
+          },
+          {
+            "number": 4413,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 17,
+            "message": "Could not use view or function 'dbo.binding_view' because of binding errors."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "repair",
+      "sql": "ALTER TABLE dbo.binding_base ADD v INT",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "repaired",
+      "sql": "SELECT result FROM dbo.binding_view",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                null
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "nested",
+      "sql": "CREATE VIEW dbo.binding_nested AS SELECT result FROM dbo.binding_view",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "alter",
+      "sql": "ALTER VIEW dbo.binding_view AS SELECT id AS renamed FROM dbo.binding_base",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "nested-broken",
+      "sql": "SELECT result FROM dbo.binding_nested",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 207,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Invalid column name 'result'."
+          },
+          {
+            "number": 4413,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 17,
+            "message": "Could not use view or function 'dbo.binding_nested' because of binding errors."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "nested-outer",
+      "sql": "SELECT (SELECT result FROM dbo.binding_nested) AS result FROM (SELECT 88 AS result) AS o",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 207,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Invalid column name 'result'."
+          },
+          {
+            "number": 4413,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 17,
+            "message": "Could not use view or function 'dbo.binding_nested' because of binding errors."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    }
+  ]
+}
