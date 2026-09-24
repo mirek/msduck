@@ -1635,6 +1635,26 @@
       "dependencies": [],
       "issue": 173,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PKO-t"
+    },
+    {
+      "id": "system-all-columns-reference-v1",
+      "title": "Capture SQL Server built-in all_columns inventory and metadata",
+      "state": "ready",
+      "authorization": "Direct owner goal to implement a fully functional SQL Server compatible Rust/DuckDB server and make disjoint work claimable by parallel agents. Owner-captured all_objects evidence in task #163 shows that the runtime lacks system-column catalog rows. Capture SQL Server behavior independently before implementing those rows; no external issue or comment is input.",
+      "scope": [
+        "scripts/capture-system-all-columns.mjs",
+        "reference/system-all-columns.json",
+        "docs/system-all-columns-reference.md"
+      ],
+      "acceptance": [
+        "Use the pinned SQL Server image and isolated fresh databases to retain full raw sys.all_columns rows for shipped objects, with TDS result descriptors, declaration metadata, names, IDs, parent object IDs, type IDs, flags, collation, errors and completion events. Capture sys.columns and any related system-column view membership to establish the actual relationships rather than assuming a union.",
+        "Capture two fresh-database runs and independently repeat verification. Bind IDs to the same captured all_objects schema/name/type and parent identities, preserve the raw per-run values, and identify stable versus clock- or database-dependent differences without rewriting evidence.",
+        "Document the rows and declarations needed for objects, system_objects and all_objects, along with the wider built-in inventory, ordering assumptions, visibility limits and runtime implementation gaps. Do not create fabricated catalog rows or edit server, engine, or existing catalog implementation files.",
+        "Keep credentials out of fixtures and arguments; clean up only the task-owned containers/databases. Verify the generator and its comparison rules on retained captures."
+      ],
+      "dependencies": [],
+      "issue": 175,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PKTXU"
     }
   ]
 }
