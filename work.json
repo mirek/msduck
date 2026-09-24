@@ -1198,6 +1198,25 @@
       "dependencies": [],
       "issue": 121,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJMJj"
+    },
+    {
+      "id": "legacy-datetime-reference-v1",
+      "title": "Capture legacy datetime conversion boundaries and exact diagnostics",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal. Verified owner-origin catalog/RPC work exposed accepted seven-digit string-to-SMALLDATETIME conversions that SQL Server rejects with 295/state3/class16; extend first-party evidence before implementing conversion rules. No third-party activity consumed.",
+      "scope": [
+        "scripts/capture-legacy-datetime.mjs",
+        "reference/legacy-datetime.json",
+        "docs/legacy-datetime.md"
+      ],
+      "acceptance": [
+        "Capture nullable DATETIME/SMALLDATETIME RPC descriptors, string fractional precision, DATETIME2 source conversions, range/day rollover and CAST/TRY_CAST outcomes twice against pinned SQL Server.",
+        "Retain unnormalized rows, metadata, diagnostics, completion tokens and session counters; the reproducible generator must check the retained fixture.",
+        "Document the inspected mssqlite conversion/codecs, exact evidence and unresolved conversion gaps without treating backend timestamp casting or wire rounding as full SQL conversion support."
+      ],
+      "dependencies": [],
+      "issue": 123,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJXcD"
     }
   ]
 }
