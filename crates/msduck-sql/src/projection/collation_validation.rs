@@ -94,7 +94,7 @@ enum BinaryDirection {
     ToUnicode {
         style: Box<Expr>,
         trying: bool,
-        source_id: i32,
+        source_id: u8,
     },
 }
 struct BinaryInput {
