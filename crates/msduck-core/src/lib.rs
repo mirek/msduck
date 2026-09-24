@@ -1,6 +1,7 @@
 //! Deterministic SQL value rules. No database, transport, clock or session access.
 #![forbid(unsafe_code)]
 pub mod bin2;
+pub mod binary_unicode;
 pub mod bounded_aggregate;
 pub mod case_mapping;
 pub mod catalog;
