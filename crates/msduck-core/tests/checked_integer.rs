@@ -83,6 +83,5 @@ fn checked_arithmetic_matches_all_captured_values_nulls_and_diagnostics() {
             assert_eq!(actual.unwrap(), expected, "{case}");
         }
     }
-    assert!(errors > 0 && nulls > 0 && values > 0);
-    assert_eq!(errors + nulls + values, 240);
+    assert_eq!((errors, nulls, values), (37, 70, 133));
 }
