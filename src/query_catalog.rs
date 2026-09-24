@@ -130,6 +130,7 @@ pub fn bind_query_with_parameters(
     }
     let fields = infer::query_fields(&catalog, query, &scope);
     infer::lower_bin2_comparisons(&catalog, query, &scope)?;
+    infer::ansi_padding::lower(&catalog, query, &scope)?;
     Ok(fields)
 }
 
