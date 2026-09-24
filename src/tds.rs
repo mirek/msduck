@@ -1,57 +1,40 @@
 //! Imperative TDS streaming I/O and DuckDB adapter integration tests.
 //! Pure payload codecs are re-exported to preserve the existing public API.
-use anyhow::{Result, bail, ensure};
+use anyhow::{Result, ensure};
 pub use msduck_tds::*;
 use std::io::{Read, Write};
 
 pub fn read_message(reader: &mut impl Read, packet_size: usize) -> Result<Option<Message>> {
-    let mut payload = Vec::new();
-    let mut kind = None;
-    let mut previous_id: Option<u8> = None;
-    let mut status = 0;
+    let framing_error = |error| anyhow::anyhow!("invalid TDS framing: {error:?}");
+    let mut decoder = framing::Decoder::new(packet_size, MAX_MESSAGE).map_err(framing_error)?;
+    let mut buffer = [0u8; 8192];
     loop {
-        let mut h = [0; 8];
-        match reader.read(&mut h[..1])? {
-            0 if kind.is_none() => return Ok(None),
-            0 => bail!("EOF inside TDS message"),
-            _ => {}
+        // The borrowed Read has no retained lookahead buffer. Never take bytes
+        // from the next message: its next read_message call must still see them.
+        let limit = decoder
+            .read_size()
+            .map_err(framing_error)?
+            .min(buffer.len());
+        let count = match reader.read(&mut buffer[..limit]) {
+            Ok(count) => count,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error) => return Err(error.into()),
+        };
+        if count == 0 {
+            decoder.finish().map_err(framing_error)?;
+            return Ok(None);
         }
-        reader.read_exact(&mut h[1..])?;
-        let len = u16::from_be_bytes([h[2], h[3]]) as usize;
+        let progress = decoder.feed(&buffer[..count]).map_err(framing_error)?;
         ensure!(
-            (8..=packet_size).contains(&len),
-            "invalid TDS packet length"
+            progress.consumed == count,
+            "TDS read exceeded decoder boundary"
         );
-        ensure!(
-            kind.is_none_or(|k| k == h[0]),
-            "packet type changed inside message"
-        );
-        // Tiberius 0.12 repeats one packet ID across all fragments. Accept that
-        // client convention; TCP supplies ordering. Reject unrelated IDs.
-        ensure!(
-            previous_id.is_none_or(|id| id == h[6] || id.wrapping_add(1) == h[6]),
-            "out-of-order TDS packet"
-        );
-        ensure!(
-            payload.len() + len - 8 <= MAX_MESSAGE,
-            "TDS message too large"
-        );
-        kind = Some(h[0]);
-        previous_id = Some(h[6]);
-        status |= h[1];
-        let start = payload.len();
-        payload.resize(start + len - 8, 0);
-        reader.read_exact(&mut payload[start..])?;
-        if h[1] & 1 != 0 {
-            return Ok(Some(Message {
-                kind: h[0],
-                status,
-                payload,
-            }));
+        if let Some(message) = progress.message {
+            return Ok(Some(message));
         }
-        ensure!(len == packet_size, "short non-final TDS packet");
     }
 }
+
 pub fn write_message(writer: &mut impl Write, data: &[u8], packet_size: usize) -> Result<()> {
     write_message_kind(writer, data, packet_size, 4)
 }
@@ -92,6 +75,60 @@ pub(crate) fn write_message_kind(
 #[cfg(test)]
 mod transport_tests {
     use super::*;
+    #[test]
+    fn read_message_keeps_following_message_and_retries_interrupted_short_reads() {
+        struct Choppy {
+            bytes: std::io::Cursor<Vec<u8>>,
+            interrupt: bool,
+            width: usize,
+        }
+        impl Read for Choppy {
+            fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+                self.interrupt = !self.interrupt;
+                if self.interrupt {
+                    return Err(std::io::ErrorKind::Interrupted.into());
+                }
+                let size = self.width.min(out.len());
+                self.bytes.read(&mut out[..size])
+            }
+        }
+        for width in [1, 7, 512, 8192] {
+            let data = vec![0xab; 1400];
+            let mut wire = vec![];
+            write_message(&mut wire, &data, 512).unwrap();
+            wire[1] |= 2; // IGNORE on a non-final packet must survive assembly.
+            let boundary = wire.len() as u64;
+            write_message_kind(&mut wire, &[], 512, 6).unwrap();
+            let mut reader = Choppy {
+                bytes: std::io::Cursor::new(wire),
+                interrupt: false,
+                width,
+            };
+            let first = read_message(&mut reader, 512).unwrap().unwrap();
+            assert_eq!(first.payload, data);
+            assert_eq!(first.status, 3);
+            assert_eq!(reader.bytes.position(), boundary);
+            let second = read_message(&mut reader, 512).unwrap().unwrap();
+            assert_eq!((second.kind, second.status), (6, 1));
+            assert!(second.payload.is_empty());
+            assert!(read_message(&mut reader, 512).unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn read_message_distinguishes_clean_eof_from_every_truncated_prefix() {
+        let mut wire = vec![];
+        write_message(&mut wire, &vec![0x77; 600], 512).unwrap();
+        assert!(read_message(&mut &[][..], 512).unwrap().is_none());
+        for length in 1..wire.len() {
+            assert!(
+                read_message(&mut &wire[..length], 512).is_err(),
+                "prefix {length}"
+            );
+        }
+        assert!(read_message(&mut &wire[..], 512).unwrap().is_some());
+    }
+
     #[test]
     fn fragmented_round_trip_and_id_wrap() {
         for size in [0, 1, 504, 505, 150000] {
