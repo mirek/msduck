@@ -1058,7 +1058,7 @@
     {
       "id": "view-binding-reference-v1",
       "title": "Preserve SQL Server view metadata and lexical binding reference captures",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal; first-party captures executed in this owner session, twice in fresh isolated reference databases. No external submissions consumed.",
       "scope": [
         "reference/view-properties.json",
@@ -1101,7 +1101,7 @@
     {
       "id": "ddl-completion-reference-v1",
       "title": "Preserve SQL Server DDL completion token reference evidence",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server compatibility goal. First-party owner-run captures in this session establish DDL completion command IDs, row-count omission, RPC schema completion suppression and session row-count state. No external submissions consumed.",
       "scope": [
         "reference/ddl-completion.json",
