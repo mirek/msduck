@@ -291,3 +291,69 @@ fn supported_catalog_rows_match_captured_heap_index_and_column_snapshots() {
     })();
     assert!(result.is_err());
 }
+
+#[test]
+fn published_column_declarations_and_origin_match_captured_system_metadata() {
+    use msduck_core::result::Origin;
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../reference/index-catalog.json")).unwrap();
+    let s = setup();
+    index_catalog::publish_views(&s.db).unwrap();
+    for view in ["indexes", "index_columns"] {
+        let fields = index_catalog::fields(view, "SQL_Latin1_General_CP1_CI_AS").unwrap();
+        let actual_names:Vec<String>=s.db.prepare("SELECT column_name FROM information_schema.columns WHERE table_schema='sys' AND table_name=? ORDER BY ordinal_position").unwrap().query_map([view],|r|r.get(0)).unwrap().collect::<duckdb::Result<_>>().unwrap();
+        assert_eq!(
+            fields.iter().map(|f| f.name.clone()).collect::<Vec<_>>(),
+            actual_names
+        );
+        let declarations = fixture["declarations"][view]["result"]["sets"][0]["rows"]
+            .as_array()
+            .unwrap();
+        let descriptors = fixture["declarations"][view]["wire"]["sets"][0]["columns"]
+            .as_array()
+            .unwrap();
+        for field in fields {
+            let row = declarations.iter().find(|r| r[0] == field.name).unwrap();
+            let info = field.info.unwrap();
+            assert_eq!(
+                serde_json::json!([
+                    info.system_type_id,
+                    info.user_type_id,
+                    info.max_length,
+                    info.precision,
+                    info.scale,
+                    info.collation_name,
+                    field.properties.nullable
+                ]),
+                serde_json::json!(row.as_array().unwrap()[2..]),
+                "{view}.{}",
+                field.name
+            );
+            let wire = descriptors
+                .iter()
+                .find(|c| c["name"] == field.name)
+                .unwrap();
+            let flags = match field.properties.origin {
+                Origin::Stored => 8,
+                Origin::Expression => 32,
+                _ => panic!(),
+            } | u8::from(field.properties.nullable == Some(true));
+            assert_eq!(
+                serde_json::json!(flags),
+                wire["flags"],
+                "{view}.{}",
+                field.name
+            );
+        }
+    }
+    assert!(index_catalog::fields("unknown", "arbitrary").is_none());
+    let fields = index_catalog::fields("indexes", "Latin1_General_100_CS_AS").unwrap();
+    assert_eq!(
+        fields[1].info.as_ref().unwrap().collation_name.as_deref(),
+        Some("Latin1_General_100_CS_AS")
+    );
+    assert_eq!(
+        fields[4].info.as_ref().unwrap().collation_name.as_deref(),
+        Some("Latin1_General_CI_AS_KS_WS")
+    );
+}

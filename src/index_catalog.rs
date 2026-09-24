@@ -382,3 +382,92 @@ pub fn publish_views(db: &Connection) -> Result<()> {
         WHERE main.__msduck_index_catalog_ready()")?;
     Ok(())
 }
+
+/// Logical declarations for the columns currently published by this adapter.
+/// Catalog-default collation is explicit; type_desc uses SQL Server's captured
+/// resource collation. The root query-catalog hook must consume these fields;
+/// physical DuckDB types alone do not establish these descriptor properties.
+pub fn fields(
+    view: &str,
+    catalog_collation: &str,
+) -> Option<Vec<msduck_sql::binding_scope::Field>> {
+    use msduck_core::{
+        catalog::TypeMetadata,
+        collation::Label,
+        result::{Origin, Properties},
+    };
+    // (name, system type, user type, byte length, precision, nullable, computed)
+    let definitions: Vec<(&str, u8, i32, i16, u8, bool, bool)> =
+        match view.to_ascii_lowercase().as_str() {
+            "indexes" => vec![
+                ("object_id", 56, 56, 4, 10, false, false),
+                ("name", 231, 256, 256, 0, true, false),
+                ("index_id", 56, 56, 4, 10, false, false),
+                ("type", 48, 48, 1, 3, false, false),
+                ("type_desc", 231, 231, 120, 0, true, false),
+                ("is_unique", 104, 104, 1, 1, true, true),
+                ("data_space_id", 56, 56, 4, 10, true, true),
+                ("ignore_dup_key", 104, 104, 1, 1, true, true),
+                ("is_primary_key", 104, 104, 1, 1, true, true),
+                ("is_unique_constraint", 104, 104, 1, 1, true, true),
+                ("fill_factor", 48, 48, 1, 3, false, false),
+                ("is_padded", 104, 104, 1, 1, true, true),
+                ("is_disabled", 104, 104, 1, 1, true, true),
+                ("is_hypothetical", 104, 104, 1, 1, true, true),
+                ("allow_row_locks", 104, 104, 1, 1, true, true),
+                ("allow_page_locks", 104, 104, 1, 1, true, true),
+                ("has_filter", 104, 104, 1, 1, true, true),
+                ("filter_definition", 231, 231, -1, 0, true, true),
+                ("auto_created", 104, 104, 1, 1, true, true),
+                ("optimize_for_sequential_key", 104, 104, 1, 1, true, true),
+            ],
+            "index_columns" => vec![
+                ("object_id", 56, 56, 4, 10, false, false),
+                ("index_id", 56, 56, 4, 10, false, false),
+                ("index_column_id", 56, 56, 4, 10, false, false),
+                ("column_id", 56, 56, 4, 10, false, false),
+                ("key_ordinal", 48, 48, 1, 3, false, false),
+                ("partition_ordinal", 48, 48, 1, 3, false, false),
+                ("is_descending_key", 104, 104, 1, 1, true, true),
+                ("is_included_column", 104, 104, 1, 1, true, true),
+            ],
+            _ => return None,
+        };
+    Some(
+        definitions
+            .into_iter()
+            .map(
+                |(name, system, user, length, precision, nullable, computed)| {
+                    let collation_name = (system == 231).then(|| {
+                        if name == "type_desc" {
+                            "Latin1_General_CI_AS_KS_WS".to_owned()
+                        } else {
+                            catalog_collation.to_owned()
+                        }
+                    });
+                    msduck_sql::binding_scope::Field {
+                        name: name.into(),
+                        info: Some(TypeMetadata {
+                            system_type_id: Some(system),
+                            user_type_id: Some(user),
+                            max_length: Some(length),
+                            precision: Some(precision),
+                            scale: Some(0),
+                            collation_name: collation_name.clone(),
+                        }),
+                        collation: collation_name.map(|name| Ok(Label::Implicit(name))),
+                        json_fragment: false,
+                        properties: Properties {
+                            nullable: Some(nullable),
+                            origin: if computed {
+                                Origin::Expression
+                            } else {
+                                Origin::Stored
+                            },
+                        },
+                    }
+                },
+            )
+            .collect(),
+    )
+}

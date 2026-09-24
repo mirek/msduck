@@ -1,5 +1,7 @@
 // First-party catalog snapshots; all query projections are explicit and retained.
 import assert from 'node:assert/strict'
+import {execFile} from 'node:child_process'
+import {promisify} from 'node:util'
 import {mkdir, readFile, writeFile} from 'node:fs/promises'
 import {resolve} from 'node:path'
 import {withReferenceContainer} from './lib/reference-container.mjs'
@@ -39,6 +41,18 @@ const programs = [
 ]
 const output=resolve(process.argv[2] ?? 'artifacts/compatibility/index-catalog-reference')
 await mkdir(output,{recursive:true})
+// Let the lifecycle helper remove its owned container explicitly. Automatic
+// removal can race cleanup and hide a startup failure before logs are captured.
+const exec=promisify(execFile)
+async function diagnosticDocker(args,env){
+ const actual=args[0]==='run'?args.filter(arg=>arg!=='--rm'):args
+ const result=await exec('docker',actual,{env:{...process.env,...env},maxBuffer:4*1024*1024})
+ if(args[0]==='inspect' && result.stdout.trim()!=='true'){
+  const logs=await exec('docker',['logs',args.at(-1)],{maxBuffer:4*1024*1024}).catch(error=>({stdout:error.stdout??'',stderr:error.stderr??''}))
+  await writeFile(resolve(output,'startup.log'),logs.stdout+logs.stderr)
+ }
+ return result.stdout.trim()
+}
 await withReferenceContainer(async(config,container)=>{
  const runs=[]
  for(let repeat=0;repeat<2;repeat++){
@@ -59,16 +73,28 @@ await withReferenceContainer(async(config,container)=>{
     assert.equal(columns.errors.length,0,`Index-column projection failed after ${id}`)
     results.push({id,sql,result,completion,state,indexes,columns})
    }
-   return results
+   const declarations={}
+   for(const view of ['indexes','index_columns']){
+    const sql=`SELECT name,column_id,system_type_id,user_type_id,max_length,precision,scale,collation_name,is_nullable FROM sys.all_columns WHERE object_id=OBJECT_ID(N'sys.${view}') ORDER BY column_id`
+    const result=canonical(await capture(connection,sql))
+    assert.equal(result.errors.length,0,`Catalog declarations failed for ${view}`)
+    assert.ok(result.sets[0]?.rows.length>0,`Missing catalog declarations for ${view}`)
+    const wireSql=`SELECT * FROM sys.${view} WHERE 1=0`
+    const wire=canonical(await capture(connection,wireSql))
+    assert.equal(wire.errors.length,0,`Catalog descriptor capture failed for ${view}`)
+    assert.equal(wire.sets[0]?.columns.length,result.sets[0].rows.length)
+    declarations[view]={sql,result,wireSql,wire}
+   }
+   return {declarations,results}
   })
   runs.push(results)
   await writeFile(resolve(output,'runs.json'),JSON.stringify(runs,null,2)+'\n')
  }
  assert.deepEqual(runs[0],runs[1],'Fresh catalog captures differ')
- const actual={image:container.image,identicalFreshCaptures:2,indexSql,columnSql,results:runs[0]}
+ const actual={image:container.image,identicalFreshCaptures:2,indexSql,columnSql,results:runs[0].results,declarations:runs[0].declarations}
  await writeFile(resolve(output,'index-catalog.json'),JSON.stringify(actual,null,2)+'\n')
  let fixture
  try{fixture=JSON.parse(await readFile(new URL('../reference/index-catalog.json',import.meta.url),'utf8'))}catch(error){if(error.code!=='ENOENT')throw error}
  if(fixture)assert.deepEqual(actual,fixture,'Retained index catalog reference differs')
  console.log(`Captured ${programs.length} index catalog snapshots twice identically${fixture?' and matched retained fixture':''}`)
-})
+}, {docker:diagnosticDocker})
