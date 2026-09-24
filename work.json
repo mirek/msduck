@@ -1539,6 +1539,25 @@
       "dependencies": [],
       "issue": 162,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PKB6A"
+    },
+    {
+      "id": "all-objects-reference-v1",
+      "title": "Capture SQL Server all_objects catalog membership and metadata",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility and independently claimable work goals. Engine cancellation integration at 045bddc reproduced missing sys.all_objects; publish a disjoint reference task so another worker can establish catalog requirements without touching active engine scopes.",
+      "scope": [
+        "scripts/capture-all-objects.mjs",
+        "reference/all-objects.json",
+        "docs/all-objects-reference.md"
+      ],
+      "acceptance": [
+        "Inspect the local sys skill and owner-approved reference helpers; use the pinned SQL Server container and fresh isolated databases to capture all_objects descriptors and membership relative to objects/system_objects. Do not infer membership from names alone.",
+        "Capture effects of owner-created tables, views, procedures/functions and schema changes where supported by the reference, plus transactional visibility and rollback. Retain raw errors, rows, descriptors and completions; document server-generated identity binding explicitly.",
+        "Capture twice and independently verify retained evidence. Describe the minimal runtime catalog implementation and gaps without creating fabricated views or modifying engine/server/catalog implementation files."
+      ],
+      "dependencies": [],
+      "issue": 163,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PKDMQ"
     }
   ]
 }
