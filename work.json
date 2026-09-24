@@ -1273,6 +1273,25 @@
       "dependencies": [],
       "issue": 127,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJbIv"
+    },
+    {
+      "id": "legacy-datetime-conversion-core-v1",
+      "title": "Implement source-aware deterministic legacy datetime conversion",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal and request for disjoint claimable agent work. Owner reference commit 17d9bbc retains 60 twice-captured and independently recaptured SQL Server observations. Runtime replay at 76b0de3 matches only 17 complete observations; backend TIMESTAMP coercion and wire-only rounding do not implement SQL conversion. No third-party content consumed.",
+      "scope": [
+        "crates/msduck-core/src/legacy_datetime.rs",
+        "crates/msduck-core/tests/legacy_datetime.rs"
+      ],
+      "acceptance": [
+        "Consume owner-approved reference/legacy-datetime.json from commit 17d9bbc. Implement deterministic source-aware DATETIME/SMALLDATETIME value conversion for explicit DATETIME2 inputs and captured ISO character inputs; preserve exact rational DATETIME ticks and SMALLDATETIME minutes, NULL and typed diagnostics. Keep session, AST, DuckDB, TDS, environment and clocks outside the module.",
+        "Cover source-dependent rounding, representable boundaries, string fractional validation, TRY conversion and exact error number/state/class/message. Do not replace typed source rules with one universal rounding function: the captured minimum/maximum DATETIME2 inputs differ from string conversion. Extend first-party evidence through the reference owner before generalizing unobserved boundaries or formats.",
+        "Verify captured outcomes and independent boundary vectors without floating-point arithmetic, unchecked overflow or partial values on failure. Separate unsupported conversion styles/date formats explicitly from proven behavior. Output must be suitable for storage, arithmetic and comparison before wire encoding.",
+        "Do not edit core lib exports or runtime integration files under other claims. Compile the new module in its integration-test harness using existing exported core types; document the one-line export/integration hook in the PR for the current export owner. Native vector adapters, SQL binding, assignment common-source typing and session diagnostic plumbing remain subsequent disjoint tasks."
+      ],
+      "dependencies": [],
+      "issue": 128,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJf-F"
     }
   ]
 }
