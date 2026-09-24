@@ -1178,6 +1178,26 @@
       "dependencies": [],
       "issue": 118,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJI1w"
+    },
+    {
+      "id": "drop-index-batch-syntax-v1",
+      "title": "Preserve ordered DROP INDEX requests through batch parsing",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal. Captured DROP INDEX binder and caller-owned parser cursor are implemented; runtime integration requires retaining all targets and options in the visitor-compatible batch AST. No external submissions consumed.",
+      "scope": [
+        "crates/msduck-sql/src/dialect.rs",
+        "crates/msduck-sql/src/batch.rs",
+        "crates/msduck-sql/src/drop_index_syntax.rs",
+        "crates/msduck-sql/tests/drop_index_syntax.rs"
+      ],
+      "acceptance": [
+        "Connect the existing DROP parser cursor to batch parsing without losing ordered targets, quoted identifiers, IF EXISTS or captured options.",
+        "Preserve exact captured syntax diagnostic identity, including within nested batch constructs; reject uncaptured options instead of forwarding or discarding them.",
+        "Use a deterministic visitor-compatible statement representation and tests for adjacent/nested statements, round trip decoding and all captured requests. Root execution and library exports remain with their existing same-worker owners."
+      ],
+      "dependencies": [],
+      "issue": 121,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJMJj"
     }
   ]
 }
