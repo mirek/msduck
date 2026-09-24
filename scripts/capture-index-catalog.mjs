@@ -38,6 +38,9 @@ const programs = [
  ['begin-drop-table', 'BEGIN TRANSACTION; DROP TABLE dbo.b'],
  ['rollback-drop-table', 'ROLLBACK TRANSACTION'],
  ['committed-drop', 'BEGIN TRANSACTION; DROP INDEX ix ON dbo.b; COMMIT TRANSACTION'],
+ ['duplicate-case-name', 'CREATE INDEX IX ON dbo.a(id)'],
+ ['duplicate-unqualified-table', 'CREATE INDEX ix ON a(id)'],
+ ['duplicate-quoted-name', 'CREATE INDEX [odd.index] ON alt.[odd.table](other)'],
 ]
 const output=resolve(process.argv[2] ?? 'artifacts/compatibility/index-catalog-reference')
 await mkdir(output,{recursive:true})
@@ -65,7 +68,7 @@ await withReferenceContainer(async(config,container)=>{
     tokens=[]
     const result=canonical(await capture(connection,sql))
     const completion=[...tokens]
-    if(!['duplicate-name-error','constraint-drop-error','unique-null-duplicate'].includes(id)) assert.equal(result.errors.length,0,`Unexpected reference failure in ${id}: ${JSON.stringify(result.errors)}`)
+    if(!['duplicate-name-error','constraint-drop-error','unique-null-duplicate','duplicate-case-name','duplicate-unqualified-table','duplicate-quoted-name'].includes(id)) assert.equal(result.errors.length,0,`Unexpected reference failure in ${id}: ${JSON.stringify(result.errors)}`)
     const state=canonical(await capture(connection,'SELECT @@ROWCOUNT AS r,@@ERROR AS e,@@TRANCOUNT AS t'))
     const indexes=canonical(await capture(connection,indexSql))
     const columns=canonical(await capture(connection,columnSql))

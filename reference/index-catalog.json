@@ -21213,6 +21213,2370 @@
         "returnStatus": null,
         "rowCount": 4
       }
+    },
+    {
+      "id": "duplicate-case-name",
+      "sql": "CREATE INDEX IX ON dbo.a(id)",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 1913,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The operation failed because an index or statistics with name 'IX' already exists on table 'dbo.a'."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "t",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                1913,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "indexes": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "type",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "type_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "is_unique",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_space_id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "ignore_dup_key",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_primary_key",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_unique_constraint",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "fill_factor",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "is_padded",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_disabled",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_hypothetical",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "allow_row_locks",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "allow_page_locks",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "has_filter",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "filter_definition",
+                "type": "NVarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "auto_created",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "optimize_for_sequential_key",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "odd.table",
+                null,
+                0,
+                0,
+                "HEAP",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index",
+                2,
+                2,
+                "NONCLUSTERED",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "a",
+                null,
+                0,
+                0,
+                "HEAP",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "a",
+                "ix",
+                2,
+                2,
+                "NONCLUSTERED",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "b",
+                null,
+                0,
+                0,
+                "HEAP",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "keys_table",
+                "pk_keys",
+                1,
+                1,
+                "CLUSTERED",
+                true,
+                1,
+                false,
+                true,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "keys_table",
+                "uq_keys",
+                2,
+                2,
+                "NONCLUSTERED",
+                true,
+                1,
+                false,
+                false,
+                true,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 7,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 7
+      },
+      "columns": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "index_column_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "column_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "column_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "key_ordinal",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "partition_ordinal",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "is_descending_key",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_included_column",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "odd.table",
+                "odd.index",
+                2,
+                1,
+                1,
+                "odd.column",
+                1,
+                0,
+                false,
+                false,
+                0,
+                0
+              ],
+              [
+                "dbo",
+                "a",
+                "ix",
+                2,
+                1,
+                1,
+                "id",
+                1,
+                0,
+                false,
+                false,
+                0,
+                0
+              ],
+              [
+                "dbo",
+                "keys_table",
+                "pk_keys",
+                1,
+                1,
+                1,
+                "id",
+                1,
+                0,
+                false,
+                false,
+                0,
+                0
+              ],
+              [
+                "dbo",
+                "keys_table",
+                "uq_keys",
+                2,
+                1,
+                2,
+                "other",
+                1,
+                0,
+                false,
+                false,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "duplicate-unqualified-table",
+      "sql": "CREATE INDEX ix ON a(id)",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 1913,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The operation failed because an index or statistics with name 'ix' already exists on table 'a'."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "t",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                1913,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "indexes": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "type",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "type_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "is_unique",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_space_id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "ignore_dup_key",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_primary_key",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_unique_constraint",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "fill_factor",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "is_padded",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_disabled",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_hypothetical",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "allow_row_locks",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "allow_page_locks",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "has_filter",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "filter_definition",
+                "type": "NVarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "auto_created",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "optimize_for_sequential_key",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "odd.table",
+                null,
+                0,
+                0,
+                "HEAP",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index",
+                2,
+                2,
+                "NONCLUSTERED",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "a",
+                null,
+                0,
+                0,
+                "HEAP",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "a",
+                "ix",
+                2,
+                2,
+                "NONCLUSTERED",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "b",
+                null,
+                0,
+                0,
+                "HEAP",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "keys_table",
+                "pk_keys",
+                1,
+                1,
+                "CLUSTERED",
+                true,
+                1,
+                false,
+                true,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "keys_table",
+                "uq_keys",
+                2,
+                2,
+                "NONCLUSTERED",
+                true,
+                1,
+                false,
+                false,
+                true,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 7,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 7
+      },
+      "columns": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "index_column_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "column_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "column_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "key_ordinal",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "partition_ordinal",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "is_descending_key",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_included_column",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "odd.table",
+                "odd.index",
+                2,
+                1,
+                1,
+                "odd.column",
+                1,
+                0,
+                false,
+                false,
+                0,
+                0
+              ],
+              [
+                "dbo",
+                "a",
+                "ix",
+                2,
+                1,
+                1,
+                "id",
+                1,
+                0,
+                false,
+                false,
+                0,
+                0
+              ],
+              [
+                "dbo",
+                "keys_table",
+                "pk_keys",
+                1,
+                1,
+                1,
+                "id",
+                1,
+                0,
+                false,
+                false,
+                0,
+                0
+              ],
+              [
+                "dbo",
+                "keys_table",
+                "uq_keys",
+                2,
+                1,
+                2,
+                "other",
+                1,
+                0,
+                false,
+                false,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "duplicate-quoted-name",
+      "sql": "CREATE INDEX [odd.index] ON alt.[odd.table](other)",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 1913,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The operation failed because an index or statistics with name 'odd.index' already exists on table 'alt.odd.table'."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "t",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                1913,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "indexes": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "type",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "type_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "is_unique",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_space_id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "ignore_dup_key",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_primary_key",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_unique_constraint",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "fill_factor",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "is_padded",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_disabled",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_hypothetical",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "allow_row_locks",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "allow_page_locks",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "has_filter",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "filter_definition",
+                "type": "NVarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "auto_created",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "optimize_for_sequential_key",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_ignored_in_optimization",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "compression_delay",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "suppress_dup_key_messages",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "odd.table",
+                null,
+                0,
+                0,
+                "HEAP",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index",
+                2,
+                2,
+                "NONCLUSTERED",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "a",
+                null,
+                0,
+                0,
+                "HEAP",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "a",
+                "ix",
+                2,
+                2,
+                "NONCLUSTERED",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "b",
+                null,
+                0,
+                0,
+                "HEAP",
+                false,
+                1,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "keys_table",
+                "pk_keys",
+                1,
+                1,
+                "CLUSTERED",
+                true,
+                1,
+                false,
+                true,
+                false,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ],
+              [
+                "dbo",
+                "keys_table",
+                "uq_keys",
+                2,
+                2,
+                "NONCLUSTERED",
+                true,
+                1,
+                false,
+                false,
+                true,
+                0,
+                false,
+                false,
+                false,
+                true,
+                true,
+                false,
+                null,
+                false,
+                false,
+                false,
+                null,
+                false
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 7,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 7
+      },
+      "columns": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "index_column_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "column_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "column_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "key_ordinal",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "partition_ordinal",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "is_descending_key",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_included_column",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "column_store_order_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_clustering_ordinal",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "odd.table",
+                "odd.index",
+                2,
+                1,
+                1,
+                "odd.column",
+                1,
+                0,
+                false,
+                false,
+                0,
+                0
+              ],
+              [
+                "dbo",
+                "a",
+                "ix",
+                2,
+                1,
+                1,
+                "id",
+                1,
+                0,
+                false,
+                false,
+                0,
+                0
+              ],
+              [
+                "dbo",
+                "keys_table",
+                "pk_keys",
+                1,
+                1,
+                1,
+                "id",
+                1,
+                0,
+                false,
+                false,
+                0,
+                0
+              ],
+              [
+                "dbo",
+                "keys_table",
+                "uq_keys",
+                2,
+                1,
+                2,
+                "other",
+                1,
+                0,
+                false,
+                false,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
     }
   ],
   "declarations": {

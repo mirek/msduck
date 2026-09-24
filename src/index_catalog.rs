@@ -158,10 +158,16 @@ pub fn create(
             "resolved table identity does not match CREATE INDEX target"
         );
         let duplicate:i64=db.query_row("SELECT count(*) FROM main.__msduck_index_catalog WHERE object_id=? AND name_key=lower(?)",params![object_id,index_name[0]],|r|r.get(0))?;
-        ensure!(
-            duplicate == 0,
-            "index name already exists on the target table"
-        );
+        if duplicate != 0 {
+            return Err(msduck_core::diagnostic::SqlError::new(
+                1913,
+                1,
+                format!(
+                    "The operation failed because an index or statistics with name '{}' already exists on table '{}'.",
+                    index_name[0], target.join(".")
+                ),
+            ).into());
+        }
         let mut columns = vec![];
         for name in &keys {
             let (id, declared, kind): (i32, String, i32) = db.query_row(

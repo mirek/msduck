@@ -371,3 +371,52 @@ fn published_column_declarations_and_origin_match_captured_system_metadata() {
         Some("Latin1_General_CI_AS_KS_WS")
     );
 }
+
+#[test]
+fn duplicate_index_diagnostic_preserves_requested_names_and_catalog_state() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../reference/index-catalog.json")).unwrap();
+    let mut s = setup();
+    assert!(
+        s.batch_response(
+            "CREATE SCHEMA alt; CREATE TABLE alt.[odd.table]([odd.column] INT,other INT)",
+            &Default::default(),
+            false,
+            None
+        )
+        .1
+    );
+    make(&s, "CREATE INDEX ix ON dbo.a(id)").unwrap();
+    make(
+        &s,
+        "CREATE INDEX [odd.index] ON alt.[odd.table]([odd.column])",
+    )
+    .unwrap();
+    let before = acquire(&s.db).unwrap();
+    let mut checked = 0;
+    for case in fixture["results"].as_array().unwrap() {
+        if ![
+            "duplicate-name-error",
+            "duplicate-case-name",
+            "duplicate-unqualified-table",
+            "duplicate-quoted-name",
+        ]
+        .contains(&case["id"].as_str().unwrap())
+        {
+            continue;
+        }
+        let error = make(&s, case["sql"].as_str().unwrap()).unwrap_err();
+        let actual = error
+            .downcast_ref::<msduck_core::diagnostic::SqlError>()
+            .unwrap();
+        assert_eq!(
+            serde_json::json!({"number":actual.number,"state":actual.state,"class":actual.severity,"lineNumber":1,"message":actual.message}),
+            case["result"]["errors"][0]
+        );
+        assert_eq!(acquire(&s.db).unwrap(), before);
+        checked += 1;
+    }
+    assert_eq!(checked, 4);
+    make(&s, "CREATE INDEX after_errors ON dbo.a(value)").unwrap();
+    assert_eq!(acquire(&s.db).unwrap().len(), 3);
+}
