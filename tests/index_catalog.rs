@@ -202,3 +202,80 @@ fn incompatible_legacy_unique_data_and_constraints_remain_explicit() {
     assert!(ok, "{response:?}");
     assert!(index_catalog::acquire_complete(&s.db).is_err());
 }
+
+fn catalog_rows(s: &Session, sql: &str) -> serde_json::Value {
+    use duckdb::types::Value;
+    let rows =
+        s.db.prepare(sql)
+            .unwrap()
+            .query_map([], |r| {
+                (0..r.as_ref().column_count())
+                    .map(|i| {
+                        let value: Value = r.get(i)?;
+                        Ok(match value {
+                            Value::Null => serde_json::Value::Null,
+                            Value::Boolean(v) => serde_json::json!(v),
+                            Value::TinyInt(v) => serde_json::json!(v),
+                            Value::UTinyInt(v) => serde_json::json!(v),
+                            Value::SmallInt(v) => serde_json::json!(v),
+                            Value::Int(v) => serde_json::json!(v),
+                            Value::BigInt(v) => serde_json::json!(v),
+                            Value::Text(v) => serde_json::json!(v),
+                            other => panic!("Unexpected catalog value {other:?}"),
+                        })
+                    })
+                    .collect::<duckdb::Result<Vec<_>>>()
+            })
+            .unwrap()
+            .collect::<duckdb::Result<Vec<_>>>()
+            .unwrap();
+    serde_json::json!(rows)
+}
+#[test]
+fn supported_catalog_rows_match_captured_heap_index_and_column_snapshots() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = Session::new(server.connection().unwrap()).unwrap();
+    register(&s.db).unwrap();
+    index_catalog::publish_views(&s.db).unwrap();
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../reference/index-catalog.json")).unwrap();
+    for case in fixture["results"].as_array().unwrap() {
+        let id = case["id"].as_str().unwrap();
+        if ![
+            "schema",
+            "heaps",
+            "quoted-table",
+            "ordinary",
+            "same-name-other-table",
+            "quoted-index",
+        ]
+        .contains(&id)
+        {
+            continue;
+        }
+        let sql = case["sql"].as_str().unwrap();
+        if sql.starts_with("CREATE INDEX") || sql.starts_with("CREATE UNIQUE INDEX") {
+            make(&s, sql).unwrap();
+        } else {
+            let (response, ok) = s.batch_response(sql, &Default::default(), false, None);
+            assert!(ok, "{id}: {response:?}");
+        }
+        for (query, key) in [("indexSql", "indexes"), ("columnSql", "columns")] {
+            assert_eq!(
+                catalog_rows(&s, fixture[query].as_str().unwrap()),
+                case[key]["sets"][0]["rows"],
+                "{id}/{key}"
+            );
+        }
+    }
+    s.db.execute_batch("CREATE INDEX unmanaged ON dbo.a(value)")
+        .unwrap();
+    assert!(
+        s.db.prepare("SELECT name FROM sys.indexes")
+            .unwrap()
+            .query([])
+            .unwrap()
+            .next()
+            .is_err()
+    );
+}

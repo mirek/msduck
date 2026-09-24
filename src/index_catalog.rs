@@ -340,3 +340,45 @@ pub fn acquire_complete(db: &Connection) -> Result<Vec<Index>> {
     );
     acquire(db)
 }
+
+/// Publish the supported heap/ordinary-index catalog rows. Unsupported physical
+/// states raise explicitly rather than silently omitting indexes or inventing
+/// heap rows for constraint-backed tables. Wire declaration metadata still needs
+/// the root catalog adapter's logical type/property integration.
+pub fn publish_views(db: &Connection) -> Result<()> {
+    db.execute_batch("CREATE OR REPLACE MACRO main.__msduck_index_catalog_ready() AS
+        CASE WHEN EXISTS(SELECT 1 FROM duckdb_indexes() i
+          JOIN sys.schemas s ON s.name=i.schema_name
+          JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=i.table_name AND o.type='U'
+          WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_index_catalog c WHERE c.backend_schema=i.schema_name AND c.backend_name=i.index_name AND c.object_id=o.object_id))
+        OR EXISTS(SELECT 1 FROM duckdb_constraints() c
+          JOIN sys.schemas s ON s.name=c.schema_name
+          JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=c.table_name AND o.type='U'
+          WHERE c.constraint_type IN ('PRIMARY KEY','UNIQUE'))
+        THEN error('Index catalog contains unsupported unmanaged or constraint-backed indexes') ELSE true END;
+        CREATE OR REPLACE VIEW main.__msduck_live_indexes AS
+        SELECT c.* FROM main.__msduck_index_catalog c
+          JOIN sys.objects o ON o.object_id=c.object_id AND o.type='U'
+          JOIN sys.schemas s ON s.schema_id=o.schema_id
+          JOIN duckdb_tables() t ON t.schema_name=s.name AND t.table_name=o.name
+          JOIN duckdb_indexes() i ON i.schema_name=c.backend_schema AND i.index_name=c.backend_name AND i.table_oid=t.table_oid;
+        CREATE OR REPLACE VIEW sys.indexes AS
+        SELECT r.object_id,r.name,r.index_id,CAST(CASE WHEN r.index_id=0 THEN 0 ELSE 2 END AS UTINYINT) AS type,
+          CAST(CASE WHEN r.index_id=0 THEN 'HEAP' ELSE 'NONCLUSTERED' END AS VARCHAR) AS type_desc,
+          r.is_unique,CAST(1 AS INTEGER) AS data_space_id,false AS ignore_dup_key,
+          false AS is_primary_key,false AS is_unique_constraint,CAST(0 AS UTINYINT) AS fill_factor,
+          false AS is_padded,false AS is_disabled,false AS is_hypothetical,
+          true AS allow_row_locks,true AS allow_page_locks,false AS has_filter,
+          CAST(NULL AS VARCHAR) AS filter_definition,false AS auto_created,false AS optimize_for_sequential_key
+        FROM (SELECT object_id,CAST(NULL AS VARCHAR) AS name,CAST(0 AS INTEGER) AS index_id,false AS is_unique
+              FROM sys.objects WHERE type='U'
+              UNION ALL SELECT object_id,name,index_id,is_unique FROM main.__msduck_live_indexes) r
+        WHERE main.__msduck_index_catalog_ready();
+        CREATE OR REPLACE VIEW sys.index_columns AS
+        SELECT i.object_id,i.index_id,k.ordinal AS index_column_id,k.column_id,
+          CAST(k.ordinal AS UTINYINT) AS key_ordinal,CAST(0 AS UTINYINT) AS partition_ordinal,
+          false AS is_descending_key,false AS is_included_column
+        FROM main.__msduck_live_indexes i JOIN main.__msduck_index_keys k USING(incarnation)
+        WHERE main.__msduck_index_catalog_ready()")?;
+    Ok(())
+}
