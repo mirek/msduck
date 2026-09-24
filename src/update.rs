@@ -89,15 +89,21 @@ pub fn lower(db: &Connection, statement: &mut Statement, money: &[bool]) -> Resu
                 .try_with_sql(column.2.as_deref().unwrap_or("NULL"))?
                 .parse_expr()?;
         }
-        assignment.value = match crate::assignment::storage_kind(&column.1) {
-            Some(kind) => crate::assignment::convert_for_storage(
-                value,
-                &kind,
-                money.get(index) == Some(&true),
-                utf16.contains(&column.0.to_lowercase()),
-            ),
-            None => value,
-        };
+        assignment.value = crate::storage_diagnostic::contextualize(
+            match crate::assignment::storage_kind(&column.1) {
+                Some(kind) => crate::assignment::convert_for_storage(
+                    value,
+                    &kind,
+                    money.get(index) == Some(&true),
+                    utf16.contains(&column.0.to_lowercase()),
+                ),
+                None => value,
+            },
+            "master",
+            schema,
+            table,
+            &column.0,
+        );
     }
     Ok(())
 }

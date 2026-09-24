@@ -26,3 +26,23 @@ fn rejected_character_writes_are_atomic_and_continue_the_batch() {
         assert_eq!(rows, vec![(0, "x".into()), (3, "z".into())], "{write}");
     }
 }
+
+#[test]
+fn contextual_storage_evaluates_sources_once_across_vectors() {
+    let server = Server::open(":memory:").unwrap();
+    let session = Session::new(server.connection().unwrap()).unwrap();
+    session
+        .db
+        .execute_batch("CREATE SEQUENCE contextual_store_calls")
+        .unwrap();
+    let wrong:i64=session.db.query_row("SELECT count(*) FROM (SELECT i,__msduck_store_context_varchar(__msduck_pack_unicode(CASE WHEN nextval('contextual_store_calls')%17=0 THEN NULL ELSE 'Ā' END),1,'master.dbo.t','s') v FROM range(6000) t(i)) WHERE v IS DISTINCT FROM CASE WHEN (i+1)%17=0 THEN NULL ELSE 'A' END",[],|r|r.get(0)).unwrap();
+    assert_eq!(wrong, 0);
+    assert_eq!(
+        session
+            .db
+            .query_row("SELECT currval('contextual_store_calls')", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        6000
+    );
+}

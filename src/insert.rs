@@ -238,11 +238,17 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
         .map(|(index, (target, alias))| {
             if let Some(kind) = target_kind(&target.1) {
                 let value = Expr::Identifier(Ident::new(alias));
-                crate::assignment::convert_for_storage(
-                    value,
-                    &kind,
-                    money_columns.get(index) == Some(&true),
-                    utf16.contains(&target.0.to_lowercase()),
+                crate::storage_diagnostic::contextualize(
+                    crate::assignment::convert_for_storage(
+                        value,
+                        &kind,
+                        money_columns.get(index) == Some(&true),
+                        utf16.contains(&target.0.to_lowercase()),
+                    ),
+                    "master",
+                    schema,
+                    table,
+                    &target.0,
                 )
                 .to_string()
             } else {

@@ -74,6 +74,7 @@ mod scalar;
 mod schema_catalog;
 mod select_into;
 mod space;
+mod storage_diagnostic;
 mod string_escape;
 mod switchoffset;
 mod table_alter;

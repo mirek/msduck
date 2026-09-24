@@ -32,6 +32,7 @@ fn runtime_diagnostic(message: &str) -> Option<SqlError> {
     crate::json_extract::diagnostic(message)
         .or_else(|| crate::integer_conversion::diagnostic(message))
         .or_else(|| crate::binary_unicode::diagnostic(message))
+        .or_else(|| crate::storage_diagnostic::diagnostic(message))
         .or_else(|| crate::query_error::integer_overflow(message))
         .or_else(|| {
             msduck_core::left_right::diagnostic(
@@ -3506,6 +3507,29 @@ impl VisitorMut for Translator<'_> {
                     }
                     let data_type =
                         msduck_sql::session_function::error_type(f).expect("known error function");
+                    if name == "ERROR_MESSAGE"
+                        && let Some(units) =
+                            self.caught_error.and_then(|e| e.message_utf16.as_ref())
+                    {
+                        self.values.push(duckdb::types::Value::Blob(
+                            units.iter().flat_map(|u| u.to_le_bytes()).collect(),
+                        ));
+                        *expr = binary_function(
+                            "__msduck_cast_carrier_nvarchar",
+                            unary_function(
+                                "__msduck_unicode_from_le",
+                                Expr::Value(
+                                    sqlparser::ast::Value::Placeholder(format!(
+                                        "${}",
+                                        self.values.len()
+                                    ))
+                                    .into(),
+                                ),
+                            ),
+                            number(4000),
+                        );
+                        return ControlFlow::Continue(());
+                    }
                     let value = match (self.caught_error, name.as_str()) {
                         (Some(error), "ERROR_NUMBER") => number(error.number),
                         (Some(error), "ERROR_STATE") => number(error.state),
