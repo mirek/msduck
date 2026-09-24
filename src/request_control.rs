@@ -341,7 +341,15 @@ mod tests {
         let retained = db.query_row("SELECT count(*) FROM cancellation_probe", [], |r| {
             r.get::<_, i64>(0)
         });
-        eprintln!("Interrupted explicit transaction read: {retained:?}");
+        // This is a pinned DuckDB limitation, not the SQL Server target:
+        // interruption invalidates the whole explicit transaction.
+        let retained_error = retained.unwrap_err();
+        assert!(
+            retained_error
+                .to_string()
+                .contains("Current transaction is aborted"),
+            "{retained_error}"
+        );
         assert_eq!(
             observer
                 .query_row("SELECT count(*) FROM cancellation_probe", [], |r| r

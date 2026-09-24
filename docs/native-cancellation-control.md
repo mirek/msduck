@@ -65,3 +65,21 @@ cancellation latency, transaction atomicity, streaming or transport integration.
 Run formatting, focused request-control tests, strict workspace Clippy and full
 workspace tests on the Linux builder. Independent client/SQL Server differential
 checks are required when the server starts using this module.
+
+## Explicit transaction probe
+
+A further native regression begins an explicit transaction, inserts one row,
+then interrupts a long read query using the same entry-race synchronization.
+DuckDB reports `Current transaction is aborted (please ROLLBACK)` on the next
+read. The other connection sees no committed row. The test keeps delayed pulse
+callbacks running while the worker executes ROLLBACK and a reuse query, before
+retiring the control; neither operation is interrupted and no row becomes visible.
+
+This records a backend limitation, not desired SQL Server behavior. The retained
+SQL Server WAITFOR captures preserve the explicit transaction and preceding insert
+with XACT_ABORT OFF, whereas this DuckDB computing-query probe aborts its native
+transaction. Matching SQL Server computation/write captures are still needed to
+establish the exact corresponding differences. Do not implement cancellation by
+unconditionally rolling back the whole transaction or replaying prior statements:
+that could discard or repeat observable work. Engine integration needs a deliberate
+transaction-preserving strategy where reference behavior requires it.
