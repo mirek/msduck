@@ -1,6 +1,6 @@
 # Legacy datetime conversion evidence
 
-`reference/legacy-datetime.json` contains 72 RPC observations captured twice
+`reference/legacy-datetime.json` contains 82 RPC observations captured twice
 identically from the pinned SQL Server container. Reproduce them with
 `node scripts/capture-legacy-datetime.mjs`. The generator compares fresh results
 with the retained fixture and records raw repetitions separately. Each case
@@ -34,6 +34,11 @@ Observed rules include:
 - DATETIME2 source `1752-12-31T23:59:59.9999999` converts to DATETIME at
   `1753-01-01T00:00:00`. The captured maximum DATETIME2 value converts to
   `9999-12-31T23:59:59.997`; it does not produce the string-source range error.
+- Widening DATETIME ticks to DATETIME2(7) exposes `.0033333`, `.0066667`
+  and `.9966667`, rather than the millisecond display values `.003`, `.007`
+  and `.997`. DATEPART(ns) confirms the corresponding 100ns precision; the
+  same behavior is captured at the minimum and maximum dates. SMALLDATETIME
+  widens to exact whole minutes, including rollover to the next day.
 - DATEPART, conversion back to DATETIME2, and comparison with the original
   DATETIME2 value observe the rounded legacy value before wire encoding.
 - Separate SMALLDATETIME inserts of string `12:00:29.999` and its DATETIME2

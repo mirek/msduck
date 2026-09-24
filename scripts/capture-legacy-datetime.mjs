@@ -51,6 +51,14 @@ for (const target of ['DATETIME', 'SMALLDATETIME']) {
     cases.push({id: `${target}-nvarchar-range-${text}`, sql: `SELECT CAST(N'${text}' AS ${target}) AS value`})
   }
 }
+for (const target of ['DATETIME', 'SMALLDATETIME']) {
+  const values = ['2000-01-01T00:00:00.003', '2000-01-01T00:00:00.007', '2000-01-01T00:00:00.997', '2000-01-01T23:59:59.999']
+  if (target === 'DATETIME') values.push('1753-01-01T00:00:00.003', '9999-12-31T23:59:59.997')
+  for (const text of values) {
+    const converted = `CAST(CAST('${text}' AS ${target}) AS DATETIME2(7))`
+    cases.push({id: `${target}-widening-${text}`, sql: `SELECT CONVERT(VARCHAR(33),${converted},126) AS value,DATEPART(ns,${converted}) AS fraction`})
+  }
+}
 const output = resolve(process.argv[2] ?? 'artifacts/compatibility/legacy-datetime-reference')
 await mkdir(output, {recursive: true})
 await withReferenceContainer(async (config, container) => {
