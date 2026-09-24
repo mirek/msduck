@@ -224,7 +224,7 @@ fn openjson_stored_units_and_explicit_fragments_remain_exact() {
     assert!(ok, "{response:?}");
     let rows: Vec<(Vec<u8>, Vec<u8>, i32)> = session
         .db
-        .prepare("SELECT k.__msduck_utf16le,v.__msduck_utf16le,t FROM openjson_default")
+        .prepare("SELECT k.__msduck_utf16le,v.__msduck_utf16le,t FROM openjson_default ORDER BY k.__msduck_utf16le")
         .unwrap()
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
         .unwrap()
@@ -238,9 +238,9 @@ fn openjson_stored_units_and_explicit_fragments_remain_exact() {
     assert_eq!(
         rows,
         vec![
-            (bytes("s"), vec![0x3e, 0xd8], 1),
             (bytes("a"), bytes("[\"\\ud800\"]"), 4),
             (bytes("b"), bytes("AP8B"), 1),
+            (bytes("s"), vec![0x3e, 0xd8], 1),
         ]
     );
     let explicit: (Vec<u8>, Vec<u8>, Vec<u8>) = session
