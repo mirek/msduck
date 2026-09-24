@@ -191,6 +191,18 @@ impl RawStatement {
         }
     }
 
+    #[cfg(all(feature = "bundled", not(feature = "bundled-cmake")))]
+    pub(crate) fn execute_read_cancellable(&mut self, cancel: &std::sync::atomic::AtomicBool) -> Result<bool> {
+        self.reset_result();
+        match unsafe { crate::pending_read::execute(self.ptr, cancel)? } {
+            Some(result) => {
+                self.result = Some(ExecutedResult::new(result)?);
+                Ok(true)
+            }
+            None => Ok(false),
+        }
+    }
+
     pub fn execute_streaming(&mut self) -> Result<()> {
         self.reset_result();
         self.reject_unsupported_prepared_result_columns_for_dml()?;

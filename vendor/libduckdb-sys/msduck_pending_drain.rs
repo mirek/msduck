@@ -72,6 +72,16 @@ void PendingQueryResult::Close() {"#,
         "src/main/capi/pending-c.cpp",
         "void duckdb_destroy_pending(duckdb_pending_result *pending_result) {",
         r#"// Private msduck API: retained error is readable through duckdb_pending_error.
+extern "C" DUCKDB_API bool msduck_prepared_read_eligible(duckdb_prepared_statement statement) {
+    if (!statement) { return false; }
+    auto wrapper = reinterpret_cast<PreparedStatementWrapper *>(statement);
+    try {
+        return wrapper->statement && !wrapper->statement->HasError() &&
+            wrapper->statement->GetStatementType() == duckdb::StatementType::SELECT_STATEMENT &&
+            wrapper->statement->GetStatementProperties().IsReadOnly();
+    } catch (...) { return false; }
+}
+
 extern "C" DUCKDB_API int msduck_pending_cancel_read_and_drain(duckdb_pending_result pending_result) {
     if (!pending_result) {
         return 1;

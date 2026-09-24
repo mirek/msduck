@@ -127,6 +127,29 @@ impl Statement<'_> {
         Ok(Arrow::new(self))
     }
 
+    /// Execute an eligible materialized SELECT with worker-owned cancellation.
+    ///
+    /// `None` means cancellation completed and native workers were drained.
+    /// Other threads may set `cancel`; they must not issue native interrupts or
+    /// operate on this connection. Native errors remain errors, not cancellation.
+    /// The caller must exclude side-effecting SELECTs; backend read-only flags
+    /// do not prove absence of volatile or external effects. Preparation and
+    /// parameter binding are not interruptible through this flag. On an unexpected
+    /// native drain/eligibility error, discard the connection. Streaming is not supported.
+    #[cfg(all(feature = "bundled", not(feature = "bundled-cmake")))]
+    pub fn query_arrow_cancellable_read<P: Params>(
+        &mut self,
+        params: P,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<Option<Arrow<'_>>> {
+        params.__bind_in(self)?;
+        if self.stmt.execute_read_cancellable(cancel)? {
+            Ok(Some(Arrow::new(self)))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Execute the prepared statement, returning a handle to the resulting
     /// vector of arrow RecordBatch in streaming way
     ///

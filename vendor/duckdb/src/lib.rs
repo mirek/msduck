@@ -122,6 +122,8 @@ mod pragma;
 mod r2d2;
 mod raw_statement;
 mod row;
+#[cfg(all(feature = "bundled", not(feature = "bundled-cmake")))]
+mod pending_read;
 mod statement;
 mod transaction;
 
