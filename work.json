@@ -1255,6 +1255,24 @@
       "dependencies": [],
       "issue": 126,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJaCU"
+    },
+    {
+      "id": "ansi-padding-equality-v1",
+      "title": "Bind SQL trailing-space semantics for ANSI equality comparisons",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Owner-captured public sys.objects CHAR(2) predicates prove U plus a trailing space must equal U. Type-bound SQL equality currently delegates non-BIN2 ANSI operands to DuckDB without SQL padding semantics.",
+      "scope": [
+        "crates/msduck-sql/src/projection/ansi_padding.rs",
+        "crates/msduck-sql/tests/ansi_padding_equality.rs"
+      ],
+      "acceptance": [
+        "Plan ANSI equality and inequality using explicit catalog/scoped types and preserve NULL, name resolution and single evaluation.",
+        "Apply trailing-space semantics without approximating ordering, LIKE or linguistic collation weights; preserve existing BIN2 comparison behavior and unknown-type handling.",
+        "Test the deterministic transformation and run the captured unmodified public catalog filter plus workspace/client verification through existing owners."
+      ],
+      "dependencies": [],
+      "issue": 127,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJbIv"
     }
   ]
 }
