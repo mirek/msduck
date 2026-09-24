@@ -640,6 +640,24 @@
       "dependencies": [],
       "issue": 63,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHRMw"
+    },
+    {
+      "id": "character-extrema-reference-v1",
+      "title": "Capture SQL Server character MIN/MAX ordering and exact result units",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. First-party PR64 client verification exposes MAX over an OPENJSON Unicode view stringifying carrier payloads. Read-only source tracing shows a representation-only fix would leave byte-order and collation errors. Capture authoritative behavior before choosing complete extrema lowering; no external submission is approved. Start from owner-pushed 102afa6 or a verified successor.",
+      "scope": [
+        "scripts/capture-character-extrema.mjs",
+        "reference/character-extrema.json"
+      ],
+      "acceptance": [
+        "Capture scalar, grouped and window MIN/MAX across Unicode and ANSI declarations, NULL/empty/all-NULL sets, trailing spaces, isolated surrogate units, supplementary pairs, and code-unit versus byte-order boundaries.",
+        "Compare the database default with explicit Latin1_General_100_BIN2 and representative supported/reference linguistic collations; include exact result bytes, metadata and errors. Capture tie-order behavior without claiming SQL guarantees that are not established.",
+        "Use the pinned SQL Server image, preserve raw evidence, and repeat captures to distinguish stable results from permitted tie selection. Do not modify existing assertions or engine modules. Native aggregation, deterministic binding and shared root integration need disjoint successor scopes."
+      ],
+      "dependencies": [],
+      "issue": 65,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHUuP"
     }
   ]
 }
