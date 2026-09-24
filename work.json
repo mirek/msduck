@@ -840,6 +840,24 @@
       "dependencies": [],
       "issue": 81,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHmcs"
+    },
+    {
+      "id": "transaction-recovery-contract-v1",
+      "title": "Specify and verify the backend transaction recovery boundary",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. The owner-generated 61-case transaction matrix retains seven failures caused by DuckDB exception invalidation. Source inspection of pinned DuckDB and mirek/mssqlite requires explicit recovery constraints before adopting TRY or replay.",
+      "scope": [
+        "docs/transaction-recovery.md",
+        "tests/backend_transaction_recovery.rs"
+      ],
+      "acceptance": [
+        "Retain executable native probes for runtime exception invalidation, missing savepoints, TRY diagnostic loss and volatile/subquery restrictions.",
+        "Document exact pinned-source findings and the required single-evaluation, statement atomicity, prior-write and concurrency guarantees.",
+        "Define bounded implementation steps for explicit checked-value arithmetic and constraint handling without claiming that prevalidation supplies native savepoints or complete recovery."
+      ],
+      "dependencies": [],
+      "issue": 83,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHoPS"
     }
   ]
 }
