@@ -196,7 +196,7 @@ impl RawStatement {
         self.reset_result();
         match unsafe { crate::pending_read::execute(self.ptr, cancel)? } {
             Some(result) => {
-                self.result = Some(ExecutedResult::new(result)?);
+                self.result = Some(unsafe { ExecutedResult::new(result)? });
                 Ok(true)
             }
             None => Ok(false),
