@@ -77,8 +77,8 @@ impl VScalar for Sources {
             .collect()
     }
 }
-struct Column<const FRAGMENT: bool>;
-impl<const FRAGMENT: bool> VScalar for Column<FRAGMENT> {
+struct Column<const FRAGMENT: bool, const TEXT: bool = false>;
+impl<const FRAGMENT: bool, const TEXT: bool> VScalar for Column<FRAGMENT, TEXT> {
     type State = ();
     fn invoke(
         _: &(),
@@ -86,6 +86,30 @@ impl<const FRAGMENT: bool> VScalar for Column<FRAGMENT> {
         output: &mut dyn WritableVector,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if crate::unicode_carrier::is_logical(&input.flat_vector(0).logical_type()) {
+            if TEXT {
+                let mut result = output.flat_vector();
+                let mut remaining = crate::unicode_carrier::CHUNK_LIMIT;
+                for row in 0..input.len() {
+                    let value = if let Some([source, path]) = unicode_texts(input, row)? {
+                        msduck_core::openjson::schema::column_utf16(&source, &path, FRAGMENT)?
+                    } else {
+                        None
+                    };
+                    if let Some(value) = value {
+                        // Non-character converters consume text, never DuckDB's
+                        // printable STRUCT representation. Reject invalid UTF16;
+                        // replacement characters would change conversion input.
+                        let text = String::from_utf16(&value)?;
+                        remaining = remaining
+                            .checked_sub(text.len())
+                            .ok_or("OPENJSON result exceeds the configured output limit")?;
+                        result.insert(row, text.as_str());
+                    } else {
+                        result.set_null(row);
+                    }
+                }
+                return Ok(());
+            }
             return unicode_column::<FRAGMENT>(input, output);
         }
         let mut result = output.flat_vector();
@@ -111,7 +135,10 @@ impl<const FRAGMENT: bool> VScalar for Column<FRAGMENT> {
                         Id::Varchar.into()
                     }
                 };
-                ScalarFunctionSignature::exact(vec![text(), text()], text())
+                ScalarFunctionSignature::exact(
+                    vec![text(), text()],
+                    if TEXT { Id::Varchar.into() } else { text() },
+                )
             })
             .collect()
     }
@@ -119,6 +146,7 @@ impl<const FRAGMENT: bool> VScalar for Column<FRAGMENT> {
 pub(super) fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
     db.register_scalar_function::<Sources>("__msduck_openjson_sources")?;
     db.register_scalar_function::<Column<false>>("__msduck_openjson_scalar")?;
+    db.register_scalar_function::<Column<false, true>>("__msduck_openjson_scalar_text")?;
     db.register_scalar_function::<Column<true>>("__msduck_openjson_fragment")
 }
 
@@ -204,16 +232,19 @@ pub(super) fn projection(columns: &[OpenJsonTableColumn]) -> Result<Vec<SelectIt
             if let Some(expr) = binary::expression(Expr::CompoundIdentifier(vec![Ident::new("x"),Ident::new("r")]),crate::engine::unary_function("__msduck_carrier_input", Expr::Value(Value::SingleQuotedString(path.clone()).into())),&column.r#type)? {
                 return Ok(SelectItem::ExprWithAlias {expr,alias:column.name.clone()});
             }
+            let kind = declared_type(&column.r#type);
+            let character = matches!(msduck_sql::sql_type::declaration(&kind), Ok(msduck_core::types::Type::Character(_)));
             let value = crate::engine::binary_function(
                 if column.as_json {
                     "__msduck_openjson_fragment"
+                } else if !character {
+                    "__msduck_openjson_scalar_text"
                 } else {
                     "__msduck_openjson_scalar"
                 },
                 Expr::CompoundIdentifier(vec![Ident::new("x"), Ident::new("r")]),
                 crate::engine::unary_function("__msduck_carrier_input", Expr::Value(Value::SingleQuotedString(path).into())),
             );
-            let kind = declared_type(&column.r#type);
             let expr = if let Ok(msduck_core::types::Type::Character(target)) = msduck_sql::sql_type::declaration(&kind) {
                 use msduck_core::character::{Family, Length};
                 crate::engine::binary_function(

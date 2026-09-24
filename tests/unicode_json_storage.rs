@@ -2,6 +2,35 @@
 use msduck::{engine::Session, server::Server};
 
 #[test]
+fn openjson_noncharacter_text_bridge_preserves_nulls_and_source_evaluation() {
+    let server = Server::open(":memory:").unwrap();
+    let session = Session::new(server.connection().unwrap()).unwrap();
+    session
+        .db
+        .execute_batch("CREATE SEQUENCE json_text_calls")
+        .unwrap();
+    let wrong: i64 = session.db.query_row(
+        "SELECT count(*) FROM (SELECT i,__msduck_openjson_scalar_text(__msduck_carrier_input(CASE WHEN nextval('json_text_calls')%17=0 THEN NULL ELSE printf('%d',i) END),__msduck_carrier_input('$')) AS v FROM range(6000) t(i)) WHERE v IS DISTINCT FROM CASE WHEN (i+1)%17=0 THEN NULL ELSE CAST(i AS VARCHAR) END",
+        [], |r| r.get(0),
+    ).unwrap();
+    assert_eq!(wrong, 0);
+    assert_eq!(
+        session
+            .db
+            .query_row("SELECT currval('json_text_calls')", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        6000
+    );
+    // Character projections retain arbitrary code units; the text bridge must
+    // never silently replace an unpaired surrogate for a numeric/date parser.
+    assert!(session.db.query_row(
+        r#"SELECT __msduck_openjson_scalar_text(__msduck_carrier_input('"\ud800"'),__msduck_carrier_input('$'))"#,
+        [], |r| r.get::<_, String>(0),
+    ).is_err());
+}
+
+#[test]
 fn isjson_accepts_exact_stored_units_and_preserves_constraints() {
     let server = Server::open(":memory:").unwrap();
     let mut session = Session::new(server.connection().unwrap()).unwrap();
