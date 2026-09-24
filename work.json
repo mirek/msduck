@@ -1137,6 +1137,29 @@
       "dependencies": [],
       "issue": 110,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PIzN3"
+    },
+    {
+      "id": "index-catalog-adapter-v1",
+      "title": "Persist table-owned index identities and expose captured SQL Server catalog metadata",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal and explicit request for disjoint claimable parallel work. Owner-captured DROP INDEX reference proves identical logical index names can exist on different tables and must bind through table ownership. Repository inspection finds no sys.indexes or duckdb_indexes adapter. No external submissions consumed.",
+      "scope": [
+        "src/index_catalog.rs",
+        "tests/index_catalog.rs",
+        "reference/index-catalog.json",
+        "scripts/capture-index-catalog.mjs",
+        "docs/index-catalog.md"
+      ],
+      "acceptance": [
+        "Capture SQL Server sys.indexes and relevant index-column metadata twice in fresh isolated databases, preserving exact types/flags/values and errors for heaps, ordinary/unique/nonclustered indexes, same logical name on different tables, schema-qualified and quoted names, create/drop/rollback and table drop/recreate. Keep unsupported constraint/clustered behavior explicit.",
+        "Implement a root-side catalog adapter over an explicit DuckDB connection with persistent table-owned logical index identity and separately qualified backend identity. Never derive identity from an index name alone, expose generated backend names as logical names, or reuse an index record after its table is dropped/recreated. Catalog changes and physical index changes must obey the same transaction outcome.",
+        "Provide explicit register/acquire/create/drop/sync APIs and native tests through an isolated integration-test module include. Do not edit engine, server, root lib, manifests, SQL exports or dialect under other claims. Record exact integration hooks for the later owner of those files.",
+        "Verify constraint and unsupported index kinds fail explicitly; do not fabricate complete sys.indexes/sys.index_columns compatibility from limited metadata. Native tests must prove two same-named indexes on different tables remain independently addressable and transaction rollback restores both physical and logical state.",
+        "Run appropriate workspace Rust/Clippy checks and first-party reference comparisons. Publish a focused PR with raw captures, exact tested revision and remaining integration gaps."
+      ],
+      "dependencies": [],
+      "issue": 114,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PI-HK"
     }
   ]
 }
