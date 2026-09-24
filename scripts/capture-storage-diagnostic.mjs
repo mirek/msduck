@@ -50,6 +50,24 @@ await withReferenceContainer(async(config,container)=>{
    ['uncaught-condition',"IF 1/0=0 SELECT 42 AS continued"],
    ['caught-condition',`BEGIN TRY IF 1/0=0 SELECT 42 AS continued; END TRY BEGIN CATCH ${state}; ROLLBACK; END CATCH`],
   ]) probes.push({id:`${setting}-${label}`,sql:`SET XACT_ABORT ${setting}; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); ${body}`});
+  for(const setting of ['OFF','ON']) {
+   const begin=`SET XACT_ABORT ${setting}; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); DECLARE @d INT=0;`;
+   for(const [label,body] of [
+    ['nested-condition',"DECLARE @n BIGINT=7; IF ((@n+1)/@d)%2>=0 SELECT 42 AS unexpected"],
+    ['overflow-null-predicate',"IF (2147483647+1) IS NULL SELECT 42 AS unexpected"],
+    ['checked-assignment',"DECLARE @n INT=9; SET @n=(7+1)/@d; SELECT @n AS unexpected"],
+    ['left-overflow-right-zero',"IF (2147483647+1)+(1/@d)=0 SELECT 42 AS unexpected"],
+    ['left-zero-right-overflow',"IF (1/@d)+(2147483647+1)=0 SELECT 42 AS unexpected"],
+    ['null-left-fault',"IF (NULL+(1/@d)) IS NULL SELECT 42 AS selected"],
+    ['null-right-fault',"IF ((1/@d)+NULL) IS NULL SELECT 42 AS selected"],
+    ['parameter-null-fault',"DECLARE @missing INT=NULL; IF (@missing+(1/@d)) IS NULL SELECT 42 AS selected"],
+    ['null-comparison-fault',"IF NULL=(1/@d) SELECT 42 AS unexpected"],
+    ['parameter-null-comparison-fault',"DECLARE @missing INT=NULL; IF @missing=(1/@d) SELECT 42 AS unexpected"],
+    ['fault-comparison-null',"IF (1/@d)=NULL SELECT 42 AS unexpected"],
+   ]) probes.push({id:`${setting}-${label}`,sql:`${begin} BEGIN TRY ${body}; END TRY BEGIN CATCH ${state}; ROLLBACK; END CATCH; SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs`});
+   probes.push({id:`${setting}-null-divisor-condition`,sql:`${begin} IF (NULL/0) IS NULL SELECT 42 AS selected; COMMIT`});
+   probes.push({id:`${setting}-mixed-width-condition`,sql:`${begin} DECLARE @b BIGINT=2147483647; DECLARE @expected BIGINT=2147483648; IF @b+1=@expected SELECT @b+1 AS value; COMMIT`});
+  }
   for(const probe of probes) {
    const isolated=await connect(config);
    try {

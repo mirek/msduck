@@ -731,6 +731,11 @@ impl Session {
                 Ok(None) => {}
                 Err(error) => {
                     if self.catch_error(&mut pending, &error) {
+                        if matches!(statement, Statement::If(_) | Statement::While(_))
+                            && let Some(offset) = control_done(&mut out, rpc, self.nocount, 0xc0)
+                        {
+                            last_done = Some(offset);
+                        }
                         continue;
                     }
                     self.last_error = emit_error(&mut out, &error);
@@ -1430,11 +1435,19 @@ impl Session {
                     .get(&name)
                     .ok_or_else(|| anyhow::anyhow!("Must declare the scalar variable {name}"))?
                     .data_type;
-                let value = self.evaluate_scalar(
-                    values[0].clone(),
-                    crate::sql_type::ast(kind),
-                    parameters,
-                )?;
+                let value = self
+                    .evaluate_scalar(values[0].clone(), crate::sql_type::ast(kind), parameters)
+                    .map_err(|error| {
+                        if error
+                            .downcast_ref::<SqlError>()
+                            .is_some_and(|error| matches!(error.number, 8115 | 8134))
+                        {
+                            self.rowcount = 0;
+                            crate::query_error::attach_context(error, vec![], 0xc1)
+                        } else {
+                            error
+                        }
+                    })?;
                 parameters.insert(
                     name,
                     Parameter {
@@ -2229,10 +2242,34 @@ impl Session {
             last_error: self.last_error,
             caught_error: self.caught_error.as_ref(),
         };
-        if let ControlFlow::Break(error) = VisitMut::visit(&mut expression, &mut translator) {
-            bail!(error);
+        use msduck_sql::checked_expression::{Kind, plan};
+        let mut declarations = parameters
+            .iter()
+            .filter_map(|(name, parameter)| {
+                let kind = match parameter.ast_type() {
+                    DataType::Int(_) | DataType::Integer(_) => Kind::Int,
+                    DataType::BigInt(_) => Kind::BigInt,
+                    _ => return None,
+                };
+                Some((name.clone(), kind))
+            })
+            .collect::<HashMap<_, _>>();
+        for name in ["@@trancount", "@@rowcount", "@@error"] {
+            declarations.insert(name.into(), Kind::Int);
         }
-        let mut statement = self.db.prepare(&format!("SELECT {expression}"))?;
+        let (sql, checked) = if let Some(mut checked) = plan(&expression, &declarations) {
+            if let ControlFlow::Break(error) = VisitMut::visit(&mut checked.query, &mut translator)
+            {
+                bail!(error);
+            }
+            (checked.query.to_string(), true)
+        } else {
+            if let ControlFlow::Break(error) = VisitMut::visit(&mut expression, &mut translator) {
+                bail!(error);
+            }
+            (format!("SELECT {expression}"), false)
+        };
+        let mut statement = self.db.prepare(&sql)?;
         let mut batches =
             statement.query_arrow(duckdb::params_from_iter(translator.values.iter()))?;
         if predicate {
@@ -2245,9 +2282,27 @@ impl Session {
             .next()
             .ok_or_else(|| anyhow::anyhow!("scalar assignment returned no value"))?;
         ensure!(
-            batch.num_rows() == 1 && batch.num_columns() == 1,
+            batch.num_rows() == 1 && batch.num_columns() == if checked { 5 } else { 1 },
             "scalar assignment must return one value"
         );
+        if checked {
+            let field =
+                |index| arrow_value(batch.column(index).as_ref(), 0, batch.schema().field(index));
+            match field(1)? {
+                Value::Null => {}
+                Value::Int(number) => {
+                    let (Value::UTinyInt(state), Value::UTinyInt(severity), Value::Text(message)) =
+                        (field(2)?, field(3)?, field(4)?)
+                    else {
+                        bail!("invalid checked scalar diagnostic");
+                    };
+                    let mut error = SqlError::new(number, state, message);
+                    error.severity = severity;
+                    return Err(error.into());
+                }
+                _ => bail!("invalid checked scalar error number"),
+            }
+        }
         let value = arrow_value(batch.column(0).as_ref(), 0, batch.schema().field(0))?;
         binding_value(value)
     }
