@@ -253,11 +253,16 @@ library tests and strict Clippy passed locally. A separate 81-case wire replay
 against its private executable confirms exactly three changed observations:
 computed cast flags change from 1 to the captured 33. All other rows, descriptors,
 errors and completion streams are unchanged; 30/81 complete cases now match.
-Full Linux/client verification for this correction remains pending. Do not use the `ba24b78` pass as evidence
-for later revisions. The subsequent DDL completion correction has separate
-verification and does not implement view-body observation.
+Linux verification of `8a233f3` also passed all 647 workspace Rust tests,
+13 focused tests, strict Clippy, the all-target build and all 404 standard
+client tests (1164028 ms, zero failures or cancellations). Its 325-case audit
+and full 50-case boundary capture are byte-for-byte equivalent as parsed JSON
+to the preceding `ba24b78` captures: 39 exact boundary cases, two setup
+failures and 45 differences across nine executions. The complete boundary
+comparison still exits with failure. The subsequent DDL completion correction
+has separate verification and does not implement view-body observation.
 
-The first-party view fixtures and reproducible capture command are in
+The first-party view fixtures and reproducible capture command were merged in
 [PR #106](https://github.com/mirek/msduck/pull/106). They also retain caller CTE
 isolation, qualified/quoted names, duplicate exposed-name errors and invalid
 dependency errors. Future expansion must independently bind stored bodies;
