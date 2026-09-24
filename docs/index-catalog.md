@@ -74,13 +74,23 @@ contract requiring an already-active caller transaction. The vendored driver's
 The engine must pass its own transaction state. Sequence allocation may leave
 gaps on rollback; incarnations must never be recycled.
 
-The current adapter acquires only indexes created through its APIs. It does not
-yet reconcile pre-existing/unmanaged indexes or constraint-backed indexes and
-does not install `sys.indexes` or `sys.index_columns`. Consequently its acquired
-rows are not yet a complete catalog suitable for the DROP binder's complete-
-snapshot contract. Those reconciliation/public-view steps and wire comparisons
-remain required before root integration can claim this task complete.
+`reconcile` now migrates ordinary unmanaged indexes atomically, preserving their
+logical names while rebuilding backend identities. Unique integer indexes are
+rebuilt with SQL Server NULL comparison; incompatible pre-existing data aborts
+and rolls back the migration, preserving the old indexes. Reserved private
+backend names without a logical record require explicit recovery.
 
-At checkpoint `7024c8c`, all four focused Linux native tests and strict workspace
-Clippy passed; all 644 workspace Rust tests also passed. The initial local
-native build was cancelled for disk pressure; no local pass is claimed.
+`acquire` remains a managed-index read. `acquire_complete` additionally rejects
+unmanaged and constraint-backed indexes, so a partial snapshot cannot silently
+reach the DROP binder. Constraint-backed reconciliation and public
+`sys.indexes`/`sys.index_columns` views remain implementation work.
+
+A persistent reopen test initially failed because DuckDB table OIDs changed
+across restart. Current ownership joins use live native OIDs, but persistent
+identity relies on the logical object ID and recorded incarnation. The caller
+must synchronize logical objects after each DDL mutation. The reopen regression
+now proves that the logical index identity remains usable after restart.
+
+At runtime checkpoint `6807d5e`, all seven focused Linux native tests, all 647
+workspace Rust tests, strict workspace Clippy and formatting passed. The initial
+local native build was cancelled for disk pressure; no local pass is claimed.
