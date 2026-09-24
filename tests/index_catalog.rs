@@ -1,0 +1,95 @@
+#[path = "../src/index_catalog.rs"]
+mod index_catalog;
+use index_catalog::{Transaction, acquire, create, drop_index, register, sync};
+use msduck::{engine::Session, server::Server};
+use sqlparser::{ast::Statement, dialect::MsSqlDialect, parser::Parser};
+fn setup() -> Session {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let (response, ok) = session.batch_response(
+        "CREATE TABLE dbo.a(id INT,value INT); CREATE TABLE dbo.b(id INT,value INT)",
+        &Default::default(),
+        false,
+        None,
+    );
+    assert!(ok, "{response:?}");
+    register(&session.db).unwrap();
+    session
+}
+fn make(session: &Session, sql: &str) -> anyhow::Result<index_catalog::Index> {
+    let Statement::CreateIndex(ast) = Parser::parse_sql(&MsSqlDialect {}, sql)?.remove(0) else {
+        panic!()
+    };
+    let object_id = session.db.query_row(
+        "SELECT __msduck_object_id(?,NULL)",
+        [ast.table_name.to_string()],
+        |r| r.get(0),
+    )?;
+    create(&session.db, object_id, &ast, Transaction::Owned)
+}
+#[test]
+fn names_belong_to_tables_and_reused_ids_do_not_revive_bound_drops() {
+    let s = setup();
+    let a = make(&s, "CREATE INDEX ix ON dbo.a(id)").unwrap();
+    let b = make(&s, "CREATE INDEX ix ON dbo.b(id)").unwrap();
+    assert_ne!(a.backend_name, b.backend_name);
+    assert_eq!(a.index_id, 2);
+    assert_eq!(b.index_id, 2);
+    drop_index(&s.db, &a, Transaction::Owned).unwrap();
+    let replacement = make(&s, "CREATE INDEX ix ON dbo.a(value)").unwrap();
+    assert_eq!(replacement.index_id, a.index_id);
+    assert_ne!(replacement.incarnation, a.incarnation);
+    assert!(drop_index(&s.db, &a, Transaction::Owned).is_err());
+    let current = acquire(&s.db).unwrap();
+    assert!(current.contains(&replacement));
+    assert!(current.contains(&b));
+}
+#[test]
+fn caller_rollback_restores_physical_and_logical_index_state() {
+    let s = setup();
+    let a = make(&s, "CREATE UNIQUE INDEX ix ON dbo.a(id)").unwrap();
+    s.db.execute_batch("BEGIN TRANSACTION").unwrap();
+    drop_index(&s.db, &a, Transaction::CallerOwned).unwrap();
+    assert!(acquire(&s.db).unwrap().is_empty());
+    s.db.execute_batch("ROLLBACK").unwrap();
+    assert_eq!(acquire(&s.db).unwrap(), vec![a.clone()]);
+    s.db.execute_batch("INSERT INTO dbo.a VALUES(1,1)").unwrap();
+    assert!(s.db.execute_batch("INSERT INTO dbo.a VALUES(1,2)").is_err());
+    let Statement::CreateIndex(ast) =
+        Parser::parse_sql(&MsSqlDialect {}, "CREATE INDEX other ON dbo.b(value)")
+            .unwrap()
+            .remove(0)
+    else {
+        panic!()
+    };
+    let id: i32 =
+        s.db.query_row("SELECT __msduck_object_id('dbo.b',NULL)", [], |r| r.get(0))
+            .unwrap();
+    s.db.execute_batch("BEGIN TRANSACTION").unwrap();
+    create(&s.db, id, &ast, Transaction::CallerOwned).unwrap();
+    s.db.execute_batch("ROLLBACK").unwrap();
+    assert_eq!(acquire(&s.db).unwrap(), vec![a]);
+}
+#[test]
+fn failed_create_and_recreated_tables_do_not_leave_live_catalog_records() {
+    let mut s = setup();
+    s.db.execute_batch("INSERT INTO dbo.a VALUES(1,1),(1,2)")
+        .unwrap();
+    assert!(make(&s, "CREATE UNIQUE INDEX bad ON dbo.a(id)").is_err());
+    assert!(acquire(&s.db).unwrap().is_empty());
+    assert!(make(&s, "CREATE INDEX unsupported ON dbo.a(id DESC)").is_err());
+    let old = make(&s, "CREATE INDEX ix ON dbo.a(id)").unwrap();
+    let (response, ok) = s.batch_response(
+        "DROP TABLE dbo.a; CREATE TABLE dbo.a(id INT)",
+        &Default::default(),
+        false,
+        None,
+    );
+    assert!(ok, "{response:?}");
+    sync(&s.db).unwrap();
+    assert!(acquire(&s.db).unwrap().is_empty());
+    let new = make(&s, "CREATE INDEX ix ON dbo.a(id)").unwrap();
+    assert_ne!(new.object_id, old.object_id);
+    assert_ne!(new.backend_name, old.backend_name);
+    assert!(drop_index(&s.db, &old, Transaction::Owned).is_err());
+}
