@@ -1311,6 +1311,23 @@
       "dependencies": [],
       "issue": 134,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJpkf"
+    },
+    {
+      "id": "prepared-execution-context-v1",
+      "title": "Pass prepared RPC execution context to the engine",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. First-party SQL Server captures show identical invalid DATEFIRST batches return status -6 through sp_execute but 0 through sp_executesql after following statements. Current RPC adapter loses that distinction. No third-party content used.",
+      "scope": [
+        "src/rpc.rs"
+      ],
+      "acceptance": [
+        "Preserve the explicit sp_execute versus sp_executesql identity at the engine invocation boundary without inferring it from SQL text, parameter values or mutable global state.",
+        "Retain prepared handle lookup, typed parameter binding and existing prepare/prepexec/unprepare behavior. Coordinate engine and client assertions through the original concat-integration-v1 scope.",
+        "Replay retained first-party prepared and ordinary RPC reference responses, including setting errors, continuation and connection reuse; run appropriate workspace and client checks."
+      ],
+      "dependencies": [],
+      "issue": 137,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJtP0"
     }
   ]
 }
