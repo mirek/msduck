@@ -1292,6 +1292,25 @@
       "dependencies": [],
       "issue": 128,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJf-F"
+    },
+    {
+      "id": "rpc-session-scope-reference-v1",
+      "title": "Capture SQL Server RPC session setting scope and restoration",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal. Inspection of the owner-controlled runtime shows RPC restoration currently covers NOCOUNT and XACT_ABORT but not ANSI_WARNINGS or DATEFIRST. Capture first-party ground truth before changing session semantics. No third-party content used.",
+      "scope": [
+        "scripts/capture-rpc-session-scope.mjs",
+        "reference/rpc-session-scope.json",
+        "docs/rpc-session-scope.md"
+      ],
+      "acceptance": [
+        "Capture SQL batch versus sp_executesql RPC setting visibility and restoration for DATEFIRST and ANSI_WARNINGS, including successful execution, runtime errors, repeated use and connection recovery. Preserve complete rows, metadata, diagnostics and completion events.",
+        "Capture twice in fresh SQL Server databases using the pinned reference container and independently recapture against the retained fixture. Separate proven settings from unverified options.",
+        "Replay against an immutable current server snapshot and record exact differences. Runtime engine and client-test edits remain under the original concat-integration-v1 owner scope."
+      ],
+      "dependencies": [],
+      "issue": 134,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJpkf"
     }
   ]
 }
