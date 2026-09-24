@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { start, query } from './support/client.mjs'
+import { TYPES } from 'tedious'
 
 test('stored JSON validation and escaping preserve isolated Unicode units on the wire', async t => {
   const c = await start(t)
@@ -44,7 +45,14 @@ test('OPENJSON default and explicit rows preserve captured Unicode values and bi
     assert.deepEqual(actual.rows,expected,item.sql)
   }
   for (const item of fixture.results) {
-    await query(c,item.setup)
+    // Load captured source units directly so JSON row replay does not depend on
+    // the separate document-construction UPDATE regression below.
+    const captured = operation => item.operations.find(op => op.operation === operation).result.sets[0].rows[0][0]
+    await query(c,`DROP TABLE IF EXISTS dbo.unicode_json_source; CREATE TABLE dbo.unicode_json_source(s ${item.type},j NVARCHAR(MAX),p NVARCHAR(100),f NVARCHAR(10))`)
+    await query(c,"INSERT INTO dbo.unicode_json_source VALUES(@s,@j,N'$.s',N'json')",[
+      ['s',TYPES.NVarChar,captured('source'),{length:4000}],
+      ['j',TYPES.NVarChar,captured('document'),{length:4000}],
+    ])
     for (const operation of item.operations.filter(op => ['OPENJSON','OPENJSON WITH'].includes(op.operation))) {
       await compareRows(operation)
     }
@@ -56,7 +64,19 @@ test('OPENJSON default and explicit rows preserve captured Unicode values and bi
     }
   }
   for (const item of fixture.keys) {
-    await query(c,item.setup)
+    const key = item.operations.find(op => op.operation === 'key source').result.sets[0].rows[0][0]
+    const escaped = text => '"'+text.replace(/["\\\x00-\x1f]/g,c => JSON.stringify(c).slice(1,-1))+'"'
+    await query(c,'UPDATE dbo.unicode_json_source SET j=@j',[
+      ['j',TYPES.NVarChar,key === null ? null : `{${escaped(key)}:7}`,{length:4000}],
+    ])
     await compareRows(item.operations.find(op => op.operation === 'OPENJSON key'))
   }
+})
+
+test('JSON document construction from stored Unicode values completes inside UPDATE', async t => {
+  const { readFile } = await import('node:fs/promises')
+  const fixture = JSON.parse(await readFile(new URL('../reference/unicode-json-storage.json',import.meta.url),'utf8'))
+  const c = await start(t)
+  await query(c,fixture.results[0].setup)
+  assert.deepEqual((await query(c,'SELECT j FROM dbo.unicode_json_source')).rows,[[null]])
 })
