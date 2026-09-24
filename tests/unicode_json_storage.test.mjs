@@ -31,3 +31,32 @@ test('JSON NULL path diagnostics match captured source-null and path-type cases'
     await assert.rejects(query(c,item.sql),error => error.number === expected.number && error.state === expected.state && error.message === expected.message, `${item.source} ${item.path} ${item.operation}`)
   }
 })
+
+test('OPENJSON default and explicit rows preserve captured Unicode values and binary projections', async t => {
+  const { readFile } = await import('node:fs/promises')
+  const fixture = JSON.parse(await readFile(new URL('../reference/unicode-json-storage.json',import.meta.url),'utf8'))
+  const c = await start(t)
+  const decode = value => value?.kind === 'binary' ? Buffer.from(value.value,'hex') : value
+  const compareRows = async item => {
+    assert.equal(item.result.errors.length,0)
+    const actual = await query(c,item.sql)
+    const expected = item.result.sets.flatMap(set => set.rows.map(row => row.map(decode)))
+    assert.deepEqual(actual.rows,expected,item.sql)
+  }
+  for (const item of fixture.results) {
+    await query(c,item.setup)
+    for (const operation of item.operations.filter(op => ['OPENJSON','OPENJSON WITH'].includes(op.operation))) {
+      await compareRows(operation)
+    }
+  }
+  for (const item of fixture.escaped.filter(item => item.sample !== 'invalid trailing')) {
+    await query(c,item.setup)
+    for (const operation of item.operations.filter(op => ['OPENJSON','OPENJSON WITH'].includes(op.operation))) {
+      await compareRows(operation)
+    }
+  }
+  for (const item of fixture.keys) {
+    await query(c,item.setup)
+    await compareRows(item.operations.find(op => op.operation === 'OPENJSON key'))
+  }
+})

@@ -19,6 +19,9 @@ impl VScalar for OpenJson {
         input: &mut DataChunkHandle,
         output: &mut dyn WritableVector,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        if crate::unicode_carrier::is_logical(&input.flat_vector(0).logical_type()) {
+            return unicode_rows(input, output);
+        }
         let len = input.len();
         let inputs = [input.flat_vector(0), input.flat_vector(1)];
         let mut all = Vec::new();
@@ -64,20 +67,121 @@ impl VScalar for OpenJson {
         Ok(())
     }
     fn signatures() -> Vec<ScalarFunctionSignature> {
-        vec![ScalarFunctionSignature::exact(
-            vec![Id::Varchar.into(), Id::Varchar.into()],
-            Type::list(&Type::struct_type(&[
-                ("key", Id::Varchar.into()),
-                ("value", Id::Varchar.into()),
-                ("type", Id::Integer.into()),
-            ])),
-        )]
+        [false, true]
+            .into_iter()
+            .map(|unicode| {
+                let text = || {
+                    if unicode {
+                        crate::unicode_carrier::kind()
+                    } else {
+                        Id::Varchar.into()
+                    }
+                };
+                ScalarFunctionSignature::exact(
+                    vec![text(), text()],
+                    Type::list(&Type::struct_type(&[
+                        ("key", text()),
+                        ("value", text()),
+                        ("type", Id::Integer.into()),
+                    ])),
+                )
+            })
+            .collect()
     }
 }
 pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
     db.register_scalar_function::<OpenJson>("__msduck_openjson")?;
     schema::register(db)?;
     binary::register(db)
+}
+
+fn unicode_texts(
+    input: &DataChunkHandle,
+    row: usize,
+) -> Result<Option<[Vec<u16>; 2]>, Box<dyn std::error::Error>> {
+    let mut units = [Vec::new(), Vec::new()];
+    for (index, text) in units.iter_mut().enumerate() {
+        if input.flat_vector(index).row_is_null(row as u64) {
+            return Ok(None);
+        }
+        let structure = input.struct_vector(index);
+        let payload = structure.child(0, input.len());
+        if payload.row_is_null(row as u64) {
+            return Err("invalid Unicode carrier: NULL payload".into());
+        }
+        let bytes = crate::unicode_carrier::bytes(&payload, row, input.len())?;
+        if bytes.len() % 2 != 0 {
+            return Err("invalid Unicode carrier byte length".into());
+        }
+        *text = bytes
+            .chunks_exact(2)
+            .map(|b| u16::from_le_bytes([b[0], b[1]]))
+            .collect();
+    }
+    Ok(Some(units))
+}
+
+fn encode_units(
+    units: &[u16],
+    remaining: &mut usize,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let size = units
+        .len()
+        .checked_mul(2)
+        .ok_or("OPENJSON output size overflow")?;
+    if size > crate::unicode_carrier::CELL_LIMIT || size > *remaining {
+        return Err("OPENJSON result exceeds the configured output limit".into());
+    }
+    *remaining -= size;
+    Ok(units.iter().flat_map(|u| u.to_le_bytes()).collect())
+}
+
+fn unicode_rows(
+    input: &DataChunkHandle,
+    output: &mut dyn WritableVector,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut result = output.list_vector();
+    let mut all = Vec::new();
+    let mut remaining = crate::unicode_carrier::CHUNK_LIMIT;
+    for row in 0..input.len() {
+        let offset = all.len();
+        if let Some([source, path]) = unicode_texts(input, row)? {
+            for entry in msduck_core::openjson::rows_utf16_with_limit(&source, &path, remaining)? {
+                remaining = remaining
+                    .checked_sub(std::mem::size_of::<msduck_core::openjson::Utf16Row>())
+                    .ok_or("OPENJSON result exceeds the configured output limit")?;
+                let key = encode_units(&entry.key, &mut remaining)?;
+                let value = entry
+                    .value
+                    .as_deref()
+                    .map(|v| encode_units(v, &mut remaining))
+                    .transpose()?;
+                all.push((key, value, entry.kind));
+            }
+        }
+        result.set_entry(row, offset, all.len() - offset);
+    }
+    let child = result.struct_child(all.len());
+    result.try_set_len(all.len())?;
+    let keys = child.struct_vector_child(0);
+    let key_bytes = keys.child(0, all.len());
+    let mut values = child.struct_vector_child(1);
+    let mut value_bytes = values.child(0, all.len());
+    let mut kinds = child.child(2, all.len());
+    for (row, (key, value, kind)) in all.iter().enumerate() {
+        key_bytes.insert(row, key.as_slice());
+        if let Some(value) = value {
+            value_bytes.insert(row, value.as_slice());
+        } else {
+            values.set_null(row);
+            value_bytes.set_null(row);
+        }
+        // Exact INTEGER child, reserved for the full list result.
+        unsafe {
+            kinds.as_mut_slice_with_len::<i32>(all.len())[row] = *kind;
+        }
+    }
+    Ok(())
 }
 fn path_expression(path: &Option<ValueWithSpan>) -> Expr {
     match path {
@@ -123,12 +227,7 @@ pub fn lower(factor: &mut TableFactor) -> Result<(), String> {
             if let Expr::Function(f) = e
                 && f.name.to_string() == "__msduck_openjson"
             {
-                let text = |expr| Expr::Cast {
-                    kind: CastKind::Cast,
-                    expr: Box::new(expr),
-                    data_type: DataType::Text,
-                    format: None,
-                };
+                let text = |expr| crate::engine::unary_function("__msduck_carrier_input", expr);
                 *e = crate::engine::binary_function(
                     if self.explicit {
                         "__msduck_openjson_sources"

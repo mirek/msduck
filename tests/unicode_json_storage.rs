@@ -212,3 +212,109 @@ fn extraction_inside_arithmetic_preserves_stored_input() {
         .unwrap();
     assert_eq!(rows, vec![None, Some(8)]);
 }
+
+#[test]
+fn openjson_stored_units_and_explicit_fragments_remain_exact() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let (response, ok) = session.batch_response(
+        "CREATE TABLE openjson_units(j NVARCHAR(MAX)); INSERT INTO openjson_units VALUES(N'{\"s\":\"'+LEFT(N'🦆',1)+N'\",\"a\":[\"\\ud800\"],\"b\":\"AP8B\"}'); SELECT o.[key] AS k,o.[value] AS v,o.[type] AS t INTO openjson_default FROM openjson_units d CROSS APPLY OPENJSON(d.j) o; SELECT o.v,o.f,o.b INTO openjson_explicit FROM openjson_units d CROSS APPLY OPENJSON(d.j) WITH(v NVARCHAR(MAX) '$.s',f NVARCHAR(MAX) '$.a' AS JSON,b VARBINARY(4) '$.b') o",
+        &Default::default(), false, None,
+    );
+    assert!(ok, "{response:?}");
+    let rows: Vec<(Vec<u8>, Vec<u8>, i32)> = session
+        .db
+        .prepare("SELECT k.__msduck_utf16le,v.__msduck_utf16le,t FROM openjson_default")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    let bytes = |text: &str| {
+        text.encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        rows,
+        vec![
+            (bytes("s"), vec![0x3e, 0xd8], 1),
+            (bytes("a"), bytes("[\"\\ud800\"]"), 4),
+            (bytes("b"), bytes("AP8B"), 1),
+        ]
+    );
+    let explicit: (Vec<u8>, Vec<u8>, Vec<u8>) = session
+        .db
+        .query_row(
+            "SELECT v.__msduck_utf16le,f.__msduck_utf16le,b FROM openjson_explicit",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        explicit,
+        (vec![0x3e, 0xd8], bytes("[\"\\ud800\"]"), vec![0, 255, 1])
+    );
+}
+
+#[test]
+fn openjson_unicode_vectors_preserve_nulls_and_single_evaluation() {
+    let server = Server::open(":memory:").unwrap();
+    let session = Session::new(server.connection().unwrap()).unwrap();
+    session
+        .db
+        .execute_batch("CREATE SEQUENCE openjson_source_calls; CREATE SEQUENCE openjson_path_calls")
+        .unwrap();
+    let count: i64 = session.db.query_row("SELECT count(*) FROM (SELECT unnest(__msduck_openjson(__msduck_pack_unicode(printf('[%d,null]',nextval('openjson_source_calls'))),__msduck_pack_unicode(CASE WHEN nextval('openjson_path_calls')%17=0 THEN NULL ELSE '$' END))) AS r FROM range(6000)) WHERE (r.type=0 AND r.value IS NULL) OR (r.type=2 AND r.value.__msduck_utf16le IS NOT NULL)", [], |r| r.get(0)).unwrap();
+    assert_eq!(count, (6000 - 6000 / 17) * 2);
+    for sequence in ["openjson_source_calls", "openjson_path_calls"] {
+        assert_eq!(
+            session
+                .db
+                .query_row("SELECT currval(?)", [sequence], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            6000
+        );
+    }
+    let count: i64 = session.db.query_row("SELECT count(*) FROM (SELECT unnest(__msduck_openjson_sources(__msduck_pack_unicode('[{\"x\":\"\\ud800\"},null]'),__msduck_pack_unicode('$'))) AS r FROM range(6000)) WHERE __msduck_openjson_scalar(r,__msduck_pack_unicode('$.x')).__msduck_utf16le=from_hex('00D8')", [], |r| r.get(0)).unwrap();
+    assert_eq!(count, 6000);
+    let wrong: i64 = session.db.query_row("SELECT count(*) FROM range(6000) WHERE __msduck_openjson_binary(__msduck_pack_unicode('\"AP8B\"'),__msduck_pack_unicode('$'),4)<>from_hex('00FF0100')", [], |r|r.get(0)).unwrap();
+    assert_eq!(wrong, 0);
+}
+
+#[test]
+fn openjson_unicode_rejects_invalid_storage_and_validates_whole_document() {
+    let server = Server::open(":memory:").unwrap();
+    let session = Session::new(server.connection().unwrap()).unwrap();
+    for function in [
+        "__msduck_openjson",
+        "__msduck_openjson_sources",
+        "__msduck_openjson_scalar",
+        "__msduck_openjson_fragment",
+    ] {
+        for payload in ["NULL::BLOB", "from_hex('7b')"] {
+            let sql = format!(
+                "SELECT {function}(struct_pack(__msduck_utf16le := {payload}),__msduck_pack_unicode('$'))"
+            );
+            assert!(
+                session
+                    .db
+                    .prepare(&sql)
+                    .and_then(|mut s| s.query([]).map(|_| ()))
+                    .is_err(),
+                "{sql}"
+            );
+        }
+        let sql = format!(
+            "SELECT {function}(__msduck_pack_unicode('{{\"a\":[],\"bad\":invalid}}'),__msduck_pack_unicode('$.a'))"
+        );
+        assert!(
+            session
+                .db
+                .prepare(&sql)
+                .and_then(|mut s| s.query([]).map(|_| ()))
+                .is_err(),
+            "{sql}"
+        );
+    }
+}

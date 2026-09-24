@@ -71,7 +71,10 @@ pub fn convert(
     if kind != Kind::String {
         return Err("OPENJSON binary conversion of non-string scalars is not yet supported");
     };
-    let mut bytes = decode64(&decode(value)?)?;
+    fit(decode64(&decode(value)?)?, width, fixed).map(Some)
+}
+
+fn fit(mut bytes: Vec<u8>, width: i32, fixed: bool) -> Result<Vec<u8>, &'static str> {
     if width != -1 {
         if !(1..=8000).contains(&width) {
             return Err("invalid OPENJSON binary width");
@@ -85,7 +88,36 @@ pub fn convert(
     } else if fixed {
         return Err("invalid OPENJSON binary width");
     };
-    Ok(Some(bytes))
+    Ok(bytes)
+}
+
+/// Base64 is ASCII; reject other code units without replacement or struct casts.
+pub fn convert_utf16(
+    source: &[u16],
+    path: &[u16],
+    width: i32,
+    fixed: bool,
+) -> Result<Option<Vec<u8>>, &'static str> {
+    let Some(value) = schema::resolve_utf16(source, path, false)? else {
+        return Ok(None);
+    };
+    let syntax = json::json_syntax(value);
+    let kind = root(&syntax).ok_or(DOCUMENT)?;
+    if syntax == b"null" {
+        return Ok(None);
+    }
+    if matches!(kind, Kind::Object | Kind::Array) {
+        return schema::column_utf16(source, path, false).map(|_| None);
+    }
+    if kind != Kind::String {
+        return Err("OPENJSON binary conversion of non-string scalars is not yet supported");
+    }
+    let units = json::decode_utf16(value).map_err(|_| DOCUMENT)?;
+    if units.iter().any(|&unit| unit > 127) {
+        return Err(ENCODING);
+    }
+    let text: String = units.into_iter().map(|unit| unit as u8 as char).collect();
+    fit(decode64(&text)?, width, fixed).map(Some)
 }
 
 #[cfg(test)]

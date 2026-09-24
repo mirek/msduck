@@ -304,24 +304,27 @@ pub fn decode_utf16(text: &[u16]) -> Result<Vec<u16>, &'static str> {
 
 // One byte per code unit gives the existing ASCII grammar scanner exact UTF-16
 // offsets. Non-ASCII content is never reconstructed from this syntax projection.
-fn json_syntax(text: &[u16]) -> Vec<u8> {
+pub(crate) fn json_syntax(text: &[u16]) -> Vec<u8> {
     text.iter()
         .map(|&u| if u <= 127 { u as u8 } else { 128 })
         .collect()
 }
-fn skip_ws(syntax: &[u8], mut at: usize, end: usize) -> usize {
+pub(crate) fn skip_ws(syntax: &[u8], mut at: usize, end: usize) -> usize {
     while at < end && matches!(syntax[at], b' ' | b'\t' | b'\r' | b'\n') {
         at += 1;
     }
     at
 }
 #[derive(Debug)]
-enum Utf16Step {
+pub(crate) enum Utf16Step {
     Key(Vec<u16>),
     Index(usize),
     All,
 }
-fn path_utf16(text: &[u16], wildcard: bool) -> Result<(bool, Vec<Utf16Step>), &'static str> {
+pub(crate) fn path_utf16(
+    text: &[u16],
+    wildcard: bool,
+) -> Result<(bool, Vec<Utf16Step>), &'static str> {
     let syntax = json_syntax(text);
     let mut at = skip_ws(&syntax, 0, syntax.len());
     let mut end = syntax.len();
@@ -413,23 +416,23 @@ fn path_utf16(text: &[u16], wildcard: bool) -> Result<(bool, Vec<Utf16Step>), &'
     }
     Ok((strict, steps))
 }
-struct Utf16Document<'a> {
+pub(crate) struct Utf16Document<'a> {
     units: &'a [u16],
     syntax: Vec<u8>,
 }
 impl<'a> Utf16Document<'a> {
-    fn new(units: &'a [u16]) -> Self {
+    pub(crate) fn new(units: &'a [u16]) -> Self {
         Self {
             units,
             syntax: json_syntax(units),
         }
     }
-    fn prefix(&self, at: usize, end: usize) -> Result<(Kind, usize), &'static str> {
+    pub(crate) fn prefix(&self, at: usize, end: usize) -> Result<(Kind, usize), &'static str> {
         prefix(&self.syntax[at..end])
             .map(|(kind, len)| (kind, at + len))
             .ok_or(DOCUMENT)
     }
-    fn selected(
+    pub(crate) fn selected(
         &self,
         start: usize,
         end: usize,

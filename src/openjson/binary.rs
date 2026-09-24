@@ -9,6 +9,9 @@ impl<const FIXED: bool> VScalar for Binary<FIXED> {
         input: &mut DataChunkHandle,
         output: &mut dyn WritableVector,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        if crate::unicode_carrier::is_logical(&input.flat_vector(0).logical_type()) {
+            return unicode_binary::<FIXED>(input, output);
+        }
         let width = input.flat_vector(2);
         let mut result = output.flat_vector();
         for row in 0..input.len() {
@@ -29,15 +32,56 @@ impl<const FIXED: bool> VScalar for Binary<FIXED> {
         Ok(())
     }
     fn signatures() -> Vec<ScalarFunctionSignature> {
-        vec![ScalarFunctionSignature::exact(
-            vec![Id::Varchar.into(), Id::Varchar.into(), Id::Integer.into()],
-            Id::Blob.into(),
-        )]
+        [false, true]
+            .into_iter()
+            .map(|unicode| {
+                let text = || {
+                    if unicode {
+                        crate::unicode_carrier::kind()
+                    } else {
+                        Id::Varchar.into()
+                    }
+                };
+                ScalarFunctionSignature::exact(
+                    vec![text(), text(), Id::Integer.into()],
+                    Id::Blob.into(),
+                )
+            })
+            .collect()
     }
 }
 pub(super) fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
     db.register_scalar_function::<Binary<false>>("__msduck_openjson_varbinary")?;
     db.register_scalar_function::<Binary<true>>("__msduck_openjson_binary")
+}
+fn unicode_binary<const FIXED: bool>(
+    input: &DataChunkHandle,
+    output: &mut dyn WritableVector,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let width = input.flat_vector(2);
+    let mut result = output.flat_vector();
+    let mut remaining = crate::unicode_carrier::CHUNK_LIMIT;
+    for row in 0..input.len() {
+        if width.row_is_null(row as u64) {
+            result.set_null(row);
+            continue;
+        }
+        // Exact INTEGER signature and row bounded by the current chunk.
+        let width = unsafe { width.as_slice_with_len::<i32>(input.len())[row] };
+        if let Some([source, path]) = unicode_texts(input, row)?
+            && let Some(value) =
+                msduck_core::openjson::binary::convert_utf16(&source, &path, width, FIXED)?
+        {
+            if value.len() > crate::unicode_carrier::CELL_LIMIT || value.len() > remaining {
+                return Err("OPENJSON result exceeds the configured output limit".into());
+            }
+            remaining -= value.len();
+            result.insert(row, value.as_slice());
+        } else {
+            result.set_null(row);
+        }
+    }
+    Ok(())
 }
 pub(super) fn expression(
     source: Expr,
