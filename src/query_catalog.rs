@@ -321,6 +321,11 @@ pub(crate) fn snapshot<T: Visit>(db: &Connection, query: &T) -> duckdb::Result<C
     snapshot_with_views(db, query, &mut ViewBinding::default())
 }
 
+pub(crate) fn system_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Field>> {
+    crate::index_catalog::fields(view, catalog_collation)
+        .or_else(|| object_catalog_fields(view, catalog_collation))
+}
+
 // SQL Server system-view declarations and projection origins, captured with
 // sys.all_columns and empty SELECT * results. Resource strings have a different
 // collation from database-owned sysname values.
@@ -434,8 +439,7 @@ fn snapshot_with_views<T: Visit>(
         ] = object_name.0.as_slice()
             && schema.value.eq_ignore_ascii_case("sys")
             && let Some(collation) = catalog.default_collation.as_deref()
-            && let Some(fields) = crate::index_catalog::fields(&view.value, collation)
-                .or_else(|| object_catalog_fields(&view.value, collation))
+            && let Some(fields) = system_catalog_fields(&view.value, collation)
         {
             catalog.tables.insert(name, fields);
             continue;
