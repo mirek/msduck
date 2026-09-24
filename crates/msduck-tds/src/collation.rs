@@ -32,6 +32,7 @@ impl Collation {
     pub fn for_name(name: &str) -> Option<Self> {
         let (flags, version, sort_id) = match name.to_ascii_lowercase().as_str() {
             "sql_latin1_general_cp1_ci_as" => (13, 0, 52),
+            "latin1_general_ci_as_ks_ws" => (1, 0, 0),
             "latin1_general_100_ci_as" => (13, 2, 0),
             "latin1_general_100_cs_as" => (12, 2, 0),
             "latin1_general_100_ci_ai" => (15, 2, 0),
