@@ -626,7 +626,7 @@
     {
       "id": "unicode-for-json-metadata-v1",
       "title": "Retain FOR JSON subquery declarations through scalar consumers",
-      "state": "ready",
+      "state": "review",
       "authorization": "Direct owner full SQL Server compatibility goal. Native UTF16 FOR JSON integration under #56/#62 exposes a first-party DATALENGTH failure: FOR JSON subqueries have an unconditional logical NVARCHAR(MAX) result, but shared storage inference drops that declaration. This is a disjoint companion; no external content was used. Start from owner-pushed b40ce1d or this worker continuation.",
       "scope": [
         "crates/msduck-sql/src/expression_metadata/storage.rs",
@@ -715,6 +715,25 @@
       "dependencies": [],
       "issue": 70,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHaMQ"
+    },
+    {
+      "id": "character-declaration-metadata-v1",
+      "title": "Preserve character aggregate declarations and accept column COLLATE syntax",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. First-party task69/70 client replay exposed missing character MIN/MAX metadata in scalar consumers and ADD COLUMN preflight rejecting COLLATE. This worker has finished and stops modifying the predecessor unicode-for-json-metadata-v1 snapshot (ab9e870); its scope is now review-only and its receipt must not be used for new edits. No external content used.",
+      "scope": [
+        "crates/msduck-sql/src/expression_metadata/storage.rs",
+        "crates/msduck-sql/src/ddl_syntax.rs",
+        "crates/msduck-sql/tests/character_declaration_metadata.rs"
+      ],
+      "acceptance": [
+        "Character MIN/MAX retain exact source family and width through scalar metadata inference, including fixed-width and MAX declarations, nested queries and casts. Do not infer declarations from runtime values or permit invalid aggregate syntax.",
+        "ADD COLUMN preflight accepts a single syntactic COLLATE option while retaining existing constraint restrictions. Supported names and character applicability are validated by native declaration adapter under task70; no silent unsupported collation acceptance.",
+        "Add deterministic metadata/preflight regressions and run pure and workspace checks; retain first-party client failures until repaired."
+      ],
+      "dependencies": [],
+      "issue": 71,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHap0"
     }
   ]
 }
