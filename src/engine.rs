@@ -563,9 +563,11 @@ impl Session {
         handle: Option<(&str, i32)>,
     ) -> (Vec<u8>, bool) {
         let saved_nocount = self.nocount;
+        let saved_xact_abort = self.xact_abort;
         let result = self.batch_response_inner(sql, parameters, rpc, handle);
         if rpc {
             self.nocount = saved_nocount;
+            self.xact_abort = saved_xact_abort;
         }
         result
     }

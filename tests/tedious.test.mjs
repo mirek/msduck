@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { readFileSync } from 'node:fs'
 import { TYPES, Request, Connection } from 'tedious'
 import { start, query } from './support/client.mjs'
 import { capture, canonical } from '../scripts/lib/compatibility.mjs'
@@ -1320,7 +1321,8 @@ test('DELETE supports optional FROM, joined aliases and CTE completion counts', 
   assert.deepEqual((await query(c, 'SELECT id FROM dbo.delete_target')).rows, [[1]])
   await assert.rejects(query(c, 'DELETE t FROM dbo.delete_target t LEFT JOIN dbo.delete_source s ON t.id=s.id'), e => /unsupported outer\/lateral join/.test(e.message))
   assert.deepEqual((await query(c, 'SELECT id FROM dbo.delete_target')).rows, [[1]])
-  await query(c, 'SET NOCOUNT ON')
+  // A SQL batch changes the caller session; sp_executesql restores SET options.
+  assert.deepEqual((await capture(c, 'SET NOCOUNT ON')).errors, [])
   const silent = await query(c, 'WITH ids AS (SELECT 1 AS id) DELETE dbo.delete_target WHERE id IN (SELECT id FROM ids)')
   assert.deepEqual(silent.rows, [])
   assert.deepEqual(silent.columns, [])
@@ -1453,8 +1455,9 @@ test('prepared session settings validate without changing NOCOUNT during prepare
   const transactionProbe = 'BEGIN TRAN; BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT XACT_STATE() AS state; END CATCH; ROLLBACK'
   assert.deepEqual((await query(c, transactionProbe)).rows, [[1]])
   await settings.run({})
-  assert.equal((await query(c, 'SELECT 1')).rowCount, 0)
-  assert.deepEqual((await query(c, transactionProbe)).rows, [[-1]])
+  // Captured sp_execute restores both options on returning to its caller.
+  assert.equal((await query(c, 'SELECT 1')).rowCount, 1)
+  assert.deepEqual((await query(c, transactionProbe)).rows, [[1]])
   await settings.release()
   await query(c, 'SET NOCOUNT OFF; SET XACT_ABORT OFF')
   const defaults = await prepare(c, 'SET ANSI_NULLS ON; SET QUOTED_IDENTIFIER ON; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; SELECT 1')
