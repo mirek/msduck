@@ -2383,5 +2383,1601 @@
         }
       ]
     }
+  ],
+  "prepared": [
+    {
+      "name": "prepared DATEFIRST values and recovery",
+      "sql": "SET DATEFIRST @first; SELECT @@DATEFIRST AS first_day; IF @fail=1 THROW 51000,'scope probe',1",
+      "parameters": [
+        "first",
+        "fail"
+      ],
+      "values": [
+        {
+          "first": 3,
+          "fail": 0
+        },
+        {
+          "first": 5,
+          "fail": 1
+        },
+        {
+          "first": 0,
+          "fail": 0
+        },
+        {
+          "first": null,
+          "fail": 0
+        },
+        {
+          "first": 1,
+          "fail": 0
+        }
+      ],
+      "result": {
+        "setup": {
+          "sets": [],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        },
+        "initial": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "first_day",
+                  "type": "IntN",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  7
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "total",
+                  "type": "IntN",
+                  "length": 4,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 1,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [
+            {
+              "number": 8153,
+              "state": 1,
+              "class": 0,
+              "lineNumber": 1,
+              "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+            }
+          ],
+          "returnStatus": 0,
+          "rowCount": 2
+        },
+        "afterPrepare": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "first_day",
+                  "type": "IntN",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  7
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "total",
+                  "type": "IntN",
+                  "length": 4,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 1,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [
+            {
+              "number": 8153,
+              "state": 1,
+              "class": 0,
+              "lineNumber": 1,
+              "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+            }
+          ],
+          "returnStatus": 0,
+          "rowCount": 2
+        },
+        "executions": [
+          {
+            "values": {
+              "first": 3,
+              "fail": 0
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      3
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [],
+              "returnStatus": 0,
+              "rowCount": 1
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          },
+          {
+            "values": {
+              "first": 5,
+              "fail": 1
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      5
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [
+                {
+                  "number": 51000,
+                  "state": 1,
+                  "class": 16,
+                  "lineNumber": 1,
+                  "message": "scope probe"
+                }
+              ],
+              "info": [],
+              "returnStatus": {
+                "kind": "missing"
+              },
+              "rowCount": 1
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          },
+          {
+            "values": {
+              "first": 0,
+              "fail": 0
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [
+                {
+                  "number": 2742,
+                  "state": 1,
+                  "class": 16,
+                  "lineNumber": 1,
+                  "message": "SET DATEFIRST 0 is out of range."
+                }
+              ],
+              "info": [],
+              "returnStatus": -6,
+              "rowCount": 1
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          },
+          {
+            "values": {
+              "first": null,
+              "fail": 0
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [
+                {
+                  "number": 2742,
+                  "state": 1,
+                  "class": 16,
+                  "lineNumber": 1,
+                  "message": "SET DATEFIRST 0 is out of range."
+                }
+              ],
+              "info": [],
+              "returnStatus": -6,
+              "rowCount": 1
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          },
+          {
+            "values": {
+              "first": 1,
+              "fail": 0
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [],
+              "returnStatus": 0,
+              "rowCount": 1
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          }
+        ],
+        "afterUnprepare": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "first_day",
+                  "type": "IntN",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  7
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "total",
+                  "type": "IntN",
+                  "length": 4,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 1,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [
+            {
+              "number": 8153,
+              "state": 1,
+              "class": 0,
+              "lineNumber": 1,
+              "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+            }
+          ],
+          "returnStatus": 0,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "name": "prepared ANSI_WARNINGS and recovery",
+      "sql": "SET ANSI_WARNINGS OFF; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); IF @fail=1 THROW 51000,'scope probe',1",
+      "parameters": [
+        "fail"
+      ],
+      "values": [
+        {
+          "fail": 0
+        },
+        {
+          "fail": 1
+        },
+        {
+          "fail": 0
+        }
+      ],
+      "result": {
+        "setup": {
+          "sets": [],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        },
+        "initial": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "first_day",
+                  "type": "IntN",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  7
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "total",
+                  "type": "IntN",
+                  "length": 4,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 1,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [
+            {
+              "number": 8153,
+              "state": 1,
+              "class": 0,
+              "lineNumber": 1,
+              "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+            }
+          ],
+          "returnStatus": 0,
+          "rowCount": 2
+        },
+        "afterPrepare": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "first_day",
+                  "type": "IntN",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  7
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "total",
+                  "type": "IntN",
+                  "length": 4,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 1,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [
+            {
+              "number": 8153,
+              "state": 1,
+              "class": 0,
+              "lineNumber": 1,
+              "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+            }
+          ],
+          "returnStatus": 0,
+          "rowCount": 2
+        },
+        "executions": [
+          {
+            "values": {
+              "fail": 0
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [],
+              "returnStatus": 0,
+              "rowCount": 2
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          },
+          {
+            "values": {
+              "fail": 1
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [
+                {
+                  "number": 51000,
+                  "state": 1,
+                  "class": 16,
+                  "lineNumber": 1,
+                  "message": "scope probe"
+                }
+              ],
+              "info": [],
+              "returnStatus": {
+                "kind": "missing"
+              },
+              "rowCount": 2
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          },
+          {
+            "values": {
+              "fail": 0
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [],
+              "returnStatus": 0,
+              "rowCount": 2
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          }
+        ],
+        "afterUnprepare": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "first_day",
+                  "type": "IntN",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  7
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "total",
+                  "type": "IntN",
+                  "length": 4,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 1,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [
+            {
+              "number": 8153,
+              "state": 1,
+              "class": 0,
+              "lineNumber": 1,
+              "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+            }
+          ],
+          "returnStatus": 0,
+          "rowCount": 2
+        }
+      }
+    }
   ]
 }
