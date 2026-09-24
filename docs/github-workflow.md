@@ -33,3 +33,11 @@ The [development project](https://github.com/users/mirek/projects/2) now groups
 workstreams and bounded tasks. Readiness is informational: workers discover only
 the owner-approved registry and claim through `scripts/agent-work.mjs`.
 See [exclusive claims and owner-only intake](agent-work.md).
+
+During the owner-requested integration checkpoint (#93), the full
+**Workspace and clients** check is temporarily non-blocking for merging to main;
+**Deterministic crates** remains required with strict up-to-date checking.
+The full workflow still runs and its failures remain visible. See
+[the checkpoint](integration-checkpoint.md) for ancestry, revision-specific
+verification, retained failures and the requirement to restore the full gate
+once its reproducible failures are resolved.

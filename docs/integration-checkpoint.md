@@ -48,3 +48,10 @@ its result visible, record the affected integration revision, and retain the
 owner-only intake and claim protections. Restore the full required check after
 its reproducible failures are resolved. New feature work should give priority to
 that baseline instead of growing another long unmerged stack.
+
+For this owner-approved consolidation, `main` now requires **Deterministic
+crates** with strict up-to-date checking. **Workspace and clients** remains
+scheduled and visible, but is temporarily non-blocking. Claim-tag and registry
+protections, owner-only workflow guards and external-contributor restrictions
+are unchanged. This is an explicit integration exception, not permission for
+workers to ignore future failures or merge unrelated work automatically.
