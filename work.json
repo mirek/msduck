@@ -469,7 +469,7 @@
     {
       "id": "unicode-output-storage-test-v1",
       "title": "Retain exact OUTPUT image assertions for Unicode storage",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner full SQL Server compatibility goal; Unicode column storage changes the native value representation while keeping logical OUTPUT values identical.",
       "scope": [
         "src/engine/joined_output.rs"
@@ -822,6 +822,24 @@
       "dependencies": [],
       "issue": 79,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHiF0"
+    },
+    {
+      "id": "transaction-state-adapters-v1",
+      "title": "Propagate uncommittable transaction state through execution adapters",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Pinned owner-generated 53-case storage transaction fixture requires XACT_ABORT state, 3930 write/commit rejection and 3998 batch-end rollback. Existing engine and storage reference integration stays under original #26 and #79 receipts.",
+      "scope": [
+        "src/engine/joined_output.rs",
+        "tests/transaction_state.rs"
+      ],
+      "acceptance": [
+        "Pass explicit transaction state to joined OUTPUT translation without process-global state.",
+        "Verify XACT_ABORT ON/OFF, caught error state, rejected writes/commit, rollback cleanup and next-batch state against retained reference evidence.",
+        "Run formatting, strict Clippy, native transaction regressions and exact reference replay; preserve remaining backend abort gaps."
+      ],
+      "dependencies": [],
+      "issue": 81,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHmcs"
     }
   ]
 }
