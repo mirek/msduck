@@ -734,6 +734,28 @@
       "dependencies": [],
       "issue": 71,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHap0"
+    },
+    {
+      "id": "windows-1252-best-fit-v1",
+      "title": "Implement captured SQL Server Windows-1252 best-fit conversion",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Owner-generated character extrema reference and PR72 replay show ANSI setup failing on U+0100, which SQL Server maps to A. Capture the complete UTF16 unit conversion and width/storage boundaries using the existing pinned reference helper. No external content used.",
+      "scope": [
+        "crates/msduck-core/src/character.rs",
+        "crates/msduck-core/src/character/windows_1252.bin",
+        "crates/msduck-core/tests/windows_1252_best_fit.rs",
+        "scripts/capture-windows-1252-best-fit.mjs",
+        "reference/windows-1252-best-fit.json",
+        "tests/windows_1252_best_fit.test.mjs"
+      ],
+      "acceptance": [
+        "Capture all 65536 UTF16 code units under every currently supported CP1252 collation, preserve raw results and independently reproduce the map with a fresh pinned SQL Server container. Capture supplementary pairs, isolated halves, best-fit space/storage overflow and CAST width boundaries.",
+        "Implement deterministic SQL character conversion from captured mappings, including VARCHAR and CHAR storage/casts, UTF16 and Rust text inputs, padding and truncation. Keep strict wire encoding separate and numeric formatting/overflow behavior unchanged. Do not infer unsupported collation behavior.",
+        "Compare every mapped code unit and captured public-client boundary result. Run existing character extrema replay unchanged, pure/core tests, strict Clippy and full workspace/client/audit verification. Retain any unresolved token or linguistic gaps explicitly."
+      ],
+      "dependencies": [],
+      "issue": 73,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHcLx"
     }
   ]
 }
