@@ -80,7 +80,7 @@ pub fn sync(db: &Connection) -> Result<()> {
         SELECT 1 FROM sys.objects o JOIN sys.schemas s USING(schema_id)
         JOIN duckdb_tables() t ON t.schema_name=s.name AND t.table_name=o.name
         JOIN duckdb_indexes() i ON i.schema_name=c.backend_schema AND i.index_name=c.backend_name AND i.table_oid=t.table_oid
-        WHERE o.object_id=c.object_id AND o.type='U');
+        WHERE o.object_id=c.object_id AND rtrim(o.type)='U');
         DELETE FROM main.__msduck_index_keys k WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_index_catalog c WHERE c.incarnation=k.incarnation)")?;
     Ok(())
 }
@@ -88,7 +88,7 @@ pub fn sync(db: &Connection) -> Result<()> {
 /// Read only identities that still belong to the same live physical table/index.
 pub fn acquire(db: &Connection) -> Result<Vec<Index>> {
     Ok(db.prepare("SELECT c.object_id,c.index_id,c.name,c.is_unique,c.incarnation,c.backend_schema,c.backend_name
-        FROM main.__msduck_index_catalog c JOIN sys.objects o ON o.object_id=c.object_id AND o.type='U'
+        FROM main.__msduck_index_catalog c JOIN sys.objects o ON o.object_id=c.object_id AND rtrim(o.type)='U'
         JOIN sys.schemas s ON s.schema_id=o.schema_id
         JOIN duckdb_tables() t ON t.schema_name=s.name AND t.table_name=o.name
         JOIN duckdb_indexes() i ON i.schema_name=c.backend_schema AND i.index_name=c.backend_name AND i.table_oid=t.table_oid
@@ -146,7 +146,7 @@ pub fn create(
         sync(db)?;
         let (schema,table,table_oid):(String,String,i64)=db.query_row(
             "SELECT s.name,o.name,CAST(t.table_oid AS BIGINT) FROM sys.objects o JOIN sys.schemas s USING(schema_id)
-             JOIN duckdb_tables() t ON t.schema_name=s.name AND t.table_name=o.name WHERE o.object_id=? AND o.type='U'",
+             JOIN duckdb_tables() t ON t.schema_name=s.name AND t.table_name=o.name WHERE o.object_id=? AND rtrim(o.type)='U'",
             [object_id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?)))?;
         let target = parts(&ast.table_name)?;
         ensure!(
@@ -288,7 +288,7 @@ pub fn reconcile(db: &Connection, owner: Transaction) -> Result<()> {
         sync(db)?;
         let records=db.prepare("SELECT o.object_id,i.schema_name,i.index_name,i.sql FROM duckdb_indexes() i
             JOIN sys.schemas s ON s.name=i.schema_name
-            JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=i.table_name AND o.type='U'
+            JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=i.table_name AND rtrim(o.type)='U'
             WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_index_catalog c WHERE c.backend_schema=i.schema_name AND c.backend_name=i.index_name)
             ORDER BY o.object_id,i.index_oid")?.query_map([],|r|Ok((r.get::<_,i32>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?)))?.collect::<duckdb::Result<Vec<_>>>()?;
         for (object_id, schema, name, sql) in records {
@@ -326,7 +326,7 @@ pub fn reconcile(db: &Connection, owner: Transaction) -> Result<()> {
 pub fn acquire_complete(db: &Connection) -> Result<Vec<Index>> {
     let unknown:i64=db.query_row("SELECT count(*) FROM duckdb_indexes() i
         JOIN sys.schemas s ON s.name=i.schema_name
-        JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=i.table_name AND o.type='U'
+        JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=i.table_name AND rtrim(o.type)='U'
         WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_index_catalog c WHERE c.backend_schema=i.schema_name AND c.backend_name=i.index_name AND c.object_id=o.object_id)",[],|r|r.get(0))?;
     ensure!(
         unknown == 0,
@@ -335,7 +335,7 @@ pub fn acquire_complete(db: &Connection) -> Result<Vec<Index>> {
     let constraints: i64 = db.query_row(
         "SELECT count(*) FROM duckdb_constraints() c
         JOIN sys.schemas s ON s.name=c.schema_name
-        JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=c.table_name AND o.type='U'
+        JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=c.table_name AND rtrim(o.type)='U'
         WHERE c.constraint_type IN ('PRIMARY KEY','UNIQUE')",
         [],
         |r| r.get(0),
@@ -355,16 +355,16 @@ pub fn publish_views(db: &Connection) -> Result<()> {
     db.execute_batch("CREATE OR REPLACE MACRO main.__msduck_index_catalog_ready() AS
         CASE WHEN EXISTS(SELECT 1 FROM duckdb_indexes() i
           JOIN sys.schemas s ON s.name=i.schema_name
-          JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=i.table_name AND o.type='U'
+          JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=i.table_name AND rtrim(o.type)='U'
           WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_index_catalog c WHERE c.backend_schema=i.schema_name AND c.backend_name=i.index_name AND c.object_id=o.object_id))
         OR EXISTS(SELECT 1 FROM duckdb_constraints() c
           JOIN sys.schemas s ON s.name=c.schema_name
-          JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=c.table_name AND o.type='U'
+          JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=c.table_name AND rtrim(o.type)='U'
           WHERE c.constraint_type IN ('PRIMARY KEY','UNIQUE'))
         THEN error('Index catalog contains unsupported unmanaged or constraint-backed indexes') ELSE true END;
         CREATE OR REPLACE VIEW main.__msduck_live_indexes AS
         SELECT c.* FROM main.__msduck_index_catalog c
-          JOIN sys.objects o ON o.object_id=c.object_id AND o.type='U'
+          JOIN sys.objects o ON o.object_id=c.object_id AND rtrim(o.type)='U'
           JOIN sys.schemas s ON s.schema_id=o.schema_id
           JOIN duckdb_tables() t ON t.schema_name=s.name AND t.table_name=o.name
           JOIN duckdb_indexes() i ON i.schema_name=c.backend_schema AND i.index_name=c.backend_name AND i.table_oid=t.table_oid;
@@ -378,7 +378,7 @@ pub fn publish_views(db: &Connection) -> Result<()> {
           CAST(NULL AS VARCHAR) AS filter_definition,CAST(NULL AS INTEGER) AS compression_delay,
           false AS suppress_dup_key_messages,false AS auto_created,false AS optimize_for_sequential_key
         FROM (SELECT object_id,CAST(NULL AS VARCHAR) AS name,CAST(0 AS INTEGER) AS index_id,false AS is_unique
-              FROM sys.objects WHERE type='U'
+              FROM sys.objects WHERE rtrim(type)='U'
               UNION ALL SELECT object_id,name,index_id,is_unique FROM main.__msduck_live_indexes) r
         WHERE main.__msduck_index_catalog_ready();
         CREATE OR REPLACE VIEW sys.index_columns AS
