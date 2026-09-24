@@ -20,6 +20,7 @@ pub mod json;
 pub mod json_escape;
 pub mod json_path;
 pub mod left_right;
+pub mod legacy_datetime;
 pub mod money;
 pub mod openjson;
 pub mod types;
