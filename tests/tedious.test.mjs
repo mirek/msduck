@@ -9299,3 +9299,6 @@ for (const entry of preparedScopeCases) {
     assert.deepEqual(await runPreparedCase(c,entry),entry.result)
   })
 }
+
+const {registerAttentionBoundaries}=await import('./attention_boundaries.test.mjs')
+registerAttentionBoundaries()
