@@ -3,7 +3,7 @@
 Upstream libduckdb-sys 1.10505.0 from crates.io. License retained.
 The original duckdb.tar.gz is unchanged (SHA-256 `e11f1209cdbb2a99b2ea2d348de21bdfb01dc494b55d1271df94b09c52bf229c`).
 
-Only build_bundled_cc.rs changes upstream code. After extracting the pinned
+The bundled cc builder applies the upstream source patches. After extracting the pinned
 archive, it flattens the state vector before C API aggregate update and flattens
 the target vector before combine. Each exact replacement is asserted once to
 fail on source drift. This restores the per-row state-pointer contract for

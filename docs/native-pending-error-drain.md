@@ -35,3 +35,12 @@ conversion error. The test process has a 20-second watchdog. A gated scalar call
 released to fail concurrently with drain. No pending task poll transfers that error;
 the explicit drain must retain the callback failure rather than replace it with
 an interrupt. This is an additional check beyond preexisting-error coverage.
+
+## Verification
+
+At `993b420`, the focused native test, full workspace tests, formatting, all-targets
+workspace build and strict all-targets workspace Clippy passed on linux.local.
+The workspace run repeated the gated background-error and transaction probes.
+The final commit only updates documentation. The original native archive remains
+unchanged. Server client tests were not rerun for this unused private entry point;
+production integration will require independent clients and reference comparisons.
