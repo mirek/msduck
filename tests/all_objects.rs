@@ -39,6 +39,18 @@ fn built_in_membership_is_a_disjoint_catalog_union() {
         ),
         2624
     );
+    let help_id: i32 = db
+        .query_row("SELECT __msduck_object_id('sys.sp_help','P')", [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(help_id, -784136858);
+    let help_name: String = db
+        .query_row("SELECT __msduck_object_name(?)", [help_id], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(help_name, "sp_help");
 }
 
 #[test]
