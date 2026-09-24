@@ -56,3 +56,11 @@ This task does not edit the SQL export module or root engine. Root integration,
 transaction policy, catalog acquisition and end-to-end execution verification
 remain separately owned follow-up work. The captures do not establish complete
 DROP INDEX compatibility.
+
+The deterministic `parse_cursor` entry point consumes one DROP INDEX statement
+from a caller-owned sqlparser cursor and leaves its terminator or following
+statement untouched. It preserves every ordered target, quoted identifier and
+supported option. `parse` wraps this entry point and still rejects trailing
+statements. Cursor regressions cover adjacent statements, semicolons, comments,
+legacy and modern names, and invalid trailing targets/options. The dialect
+carrier and runtime execution hooks remain separate integration work.
