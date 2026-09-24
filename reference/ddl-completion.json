@@ -1,0 +1,2435 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "identicalFreshCaptures": 2,
+  "results": [
+    {
+      "mode": "batch",
+      "results": [
+        {
+          "id": "schema",
+          "sql": "CREATE SCHEMA ddl_schema",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 253
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "plain",
+          "sql": "CREATE TABLE dbo.ddl_plain(v INT)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 198
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "identity",
+          "sql": "CREATE TABLE dbo.ddl_identity(id INT IDENTITY)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 198
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "insert",
+          "sql": "INSERT INTO dbo.ddl_plain VALUES(1),(2)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 2,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 2
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "rowCount": 2,
+              "curCmd": 195
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    2,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "view",
+          "sql": "CREATE VIEW dbo.ddl_view AS SELECT v FROM dbo.ddl_plain",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 207
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "alter-view",
+          "sql": "ALTER VIEW dbo.ddl_view AS SELECT v+1 AS v FROM dbo.ddl_plain",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 207
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "drop-view",
+          "sql": "DROP VIEW dbo.ddl_view",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 208
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "index",
+          "sql": "CREATE INDEX ddl_index ON dbo.ddl_plain(v)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 200
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "drop-index",
+          "sql": "DROP INDEX ddl_index ON dbo.ddl_plain",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 201
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "alter-add",
+          "sql": "ALTER TABLE dbo.ddl_plain ADD extra INT",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 216
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "alter-drop",
+          "sql": "ALTER TABLE dbo.ddl_plain DROP COLUMN extra",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 216
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "truncate",
+          "sql": "TRUNCATE TABLE dbo.ddl_plain",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 234
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "drop-plain",
+          "sql": "DROP TABLE dbo.ddl_plain",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 199
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "drop-identity",
+          "sql": "DROP TABLE dbo.ddl_identity",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 199
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "drop-schema",
+          "sql": "DROP SCHEMA ddl_schema",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONE",
+              "handlerName": "onDone",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 253
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        }
+      ]
+    },
+    {
+      "mode": "rpc",
+      "results": [
+        {
+          "id": "schema",
+          "sql": "CREATE SCHEMA ddl_schema",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "plain",
+          "sql": "CREATE TABLE dbo.ddl_plain(v INT)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEINPROC",
+              "handlerName": "onDoneInProc",
+              "more": true,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 198
+            },
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "identity",
+          "sql": "CREATE TABLE dbo.ddl_identity(id INT IDENTITY)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEINPROC",
+              "handlerName": "onDoneInProc",
+              "more": true,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 198
+            },
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "insert",
+          "sql": "INSERT INTO dbo.ddl_plain VALUES(1),(2)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 2,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 2
+          },
+          "completion": [
+            {
+              "name": "DONEINPROC",
+              "handlerName": "onDoneInProc",
+              "more": true,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "rowCount": 2,
+              "curCmd": 195
+            },
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    2,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "view",
+          "sql": "CREATE VIEW dbo.ddl_view AS SELECT v FROM dbo.ddl_plain",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEINPROC",
+              "handlerName": "onDoneInProc",
+              "more": true,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 207
+            },
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "alter-view",
+          "sql": "ALTER VIEW dbo.ddl_view AS SELECT v+1 AS v FROM dbo.ddl_plain",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEINPROC",
+              "handlerName": "onDoneInProc",
+              "more": true,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 207
+            },
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "drop-view",
+          "sql": "DROP VIEW dbo.ddl_view",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEINPROC",
+              "handlerName": "onDoneInProc",
+              "more": true,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 208
+            },
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "index",
+          "sql": "CREATE INDEX ddl_index ON dbo.ddl_plain(v)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEINPROC",
+              "handlerName": "onDoneInProc",
+              "more": true,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 200
+            },
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "drop-index",
+          "sql": "DROP INDEX ddl_index ON dbo.ddl_plain",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEINPROC",
+              "handlerName": "onDoneInProc",
+              "more": true,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 201
+            },
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "alter-add",
+          "sql": "ALTER TABLE dbo.ddl_plain ADD extra INT",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEINPROC",
+              "handlerName": "onDoneInProc",
+              "more": true,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 216
+            },
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "alter-drop",
+          "sql": "ALTER TABLE dbo.ddl_plain DROP COLUMN extra",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEINPROC",
+              "handlerName": "onDoneInProc",
+              "more": true,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 216
+            },
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "truncate",
+          "sql": "TRUNCATE TABLE dbo.ddl_plain",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEINPROC",
+              "handlerName": "onDoneInProc",
+              "more": true,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 234
+            },
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "drop-plain",
+          "sql": "DROP TABLE dbo.ddl_plain",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEINPROC",
+              "handlerName": "onDoneInProc",
+              "more": true,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 199
+            },
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "drop-identity",
+          "sql": "DROP TABLE dbo.ddl_identity",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEINPROC",
+              "handlerName": "onDoneInProc",
+              "more": true,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 199
+            },
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "id": "drop-schema",
+          "sql": "DROP SCHEMA ddl_schema",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 0
+          },
+          "completion": [
+            {
+              "name": "DONEPROC",
+              "handlerName": "onDoneProc",
+              "more": false,
+              "sqlError": false,
+              "attention": false,
+              "serverError": false,
+              "curCmd": 224
+            }
+          ],
+          "state": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "r",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "e",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    0
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        }
+      ]
+    }
+  ]
+}
