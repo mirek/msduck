@@ -1039,7 +1039,7 @@
     {
       "id": "aggregate-warning-boundaries-v1",
       "title": "Capture aggregate diagnostic boundaries in views DML windows and failures",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Integration task101 now matches all126 initial warning captures; its explicitly retained gaps require first-party SQL Server ground truth. Reference-only work runs independently while existing full verification completes. No external submission is approved.",
       "scope": [
         "scripts/capture-aggregate-warning-boundaries.mjs",
