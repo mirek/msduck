@@ -46,3 +46,109 @@ fn contextual_storage_evaluates_sources_once_across_vectors() {
         6000
     );
 }
+
+#[test]
+fn validation_data_keeps_prior_writes_and_transaction_committable() {
+    let server = Server::open(":memory:").unwrap();
+    let session = Session::new(server.connection().unwrap()).unwrap();
+    session.db.execute_batch("CREATE TABLE transaction_probe(i INTEGER); BEGIN TRANSACTION; INSERT INTO transaction_probe VALUES(1)").unwrap();
+    let rows:Vec<(Option<Vec<u8>>,Option<String>)>=session.db.prepare("SELECT v.value,v.error FROM (SELECT __msduck_check_store_nchar(__msduck_pack_unicode(s),1,'master.dbo.t','s') v FROM (VALUES ('a'),('ab'),(NULL)) t(s))").unwrap().query_map([],|r|Ok((r.get(0)?,r.get(1)?))).unwrap().collect::<duckdb::Result<_>>().unwrap();
+    assert_eq!(rows[0], (Some(vec![97, 0]), None));
+    assert_eq!(rows[1].0, None);
+    assert!(
+        rows[1]
+            .1
+            .as_ref()
+            .unwrap()
+            .starts_with("__msduck_truncated_utf16:")
+    );
+    assert_eq!(rows[2], (None, None));
+    session
+        .db
+        .execute_batch("INSERT INTO transaction_probe VALUES(2); COMMIT")
+        .unwrap();
+    assert_eq!(
+        session
+            .db
+            .query_row("SELECT count(*) FROM transaction_probe", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        2
+    );
+}
+
+#[test]
+fn validation_materialization_does_not_repeat_volatile_sources() {
+    let server = Server::open(":memory:").unwrap();
+    let session = Session::new(server.connection().unwrap()).unwrap();
+    session.db.execute_batch("CREATE SEQUENCE staged_store_calls; BEGIN TRANSACTION; CREATE TEMP TABLE staged_store AS SELECT __msduck_check_store_varchar(__msduck_pack_unicode(CASE WHEN nextval('staged_store_calls')%2=0 THEN 'ab' ELSE 'Ā' END),1,'master.dbo.t','s') v FROM range(6000)").unwrap();
+    let (good, bad): (i64, i64) = session
+        .db
+        .query_row(
+            "SELECT count(v.value),count(v.error) FROM staged_store",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!((good, bad), (3000, 3000));
+    assert_eq!(
+        session
+            .db
+            .query_row("SELECT currval('staged_store_calls')", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        6000
+    );
+    session
+        .db
+        .execute_batch("DROP TABLE staged_store; COMMIT")
+        .unwrap();
+}
+
+#[test]
+fn public_explicit_transaction_survives_rejected_insert_and_retains_prior_work() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    assert!(session.batch_response("CREATE TABLE dbo.transaction_text(i INT,s VARCHAR(1)); BEGIN TRAN; INSERT dbo.transaction_text VALUES(1,'a')",&Default::default(),false,None).1);
+    assert!(!session.batch_response("INSERT dbo.transaction_text VALUES(2,'b'),(3,'long'); INSERT dbo.transaction_text VALUES(4,'c')",&Default::default(),false,None).1);
+    assert_eq!(session.transactions, 1);
+    assert!(
+        session
+            .batch_response("COMMIT", &Default::default(), false, None)
+            .1
+    );
+    let rows: Vec<i32> = session
+        .db
+        .prepare("SELECT i FROM dbo.transaction_text ORDER BY i")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec![1, 4]);
+    assert_eq!(session.db.query_row("SELECT count(*) FROM duckdb_tables() WHERE database_name='temp' AND table_name LIKE '__msduck_checked_insert_%'",[],|r|r.get::<_,i64>(0)).unwrap(),0);
+}
+
+#[test]
+fn staged_insert_binds_parameters_and_preserves_unicode_and_null_storage() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let sql = "CREATE TABLE dbo.staged_parameters(a VARCHAR(1),u NVARCHAR(3)); DECLARE @a NVARCHAR(1)=N'Ā'; DECLARE @u NVARCHAR(3)=N'🦆'; BEGIN TRAN; INSERT dbo.staged_parameters VALUES(@a,@u),(NULL,NULL); COMMIT";
+    let (tokens, ok) = session.batch_response(sql, &Default::default(), false, None);
+    assert!(ok, "{tokens:?}");
+    let rows: Vec<(Option<String>, Option<Vec<u8>>)> = session
+        .db
+        .prepare("SELECT a,u.__msduck_utf16le FROM dbo.staged_parameters ORDER BY a NULLS LAST")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(
+        rows,
+        vec![
+            (Some("A".into()), Some(vec![0x3e, 0xd8, 0x86, 0xdd])),
+            (None, None)
+        ]
+    );
+}
