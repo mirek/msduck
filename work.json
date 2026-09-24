@@ -1366,6 +1366,25 @@
       "dependencies": [],
       "issue": 142,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJyJn"
+    },
+    {
+      "id": "incremental-tds-framing-v1",
+      "title": "Decode bounded TDS messages without blocking transport reads",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. The approved cancellation design requires incremental framing so transport can service Attention and worker events. Current root read_message blocks until a full message; implement deterministic framing without changing live runtime behavior yet.",
+      "scope": [
+        "crates/msduck-tds/src/framing.rs",
+        "crates/msduck-tds/tests/framing.rs",
+        "docs/incremental-framing.md"
+      ],
+      "acceptance": [
+        "Implement a pure incremental decoder retaining bounded incomplete state, producing at most one complete message per feed with consumed-byte accounting, explicit EOF and sticky fatal errors. Preserve root packet length/type/ID/IGNORE/EOM semantics including Tiberius repeated IDs.",
+        "Reject malformed lengths, short non-final packets, type changes, unrelated packet IDs, overflow and incomplete EOF. Cover all split positions, bytewise feeds, multiple messages per input, wraparound, exact limits and poisoned reuse.",
+        "Keep sockets/TLS/timers/native dependencies out. Original root smp-codec-v1 ownership supplies module export wiring. Run deterministic tests, formatting and strict Clippy on Linux; runtime adapter replacement and active cancellation remain separate integration work."
+      ],
+      "dependencies": [],
+      "issue": 144,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJzGx"
     }
   ]
 }
