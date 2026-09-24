@@ -6080,16 +6080,21 @@ test('TODATETIMEOFFSET attaches fixed offsets to local temporal fields', { timeo
   for(const [value,zone] of [['0001-01-01T00:00:00',1],['9999-12-31T23:59:59',-1]]) await assert.rejects(query(c,`SELECT TODATETIMEOFFSET(CAST('${value}' AS DATETIME2(7)),${zone})`),e=>e.number===9813 && e.message.includes('todatetimeoffset'))
 })
 
-test('TIME set sources retain precision through derived queries and windows', { timeout: 30000 }, async t => {
-  const c=await start(t)
-  await query(c,"CREATE TABLE dbo.time_set_a(t TIME(2)); CREATE TABLE dbo.time_set_b(t TIME(4)); INSERT INTO dbo.time_set_a VALUES('12:00:00.1234'),(NULL); INSERT INTO dbo.time_set_b VALUES('12:00:00.1234'),(NULL)")
-  for(const op of ['UNION ALL','UNION','INTERSECT','EXCEPT']) {
+for(const op of ['UNION ALL','UNION','INTERSECT','EXCEPT']) {
+  test(`TIME set sources retain precision through derived queries: ${op}`, { timeout: 30000 }, async t => {
+    const c=await start(t)
+    await query(c,"CREATE TABLE dbo.time_set_a(t TIME(2)); CREATE TABLE dbo.time_set_b(t TIME(4)); INSERT INTO dbo.time_set_a VALUES('12:00:00.1234'),(NULL); INSERT INTO dbo.time_set_b VALUES('12:00:00.1234'),(NULL)")
     const source=`SELECT t FROM dbo.time_set_a ${op} SELECT t FROM dbo.time_set_b`
     const direct=await query(c,source);assert.equal(direct.columns[0][0].scale,4,op)
     const derived=await query(c,`SELECT t FROM (${source}) q ORDER BY t`);assert.equal(derived.columns[0][0].scale,4,op)
     const empty=await query(c,`SELECT t FROM (${source}) q WHERE 1=0`);assert.deepEqual(empty.rows,[]);assert.equal(empty.columns[0][0].scale,4,op)
     const agg=await query(c,`WITH q AS (${source}) SELECT MIN(t),MAX(t) FROM q`);assert.deepEqual(agg.columns[0].map(c=>c.scale),[4,4],op)
-  }
+  })
+}
+
+test('TIME set sources retain precision through windows views and nested sets', { timeout: 30000 }, async t => {
+  const c=await start(t)
+  await query(c,"CREATE TABLE dbo.time_set_a(t TIME(2)); CREATE TABLE dbo.time_set_b(t TIME(4)); INSERT INTO dbo.time_set_a VALUES('12:00:00.1234'),(NULL); INSERT INTO dbo.time_set_b VALUES('12:00:00.1234'),(NULL)")
   const source='SELECT t FROM dbo.time_set_a UNION ALL SELECT t FROM dbo.time_set_b'
   const r=await query(c,`WITH q AS (${source}) SELECT LAG(t,5,'01:02:03.1234567') OVER(ORDER BY t),DATEPART(ns,LAG(t,5,'01:02:03.1234567') OVER(ORDER BY t)),DATEADD(ns,50000,t) FROM q ORDER BY t`)
   assert.deepEqual(r.columns[0].map(c=>c.scale),[4,undefined,4]);assert.deepEqual(r.rows.map(r=>r[1]),[123500000,123500000,123500000,123500000])
