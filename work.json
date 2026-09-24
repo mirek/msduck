@@ -1012,6 +1012,29 @@
       "dependencies": [],
       "issue": 99,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PH8K7"
+    },
+    {
+      "id": "aggregate-warning-integration-v1",
+      "title": "Integrate statement-scoped aggregate NULL-elimination warnings",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Reference task97 defines warning8153, and native task99 provides explicit isolated diagnostic contexts. Integrate these through database/session ownership, deterministic single-evaluation aggregate lowering and completion emission. Root engine/lib remain under the same-worker original concat-integration-v1 claim; native registry updates retain task99 ownership. No external content consumed.",
+      "scope": [
+        "src/server.rs",
+        "src/aggregate_diagnostics.rs",
+        "crates/msduck-sql/src/aggregate_diagnostics.rs",
+        "crates/msduck-sql/tests/aggregate_diagnostics.rs",
+        "tests/aggregate_diagnostics.test.mjs",
+        "docs/aggregate-diagnostics.md"
+      ],
+      "acceptance": [
+        "Carry an explicit database-owned diagnostic registry into every connection and session, including TLS and direct connection tests. No process-global or current-session state.",
+        "Bind aggregate operands from declarations and evaluate them once, preserving actual filtering/group/window behavior, NULLs and public metadata. Track per-statement NULL elimination across internal execution work and error cleanup.",
+        "Emit warning8153 at captured completion boundaries with ANSI_WARNINGS policy. Replay exact reference cases including empty/all-NULL/HAVING/window/correlated cases; preserve unresolved boundaries and do not claim full compatibility from a subset.",
+        "Run native and deterministic regressions, strict Clippy, client suites and reference replay. Keep ongoing verification binaries unchanged and record exact revisions."
+      ],
+      "dependencies": [],
+      "issue": 101,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PH9q9"
     }
   ]
 }
