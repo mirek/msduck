@@ -559,6 +559,27 @@
       "dependencies": [],
       "issue": 57,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHEEa"
+    },
+    {
+      "id": "vscalar-special-null-v1",
+      "title": "Expose opt-in special NULL handling for native Rust scalar functions",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. First-party SQL Server JSON captures show NULL paths must raise error 8116; DuckDB default scalar NULL propagation bypasses callbacks. Add a disjoint companion to active Unicode JSON task #56, starting from its owner-pushed f76d5af checkpoint or this worker continuation.",
+      "scope": [
+        "vendor/duckdb/src/vscalar/mod.rs",
+        "vendor/duckdb/src/vscalar/function.rs",
+        "vendor/duckdb/MSDUCK-PATCH.md",
+        "tests/vscalar_nulls.rs"
+      ],
+      "acceptance": [
+        "Expose an explicit VScalar opt-in for DuckDB special NULL handling. Default must preserve upstream NULL propagation. Apply the option consistently to ordinary and stateful registrations and every overload.",
+        "Retain existing callback panic containment, vector flattening, state lifecycle and native ownership. Do not patch the bundled archive or weaken type checks.",
+        "Add integration tests proving opt-in callbacks observe NULL, default constant-NULL calls still propagate NULL, both registration APIs honor the option, and callback errors remain recoverable. JSON adapter changes remain under task #56.",
+        "Run required formatting, strict workspace Clippy and Rust tests. Document the vendored binding extension and exact verification revision."
+      ],
+      "dependencies": [],
+      "issue": 60,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHJbN"
     }
   ]
 }
