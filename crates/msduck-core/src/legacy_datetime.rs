@@ -73,6 +73,20 @@ impl Value {
     pub fn storage_parts(self) -> (i32, u32) {
         (self.days, self.units)
     }
+
+    /// Widen the stored value to DATETIME2(7). DATETIME's rational ticks round
+    /// to the nearest 100ns unit; using its millisecond display would lose
+    /// information needed by SQL mixed-type comparison and arithmetic.
+    pub fn to_datetime2(self) -> DateTime2 {
+        let time = match self.target {
+            Target::DateTime => (i64::from(self.units) * SECOND + 150) / 300,
+            Target::SmallDateTime => i64::from(self.units) * 60 * SECOND,
+        };
+        // Private fields are constructed only after range validation. The
+        // widest result is below the end of 9999-12-31 and fits in i64.
+        DateTime2::from_ticks((i64::from(self.days) + EPOCH_DAY) * DAY + time)
+            .expect("validated legacy value lies inside DATETIME2 range")
+    }
 }
 
 /// Convert an explicitly typed DATETIME2 value, with NULL preserved.

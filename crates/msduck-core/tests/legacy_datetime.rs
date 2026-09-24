@@ -82,6 +82,47 @@ fn scalar_conversions_match_retained_sql_server_values_and_errors() {
 }
 
 #[test]
+fn widening_matches_captured_submillisecond_values() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../../reference/legacy-datetime.json")).unwrap();
+    let mut checked = 0;
+    for case in fixture["results"].as_array().unwrap() {
+        let id = case["id"].as_str().unwrap();
+        if !id.contains("-widening-") {
+            continue;
+        }
+        let target = if id.starts_with("SMALLDATETIME-") {
+            Target::SmallDateTime
+        } else {
+            Target::DateTime
+        };
+        let text = case["sql"].as_str().unwrap().split('\'').nth(1).unwrap();
+        let value = from_iso(target, CharacterKind::VarChar, Some(text))
+            .unwrap()
+            .unwrap();
+        let expected = &case["result"]["sets"][0]["rows"][0];
+        let widened = value.to_datetime2();
+        assert_eq!(
+            widened,
+            DateTime2::parse_iso(expected[0].as_str().unwrap()).unwrap(),
+            "{id}"
+        );
+        assert_eq!(
+            u64::from(widened.parts().fraction) * 100,
+            expected[1].as_u64().unwrap(),
+            "{id}"
+        );
+        assert_eq!(
+            from_datetime2(target, Some(widened)).unwrap(),
+            Some(value),
+            "{id}"
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 10);
+}
+
+#[test]
 fn values_preserve_nulls_and_exact_storage_units() {
     for target in [Target::DateTime, Target::SmallDateTime] {
         assert_eq!(
