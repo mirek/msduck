@@ -1443,7 +1443,7 @@ impl Session {
     ) -> Result<Execution> {
         use msduck_sql::drop_index as bind;
         let managed = crate::index_catalog::acquire_complete(&self.db)?;
-        let tables = self.db.prepare("SELECT o.object_id,s.name,o.name FROM sys.objects o JOIN sys.schemas s USING(schema_id) WHERE o.type='U'")?
+        let tables = self.db.prepare("SELECT o.object_id,s.name,o.name FROM sys.objects o JOIN sys.schemas s USING(schema_id) WHERE rtrim(o.type)='U'")?
             .query_map([], |r| Ok(bind::Table { id:r.get::<_,i32>(0)? as u64, schema:r.get(1)?, name:r.get(2)? }))?
             .collect::<duckdb::Result<Vec<_>>>()?;
         let indexes = managed
@@ -5733,7 +5733,14 @@ mod drop_index_runtime_tests {
                 );
                 let rows = session
                     .db
-                    .prepare(fixture["inventory"].as_str().unwrap())
+                    // Direct DuckDB observation needs explicit trailing-space
+                    // equality; public T-SQL predicates are covered over TDS.
+                    .prepare(
+                        &fixture["inventory"]
+                            .as_str()
+                            .unwrap()
+                            .replace("o.type='U'", "rtrim(o.type)='U'"),
+                    )
                     .unwrap()
                     .query_map([], |r| {
                         Ok(vec![

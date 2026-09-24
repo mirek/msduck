@@ -37,7 +37,7 @@ SELECT o.*,
     false AS is_dropped_ledger_table
 FROM sys.objects o
 JOIN main.__msduck_column_counters c USING(object_id)
-WHERE o.type='U';
+WHERE rtrim(o.type)='U';
 
 CREATE OR REPLACE VIEW sys.views AS
 SELECT o.*,
@@ -50,4 +50,4 @@ SELECT o.*,
     CAST(0 AS UTINYINT) AS ledger_view_type,
     'NON_LEDGER_VIEW' AS ledger_view_type_desc,
     false AS is_dropped_ledger_view
-FROM sys.objects o WHERE o.type='V';
+FROM sys.objects o WHERE rtrim(o.type)='V';

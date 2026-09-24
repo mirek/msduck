@@ -4243,7 +4243,7 @@ test('sys.objects and object lookup functions track tables views and rollback', 
   assert.deepEqual(await p.run({name:'[dbo].[object_probe]',kind:null}),[[id]])
   assert.deepEqual(await p.run({name:'object_probe',kind:'V'}),[[null]])
   assert.deepEqual((await query(c,`SELECT OBJECT_NAME(${id}),OBJECT_SCHEMA_NAME(${id}),OBJECT_NAME(NULL),OBJECT_ID(NULL)`)).rows,[['object_probe','dbo',null,null]])
-  assert.deepEqual((await query(c,`SELECT o.name,s.name,o.type,o.type_desc,o.principal_id,o.parent_object_id,o.is_ms_shipped FROM sys.objects o JOIN sys.schemas s ON o.schema_id=s.schema_id WHERE o.object_id=${id}`)).rows,[['object_probe','dbo','U','USER_TABLE',null,0,false]])
+  assert.deepEqual((await query(c,`SELECT o.name,s.name,o.type,o.type_desc,o.principal_id,o.parent_object_id,o.is_ms_shipped FROM sys.objects o JOIN sys.schemas s ON o.schema_id=s.schema_id WHERE o.object_id=${id}`)).rows,[['object_probe','dbo','U ','USER_TABLE',null,0,false]])
   await query(c,'ALTER TABLE dbo.object_probe ADD extra INT')
   assert.deepEqual(await p.run({name:'object_probe',kind:'U'}),[[id]])
   await query(c,'CREATE VIEW dbo.object_view AS SELECT v FROM dbo.object_probe')
@@ -9226,5 +9226,20 @@ test('system object and schema projections retain captured descriptors across ca
     assert.deepEqual(result.errors, [])
     assert.deepEqual(result.sets[0].rows, sql.endsWith('AND 1=0') ? [] : [['dbo','catalog_join','ix']])
     assert.deepEqual(result.sets[0].columns.map(column => [column.type,column.length,column.flags]), [['NVarChar',256,8],['NVarChar',256,8],['NVarChar',256,9]])
+  }
+})
+
+
+test('object catalog CHAR type values retain padding and filter semantics', { timeout: 20000 }, async t => {
+  const { canonical } = await import('../scripts/lib/compatibility.mjs')
+  const fixture = JSON.parse(readFileSync(new URL('../reference/object-catalog-width.json', import.meta.url), 'utf8'))
+  const c = await start(t)
+  for (const sql of fixture.setup) await query(c, sql)
+  for (const {sql, result} of fixture.results) {
+    const actual = canonical(await capture(c, sql))
+    assert.deepEqual(actual.errors, result.errors, sql)
+    assert.deepEqual(actual.sets.map(s => s.rows), result.sets.map(s => s.rows), sql)
+    // Full sys.tables/sys.views descriptors remain a separate catalog gap.
+    if (sql.includes('FROM sys.objects')) assert.deepEqual(actual, result, sql)
   }
 })

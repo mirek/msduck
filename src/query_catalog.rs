@@ -14,7 +14,7 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
 }
 
 pub fn sync(db: &Connection) -> duckdb::Result<()> {
-    db.execute_batch("DELETE FROM main.__msduck_view_definitions d WHERE NOT EXISTS(SELECT 1 FROM sys.objects o WHERE o.object_id=d.object_id AND o.type='V')")
+    db.execute_batch("DELETE FROM main.__msduck_view_definitions d WHERE NOT EXISTS(SELECT 1 FROM sys.objects o WHERE o.object_id=d.object_id AND rtrim(o.type)='V')")
 }
 
 pub fn record_view_definition(db: &Connection, statement: &Statement) -> duckdb::Result<()> {
@@ -42,7 +42,7 @@ pub fn record_view_definition(db: &Connection, statement: &Statement) -> duckdb:
     let mut query = query.clone();
     let _ = VisitMut::visit(&mut query, &mut Unmark);
     db.execute(
-        "INSERT OR REPLACE INTO main.__msduck_view_definitions SELECT object_id,? FROM sys.objects WHERE object_id=__msduck_object_id(?,NULL) AND type='V'",
+        "INSERT OR REPLACE INTO main.__msduck_view_definitions SELECT object_id,? FROM sys.objects WHERE object_id=__msduck_object_id(?,NULL) AND rtrim(type)='V'",
         duckdb::params![query.to_string(), name.to_string()],
     )?;
     Ok(())
@@ -466,7 +466,7 @@ fn snapshot_with_views<T: Visit>(
                 })
             })?
             .collect::<duckdb::Result<Vec<_>>>()?;
-        let definition = db.prepare("SELECT d.object_id,d.query_sql FROM main.__msduck_view_definitions d JOIN sys.objects o ON o.object_id=d.object_id WHERE o.object_id=__msduck_object_id(?,NULL) AND o.type='V'")?
+        let definition = db.prepare("SELECT d.object_id,d.query_sql FROM main.__msduck_view_definitions d JOIN sys.objects o ON o.object_id=d.object_id WHERE o.object_id=__msduck_object_id(?,NULL) AND rtrim(o.type)='V'")?
             .query_map([&name], |row| Ok((row.get::<_,i32>(0)?,row.get::<_,String>(1)?)))?
             .next().transpose()?;
         if let Some((id, sql)) = definition {
