@@ -105,7 +105,7 @@ identity relies on the logical object ID and recorded incarnation. The caller
 must synchronize logical objects after each DDL mutation. The reopen regression
 now proves that the logical index identity remains usable after restart.
 
-At runtime checkpoint `d9d423b`, all nine focused Linux native tests, all 649
+At runtime checkpoint `0a1d577`, all nine focused Linux native tests, all 649
 workspace Rust tests, strict workspace Clippy and formatting passed. The initial
 local native build was cancelled for disk pressure; no local pass is claimed.
 
