@@ -26,7 +26,7 @@ pub fn register(db: &Connection) -> Result<()> {
         CREATE OR REPLACE MACRO main.__msduck_object_schema_name(value) AS map_extract_value((SELECT map(list(object_id),list(s.name)) FROM main.__msduck_objects o JOIN main.__msduck_schemas s USING(schema_id)),value)")?;
     crate::column_catalog::register(db)?;
     db.execute_batch(include_str!("table_catalog.sql"))?;
-    sync(db)
+    Ok(sync(db)?)
 }
 
 pub fn sync(db: &Connection) -> duckdb::Result<()> {
