@@ -85,6 +85,7 @@ struct Bindings {
     comparisons: Vec<(usize, Bin2Input)>,
     cases: Vec<(usize, CaseInput)>,
     binary: Vec<(usize, BinaryInput)>,
+    extrema: Vec<(usize, super::character_extrema::Input)>,
 }
 struct BinaryInput {
     target: DataType,
@@ -338,6 +339,9 @@ fn comparison_plan(
             if let Some(input) = binary_input(self.catalog, expr, scope) {
                 self.bindings.binary.push((self.position, input));
             }
+            if let Some(input) = super::character_extrema::input(self.catalog, expr, scope) {
+                self.bindings.extrema.push((self.position, input));
+            }
             self.position += 1;
             if let Some(Err(Conflict::Operation(error))) = label {
                 return ControlFlow::Break(error);
@@ -560,4 +564,13 @@ pub fn lower_unicode_binary_conversions(
     let _ = VisitMut::visit(query, &mut lower);
     debug_assert!(lower.pending.next().is_none());
     Ok(())
+}
+
+/// Reuse the same scope frames as comparison/casing validation.
+pub(super) fn extrema_plan(
+    catalog: &CatalogSnapshot,
+    query: &Query,
+    outer: &Scope,
+) -> Result<Vec<(usize, super::character_extrema::Input)>, SqlError> {
+    Ok(comparison_plan(catalog, query, outer)?.extrema)
 }
