@@ -127,6 +127,27 @@ impl Execution {
     }
 }
 
+// Command identities captured from SQL Server for successful DDL. Backend
+// affected-row counts do not represent SQL Server DDL completion row counts.
+fn ddl_completion_command(statement: &Statement) -> Option<u16> {
+    Some(match statement {
+        Statement::CreateTable(_) => 198,
+        Statement::CreateView(_) | Statement::AlterView { .. } => 207,
+        Statement::CreateIndex(_) => 200,
+        Statement::AlterTable(_) => 216,
+        Statement::Truncate(_) => 234,
+        Statement::CreateSchema { .. } => 253,
+        Statement::Drop { object_type, .. } => match object_type {
+            ObjectType::Table => 199,
+            ObjectType::View => 208,
+            ObjectType::Index => 201,
+            ObjectType::Schema => 253,
+            _ => return None,
+        },
+        _ => return None,
+    })
+}
+
 struct Work<'a> {
     statement: &'a Statement,
     loop_boundary: bool,
@@ -869,7 +890,9 @@ impl Session {
                     }
                     self.rowcount = count.unwrap_or(0);
                     let visible = count.filter(|_| !self.nocount);
-                    if !msduck_core::completion::visible(rpc, self.nocount, kind) {
+                    if (rpc && ddl_completion_command(statement) == Some(253))
+                        || !msduck_core::completion::visible(rpc, self.nocount, kind)
+                    {
                         continue;
                     }
                     last_done = Some(out.len());
@@ -1303,11 +1326,15 @@ impl Session {
         }
         let result = (|| {
             let view_columns = crate::query_catalog::view(&self.db, &statement)?;
-            let result = self.execute_inner(
+            let mut result = self.execute_inner(
                 statement.clone(),
                 parameters,
                 self.transactions == 0 && !own_transaction,
             )?;
+            if let Some(command) = ddl_completion_command(&statement) {
+                result.count = None;
+                result.command = command;
+            }
             if catalog_ddl {
                 crate::object_catalog::sync(&self.db)?;
                 crate::query_catalog::sync(&self.db)?;
@@ -4695,6 +4722,67 @@ mod tests {
         out.clear();
         encode_value(&mut out, &Type::Date, &Value::Date32(-719162)).unwrap();
         assert_eq!(out, [3, 0, 0, 0]);
+    }
+}
+
+#[cfg(test)]
+mod ddl_completion_tests {
+    use super::*;
+
+    #[test]
+    fn ddl_batch_and_rpc_tokens_match_captured_commands_and_rowcounts() {
+        // Captured twice in fresh SQL Server databases, both batch and RPC.
+        let cases = [
+            ("CREATE SCHEMA ddl_schema", 253, None),
+            ("CREATE TABLE dbo.ddl_plain(v INT)", 198, None),
+            ("CREATE TABLE dbo.ddl_identity(id INT IDENTITY)", 198, None),
+            ("INSERT INTO dbo.ddl_plain VALUES(1),(2)", 195, Some(2u64)),
+            (
+                "CREATE VIEW dbo.ddl_view AS SELECT v FROM dbo.ddl_plain",
+                207,
+                None,
+            ),
+            (
+                "ALTER VIEW dbo.ddl_view AS SELECT v+1 AS v FROM dbo.ddl_plain",
+                207,
+                None,
+            ),
+            ("DROP VIEW dbo.ddl_view", 208, None),
+            ("ALTER TABLE dbo.ddl_plain ADD extra INT", 216, None),
+            ("ALTER TABLE dbo.ddl_plain DROP COLUMN extra", 216, None),
+            ("TRUNCATE TABLE dbo.ddl_plain", 234, None),
+            // DROP INDEX ... ON remains unsupported (retained in the raw audit).
+            // Create this index after ALTER/TRUNCATE, then drop its table below.
+            ("CREATE INDEX ddl_index ON dbo.ddl_plain(v)", 200, None),
+            ("DROP TABLE dbo.ddl_plain", 199, None),
+            ("DROP TABLE dbo.ddl_identity", 199, None),
+            ("DROP SCHEMA ddl_schema", 253, None),
+        ];
+        for rpc in [false, true] {
+            let server = crate::server::Server::open(":memory:").unwrap();
+            let mut session = Session::new(server.connection().unwrap()).unwrap();
+            for (sql, command, count) in cases {
+                let (actual, ok) = session.batch_response(sql, &Default::default(), rpc, None);
+                assert!(ok, "rpc={rpc}, {sql}: {actual:?}");
+                let mut expected = Vec::new();
+                if !rpc || command != 253 {
+                    expected.extend([
+                        if rpc { 0xff } else { 0xfd },
+                        u8::from(rpc) | if count.is_some() { 16 } else { 0 },
+                        0,
+                    ]);
+                    expected.extend((command as u16).to_le_bytes());
+                    expected.extend(count.unwrap_or(0).to_le_bytes());
+                }
+                if rpc {
+                    expected.extend([0x79, 0, 0, 0, 0, 0xfe, 0, 0, 0xe0, 0]);
+                    expected.extend(0u64.to_le_bytes());
+                }
+                assert_eq!(actual, expected, "rpc={rpc}, {sql}");
+                assert_eq!(session.rowcount, count.unwrap_or(0), "{sql}");
+                assert_eq!(session.last_error, 0, "{sql}");
+            }
+        }
     }
 }
 
