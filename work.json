@@ -580,6 +580,29 @@
       "dependencies": [],
       "issue": 60,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHJbN"
+    },
+    {
+      "id": "unicode-integer-consumers-v1",
+      "title": "Convert exact Unicode carriers to integer values without struct text",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal and parallel work organization. First-party JSON extraction work at PR #59 reveals JSON_VALUE(j, path)+1 stringifies its exact UTF16 result in __msduck_integer_input. Native Unicode extraction itself is verified. Start from the latest owner-pushed work/unicode-json-consumers-v1 after discovering its approved snapshot, or coordinate with the current worker before choosing the starting revision.",
+      "scope": [
+        "src/integer_conversion.rs",
+        "tests/unicode_integer_storage.rs",
+        "tests/unicode_integer_storage.test.mjs",
+        "scripts/capture-unicode-integer.mjs",
+        "reference/unicode-integer.json"
+      ],
+      "acceptance": [
+        "Implement an exact carrier-aware integer normalization/registration helper in src/integer_conversion.rs. Do not parse physical STRUCT display text. Preserve numeric operand behavior, whitespace, signs, empty text, bounds for TINYINT/SMALLINT/INT/BIGINT, TRY conversion, and single evaluation. Expose an explicit registration function if needed.",
+        "Capture SQL Server diagnostics for Unicode numeric text, isolated surrogate units, overflow, NULLs and TRY conversions using the pinned reference container. Preserve raw UTF16 evidence; never replace unpaired units silently. If exact error-message transport requires another module, publish a disjoint follow-up rather than weakening assertions.",
+        "Reproduce JSON_VALUE over a stored NVARCHAR(MAX) document containing x=\"7\", followed by +1: expected 8, current failure is physical STRUCT display text converted to INT32. Keep the regression in tests/unicode_json_storage.rs unchanged; that file belongs to #56. Add dedicated tests within this task scope.",
+        "Root registration in src/scalar.rs belongs to active unicode-trim-v1 (#35); root expression lowering belongs to concat-integration-v1 (#26). Coordinate integration with that owner instead of editing their files. This native helper/reference subtask can proceed independently.",
+        "Verify new callbacks and helpers with native tests, strict Clippy and formatting. Use the shared remote builder lock and record exact revision. Treat incomplete integration and diagnostic differences as unfinished, not passing compatibility."
+      ],
+      "dependencies": [],
+      "issue": 61,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHKie"
     }
   ]
 }
