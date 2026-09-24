@@ -139,7 +139,7 @@ impl State {
                     anyhow::anyhow!("Could not find prepared statement with handle {handle}.")
                 })?;
                 let bindings = bind(&prepared.declarations, &parameters[1..])?;
-                Ok(session.batch(&prepared.sql, &bindings, true))
+                Ok(session.prepared_batch(&prepared.sql, &bindings))
             }
             "sp_unprepare" => {
                 ensure!(parameters.len() == 1, "sp_unprepare requires one handle");

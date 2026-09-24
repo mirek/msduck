@@ -2,6 +2,7 @@
 //! Deterministic values, syntax and codecs live in the three workspace libraries.
 pub use msduck_core::{datetime2, datetimeoffset};
 pub mod engine;
+pub mod index_catalog;
 pub use msduck_sql::parameter;
 pub(crate) use msduck_sql::{
     apply, dialect, function_args, grouping, grouping_syntax, merge, named_windows, sql_type, top,

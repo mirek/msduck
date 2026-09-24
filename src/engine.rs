@@ -166,6 +166,12 @@ impl<'a> Work<'a> {
         }
     }
 }
+#[derive(Clone, Copy)]
+enum RpcExecution {
+    Direct,
+    Prepared,
+}
+
 pub struct Session {
     pub db: Connection,
     diagnostics: crate::statement_diagnostics::Registry,
@@ -178,6 +184,8 @@ pub struct Session {
     transaction_name: String,
     xact_abort: bool,
     ansi_warnings: bool,
+    datefirst: i32,
+    backend_datefirst: std::cell::Cell<i32>,
     transaction_doomed: bool,
     caught_error: Option<SqlError>,
 }
@@ -206,6 +214,8 @@ impl Session {
             transaction_name: String::new(),
             xact_abort: false,
             ansi_warnings: true,
+            datefirst: 7,
+            backend_datefirst: std::cell::Cell::new(7),
             transaction_doomed: false,
             caught_error: None,
         })
@@ -260,6 +270,9 @@ impl Session {
             }
             if crate::dialect::loop_control(&statement).is_some() {
                 continue; // Placement was checked by batch_variables.
+            }
+            if msduck_sql::drop_index_syntax::request(&statement).is_some() {
+                continue; // Bind table/index identities only when executed.
             }
             if let Some(call) = msduck_sql::raiserror::call(&statement) {
                 for expression in [call.message, call.severity, call.state]
@@ -559,12 +572,92 @@ impl Session {
         rpc: bool,
         handle: Option<(&str, i32)>,
     ) -> (Vec<u8>, bool) {
+        self.batch_response_context(sql, parameters, rpc.then_some(RpcExecution::Direct), handle)
+    }
+
+    pub fn prepared_batch(
+        &mut self,
+        sql: &str,
+        parameters: &HashMap<String, Parameter>,
+    ) -> Vec<u8> {
+        self.batch_response_context(sql, parameters, Some(RpcExecution::Prepared), None)
+            .0
+    }
+
+    fn batch_response_context(
+        &mut self,
+        sql: &str,
+        parameters: &HashMap<String, Parameter>,
+        rpc_execution: Option<RpcExecution>,
+        handle: Option<(&str, i32)>,
+    ) -> (Vec<u8>, bool) {
+        let saved_nocount = self.nocount;
+        let saved_xact_abort = self.xact_abort;
+        let saved_ansi_warnings = self.ansi_warnings;
+        let saved_datefirst = self.datefirst;
+        let result = self.batch_response_inner(sql, parameters, rpc_execution, handle);
+        if rpc_execution.is_some() {
+            self.nocount = saved_nocount;
+            self.xact_abort = saved_xact_abort;
+            self.ansi_warnings = saved_ansi_warnings;
+            // Restoring caller state must not execute SQL in an aborted native
+            // transaction or replace the request's original diagnostics.
+            self.datefirst = saved_datefirst;
+        }
+        result
+    }
+
+    fn set_datefirst(&mut self, first: i32) -> Result<()> {
+        let previous = self.datefirst;
+        self.datefirst = first;
+        if let Err(error) = self.sync_datefirst() {
+            self.datefirst = previous;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    fn sync_datefirst(&self) -> Result<()> {
+        if self.backend_datefirst.get() != self.datefirst {
+            self.db.execute_batch(&format!(
+                "SET VARIABLE __msduck_datefirst = {}",
+                self.datefirst
+            ))?;
+            self.backend_datefirst.set(self.datefirst);
+        }
+        Ok(())
+    }
+
+    fn batch_response_inner(
+        &mut self,
+        sql: &str,
+        parameters: &HashMap<String, Parameter>,
+        rpc_execution: Option<RpcExecution>,
+        handle: Option<(&str, i32)>,
+    ) -> (Vec<u8>, bool) {
+        let rpc = rpc_execution.is_some();
         self.caught_error = None;
         let mut out = Vec::new();
         let mut had_runtime_error = false;
         let statements = match parse_batch(sql) {
             Ok(s) => s,
             Err(e) => {
+                if e.downcast_ref::<SqlError>().is_some() {
+                    self.last_error = emit_error(&mut out, &e);
+                    let command = if matches!(self.last_error, 156 | 159) {
+                        if rpc {
+                            out.push(0x79);
+                            out.extend(self.last_error.to_le_bytes());
+                            224
+                        } else {
+                            253
+                        }
+                    } else {
+                        0
+                    };
+                    tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, command, 0);
+                    return (out, false);
+                }
                 let message = e.to_string();
                 self.error(
                     &mut out,
@@ -589,6 +682,7 @@ impl Session {
         let mut steps = 0usize;
         let mut last_done = None;
         let mut return_status = 0i32;
+        let mut preserve_return_status = false;
         let mut executed_leaf = false;
         while let Some(work) = pending.pop() {
             steps += 1;
@@ -814,6 +908,7 @@ impl Session {
                     }
                     continue;
                 }
+                preserve_return_status = false;
                 self.last_error = raised.error_number;
                 if is_error {
                     had_runtime_error = true;
@@ -875,9 +970,26 @@ impl Session {
                         tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
                         return (out, false);
                     }
+                    if !rpc
+                        && matches!(statement, Statement::Set(_))
+                        && statement
+                            .to_string()
+                            .eq_ignore_ascii_case("SET LANGUAGE US_ENGLISH")
+                    {
+                        tds::diagnostic_utf16(
+                            &mut out,
+                            tds::DiagnosticKind::Information,
+                            0,
+                            1,
+                            5703,
+                            &"Changed language setting to us_english."
+                                .encode_utf16()
+                                .collect::<Vec<_>>(),
+                        );
+                    }
                     out.extend(tokens);
                     self.last_error = 0;
-                    if had_runtime_error {
+                    if had_runtime_error && !preserve_return_status {
                         return_status = 0;
                     }
                     // A declaration without an initializer changes neither the
@@ -972,11 +1084,24 @@ impl Session {
                         }
                         continue;
                     }
+                    preserve_return_status = false;
                     self.last_error = emit_error(&mut out, &e);
                     if self.transaction_doomed {
                         self.rollback_doomed(&mut out);
                         tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
                         return (out, false);
+                    }
+                    if self.last_error == 2742 && matches!(statement, Statement::Set(_)) {
+                        // Invalid DATEFIRST ends only SET. SQL Server preserves
+                        // its RPC failure status even when later queries succeed.
+                        had_runtime_error = true;
+                        preserve_return_status =
+                            matches!(rpc_execution, Some(RpcExecution::Prepared));
+                        return_status = -6;
+                        self.rowcount = 0;
+                        last_done = Some(out.len());
+                        tds::done(&mut out, if rpc { 0xff } else { 0xfd }, 2 | more, 0, 0);
+                        continue;
                     }
                     let failed_dml =
                         e.downcast_ref::<crate::query_error::FailedQuery>()
@@ -1033,14 +1158,40 @@ impl Session {
                         );
                         continue;
                     }
-                    let command = if !rpc
-                        && e.downcast_ref::<crate::query_error::CompilationFailure>()
-                            .is_some()
-                    {
-                        0xfd
-                    } else {
-                        0
-                    };
+                    if rpc && msduck_sql::drop_index_syntax::request(statement).is_some() {
+                        self.rowcount = 0;
+                        if self.last_error == 3701 {
+                            // A missing target ends this statement, while later
+                            // RPC statements still run, even with NOCOUNT ON.
+                            had_runtime_error = true;
+                            return_status = self.last_error;
+                            last_done = Some(out.len());
+                            tds::done(&mut out, 0xff, 3, 201, 0);
+                            continue;
+                        }
+                        if self.last_error == 3748 {
+                            tds::done(&mut out, 0xfe, 2, 224, 0);
+                            return (out, false);
+                        }
+                    }
+                    let command =
+                        if !rpc && msduck_sql::drop_index_syntax::request(statement).is_some() {
+                            self.rowcount = 0;
+                            if self.last_error == 3748 { 253 } else { 201 }
+                        } else if !rpc
+                            && matches!(statement, Statement::CreateIndex(_))
+                            && self.last_error == 1913
+                        {
+                            self.rowcount = 0;
+                            253
+                        } else if !rpc
+                            && e.downcast_ref::<crate::query_error::CompilationFailure>()
+                                .is_some()
+                        {
+                            0xfd
+                        } else {
+                            0
+                        };
                     tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, command, 0);
                     return (out, false);
                 }
@@ -1180,6 +1331,7 @@ impl Session {
             self.transaction_name.clear();
         }
         self.transactions -= 1;
+        self.sync_datefirst()?;
         Ok(out)
     }
     pub fn rollback_transaction(&mut self, name: &str) -> Result<Vec<u8>> {
@@ -1198,6 +1350,7 @@ impl Session {
         self.transaction_doomed = false;
         self.transaction_descriptor = 0;
         self.transaction_name.clear();
+        self.sync_datefirst()?;
         Ok(out)
     }
     pub fn transaction_request(&mut self, request: tds::TransactionRequest) -> Result<Vec<u8>> {
@@ -1299,6 +1452,18 @@ impl Session {
         statement: Statement,
         parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Execution> {
+        if !matches!(
+            statement,
+            Statement::Rollback { .. }
+                | Statement::Commit { .. }
+                | Statement::StartTransaction { .. }
+        ) {
+            self.sync_datefirst()?;
+        }
+        if let Some(request) = msduck_sql::drop_index_syntax::request(&statement) {
+            self.require_committable()?;
+            return self.execute_drop_index(request);
+        }
         if self.transaction_doomed {
             let command = match &statement {
                 Statement::Insert(_) => Some(0xc3),
@@ -1326,11 +1491,28 @@ impl Session {
         }
         let result = (|| {
             let view_columns = crate::query_catalog::view(&self.db, &statement)?;
-            let mut result = self.execute_inner(
-                statement.clone(),
-                parameters,
-                self.transactions == 0 && !own_transaction,
-            )?;
+            let mut result = if let Statement::CreateIndex(index) = &statement {
+                let object_id: Option<i32> = self.db.query_row(
+                    "SELECT __msduck_object_id(?,'U')",
+                    [index.table_name.to_string()],
+                    |r| r.get(0),
+                )?;
+                let object_id = object_id
+                    .ok_or_else(|| anyhow::anyhow!("CREATE INDEX target table does not exist"))?;
+                crate::index_catalog::create(
+                    &self.db,
+                    object_id,
+                    index,
+                    crate::index_catalog::Transaction::CallerOwned,
+                )?;
+                Execution::statement(vec![], None, 200)
+            } else {
+                self.execute_inner(
+                    statement.clone(),
+                    parameters,
+                    self.transactions == 0 && !own_transaction,
+                )?
+            };
             if let Some(command) = ddl_completion_command(&statement) {
                 result.count = None;
                 result.command = command;
@@ -1338,8 +1520,10 @@ impl Session {
             if catalog_ddl {
                 crate::object_catalog::sync(&self.db)?;
                 crate::query_catalog::sync(&self.db)?;
+                crate::index_catalog::sync(&self.db)?;
                 crate::object_catalog::touch(&self.db, &statement)?;
                 crate::declared_columns::record(&self.db, &statement)?;
+                crate::object_catalog::sync_lob(&self.db)?;
                 if let Some((name, fields)) = view_columns {
                     crate::query_catalog::record(&self.db, &name, &fields)?;
                     crate::query_catalog::record_view_definition(&self.db, &statement)?;
@@ -1355,6 +1539,72 @@ impl Session {
         }
         result
     }
+    fn execute_drop_index(
+        &mut self,
+        request: msduck_sql::drop_index::Request,
+    ) -> Result<Execution> {
+        use msduck_sql::drop_index as bind;
+        let managed = crate::index_catalog::acquire_complete(&self.db)?;
+        let tables = self.db.prepare("SELECT o.object_id,s.name,o.name FROM sys.objects o JOIN sys.schemas s USING(schema_id) WHERE rtrim(o.type)='U'")?
+            .query_map([], |r| Ok(bind::Table { id:r.get::<_,i32>(0)? as u64, schema:r.get(1)?, name:r.get(2)? }))?
+            .collect::<duckdb::Result<Vec<_>>>()?;
+        let indexes = managed
+            .iter()
+            .map(|i| bind::Index {
+                table_id: i.object_id as u64,
+                id: i.index_id as u64,
+                name: i.name.clone(),
+                clustered: false,
+                constraint_backed: false,
+                backend_name: ObjectName::from(vec![
+                    Ident::with_quote('"', &i.backend_schema),
+                    Ident::with_quote('"', &i.backend_name),
+                ]),
+            })
+            .collect::<Vec<_>>();
+        let plan = bind::bind(
+            &request,
+            &tables,
+            &indexes,
+            &["dbo"],
+            str::eq_ignore_ascii_case,
+        )
+        .map_err(|error| match error {
+            bind::Error::Unsupported(message) => anyhow::anyhow!(message),
+            bind::Error::Sql(d) => SqlError::from_utf16(
+                d.number,
+                d.state,
+                d.class,
+                d.message.encode_utf16().collect(),
+            )
+            .into(),
+        })?;
+        for drop in plan.drops {
+            let index = managed
+                .iter()
+                .find(|i| i.object_id as u64 == drop.table_id && i.index_id as u64 == drop.index_id)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Bound index identity is absent from its catalog snapshot")
+                })?;
+            let owner = if self.transactions == 0 {
+                crate::index_catalog::Transaction::Owned
+            } else {
+                crate::index_catalog::Transaction::CallerOwned
+            };
+            crate::index_catalog::drop_index(&self.db, index, owner)?;
+        }
+        if let Some(d) = plan.terminal {
+            return Err(SqlError::from_utf16(
+                d.number,
+                d.state,
+                d.class,
+                d.message.encode_utf16().collect(),
+            )
+            .into());
+        }
+        Ok(Execution::statement(vec![], None, 201))
+    }
+
     fn execute_inner(
         &mut self,
         statement: Statement,
@@ -1536,23 +1786,27 @@ impl Session {
         if let Statement::Set(_) = &statement {
             if let Some(value) = crate::datepart::setting(&statement).map_err(anyhow::Error::msg)? {
                 let value = self.evaluate_scalar(value, DataType::Int(None), parameters)?;
-                let Value::Int(first) = value else {
-                    bail!("DATEFIRST must be between 1 and 7")
+                let first = match value {
+                    Value::Int(first) => first,
+                    Value::Null => 0,
+                    _ => bail!("DATEFIRST requires an integer value"),
                 };
-                ensure!(
-                    (1..=7).contains(&first),
-                    "DATEFIRST must be between 1 and 7"
-                );
-                self.db
-                    .execute_batch(&format!("SET VARIABLE __msduck_datefirst = {first}"))?;
+                if !(1..=7).contains(&first) {
+                    return Err(SqlError::new(
+                        2742,
+                        1,
+                        format!("SET DATEFIRST {first} is out of range."),
+                    )
+                    .into());
+                }
+                self.set_datefirst(first)?;
                 return Ok(Execution::statement(vec![], None, 0));
             }
             if statement
                 .to_string()
                 .eq_ignore_ascii_case("SET LANGUAGE US_ENGLISH")
             {
-                self.db
-                    .execute_batch("SET VARIABLE __msduck_datefirst = 7")?;
+                self.set_datefirst(7)?;
             }
             let normalized = statement.to_string().to_uppercase().replace(" = ", " ");
             if matches!(
@@ -2279,7 +2533,29 @@ impl Session {
             .iter()
             .enumerate()
             .map(|(index, field)| {
-                let kind = if let Some(kind) = metadata.declared(index)
+                let kind = if result_fields.len() == schema.fields().len()
+                    && matches!(
+                        result_fields[index]
+                            .info
+                            .as_ref()
+                            .and_then(|info| info.system_type_id),
+                        Some(58 | 61)
+                    )
+                    && matches!(field.data_type(), ArrowType::Timestamp(_, None))
+                {
+                    Type::LegacyDateTime(
+                        if result_fields[index]
+                            .info
+                            .as_ref()
+                            .and_then(|info| info.system_type_id)
+                            == Some(58)
+                        {
+                            4
+                        } else {
+                            8
+                        },
+                    )
+                } else if let Some(kind) = metadata.declared(index)
                     && (matches!(field.data_type(), ArrowType::Utf8 | ArrowType::LargeUtf8)
                         || crate::unicode_carrier::is_arrow(field.data_type())
                             && matches!(kind, Type::Text | Type::Nvarchar(_) | Type::Nchar(_))
@@ -2291,7 +2567,8 @@ impl Session {
                                     Type::Varbinary(_) | Type::FixedBinary(_),
                                     ArrowType::Binary | ArrowType::LargeBinary
                                 )
-                        )) {
+                        ))
+                {
                     kind.clone()
                 } else if is_bool_field(field) {
                     Type::Bit
@@ -2372,6 +2649,7 @@ impl Session {
         predicate: bool,
         diagnostics: Option<&crate::statement_diagnostics::Scope>,
     ) -> Result<Value> {
+        self.sync_datefirst()?;
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
             .map_err(anyhow::Error::msg)?;
@@ -4259,6 +4537,16 @@ fn encode_value_mode(out: &mut Vec<u8>, kind: &Type, value: &Value, fixed: bool)
             out.push(encoded.len() as u8);
             out.extend(encoded);
         }
+        (Type::LegacyDateTime(width), Value::Timestamp(unit, v)) => {
+            let nanos = i128::from(*v)
+                * match unit {
+                    TimeUnit::Second => 1_000_000_000,
+                    TimeUnit::Millisecond => 1_000_000,
+                    TimeUnit::Microsecond => 1_000,
+                    TimeUnit::Nanosecond => 1,
+                };
+            tds::legacy_datetime(out, *width, nanos, fixed)?;
+        }
         (Type::DateTime, Value::Timestamp(unit, v)) => {
             let nanos = i128::from(*v)
                 * match unit {
@@ -4287,6 +4575,34 @@ fn plp(out: &mut Vec<u8>, data: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rpc_settings_restore_after_native_transaction_failure() {
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        assert!(session.batch_response(
+            "CREATE TABLE dbo.scope_tx(n INT PRIMARY KEY); INSERT INTO dbo.scope_tx VALUES(1)",
+            &HashMap::new(), false, None,
+        ).1);
+        assert!(!session.batch_response(
+            "SET DATEFIRST 3; SET ANSI_WARNINGS OFF; BEGIN TRAN; INSERT INTO dbo.scope_tx VALUES(1)",
+            &HashMap::new(), true, None,
+        ).1);
+        assert_eq!(session.datefirst, 7);
+        assert!(session.ansi_warnings);
+        assert!(
+            session
+                .batch_response("ROLLBACK", &HashMap::new(), true, None)
+                .1
+        );
+        let first: i32 = session
+            .db
+            .query_row("SELECT getvariable('__msduck_datefirst')", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(first, 7);
+    }
+
     fn alignment_fields(count: usize) -> Vec<crate::query_catalog::Field> {
         (0..count)
             .map(|_| crate::query_catalog::Field {
@@ -4751,9 +5067,8 @@ mod ddl_completion_tests {
             ("ALTER TABLE dbo.ddl_plain ADD extra INT", 216, None),
             ("ALTER TABLE dbo.ddl_plain DROP COLUMN extra", 216, None),
             ("TRUNCATE TABLE dbo.ddl_plain", 234, None),
-            // DROP INDEX ... ON remains unsupported (retained in the raw audit).
-            // Create this index after ALTER/TRUNCATE, then drop its table below.
             ("CREATE INDEX ddl_index ON dbo.ddl_plain(v)", 200, None),
+            ("DROP INDEX ddl_index ON dbo.ddl_plain", 201, None),
             ("DROP TABLE dbo.ddl_plain", 199, None),
             ("DROP TABLE dbo.ddl_identity", 199, None),
             ("DROP SCHEMA ddl_schema", 253, None),
@@ -5341,5 +5656,360 @@ mod output_materialization_tests {
         assert_eq!(count(&session, "image_source"), 3);
         assert_eq!(count(&session, "image_sink"), 3);
         assert_eq!(images(&session), 0);
+    }
+}
+
+#[cfg(test)]
+mod index_catalog_integration_tests {
+    use super::*;
+
+    #[test]
+    fn index_catalog_startup_and_empty_result_descriptors_match_reference() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../reference/index-catalog.json")).unwrap();
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        for view in ["indexes", "index_columns"] {
+            let wire = &fixture["declarations"][view]["wire"]["sets"][0]["columns"];
+            let columns = wire
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|c| {
+                    let kind = match c["type"].as_str().unwrap() {
+                        "Int" => Type::Int(4),
+                        "TinyInt" => Type::Int(1),
+                        "IntN" => Type::Int(c["length"].as_u64().unwrap() as u8),
+                        "BitN" => Type::Bit,
+                        "NVarChar" => {
+                            if c["length"] == 65535 {
+                                Type::Text
+                            } else {
+                                Type::Nvarchar(c["length"].as_u64().unwrap() as u16 / 2)
+                            }
+                        }
+                        other => panic!("unhandled reference type {other}"),
+                    };
+                    let flags = c["flags"].as_u64().unwrap();
+                    let collation = c["collation"].as_object().map(|_| {
+                        tds::collation::Collation::new(
+                            c["collation"]["lcid"].as_u64().unwrap() as u32,
+                            c["collation"]["flags"].as_u64().unwrap() as u8,
+                            c["collation"]["version"].as_u64().unwrap() as u8,
+                            c["collation"]["sortId"].as_u64().unwrap() as u8,
+                        )
+                        .unwrap()
+                    });
+                    Column {
+                        name: c["name"].as_str().unwrap().into(),
+                        kind,
+                        properties: msduck_core::result::Properties {
+                            nullable: Some(flags & 1 != 0),
+                            origin: if flags & 32 != 0 {
+                                msduck_core::result::Origin::Expression
+                            } else {
+                                msduck_core::result::Origin::Stored
+                            },
+                        },
+                        collation,
+                    }
+                })
+                .collect::<Vec<_>>();
+            let mut expected = vec![];
+            tds::metadata(&mut expected, &columns).unwrap();
+            for name in [format!("sys.{view}"), format!("[sys].[{view}]")] {
+                let sql = format!("SELECT * FROM {name} WHERE 1=0");
+                let (actual, ok) = session.batch_response(&sql, &Default::default(), false, None);
+                assert!(ok, "{sql}: {actual:?}");
+                assert!(
+                    actual.starts_with(&expected),
+                    "{sql}: expected {expected:?}, actual {actual:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn index_creation_uses_table_owned_identity_and_transactional_catalog() {
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        for sql in [
+            "CREATE TABLE dbo.a(id INT)",
+            "CREATE TABLE dbo.b(id INT)",
+            "CREATE INDEX ix ON dbo.a(id)",
+            "CREATE UNIQUE INDEX ix ON dbo.b(id)",
+        ] {
+            let (out, ok) = session.batch_response(sql, &Default::default(), false, None);
+            assert!(ok, "{sql}: {out:?}");
+        }
+        let indexes = crate::index_catalog::acquire_complete(&session.db).unwrap();
+        assert_eq!(indexes.len(), 2);
+        assert!(indexes.iter().all(|i| i.name == "ix" && i.index_id == 2));
+        assert_ne!(indexes[0].backend_name, indexes[1].backend_name);
+        for sql in [
+            "BEGIN TRAN; CREATE INDEX transient ON dbo.a(id); ROLLBACK",
+            "BEGIN TRAN; DROP TABLE dbo.a; ROLLBACK",
+        ] {
+            assert!(
+                session
+                    .batch_response(sql, &Default::default(), false, None)
+                    .1,
+                "{sql}"
+            );
+            assert_eq!(
+                crate::index_catalog::acquire_complete(&session.db).unwrap(),
+                indexes
+            );
+        }
+        assert!(
+            session
+                .batch_response("DROP TABLE dbo.a", &Default::default(), false, None)
+                .1
+        );
+        assert_eq!(
+            crate::index_catalog::acquire_complete(&session.db)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            session
+                .db
+                .query_row(
+                    "SELECT count(*) FROM main.__msduck_index_catalog",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            1
+        );
+    }
+}
+
+#[cfg(test)]
+mod drop_index_runtime_tests {
+    use super::*;
+    #[test]
+    fn captured_drop_requests_preserve_diagnostics_completion_and_remaining_indexes() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../reference/drop-index.json")).unwrap();
+        for rpc in [false, true] {
+            for case in fixture["results"].as_array().unwrap() {
+                let server = crate::server::Server::open(":memory:").unwrap();
+                let mut session = Session::new(server.connection().unwrap()).unwrap();
+                for sql in fixture["setup"].as_array().unwrap() {
+                    let (out, ok) = session.batch_response(
+                        sql.as_str().unwrap(),
+                        &Default::default(),
+                        false,
+                        None,
+                    );
+                    assert!(ok, "setup {sql}: {out:?}");
+                }
+                let sql = case["sql"].as_str().unwrap();
+                let (actual, ok) = session.batch_response(sql, &Default::default(), rpc, None);
+                let errors = case["result"]["errors"].as_array().unwrap();
+                assert_eq!(ok, errors.is_empty(), "{sql}: {actual:?}");
+                let mut expected = vec![];
+                for e in errors {
+                    tds::sql_error(
+                        &mut expected,
+                        &SqlError::from_utf16(
+                            e["number"].as_i64().unwrap() as i32,
+                            e["state"].as_u64().unwrap() as u8,
+                            e["class"].as_u64().unwrap() as u8,
+                            e["message"].as_str().unwrap().encode_utf16().collect(),
+                        ),
+                    );
+                }
+                let number = errors.first().map(|e| e["number"].as_i64().unwrap() as i32);
+                if rpc {
+                    // SQL Server RPC captures distinguish statement errors from
+                    // syntax/option failures that terminate the entire request.
+                    if number.is_none() || number == Some(3701) {
+                        tds::done(
+                            &mut expected,
+                            0xff,
+                            if number.is_some() { 3 } else { 1 },
+                            201,
+                            0,
+                        );
+                    }
+                    if number != Some(3748) {
+                        expected.push(0x79);
+                        expected.extend(number.unwrap_or(0).to_le_bytes());
+                    }
+                    tds::done(
+                        &mut expected,
+                        0xfe,
+                        if matches!(number, Some(156 | 159 | 3748)) {
+                            2
+                        } else {
+                            0
+                        },
+                        224,
+                        0,
+                    );
+                } else {
+                    let done = &case["completion"][0];
+                    tds::done(
+                        &mut expected,
+                        0xfd,
+                        if errors.is_empty() { 0 } else { 2 },
+                        done["curCmd"].as_u64().unwrap() as u16,
+                        0,
+                    );
+                }
+                assert_eq!(actual, expected, "{sql}");
+                assert_eq!(
+                    serde_json::json!([[session.rowcount, session.last_error]]),
+                    case["state"]["sets"][0]["rows"],
+                    "{sql}"
+                );
+                let rows = session
+                    .db
+                    // Direct DuckDB observation needs explicit trailing-space
+                    // equality; public T-SQL predicates are covered over TDS.
+                    .prepare(
+                        &fixture["inventory"]
+                            .as_str()
+                            .unwrap()
+                            .replace("o.type='U'", "rtrim(o.type)='U'"),
+                    )
+                    .unwrap()
+                    .query_map([], |r| {
+                        Ok(vec![
+                            r.get::<_, String>(0)?,
+                            r.get::<_, String>(1)?,
+                            r.get::<_, String>(2)?,
+                        ])
+                    })
+                    .unwrap()
+                    .collect::<duckdb::Result<Vec<_>>>()
+                    .unwrap();
+                assert_eq!(
+                    serde_json::json!(rows),
+                    case["remaining"]["sets"][0]["rows"],
+                    "{sql}"
+                );
+            }
+        }
+    }
+    #[test]
+    fn caller_transaction_can_rollback_a_drop_before_a_later_missing_target() {
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        assert!(
+            session
+                .batch_response(
+                    "CREATE TABLE dbo.a(id INT); CREATE INDEX ix ON dbo.a(id); BEGIN TRAN",
+                    &Default::default(),
+                    false,
+                    None
+                )
+                .1
+        );
+        assert!(
+            !session
+                .batch_response(
+                    "DROP INDEX ix ON dbo.a, absent ON dbo.a",
+                    &Default::default(),
+                    false,
+                    None
+                )
+                .1
+        );
+        assert_eq!(session.transactions, 1);
+        assert!(
+            crate::index_catalog::acquire_complete(&session.db)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            session
+                .batch_response("ROLLBACK", &Default::default(), false, None)
+                .1
+        );
+        assert_eq!(
+            crate::index_catalog::acquire_complete(&session.db)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+}
+
+#[cfg(test)]
+mod duplicate_index_runtime_tests {
+    use super::*;
+    #[test]
+    fn duplicate_index_errors_match_captured_tokens_and_preserve_the_session() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../reference/index-catalog.json")).unwrap();
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        for sql in [
+            "CREATE TABLE dbo.a(id INT,value INT)",
+            "CREATE INDEX ix ON dbo.a(id)",
+            "CREATE SCHEMA alt",
+            "CREATE TABLE alt.[odd.table]([odd.column] INT,other INT)",
+            "CREATE INDEX [odd.index] ON alt.[odd.table]([odd.column])",
+        ] {
+            let (out, ok) = session.batch_response(sql, &Default::default(), false, None);
+            assert!(ok, "{sql}: {out:?}");
+        }
+        let before = crate::index_catalog::acquire_complete(&session.db).unwrap();
+        let mut checked = 0;
+        for case in fixture["results"].as_array().unwrap() {
+            if !case["id"].as_str().unwrap().starts_with("duplicate-") {
+                continue;
+            }
+            let error = &case["result"]["errors"][0];
+            let mut expected = vec![];
+            tds::sql_error(
+                &mut expected,
+                &SqlError::from_utf16(
+                    error["number"].as_i64().unwrap() as i32,
+                    error["state"].as_u64().unwrap() as u8,
+                    error["class"].as_u64().unwrap() as u8,
+                    error["message"].as_str().unwrap().encode_utf16().collect(),
+                ),
+            );
+            tds::done(
+                &mut expected,
+                0xfd,
+                2,
+                case["completion"][0]["curCmd"].as_u64().unwrap() as u16,
+                0,
+            );
+            let (actual, ok) = session.batch_response(
+                case["sql"].as_str().unwrap(),
+                &Default::default(),
+                false,
+                None,
+            );
+            assert!(!ok);
+            assert_eq!(actual, expected, "{}", case["id"]);
+            assert_eq!(
+                serde_json::json!([[session.rowcount, session.last_error, session.transactions]]),
+                case["state"]["sets"][0]["rows"]
+            );
+            assert_eq!(
+                crate::index_catalog::acquire_complete(&session.db).unwrap(),
+                before
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 4);
+        assert!(
+            session
+                .batch_response(
+                    "CREATE INDEX usable ON dbo.a(value)",
+                    &Default::default(),
+                    false,
+                    None
+                )
+                .1
+        );
     }
 }

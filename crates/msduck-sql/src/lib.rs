@@ -99,3 +99,6 @@ pub mod output_bind;
 pub mod output_join;
 pub mod output_target;
 pub mod output_update;
+
+pub mod drop_index;
+pub mod drop_index_syntax;

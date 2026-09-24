@@ -70,6 +70,32 @@ pub(super) fn acquire<T: VisitMut>(db: &Connection, value: &mut T) -> Snapshot {
 }
 
 fn columns(db: &Connection, schema: &str, table: &str) -> Result<Columns, String> {
+    if schema.eq_ignore_ascii_case("sys") {
+        let collation: Option<String> = db
+            .query_row(
+                "SELECT collation_name FROM sys.types WHERE name='nvarchar'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        if let Some(fields) = collation
+            .as_deref()
+            .and_then(|collation| crate::query_catalog::system_catalog_fields(table, collation))
+        {
+            return Ok(fields
+                .into_iter()
+                .map(|field| {
+                    (
+                        field.name,
+                        field
+                            .info
+                            .and_then(|info| info.logical_type())
+                            .map(crate::sql_type::ast),
+                    )
+                })
+                .collect());
+        }
+    }
     let mut statement = db.prepare("SELECT column_name, data_type FROM information_schema.columns WHERE table_catalog=current_database() AND table_schema=? COLLATE NOCASE AND table_name=? COLLATE NOCASE ORDER BY ordinal_position").map_err(|e| e.to_string())?;
     let columns = statement
         .query_map([schema, table], |row| {

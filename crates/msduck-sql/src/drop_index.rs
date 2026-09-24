@@ -94,6 +94,18 @@ pub fn parse(sql: &str) -> Result<Request, Error> {
     let mut p = Parser::new(&dialect)
         .try_with_sql(sql)
         .map_err(|e| unsupported(e.to_string()))?;
+    let request = parse_cursor(&mut p)?;
+    let _ = p.consume_token(&Token::SemiColon);
+    if p.next_token().token != Token::EOF {
+        return Err(unsupported("Trailing DROP INDEX syntax"));
+    }
+    Ok(request)
+}
+
+/// Consume exactly one DROP INDEX statement from a caller-owned token cursor.
+/// Leave its terminator or next statement untouched. Batch parsing remains the
+/// caller's responsibility; quoted identifiers are retained as AST identifiers.
+pub fn parse_cursor(p: &mut Parser<'_>) -> Result<Request, Error> {
     if !p.parse_keywords(&[Keyword::DROP, Keyword::INDEX]) {
         return Err(unsupported("Expected DROP INDEX"));
     }
@@ -166,10 +178,6 @@ pub fn parse(sql: &str) -> Result<Request, Error> {
         if !p.consume_token(&Token::Comma) {
             break;
         }
-    }
-    let _ = p.consume_token(&Token::SemiColon);
-    if p.next_token().token != Token::EOF {
-        return Err(unsupported("Trailing DROP INDEX syntax"));
     }
     Ok(Request { if_exists, targets })
 }

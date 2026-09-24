@@ -177,3 +177,55 @@ fn inconsistent_catalog_identities_cannot_drop_another_tables_index() {
         Err(Error::Unsupported(_))
     ));
 }
+
+#[test]
+fn parser_cursor_retains_statement_boundaries_and_all_ordered_targets() {
+    use sqlparser::{dialect::MsSqlDialect, parser::Parser, tokenizer::Token};
+    let dialect = MsSqlDialect {};
+    for suffix in ["; SELECT 7", " SELECT 7", " /* boundary */ SELECT 7"] {
+        let sql = format!(
+            "DROP INDEX IF EXISTS [odd.index] ON [alt].[odd.table] WITH (ONLINE=OFF), dbo.a.ix{suffix}"
+        );
+        let mut parser = Parser::new(&dialect).try_with_sql(&sql).unwrap();
+        let request = parse_cursor(&mut parser).unwrap();
+        assert!(request.if_exists);
+        assert_eq!(request.targets.len(), 2);
+        assert_eq!(request.targets[0].index.value, "odd.index");
+        assert_eq!(request.targets[0].index.quote_style, Some('['));
+        assert_eq!(request.targets[0].table.to_string(), "[alt].[odd.table]");
+        assert_eq!(request.targets[0].option, OptionClause::OnlineOff);
+        assert_eq!(request.targets[1].table.to_string(), "dbo.a");
+        assert_eq!(request.targets[1].index.value, "ix");
+        assert_eq!(request.targets[1].option, OptionClause::None);
+        if suffix.starts_with(';') {
+            assert_eq!(parser.peek_token().token, Token::SemiColon);
+            parser.next_token();
+        }
+        assert_eq!(parser.parse_statement().unwrap().to_string(), "SELECT 7");
+        assert_eq!(parser.peek_token().token, Token::EOF);
+        // The complete-statement API must still reject an appended statement.
+        assert!(parse(&sql).is_err());
+    }
+    let mut parser = Parser::new(&dialect)
+        .try_with_sql("DROP INDEX ix ON dbo.a WITH(MAXDOP=1) DROP INDEX ix ON dbo.b")
+        .unwrap();
+    assert_eq!(
+        parse_cursor(&mut parser).unwrap().targets[0].option,
+        OptionClause::MaxdopOne
+    );
+    assert_eq!(
+        parse_cursor(&mut parser).unwrap().targets[0]
+            .table
+            .to_string(),
+        "dbo.b"
+    );
+    assert_eq!(parser.peek_token().token, Token::EOF);
+    for sql in [
+        "DROP INDEX ix ON dbo.a, SELECT 1",
+        "DROP INDEX ix ON dbo.a WITH(ONLINE=ON)",
+        "DROP INDEX ix ON dbo.a WITH(MAXDOP=1,ONLINE=OFF)",
+    ] {
+        let mut parser = Parser::new(&dialect).try_with_sql(sql).unwrap();
+        assert!(parse_cursor(&mut parser).is_err(), "{sql}");
+    }
+}

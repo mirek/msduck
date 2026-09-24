@@ -1,0 +1,5774 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "identicalFreshCaptures": 2,
+  "results": [
+    {
+      "name": "batch: SET DATEFIRST 3: success",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 3; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    3
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": null,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    3
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "batch: SET DATEFIRST 3: ; RAISERROR('scope probe',16,1)",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 3; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); RAISERROR('scope probe',16,1)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    3
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 50000,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "scope probe"
+              }
+            ],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": null,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    3
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "batch: SET DATEFIRST 3: ; THROW 51000,'scope probe',1",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 3; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); THROW 51000,'scope probe',1",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    3
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 51000,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "scope probe"
+              }
+            ],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": null,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    3
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "batch: SET ANSI_WARNINGS OFF: success",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "batch",
+          "sql": "SET ANSI_WARNINGS OFF; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "batch: SET ANSI_WARNINGS OFF: ; RAISERROR('scope probe',16,1)",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "batch",
+          "sql": "SET ANSI_WARNINGS OFF; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); RAISERROR('scope probe',16,1)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 50000,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "scope probe"
+              }
+            ],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "batch: SET ANSI_WARNINGS OFF: ; THROW 51000,'scope probe',1",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "batch",
+          "sql": "SET ANSI_WARNINGS OFF; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); THROW 51000,'scope probe',1",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 51000,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "scope probe"
+              }
+            ],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "batch: SET DATEFIRST 0: success",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 0; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 2742,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "SET DATEFIRST 0 is out of range."
+              }
+            ],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": null,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "batch: SET DATEFIRST 0: ; RAISERROR('scope probe',16,1)",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 0; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); RAISERROR('scope probe',16,1)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 2742,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "SET DATEFIRST 0 is out of range."
+              },
+              {
+                "number": 50000,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "scope probe"
+              }
+            ],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": null,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "batch: SET DATEFIRST 0: ; THROW 51000,'scope probe',1",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 0; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); THROW 51000,'scope probe',1",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 2742,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "SET DATEFIRST 0 is out of range."
+              },
+              {
+                "number": 51000,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "scope probe"
+              }
+            ],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": null,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: SET DATEFIRST 3: success",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET DATEFIRST 3; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    3
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: SET DATEFIRST 3: ; RAISERROR('scope probe',16,1)",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET DATEFIRST 3; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); RAISERROR('scope probe',16,1)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    3
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 50000,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "scope probe"
+              }
+            ],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 50000,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: SET DATEFIRST 3: ; THROW 51000,'scope probe',1",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET DATEFIRST 3; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); THROW 51000,'scope probe',1",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    3
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 51000,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "scope probe"
+              }
+            ],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": {
+              "kind": "missing"
+            },
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: SET ANSI_WARNINGS OFF: success",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET ANSI_WARNINGS OFF; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: SET ANSI_WARNINGS OFF: ; RAISERROR('scope probe',16,1)",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET ANSI_WARNINGS OFF; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); RAISERROR('scope probe',16,1)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 50000,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "scope probe"
+              }
+            ],
+            "info": [],
+            "returnStatus": 50000,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: SET ANSI_WARNINGS OFF: ; THROW 51000,'scope probe',1",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET ANSI_WARNINGS OFF; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); THROW 51000,'scope probe',1",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 51000,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "scope probe"
+              }
+            ],
+            "info": [],
+            "returnStatus": {
+              "kind": "missing"
+            },
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: SET DATEFIRST 0: success",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET DATEFIRST 0; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 2742,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "SET DATEFIRST 0 is out of range."
+              }
+            ],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: SET DATEFIRST 0: ; RAISERROR('scope probe',16,1)",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET DATEFIRST 0; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); RAISERROR('scope probe',16,1)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 2742,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "SET DATEFIRST 0 is out of range."
+              },
+              {
+                "number": 50000,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "scope probe"
+              }
+            ],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 50000,
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: SET DATEFIRST 0: ; THROW 51000,'scope probe',1",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET DATEFIRST 0; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); THROW 51000,'scope probe',1",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 2742,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "SET DATEFIRST 0 is out of range."
+              },
+              {
+                "number": 51000,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "scope probe"
+              }
+            ],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": {
+              "kind": "missing"
+            },
+            "rowCount": 2
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "batch: LANGUAGE resets DATEFIRST",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 3; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "batch",
+          "sql": "SET LANGUAGE us_english; SELECT @@DATEFIRST AS first_day",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 5703,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Changed language setting to us_english."
+              }
+            ],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: LANGUAGE resets DATEFIRST",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 3; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET LANGUAGE us_english; SELECT @@DATEFIRST AS first_day",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    3
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: invalid DATEFIRST without warning",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET DATEFIRST 0; SELECT @@DATEFIRST AS first_day",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 2742,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "SET DATEFIRST 0 is out of range."
+              }
+            ],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: invalid DATEFIRST parameter 0",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET DATEFIRST @first; SELECT @@DATEFIRST AS first_day",
+          "parameters": {
+            "first": 0
+          },
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 2742,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "SET DATEFIRST 0 is out of range."
+              }
+            ],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: invalid DATEFIRST parameter null",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET DATEFIRST @first; SELECT @@DATEFIRST AS first_day",
+          "parameters": {
+            "first": null
+          },
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 2742,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "SET DATEFIRST 0 is out of range."
+              }
+            ],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "rpc: invalid DATEFIRST before conditional",
+      "steps": [
+        {
+          "mode": "batch",
+          "sql": "SET DATEFIRST 7; SET ANSI_WARNINGS ON",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SET DATEFIRST @first; SELECT @@DATEFIRST AS first_day; IF @fail=1 THROW 51000,'scope probe',1",
+          "parameters": {
+            "first": 0,
+            "fail": 0
+          },
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": null,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [
+              {
+                "number": 2742,
+                "state": 1,
+                "class": 16,
+                "lineNumber": 1,
+                "message": "SET DATEFIRST 0 is out of range."
+              }
+            ],
+            "info": [],
+            "returnStatus": 0,
+            "rowCount": 1
+          }
+        },
+        {
+          "mode": "rpc",
+          "sql": "SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "first_day",
+                    "type": "IntN",
+                    "length": 1,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 33,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    7
+                  ]
+                ]
+              },
+              {
+                "columns": [
+                  {
+                    "name": "total",
+                    "type": "IntN",
+                    "length": 4,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 1,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneInProc",
+                "rowCount": 1,
+                "more": true
+              },
+              {
+                "kind": "doneProc",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [
+              {
+                "number": 8153,
+                "state": 1,
+                "class": 0,
+                "lineNumber": 1,
+                "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+              }
+            ],
+            "returnStatus": 0,
+            "rowCount": 2
+          }
+        }
+      ]
+    }
+  ],
+  "prepared": [
+    {
+      "name": "prepared DATEFIRST values and recovery",
+      "sql": "SET DATEFIRST @first; SELECT @@DATEFIRST AS first_day; IF @fail=1 THROW 51000,'scope probe',1",
+      "parameters": [
+        "first",
+        "fail"
+      ],
+      "values": [
+        {
+          "first": 3,
+          "fail": 0
+        },
+        {
+          "first": 5,
+          "fail": 1
+        },
+        {
+          "first": 0,
+          "fail": 0
+        },
+        {
+          "first": null,
+          "fail": 0
+        },
+        {
+          "first": 1,
+          "fail": 0
+        }
+      ],
+      "result": {
+        "setup": {
+          "sets": [],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        },
+        "initial": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "first_day",
+                  "type": "IntN",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  7
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "total",
+                  "type": "IntN",
+                  "length": 4,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 1,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [
+            {
+              "number": 8153,
+              "state": 1,
+              "class": 0,
+              "lineNumber": 1,
+              "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+            }
+          ],
+          "returnStatus": 0,
+          "rowCount": 2
+        },
+        "afterPrepare": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "first_day",
+                  "type": "IntN",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  7
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "total",
+                  "type": "IntN",
+                  "length": 4,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 1,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [
+            {
+              "number": 8153,
+              "state": 1,
+              "class": 0,
+              "lineNumber": 1,
+              "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+            }
+          ],
+          "returnStatus": 0,
+          "rowCount": 2
+        },
+        "executions": [
+          {
+            "values": {
+              "first": 3,
+              "fail": 0
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      3
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [],
+              "returnStatus": 0,
+              "rowCount": 1
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          },
+          {
+            "values": {
+              "first": 5,
+              "fail": 1
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      5
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [
+                {
+                  "number": 51000,
+                  "state": 1,
+                  "class": 16,
+                  "lineNumber": 1,
+                  "message": "scope probe"
+                }
+              ],
+              "info": [],
+              "returnStatus": {
+                "kind": "missing"
+              },
+              "rowCount": 1
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          },
+          {
+            "values": {
+              "first": 0,
+              "fail": 0
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [
+                {
+                  "number": 2742,
+                  "state": 1,
+                  "class": 16,
+                  "lineNumber": 1,
+                  "message": "SET DATEFIRST 0 is out of range."
+                }
+              ],
+              "info": [],
+              "returnStatus": -6,
+              "rowCount": 1
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          },
+          {
+            "values": {
+              "first": null,
+              "fail": 0
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [
+                {
+                  "number": 2742,
+                  "state": 1,
+                  "class": 16,
+                  "lineNumber": 1,
+                  "message": "SET DATEFIRST 0 is out of range."
+                }
+              ],
+              "info": [],
+              "returnStatus": -6,
+              "rowCount": 1
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          },
+          {
+            "values": {
+              "first": 1,
+              "fail": 0
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [],
+              "returnStatus": 0,
+              "rowCount": 1
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          }
+        ],
+        "afterUnprepare": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "first_day",
+                  "type": "IntN",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  7
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "total",
+                  "type": "IntN",
+                  "length": 4,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 1,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [
+            {
+              "number": 8153,
+              "state": 1,
+              "class": 0,
+              "lineNumber": 1,
+              "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+            }
+          ],
+          "returnStatus": 0,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "name": "prepared ANSI_WARNINGS and recovery",
+      "sql": "SET ANSI_WARNINGS OFF; SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n); IF @fail=1 THROW 51000,'scope probe',1",
+      "parameters": [
+        "fail"
+      ],
+      "values": [
+        {
+          "fail": 0
+        },
+        {
+          "fail": 1
+        },
+        {
+          "fail": 0
+        }
+      ],
+      "result": {
+        "setup": {
+          "sets": [],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        },
+        "initial": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "first_day",
+                  "type": "IntN",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  7
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "total",
+                  "type": "IntN",
+                  "length": 4,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 1,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [
+            {
+              "number": 8153,
+              "state": 1,
+              "class": 0,
+              "lineNumber": 1,
+              "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+            }
+          ],
+          "returnStatus": 0,
+          "rowCount": 2
+        },
+        "afterPrepare": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "first_day",
+                  "type": "IntN",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  7
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "total",
+                  "type": "IntN",
+                  "length": 4,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 1,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [
+            {
+              "number": 8153,
+              "state": 1,
+              "class": 0,
+              "lineNumber": 1,
+              "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+            }
+          ],
+          "returnStatus": 0,
+          "rowCount": 2
+        },
+        "executions": [
+          {
+            "values": {
+              "fail": 0
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [],
+              "returnStatus": 0,
+              "rowCount": 2
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          },
+          {
+            "values": {
+              "fail": 1
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [
+                {
+                  "number": 51000,
+                  "state": 1,
+                  "class": 16,
+                  "lineNumber": 1,
+                  "message": "scope probe"
+                }
+              ],
+              "info": [],
+              "returnStatus": {
+                "kind": "missing"
+              },
+              "rowCount": 2
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          },
+          {
+            "values": {
+              "fail": 0
+            },
+            "result": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": null,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [],
+              "returnStatus": 0,
+              "rowCount": 2
+            },
+            "reuse": {
+              "sets": [
+                {
+                  "columns": [
+                    {
+                      "name": "first_day",
+                      "type": "IntN",
+                      "length": 1,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 33,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      7
+                    ]
+                  ]
+                },
+                {
+                  "columns": [
+                    {
+                      "name": "total",
+                      "type": "IntN",
+                      "length": 4,
+                      "precision": null,
+                      "scale": null,
+                      "flags": 1,
+                      "collation": null
+                    }
+                  ],
+                  "rows": [
+                    [
+                      1
+                    ]
+                  ]
+                }
+              ],
+              "done": [
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneInProc",
+                  "rowCount": 1,
+                  "more": true
+                },
+                {
+                  "kind": "doneProc",
+                  "rowCount": null,
+                  "more": false
+                }
+              ],
+              "errors": [],
+              "info": [
+                {
+                  "number": 8153,
+                  "state": 1,
+                  "class": 0,
+                  "lineNumber": 1,
+                  "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+                }
+              ],
+              "returnStatus": 0,
+              "rowCount": 2
+            }
+          }
+        ],
+        "afterUnprepare": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "first_day",
+                  "type": "IntN",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  7
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "total",
+                  "type": "IntN",
+                  "length": 4,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 1,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [
+            {
+              "number": 8153,
+              "state": 1,
+              "class": 0,
+              "lineNumber": 1,
+              "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+            }
+          ],
+          "returnStatus": 0,
+          "rowCount": 2
+        }
+      }
+    }
+  ]
+}

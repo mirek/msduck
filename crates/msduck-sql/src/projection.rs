@@ -8,6 +8,7 @@ use msduck_core::catalog::TypeMetadata as Info;
 use sqlparser::ast::*;
 use std::collections::HashMap;
 
+pub mod ansi_padding;
 pub mod character_extrema;
 mod collation_validation;
 mod constant_case;

@@ -1,0 +1,4691 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "identicalFreshCaptures": 2,
+  "setup": [
+    "CREATE TABLE dbo.width_user(id INT)",
+    "CREATE VIEW dbo.width_view AS SELECT id FROM dbo.width_user"
+  ],
+  "results": [
+    {
+      "sql": "SELECT name,type,type_desc,LEN(type) AS logical_length,DATALENGTH(type) AS bytes,CAST(type AS VARBINARY(2)) AS payload FROM sys.objects WHERE name IN ('width_user','width_view') ORDER BY name",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "logical_length",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "bytes",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "payload",
+                "type": "VarBinary",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "width_user",
+                "U ",
+                "USER_TABLE",
+                1,
+                2,
+                {
+                  "kind": "binary",
+                  "value": "5520"
+                }
+              ],
+              [
+                "width_view",
+                "V ",
+                "VIEW",
+                1,
+                2,
+                {
+                  "kind": "binary",
+                  "value": "5620"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "sql": "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type='U'",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "width_user",
+                "U "
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "sql": "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type='V'",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "width_view",
+                "V "
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "sql": "SELECT name,type FROM sys.tables WHERE name='width_user'",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "width_user",
+                "U "
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "sql": "SELECT name,type FROM sys.views WHERE name='width_view'",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "width_view",
+                "V "
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "sql": "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type IN ('U','X') ORDER BY name",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "width_user",
+                "U "
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "sql": "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type NOT IN ('U') ORDER BY name",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "width_view",
+                "V "
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "sql": "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type IN ('U',NULL) ORDER BY name",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "width_user",
+                "U "
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "sql": "SELECT name,type FROM sys.objects WHERE name IN ('width_user','width_view') AND type NOT IN ('U',NULL) ORDER BY name",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "sql": "SELECT * FROM sys.tables WHERE 1=0",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "object_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "principal_id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "schema_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "parent_object_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "create_date",
+                "type": "DateTime",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "modify_date",
+                "type": "DateTime",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "is_ms_shipped",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "is_published",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "is_schema_published",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "lob_data_space_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "filestream_data_space_id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "max_column_id_used",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "lock_on_bulk_load",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "uses_ansi_nulls",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_replicated",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "has_replication_filter",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_merge_published",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_sync_tran_subscribed",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "has_unchecked_assembly_data",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "text_in_row_limit",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "large_value_types_out_of_row",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_tracked_by_cdc",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "lock_escalation",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "lock_escalation_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "is_filetable",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_memory_optimized",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "durability",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "durability_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "temporal_type",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "temporal_type_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "history_table_id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_remote_data_archive_enabled",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_external",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "history_retention_period",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "history_retention_period_unit",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "history_retention_period_unit_desc",
+                "type": "NVarChar",
+                "length": 20,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "is_node",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_edge",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_retention_period",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_retention_period_unit",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_retention_period_unit_desc",
+                "type": "NVarChar",
+                "length": 20,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "ledger_type",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "ledger_type_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "ledger_view_id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "is_dropped_ledger_table",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "sql": "SELECT * FROM sys.views WHERE 1=0",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "object_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "principal_id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "schema_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "parent_object_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "type",
+                "type": "Char",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "type_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "create_date",
+                "type": "DateTime",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "modify_date",
+                "type": "DateTime",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "is_ms_shipped",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "is_published",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "is_schema_published",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "is_replicated",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "has_replication_filter",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "has_opaque_metadata",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "has_unchecked_assembly_data",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "with_check_option",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "is_date_correlation_view",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "is_tracked_by_cdc",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "has_snapshot",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "ledger_view_type",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "ledger_view_type_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "is_dropped_ledger_view",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "sql": "SELECT name,[lob_data_space_id],[filestream_data_space_id],[max_column_id_used],[lock_on_bulk_load],[uses_ansi_nulls],[is_replicated],[has_replication_filter],[is_merge_published],[is_sync_tran_subscribed],[has_unchecked_assembly_data],[text_in_row_limit],[large_value_types_out_of_row],[is_tracked_by_cdc],[lock_escalation],[lock_escalation_desc],[is_filetable],[is_memory_optimized],[durability],[durability_desc],[temporal_type],[temporal_type_desc],[history_table_id],[is_remote_data_archive_enabled],[is_external],[history_retention_period],[history_retention_period_unit],[history_retention_period_unit_desc],[is_node],[is_edge],[data_retention_period],[data_retention_period_unit],[data_retention_period_unit_desc],[ledger_type],[ledger_type_desc],[ledger_view_id],[is_dropped_ledger_table] FROM sys.tables WHERE name='width_user'",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "lob_data_space_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "filestream_data_space_id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "max_column_id_used",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "lock_on_bulk_load",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "uses_ansi_nulls",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_replicated",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "has_replication_filter",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_merge_published",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_sync_tran_subscribed",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "has_unchecked_assembly_data",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "text_in_row_limit",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "large_value_types_out_of_row",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_tracked_by_cdc",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "lock_escalation",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "lock_escalation_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "is_filetable",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_memory_optimized",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "durability",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "durability_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "temporal_type",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "temporal_type_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "history_table_id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_remote_data_archive_enabled",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_external",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "history_retention_period",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "history_retention_period_unit",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "history_retention_period_unit_desc",
+                "type": "NVarChar",
+                "length": 20,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "is_node",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "is_edge",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_retention_period",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_retention_period_unit",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "data_retention_period_unit_desc",
+                "type": "NVarChar",
+                "length": 20,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "ledger_type",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "ledger_type_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "ledger_view_id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "is_dropped_ledger_table",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "width_user",
+                0,
+                null,
+                1,
+                false,
+                true,
+                false,
+                false,
+                false,
+                false,
+                false,
+                0,
+                false,
+                false,
+                0,
+                "TABLE",
+                false,
+                false,
+                0,
+                "SCHEMA_AND_DATA",
+                0,
+                "NON_TEMPORAL_TABLE",
+                null,
+                false,
+                false,
+                null,
+                null,
+                null,
+                false,
+                false,
+                -1,
+                -1,
+                "INFINITE",
+                0,
+                "NON_LEDGER_TABLE",
+                null,
+                false
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "sql": "SELECT name,[is_replicated],[has_replication_filter],[has_opaque_metadata],[has_unchecked_assembly_data],[with_check_option],[is_date_correlation_view],[is_tracked_by_cdc],[has_snapshot],[ledger_view_type],[ledger_view_type_desc],[is_dropped_ledger_view] FROM sys.views WHERE name='width_view'",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "is_replicated",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "has_replication_filter",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "has_opaque_metadata",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "has_unchecked_assembly_data",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "with_check_option",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "is_date_correlation_view",
+                "type": "Bit",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "is_tracked_by_cdc",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "has_snapshot",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "ledger_view_type",
+                "type": "IntN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "ledger_view_type_desc",
+                "type": "NVarChar",
+                "length": 120,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 1,
+                  "version": 0,
+                  "sortId": 0,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "is_dropped_ledger_view",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "width_view",
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                false,
+                0,
+                "NON_LEDGER_VIEW",
+                false
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    }
+  ],
+  "declarations": [
+    {
+      "view": "tables",
+      "sql": "SELECT name,column_id,system_type_id,user_type_id,max_length,precision,scale,collation_name,is_nullable FROM sys.all_columns WHERE object_id=OBJECT_ID(N'sys.tables') ORDER BY column_id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "column_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "system_type_id",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "user_type_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "max_length",
+                "type": "SmallInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "precision",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "scale",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "collation_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "is_nullable",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "name",
+                1,
+                231,
+                256,
+                256,
+                0,
+                0,
+                "SQL_Latin1_General_CP1_CI_AS",
+                false
+              ],
+              [
+                "object_id",
+                2,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                false
+              ],
+              [
+                "principal_id",
+                3,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                true
+              ],
+              [
+                "schema_id",
+                4,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                false
+              ],
+              [
+                "parent_object_id",
+                5,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                false
+              ],
+              [
+                "type",
+                6,
+                175,
+                175,
+                2,
+                0,
+                0,
+                "Latin1_General_CI_AS_KS_WS",
+                true
+              ],
+              [
+                "type_desc",
+                7,
+                231,
+                231,
+                120,
+                0,
+                0,
+                "Latin1_General_CI_AS_KS_WS",
+                true
+              ],
+              [
+                "create_date",
+                8,
+                61,
+                61,
+                8,
+                23,
+                3,
+                null,
+                false
+              ],
+              [
+                "modify_date",
+                9,
+                61,
+                61,
+                8,
+                23,
+                3,
+                null,
+                false
+              ],
+              [
+                "is_ms_shipped",
+                10,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                false
+              ],
+              [
+                "is_published",
+                11,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                false
+              ],
+              [
+                "is_schema_published",
+                12,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                false
+              ],
+              [
+                "lob_data_space_id",
+                13,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                false
+              ],
+              [
+                "filestream_data_space_id",
+                14,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                true
+              ],
+              [
+                "max_column_id_used",
+                15,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                false
+              ],
+              [
+                "lock_on_bulk_load",
+                16,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                false
+              ],
+              [
+                "uses_ansi_nulls",
+                17,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "is_replicated",
+                18,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "has_replication_filter",
+                19,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "is_merge_published",
+                20,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "is_sync_tran_subscribed",
+                21,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "has_unchecked_assembly_data",
+                22,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                false
+              ],
+              [
+                "text_in_row_limit",
+                23,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                true
+              ],
+              [
+                "large_value_types_out_of_row",
+                24,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "is_tracked_by_cdc",
+                25,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "lock_escalation",
+                26,
+                48,
+                48,
+                1,
+                3,
+                0,
+                null,
+                true
+              ],
+              [
+                "lock_escalation_desc",
+                27,
+                231,
+                231,
+                120,
+                0,
+                0,
+                "Latin1_General_CI_AS_KS_WS",
+                true
+              ],
+              [
+                "is_filetable",
+                28,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "is_memory_optimized",
+                29,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "durability",
+                30,
+                48,
+                48,
+                1,
+                3,
+                0,
+                null,
+                true
+              ],
+              [
+                "durability_desc",
+                31,
+                231,
+                231,
+                120,
+                0,
+                0,
+                "Latin1_General_CI_AS_KS_WS",
+                true
+              ],
+              [
+                "temporal_type",
+                32,
+                48,
+                48,
+                1,
+                3,
+                0,
+                null,
+                true
+              ],
+              [
+                "temporal_type_desc",
+                33,
+                231,
+                231,
+                120,
+                0,
+                0,
+                "Latin1_General_CI_AS_KS_WS",
+                true
+              ],
+              [
+                "history_table_id",
+                34,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                true
+              ],
+              [
+                "is_remote_data_archive_enabled",
+                35,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "is_external",
+                36,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                false
+              ],
+              [
+                "history_retention_period",
+                37,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                true
+              ],
+              [
+                "history_retention_period_unit",
+                38,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                true
+              ],
+              [
+                "history_retention_period_unit_desc",
+                39,
+                231,
+                231,
+                20,
+                0,
+                0,
+                "Latin1_General_CI_AS_KS_WS",
+                true
+              ],
+              [
+                "is_node",
+                40,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "is_edge",
+                41,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "data_retention_period",
+                42,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                true
+              ],
+              [
+                "data_retention_period_unit",
+                43,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                true
+              ],
+              [
+                "data_retention_period_unit_desc",
+                44,
+                231,
+                231,
+                20,
+                0,
+                0,
+                "Latin1_General_CI_AS_KS_WS",
+                true
+              ],
+              [
+                "ledger_type",
+                45,
+                48,
+                48,
+                1,
+                3,
+                0,
+                null,
+                true
+              ],
+              [
+                "ledger_type_desc",
+                46,
+                231,
+                231,
+                120,
+                0,
+                0,
+                "Latin1_General_CI_AS_KS_WS",
+                true
+              ],
+              [
+                "ledger_view_id",
+                47,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                true
+              ],
+              [
+                "is_dropped_ledger_table",
+                48,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 48,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 48
+      }
+    },
+    {
+      "view": "views",
+      "sql": "SELECT name,column_id,system_type_id,user_type_id,max_length,precision,scale,collation_name,is_nullable FROM sys.all_columns WHERE object_id=OBJECT_ID(N'sys.views') ORDER BY column_id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "column_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "system_type_id",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "user_type_id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "max_length",
+                "type": "SmallInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "precision",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "scale",
+                "type": "TinyInt",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "collation_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "is_nullable",
+                "type": "BitN",
+                "length": 1,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "name",
+                1,
+                231,
+                256,
+                256,
+                0,
+                0,
+                "SQL_Latin1_General_CP1_CI_AS",
+                false
+              ],
+              [
+                "object_id",
+                2,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                false
+              ],
+              [
+                "principal_id",
+                3,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                true
+              ],
+              [
+                "schema_id",
+                4,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                false
+              ],
+              [
+                "parent_object_id",
+                5,
+                56,
+                56,
+                4,
+                10,
+                0,
+                null,
+                false
+              ],
+              [
+                "type",
+                6,
+                175,
+                175,
+                2,
+                0,
+                0,
+                "Latin1_General_CI_AS_KS_WS",
+                true
+              ],
+              [
+                "type_desc",
+                7,
+                231,
+                231,
+                120,
+                0,
+                0,
+                "Latin1_General_CI_AS_KS_WS",
+                true
+              ],
+              [
+                "create_date",
+                8,
+                61,
+                61,
+                8,
+                23,
+                3,
+                null,
+                false
+              ],
+              [
+                "modify_date",
+                9,
+                61,
+                61,
+                8,
+                23,
+                3,
+                null,
+                false
+              ],
+              [
+                "is_ms_shipped",
+                10,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                false
+              ],
+              [
+                "is_published",
+                11,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                false
+              ],
+              [
+                "is_schema_published",
+                12,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                false
+              ],
+              [
+                "is_replicated",
+                13,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "has_replication_filter",
+                14,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "has_opaque_metadata",
+                15,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                false
+              ],
+              [
+                "has_unchecked_assembly_data",
+                16,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                false
+              ],
+              [
+                "with_check_option",
+                17,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                false
+              ],
+              [
+                "is_date_correlation_view",
+                18,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                false
+              ],
+              [
+                "is_tracked_by_cdc",
+                19,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "has_snapshot",
+                20,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ],
+              [
+                "ledger_view_type",
+                21,
+                48,
+                48,
+                1,
+                3,
+                0,
+                null,
+                true
+              ],
+              [
+                "ledger_view_type_desc",
+                22,
+                231,
+                231,
+                120,
+                0,
+                0,
+                "Latin1_General_CI_AS_KS_WS",
+                true
+              ],
+              [
+                "is_dropped_ledger_view",
+                23,
+                104,
+                104,
+                1,
+                1,
+                0,
+                null,
+                true
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 23,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 23
+      }
+    }
+  ],
+  "lob": [
+    {
+      "name": "MAX declaration VARCHAR",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT,payload VARCHAR(MAX))",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "MAX declaration NVARCHAR",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT,payload NVARCHAR(MAX))",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "MAX declaration VARBINARY",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT,payload VARBINARY(MAX))",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "add drop and recreate",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "ALTER TABLE dbo.width_lob ADD payload VARCHAR(MAX)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "ALTER TABLE dbo.width_lob DROP COLUMN payload",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "transaction rollback",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "BEGIN TRANSACTION",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "ALTER TABLE dbo.width_lob ADD payload NVARCHAR(MAX)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "ROLLBACK TRANSACTION",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "ALTER MAX and bounded VARCHAR",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT,payload VARCHAR(20))",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "ALTER TABLE dbo.width_lob ALTER COLUMN payload VARCHAR(MAX)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "ALTER TABLE dbo.width_lob ALTER COLUMN payload VARCHAR(20)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "ALTER MAX and bounded NVARCHAR",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT,payload NVARCHAR(20))",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "ALTER TABLE dbo.width_lob ALTER COLUMN payload NVARCHAR(MAX)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "ALTER TABLE dbo.width_lob ALTER COLUMN payload NVARCHAR(20)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "ALTER MAX and bounded VARBINARY",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT,payload VARBINARY(20))",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "ALTER TABLE dbo.width_lob ALTER COLUMN payload VARBINARY(MAX)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "ALTER TABLE dbo.width_lob ALTER COLUMN payload VARBINARY(20)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "ALTER MAX rollback",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT,payload VARCHAR(20))",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "BEGIN TRANSACTION",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "ALTER TABLE dbo.width_lob ALTER COLUMN payload VARCHAR(MAX)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "ROLLBACK TRANSACTION",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    }
+  ]
+}

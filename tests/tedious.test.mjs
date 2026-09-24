@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { TYPES, Request, Connection } from 'tedious'
 import { start, query } from './support/client.mjs'
-import { capture } from '../scripts/lib/compatibility.mjs'
+import { capture, canonical } from '../scripts/lib/compatibility.mjs'
 
 test('tedious login, typed results, RPC values and recovery', { timeout: 30000 }, async t => {
   const c = await start(t)
@@ -619,7 +619,8 @@ test('legacy datetime RPCs decode dates before 1900, boundaries and NULLs', { ti
     assert.equal(result.rows[0][0].toISOString(), text)
     const empty = await query(c, 'SELECT @d;', [['d', type, null]])
     assert.deepEqual(empty.rows, [[null]])
-    assert.equal(empty.columns[0][0].type.name, 'DateTime2')
+    assert.equal(empty.columns[0][0].type.name, 'DateTimeN')
+    assert.equal(empty.columns[0][0].dataLength, type === TYPES.DateTime ? 8 : 4)
   }
   await query(c, 'CREATE TABLE dbo.legacy_dates (d DATETIME, s SMALLDATETIME)')
   const d = new Date('1899-12-31T12:34:56.000Z')
@@ -1320,7 +1321,8 @@ test('DELETE supports optional FROM, joined aliases and CTE completion counts', 
   assert.deepEqual((await query(c, 'SELECT id FROM dbo.delete_target')).rows, [[1]])
   await assert.rejects(query(c, 'DELETE t FROM dbo.delete_target t LEFT JOIN dbo.delete_source s ON t.id=s.id'), e => /unsupported outer\/lateral join/.test(e.message))
   assert.deepEqual((await query(c, 'SELECT id FROM dbo.delete_target')).rows, [[1]])
-  await query(c, 'SET NOCOUNT ON')
+  // A SQL batch changes the caller session; sp_executesql restores SET options.
+  assert.deepEqual((await capture(c, 'SET NOCOUNT ON')).errors, [])
   const silent = await query(c, 'WITH ids AS (SELECT 1 AS id) DELETE dbo.delete_target WHERE id IN (SELECT id FROM ids)')
   assert.deepEqual(silent.rows, [])
   assert.deepEqual(silent.columns, [])
@@ -1453,8 +1455,9 @@ test('prepared session settings validate without changing NOCOUNT during prepare
   const transactionProbe = 'BEGIN TRAN; BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT XACT_STATE() AS state; END CATCH; ROLLBACK'
   assert.deepEqual((await query(c, transactionProbe)).rows, [[1]])
   await settings.run({})
-  assert.equal((await query(c, 'SELECT 1')).rowCount, 0)
-  assert.deepEqual((await query(c, transactionProbe)).rows, [[-1]])
+  // Captured sp_execute restores both options on returning to its caller.
+  assert.equal((await query(c, 'SELECT 1')).rowCount, 1)
+  assert.deepEqual((await query(c, transactionProbe)).rows, [[1]])
   await settings.release()
   await query(c, 'SET NOCOUNT OFF; SET XACT_ABORT OFF')
   const defaults = await prepare(c, 'SET ANSI_NULLS ON; SET QUOTED_IDENTIFIER ON; SET TRANSACTION ISOLATION LEVEL READ COMMITTED; SELECT 1')
@@ -3676,16 +3679,16 @@ test('DATEFIRST controls session week fields and reports TINYINT metadata', { ti
   await query(c,"CREATE VIEW dbo.datefirst_view AS SELECT DATEPART(weekday,'2007-04-21') AS d")
   const prepared=await prepare(c,"SELECT @@DATEFIRST,DATEPART(week,'2007-04-21'),DATEPART(weekday,'2007-04-21'),DATEPART(iso_week,'2007-04-21')",[])
   for(let first=1;first<=7;first++) {
-    await query(c,`SET DATEFIRST ${first}`)
+    assert.deepEqual((await capture(c,`SET DATEFIRST ${first}`)).errors,[])
     assert.deepEqual(await prepared.run({}),[[first,weeks[first-1],days[first-1],16]])
     assert.deepEqual((await query(c,'SELECT d FROM dbo.datefirst_view')).rows,[[days[first-1]]])
   }
-  await query(c,'DECLARE @first INT=3; SET DATEFIRST @first')
+  assert.deepEqual((await capture(c,'DECLARE @first INT=3; SET DATEFIRST @first')).errors,[])
   assert.deepEqual((await query(c,'SELECT @@DATEFIRST')).rows,[[3]])
   assert.deepEqual((await query(c,'SELECT 7/@@DATEFIRST')).rows,[[2]])
   const other=await start(t)
   assert.deepEqual((await query(other,'SELECT @@DATEFIRST')).rows,[[7]])
-  await query(c,'SET LANGUAGE US_ENGLISH')
+  assert.deepEqual((await capture(c,'SET LANGUAGE US_ENGLISH')).errors,[])
   assert.deepEqual((await query(c,'SELECT @@DATEFIRST')).rows,[[7]])
   await prepared.release()
 })
@@ -3694,6 +3697,7 @@ test('DATEFIRST preparation is inert and invalid values preserve session state',
   const c=await start(t)
   const prepared=await prepare(c,'SET DATEFIRST @first; SELECT @@DATEFIRST',[['first',TYPES.Int]])
   assert.deepEqual((await query(c,'SELECT @@DATEFIRST')).rows,[[7]])
+  assert.deepEqual((await capture(c,'SET DATEFIRST 2')).errors,[])
   assert.deepEqual(await prepared.run({first:2}),[[2]])
   for(const first of [0,8,-1,null]) {
     await assert.rejects(prepared.run({first}))
@@ -3701,7 +3705,7 @@ test('DATEFIRST preparation is inert and invalid values preserve session state',
   }
   assert.deepEqual(await prepared.run({first:5}),[[5]])
   await prepared.release()
-  await query(c,'BEGIN TRAN; SET DATEFIRST 1; ROLLBACK')
+  assert.deepEqual((await capture(c,'BEGIN TRAN; SET DATEFIRST 1; ROLLBACK')).errors,[])
   assert.deepEqual((await query(c,'SELECT @@DATEFIRST')).rows,[[1]])
 })
 
@@ -3777,7 +3781,7 @@ test('DATEPART integer inputs use legacy datetime day offsets', { timeout: 20000
   const empty=await query(c,'SELECT DATEPART(year,n) FROM dbo.datepart_integer WHERE 1=0')
   assert.deepEqual(empty.rows,[])
   assert.equal(empty.columns[0][0].dataLength,4)
-  await query(c,'SET DATEFIRST 1')
+  assert.deepEqual((await capture(c,'SET DATEFIRST 1')).errors,[])
   assert.deepEqual((await query(c,'SELECT DATEPART(weekday,0),DATEPART(week,6),DATEPART(iso_week,0)')).rows,[[1,1,1]])
 })
 
@@ -3818,7 +3822,7 @@ test('DATENAME honors session weeks and validates typed temporal fields', { time
   for(const [i,month] of months.entries()) assert.deepEqual((await query(c,`SELECT DATENAME(month,DATEFROMPARTS(2026,${i+1},1))`)).rows,[[month]])
   const prepared=await prepare(c,"SELECT DATENAME(weekday,CAST(@value AS DATETIME2(7))),DATENAME(week,CAST(@value AS DATETIME2(7))),DATENAME(iso_week,CAST(@value AS DATETIME2(7)))",[['value',TYPES.NVarChar]])
   for(let first=1;first<=7;first++) {
-    await query(c,`SET DATEFIRST ${first}`)
+    assert.deepEqual((await capture(c,`SET DATEFIRST ${first}`)).errors,[])
     assert.deepEqual(await prepared.run({value:'2007-04-21'}),[['Saturday',first===1||first===7?'16':'17','16']])
   }
   await assert.rejects(prepared.run({value:'bad'}),e=>e.number===241)
@@ -4260,7 +4264,7 @@ test('sys.objects and object lookup functions track tables views and rollback', 
   assert.deepEqual(await p.run({name:'[dbo].[object_probe]',kind:null}),[[id]])
   assert.deepEqual(await p.run({name:'object_probe',kind:'V'}),[[null]])
   assert.deepEqual((await query(c,`SELECT OBJECT_NAME(${id}),OBJECT_SCHEMA_NAME(${id}),OBJECT_NAME(NULL),OBJECT_ID(NULL)`)).rows,[['object_probe','dbo',null,null]])
-  assert.deepEqual((await query(c,`SELECT o.name,s.name,o.type,o.type_desc,o.principal_id,o.parent_object_id,o.is_ms_shipped FROM sys.objects o JOIN sys.schemas s ON o.schema_id=s.schema_id WHERE o.object_id=${id}`)).rows,[['object_probe','dbo','U','USER_TABLE',null,0,false]])
+  assert.deepEqual((await query(c,`SELECT o.name,s.name,o.type,o.type_desc,o.principal_id,o.parent_object_id,o.is_ms_shipped FROM sys.objects o JOIN sys.schemas s ON o.schema_id=s.schema_id WHERE o.object_id=${id}`)).rows,[['object_probe','dbo','U ','USER_TABLE',null,0,false]])
   await query(c,'ALTER TABLE dbo.object_probe ADD extra INT')
   assert.deepEqual(await p.run({name:'object_probe',kind:'U'}),[[id]])
   await query(c,'CREATE VIEW dbo.object_view AS SELECT v FROM dbo.object_probe')
@@ -4344,7 +4348,11 @@ test('sys.tables and sys.views partition objects and retain highest column IDs',
   await query(c,'ROLLBACK')
   assert.deepEqual((await query(c,"SELECT name FROM sys.views WHERE name=N'view_catalog_probe'")).rows,[['view_catalog_probe']])
   const empty=await query(c,'SELECT max_column_id_used,lock_escalation,is_replicated,history_table_id FROM sys.tables WHERE 1=0')
-  assert.deepEqual(empty.columns[0].map(c=>c.dataLength),[4,1,1,4])
+  const reference=JSON.parse(readFileSync(new URL('../reference/object-catalog-width.json',import.meta.url),'utf8'))
+  const declared=reference.results.find(r=>r.sql==='SELECT * FROM sys.tables WHERE 1=0').result.sets[0].columns
+  const names=['max_column_id_used','lock_escalation','is_replicated','history_table_id']
+  assert.deepEqual(empty.columns[0].map(c=>[c.colName,c.type.name,c.dataLength??null,c.flags]),
+    names.map(name=>{const c=declared.find(c=>c.name===name);return [c.name,c.type,c.length,c.flags]}))
   await assert.rejects(query(c,'DROP VIEW sys.tables'),e=>e.message.includes('cannot be changed'))
   await assert.rejects(query(c,'DROP VIEW sys.views'),e=>e.message.includes('cannot be changed'))
   await query(c,'DROP VIEW view_catalog_probe; DROP TABLE table_catalog_probe; CREATE TABLE table_catalog_probe(a INT)')
@@ -5503,7 +5511,7 @@ test('DATEDIFF and DATEDIFF_BIG count exact temporal boundaries with typed overf
   assert.deepEqual(reversed.rows,[[...Array(12).fill('-1'),'-100']])
   reversed.columns[0].forEach(col=>assert.equal(col.dataLength,8))
   for(const first of [1,7]) {
-    await query(c,`SET DATEFIRST ${first}`)
+    assert.deepEqual((await capture(c,`SET DATEFIRST ${first}`)).errors,[])
     assert.deepEqual((await query(c,"SELECT DATEDIFF(week,'2024-01-06','2024-01-07'),DATEDIFF(week,'2024-01-07','2024-01-08'),DATEDIFF(week,'2023-12-31','2024-01-01')")).rows,[[1,0,0]])
   }
   assert.deepEqual((await query(c,"SELECT DATEDIFF(day,'2036-03-01','2036-02-28'),DATEDIFF(hour,'12:59:59.9999999','13:00:00'),DATEDIFF(day,CAST('12:00:00' AS TIME(7)),CAST('13:00:00' AS TIME(7))),DATEDIFF(day,0,1),DATEDIFF(day,NULL,'2024-01-01'),DATEDIFF_BIG(ns,'2024-01-01',NULL)")).rows,[[-2,1,0,1,null,null]])
@@ -5899,7 +5907,7 @@ test('DATEPART and DATENAME retain DATETIMEOFFSET local fields and signed offset
   await query(c,"CREATE TABLE dbo.dto_parts(id INT,d DATETIMEOFFSET(7)); INSERT INTO dbo.dto_parts VALUES(1,'2024-01-01T00:15:30-00:30'),(2,'2024-01-01T00:15:30Z'),(3,NULL)")
   assert.deepEqual((await query(c,'SELECT DATEPART(tz,d),DATENAME(tz,d),DATENAME(weekday,d) FROM dbo.dto_parts ORDER BY id')).rows,[[-30,'-00:30','Monday'],[0,'+00:00','Monday'],[null,null,null]])
   for(const [first,day] of [[1,1],[7,2]]) {
-    await query(c,`SET DATEFIRST ${first}`)
+    assert.deepEqual((await capture(c,`SET DATEFIRST ${first}`)).errors,[])
     assert.deepEqual((await query(c,'SELECT DATEPART(weekday,d),DATEPART(iso_week,d) FROM dbo.dto_parts WHERE id=1')).rows,[[day,1]])
   }
   const empty=await query(c,'SELECT DATEPART(tz,d),DATENAME(tz,d) FROM dbo.dto_parts WHERE 1=0')
@@ -9126,3 +9134,168 @@ test('Unicode binary conversions preserve raw units byte bounds and scoped decla
   assert.deepEqual(await p.run({s:null}), [[null,null]])
   await p.release()
 })
+
+
+test('index catalog exposes captured descriptors and transactional table-owned names', { timeout: 20000 }, async t => {
+  const c = await start(t)
+  const { readFile } = await import('node:fs/promises')
+  const fixture = JSON.parse(await readFile(new URL('../reference/index-catalog.json', import.meta.url), 'utf8'))
+  for (const view of ['indexes', 'index_columns']) {
+    const result = canonical(await capture(c, fixture.declarations[view].wireSql))
+    assert.deepEqual(result, fixture.declarations[view].wire)
+  }
+  await query(c, 'CREATE TABLE dbo.catalog_a(id INT); CREATE TABLE dbo.catalog_b(id INT)')
+  await query(c, 'CREATE INDEX shared ON dbo.catalog_a(id); CREATE UNIQUE INDEX shared ON dbo.catalog_b(id)')
+  await assert.rejects(query(c, 'CREATE INDEX SHARED ON catalog_a(id)'), e =>
+    e.number === 1913 && e.state === 1 && e.class === 16 &&
+    e.message === "The operation failed because an index or statistics with name 'SHARED' already exists on table 'catalog_a'.")
+  const sql = "SELECT name,index_id,type_desc,is_unique,compression_delay FROM sys.indexes WHERE name IS NOT NULL ORDER BY is_unique"
+  const expected = [['shared',2,'NONCLUSTERED',false,null],['shared',2,'NONCLUSTERED',true,null]]
+  assert.deepEqual((await query(c, sql)).rows, expected)
+  await query(c, 'BEGIN TRAN; CREATE INDEX transient ON dbo.catalog_a(id); ROLLBACK')
+  assert.deepEqual((await query(c, sql)).rows, expected)
+  await query(c, 'BEGIN TRAN; DROP TABLE dbo.catalog_a; ROLLBACK')
+  assert.deepEqual((await query(c, sql)).rows, expected)
+  await query(c, 'DROP TABLE dbo.catalog_a')
+  assert.deepEqual((await query(c, sql)).rows, [expected[1]])
+})
+
+
+test('DROP INDEX binds table ownership and preserves successful earlier drops', { timeout: 20000 }, async t => {
+  const c = await start(t)
+  await query(c, 'CREATE TABLE dbo.drop_a(id INT); CREATE TABLE dbo.drop_b(id INT); CREATE INDEX shared ON dbo.drop_a(id); CREATE INDEX shared ON dbo.drop_b(id)')
+  const inventory = "SELECT OBJECT_NAME(object_id),name FROM sys.indexes WHERE name IS NOT NULL ORDER BY object_id,name"
+  const before = (await query(c, inventory)).rows
+  assert.equal(before.length, 2)
+  await assert.rejects(query(c, 'DROP INDEX shared ON dbo.drop_a, absent ON dbo.drop_b'), e => e.number === 3701 && e.state === 7 && e.class === 11)
+  assert.deepEqual((await query(c, inventory)).rows, [['drop_b', 'shared']])
+  await query(c, 'BEGIN TRAN')
+  await query(c, 'DROP INDEX shared ON dbo.drop_b WITH(ONLINE=OFF)')
+  assert.deepEqual((await query(c, inventory)).rows, [])
+  await query(c, 'ROLLBACK')
+  assert.deepEqual((await query(c, inventory)).rows, [['drop_b', 'shared']])
+  await query(c, 'DROP INDEX IF EXISTS absent ON dbo.drop_a, shared ON dbo.drop_b')
+  assert.deepEqual((await query(c, inventory)).rows, [])
+  await assert.rejects(query(c, 'DROP INDEX shared'), e => e.number === 159 && e.class === 15)
+  assert.deepEqual((await query(c, 'SELECT 7 AS recovered')).rows, [[7]])
+})
+
+test('DROP INDEX RPC errors retain completion tokens and continue after missing targets', { timeout: 20000 }, async t => {
+  const c = await start(t)
+  await query(c, 'CREATE TABLE dbo.a(id INT); CREATE TABLE dbo.b(id INT); CREATE INDEX ix ON dbo.a(id)')
+  c.execSqlBatch = request => c.execSql(request)
+  let tokens = []
+  const debugToken = c.debug.token.bind(c.debug)
+  c.debug.token = token => {
+    if (token.name.startsWith('DONE')) tokens.push(JSON.parse(JSON.stringify(token)))
+    debugToken(token)
+  }
+  const done = (name, more, sqlError, curCmd, rowCount) => ({
+    name, handlerName: name === 'DONEINPROC' ? 'onDoneInProc' : 'onDoneProc',
+    more, sqlError, attention: false, serverError: false,
+    ...(rowCount === undefined ? {} : { rowCount }), curCmd,
+  })
+  const result = await capture(c, 'DROP INDEX ix ON dbo.a, absent ON dbo.b; SELECT 7 AS alive')
+  assert.deepEqual(result.errors.map(e => [e.number, e.state, e.class]), [[3701, 7, 11]])
+  assert.deepEqual(result.sets.map(s => s.rows), [[[7]]])
+  assert.equal(result.returnStatus, 0)
+  assert.deepEqual(tokens, [done('DONEINPROC', true, true, 201), done('DONEINPROC', true, false, 193, 1), done('DONEPROC', false, false, 224)])
+  assert.deepEqual((await query(c, 'SELECT @@ROWCOUNT,@@ERROR')).rows, [[1,0]])
+  assert.deepEqual((await query(c, "SELECT name FROM sys.indexes WHERE name='ix'")).rows, [])
+  tokens = []
+  const missing = await capture(c, 'SET NOCOUNT ON; DROP INDEX absent ON dbo.a')
+  assert.deepEqual(missing.errors.map(e => e.number), [3701])
+  assert.equal(missing.returnStatus, 3701)
+  assert.deepEqual(tokens, [done('DONEINPROC', true, true, 201), done('DONEPROC', false, false, 224)])
+  const restored = await query(c, 'SELECT @@ROWCOUNT,@@ERROR')
+  assert.deepEqual(restored.rows, [[0,3701]])
+  assert.equal(restored.rowCount, 1)
+})
+
+
+test('system object and schema projections retain captured descriptors across catalog joins', { timeout: 20000 }, async t => {
+  const { canonical } = await import('../scripts/lib/compatibility.mjs')
+  const c = await start(t)
+  const descriptor = column => [column.name, column.type, column.length, column.precision, column.scale, column.flags,
+    column.collation ? ['lcid','flags','version','sortId'].map(key => column.collation[key]) : null]
+  // Empty descriptors and declarations captured twice against SQL Server.
+  for (const [view, expected] of [
+    ['schemas', [
+      ["name","NVarChar",256,null,null,8,[1033,13,0,52]],
+      ["schema_id","Int",null,null,null,8,null],
+      ["principal_id","IntN",4,null,null,9,null],
+    ]],
+    ['objects', [
+      ["name","NVarChar",256,null,null,8,[1033,13,0,52]],
+      ["object_id","Int",null,null,null,8,null],
+      ["principal_id","IntN",4,null,null,9,null],
+      ["schema_id","Int",null,null,null,8,null],
+      ["parent_object_id","Int",null,null,null,8,null],
+      ["type","Char",2,null,null,33,[1033,1,0,0]],
+      ["type_desc","NVarChar",120,null,null,9,[1033,1,0,0]],
+      ["create_date","DateTime",null,null,null,8,null],
+      ["modify_date","DateTime",null,null,null,8,null],
+      ["is_ms_shipped","Bit",null,null,null,32,null],
+      ["is_published","Bit",null,null,null,32,null],
+      ["is_schema_published","Bit",null,null,null,32,null],
+    ]],
+  ]) {
+    const result = canonical(await capture(c, `SELECT * FROM sys.${view} WHERE 1=0`))
+    assert.deepEqual(result.errors, [])
+    assert.deepEqual(result.sets[0].rows, [])
+    assert.deepEqual(result.sets[0].columns.map(descriptor), expected, view)
+  }
+  await query(c, 'CREATE TABLE dbo.catalog_join(id INT); CREATE INDEX ix ON dbo.catalog_join(id)')
+  const dates = await query(c, "SELECT create_date,modify_date FROM sys.objects WHERE name='catalog_join'")
+  assert.equal(dates.rows.length, 1)
+  for (const value of dates.rows[0]) assert.ok(value instanceof Date && Number.isFinite(value.getTime()))
+  const inventory = "SELECT s.name AS schema_name,o.name AS table_name,i.name AS index_name FROM sys.indexes i JOIN sys.objects o ON o.object_id=i.object_id JOIN sys.schemas s ON s.schema_id=o.schema_id WHERE o.name='catalog_join' AND i.name IS NOT NULL"
+  for (const sql of [inventory, `WITH inventory AS (${inventory}) SELECT * FROM inventory`, `${inventory} AND 1=0`]) {
+    const result = canonical(await capture(c, sql))
+    assert.deepEqual(result.errors, [])
+    assert.deepEqual(result.sets[0].rows, sql.endsWith('AND 1=0') ? [] : [['dbo','catalog_join','ix']])
+    assert.deepEqual(result.sets[0].columns.map(column => [column.type,column.length,column.flags]), [['NVarChar',256,8],['NVarChar',256,8],['NVarChar',256,9]])
+  }
+})
+
+
+test('object catalog CHAR type values retain padding and filter semantics', { timeout: 20000 }, async t => {
+  const { canonical } = await import('../scripts/lib/compatibility.mjs')
+  const fixture = JSON.parse(readFileSync(new URL('../reference/object-catalog-width.json', import.meta.url), 'utf8'))
+  const c = await start(t)
+  for (const sql of fixture.setup) await query(c, sql)
+  for (const {sql, result} of fixture.results) {
+    const actual = canonical(await capture(c, sql))
+    assert.deepEqual(actual.errors, result.errors, sql)
+    assert.deepEqual(actual.sets.map(s => s.rows), result.sets.map(s => s.rows), sql)
+    assert.deepEqual(actual, result, sql)
+  }
+})
+
+for (const entry of JSON.parse(readFileSync(new URL('../reference/object-catalog-width.json', import.meta.url), 'utf8')).lob) {
+  test(`table LOB catalog lifecycle: ${entry.name}`, { timeout: 30000 }, async t => {
+    const { canonical } = await import('../scripts/lib/compatibility.mjs')
+    const c = await start(t)
+    for (const {sql, result} of entry.results) {
+      assert.deepEqual(canonical(await capture(c, sql)), result, sql)
+    }
+  })
+}
+
+const sessionScopeCases=JSON.parse(readFileSync(new URL('../reference/rpc-session-scope.json',import.meta.url),'utf8')).results
+for (const entry of sessionScopeCases) {
+  test(`session setting scope: ${entry.name}`, {timeout:20000}, async t => {
+    const {captureStep}=await import('../scripts/capture-rpc-session-scope.mjs')
+    const c=await start(t)
+    for (const step of entry.steps) assert.deepEqual(await captureStep(c,step),step.result,`${entry.name}: ${step.sql}`)
+  })
+}
+
+const preparedScopeCases=JSON.parse(readFileSync(new URL('../reference/rpc-session-scope.json',import.meta.url),'utf8')).prepared
+for (const entry of preparedScopeCases) {
+  test(`session setting scope: ${entry.name}`, {timeout:20000}, async t => {
+    const {runPreparedCase}=await import('../scripts/capture-rpc-session-scope.mjs')
+    const c=await start(t)
+    assert.deepEqual(await runPreparedCase(c,entry),entry.result)
+  })
+}

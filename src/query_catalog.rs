@@ -14,7 +14,7 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
 }
 
 pub fn sync(db: &Connection) -> duckdb::Result<()> {
-    db.execute_batch("DELETE FROM main.__msduck_view_definitions d WHERE NOT EXISTS(SELECT 1 FROM sys.objects o WHERE o.object_id=d.object_id AND o.type='V')")
+    db.execute_batch("DELETE FROM main.__msduck_view_definitions d WHERE NOT EXISTS(SELECT 1 FROM sys.objects o WHERE o.object_id=d.object_id AND rtrim(o.type)='V')")
 }
 
 pub fn record_view_definition(db: &Connection, statement: &Statement) -> duckdb::Result<()> {
@@ -42,7 +42,7 @@ pub fn record_view_definition(db: &Connection, statement: &Statement) -> duckdb:
     let mut query = query.clone();
     let _ = VisitMut::visit(&mut query, &mut Unmark);
     db.execute(
-        "INSERT OR REPLACE INTO main.__msduck_view_definitions SELECT object_id,? FROM sys.objects WHERE object_id=__msduck_object_id(?,NULL) AND type='V'",
+        "INSERT OR REPLACE INTO main.__msduck_view_definitions SELECT object_id,? FROM sys.objects WHERE object_id=__msduck_object_id(?,NULL) AND rtrim(type)='V'",
         duckdb::params![query.to_string(), name.to_string()],
     )?;
     Ok(())
@@ -130,6 +130,7 @@ pub fn bind_query_with_parameters(
     }
     let fields = infer::query_fields(&catalog, query, &scope);
     infer::lower_bin2_comparisons(&catalog, query, &scope)?;
+    infer::ansi_padding::lower(&catalog, query, &scope)?;
     Ok(fields)
 }
 
@@ -321,12 +322,205 @@ pub(crate) fn snapshot<T: Visit>(db: &Connection, query: &T) -> duckdb::Result<C
     snapshot_with_views(db, query, &mut ViewBinding::default())
 }
 
+pub(crate) fn system_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Field>> {
+    crate::index_catalog::fields(view, catalog_collation)
+        .or_else(|| object_catalog_fields(view, catalog_collation))
+}
+
+// SQL Server system-view declarations and projection origins, captured with
+// sys.all_columns and empty SELECT * results. Resource strings have a different
+// collation from database-owned sysname values.
+fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Field>> {
+    use msduck_core::{
+        catalog::TypeMetadata,
+        collation::Label,
+        result::{Origin, Properties},
+    };
+    // name, system/user type, bytes, precision, scale, nullable, computed
+    let view = view.to_ascii_lowercase();
+    let mut fields = if matches!(view.as_str(), "tables" | "views") {
+        object_catalog_fields("objects", catalog_collation)?
+    } else {
+        Vec::new()
+    };
+    let definitions = match view.as_str() {
+        "schemas" => vec![
+            ("name", 231, 256, 256, 0, 0, false, false),
+            ("schema_id", 56, 56, 4, 10, 0, false, false),
+            ("principal_id", 56, 56, 4, 10, 0, true, false),
+        ],
+        "objects" => vec![
+            ("name", 231, 256, 256, 0, 0, false, false),
+            ("object_id", 56, 56, 4, 10, 0, false, false),
+            ("principal_id", 56, 56, 4, 10, 0, true, false),
+            ("schema_id", 56, 56, 4, 10, 0, false, false),
+            ("parent_object_id", 56, 56, 4, 10, 0, false, false),
+            ("type", 175, 175, 2, 0, 0, true, true),
+            ("type_desc", 231, 231, 120, 0, 0, true, false),
+            ("create_date", 61, 61, 8, 23, 3, false, false),
+            ("modify_date", 61, 61, 8, 23, 3, false, false),
+            ("is_ms_shipped", 104, 104, 1, 1, 0, false, true),
+            ("is_published", 104, 104, 1, 1, 0, false, true),
+            ("is_schema_published", 104, 104, 1, 1, 0, false, true),
+        ],
+        "tables" => vec![
+            ("lob_data_space_id", 56, 56, 4, 10, 0, false, true),
+            ("filestream_data_space_id", 56, 56, 4, 10, 0, true, false),
+            ("max_column_id_used", 56, 56, 4, 10, 0, false, false),
+            ("lock_on_bulk_load", 104, 104, 1, 1, 0, false, true),
+            ("uses_ansi_nulls", 104, 104, 1, 1, 0, true, true),
+            ("is_replicated", 104, 104, 1, 1, 0, true, true),
+            ("has_replication_filter", 104, 104, 1, 1, 0, true, true),
+            ("is_merge_published", 104, 104, 1, 1, 0, true, true),
+            ("is_sync_tran_subscribed", 104, 104, 1, 1, 0, true, true),
+            (
+                "has_unchecked_assembly_data",
+                104,
+                104,
+                1,
+                1,
+                0,
+                false,
+                true,
+            ),
+            ("text_in_row_limit", 56, 56, 4, 10, 0, true, false),
+            (
+                "large_value_types_out_of_row",
+                104,
+                104,
+                1,
+                1,
+                0,
+                true,
+                true,
+            ),
+            ("is_tracked_by_cdc", 104, 104, 1, 1, 0, true, true),
+            ("lock_escalation", 48, 48, 1, 3, 0, true, true),
+            ("lock_escalation_desc", 231, 231, 120, 0, 0, true, false),
+            ("is_filetable", 104, 104, 1, 1, 0, true, true),
+            ("is_memory_optimized", 104, 104, 1, 1, 0, true, true),
+            ("durability", 48, 48, 1, 3, 0, true, true),
+            ("durability_desc", 231, 231, 120, 0, 0, true, false),
+            ("temporal_type", 48, 48, 1, 3, 0, true, true),
+            ("temporal_type_desc", 231, 231, 120, 0, 0, true, true),
+            ("history_table_id", 56, 56, 4, 10, 0, true, true),
+            (
+                "is_remote_data_archive_enabled",
+                104,
+                104,
+                1,
+                1,
+                0,
+                true,
+                true,
+            ),
+            ("is_external", 104, 104, 1, 1, 0, false, true),
+            ("history_retention_period", 56, 56, 4, 10, 0, true, true),
+            (
+                "history_retention_period_unit",
+                56,
+                56,
+                4,
+                10,
+                0,
+                true,
+                true,
+            ),
+            (
+                "history_retention_period_unit_desc",
+                231,
+                231,
+                20,
+                0,
+                0,
+                true,
+                true,
+            ),
+            ("is_node", 104, 104, 1, 1, 0, true, true),
+            ("is_edge", 104, 104, 1, 1, 0, true, true),
+            ("data_retention_period", 56, 56, 4, 10, 0, true, true),
+            ("data_retention_period_unit", 56, 56, 4, 10, 0, true, true),
+            (
+                "data_retention_period_unit_desc",
+                231,
+                231,
+                20,
+                0,
+                0,
+                true,
+                true,
+            ),
+            ("ledger_type", 48, 48, 1, 3, 0, true, true),
+            ("ledger_type_desc", 231, 231, 120, 0, 0, true, true),
+            ("ledger_view_id", 56, 56, 4, 10, 0, true, false),
+            ("is_dropped_ledger_table", 104, 104, 1, 1, 0, true, true),
+        ],
+        "views" => vec![
+            ("is_replicated", 104, 104, 1, 1, 0, true, true),
+            ("has_replication_filter", 104, 104, 1, 1, 0, true, true),
+            ("has_opaque_metadata", 104, 104, 1, 1, 0, false, true),
+            (
+                "has_unchecked_assembly_data",
+                104,
+                104,
+                1,
+                1,
+                0,
+                false,
+                true,
+            ),
+            ("with_check_option", 104, 104, 1, 1, 0, false, true),
+            ("is_date_correlation_view", 104, 104, 1, 1, 0, false, true),
+            ("is_tracked_by_cdc", 104, 104, 1, 1, 0, true, true),
+            ("has_snapshot", 104, 104, 1, 1, 0, true, true),
+            ("ledger_view_type", 48, 48, 1, 3, 0, true, true),
+            ("ledger_view_type_desc", 231, 231, 120, 0, 0, true, true),
+            ("is_dropped_ledger_view", 104, 104, 1, 1, 0, true, true),
+        ],
+        _ => return None,
+    };
+    fields.extend(definitions.into_iter().map(
+        |(name, system, user, length, precision, scale, nullable, computed)| {
+            let collation_name = matches!(system, 175 | 231).then(|| {
+                if name != "name" {
+                    "Latin1_General_CI_AS_KS_WS"
+                } else {
+                    catalog_collation
+                }
+                .to_owned()
+            });
+            Field {
+                name: name.into(),
+                info: Some(TypeMetadata {
+                    system_type_id: Some(system),
+                    user_type_id: Some(user),
+                    max_length: Some(length),
+                    precision: Some(precision),
+                    scale: Some(scale),
+                    collation_name: collation_name.clone(),
+                }),
+                collation: collation_name.map(|name| Ok(Label::Implicit(name))),
+                properties: Properties {
+                    nullable: Some(nullable),
+                    origin: if computed {
+                        Origin::Expression
+                    } else {
+                        Origin::Stored
+                    },
+                },
+                json_fragment: false,
+            }
+        },
+    ));
+    Some(fields)
+}
+
 fn snapshot_with_views<T: Visit>(
     db: &Connection,
     query: &T,
     views: &mut ViewBinding,
 ) -> duckdb::Result<CatalogSnapshot> {
-    struct Tables(std::collections::BTreeSet<String>);
+    struct Tables(std::collections::BTreeMap<String, ObjectName>);
     impl Visitor for Tables {
         type Break = ();
         fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> std::ops::ControlFlow<()> {
@@ -334,7 +528,7 @@ fn snapshot_with_views<T: Visit>(
                 name, args: None, ..
             } = factor
             {
-                self.0.insert(name.to_string());
+                self.0.insert(name.to_string(), name.clone());
             }
             std::ops::ControlFlow::Continue(())
         }
@@ -355,7 +549,18 @@ fn snapshot_with_views<T: Visit>(
         .get("nvarchar")
         .and_then(|t| t.collation_name.clone());
     let mut columns = db.prepare("SELECT c.name,c.system_type_id,c.user_type_id,c.max_length,c.precision,c.scale,c.collation_name,c.is_nullable,c.is_identity,o.type FROM sys.columns c JOIN sys.objects o ON c.object_id=o.object_id WHERE c.object_id=__msduck_object_id(?,NULL) ORDER BY c.column_id")?;
-    for name in names.0 {
+    for (name, object_name) in names.0 {
+        if let [
+            ObjectNamePart::Identifier(schema),
+            ObjectNamePart::Identifier(view),
+        ] = object_name.0.as_slice()
+            && schema.value.eq_ignore_ascii_case("sys")
+            && let Some(collation) = catalog.default_collation.as_deref()
+            && let Some(fields) = system_catalog_fields(&view.value, collation)
+        {
+            catalog.tables.insert(name, fields);
+            continue;
+        }
         let mut fields = columns
             .query_map([&name], |row| {
                 Ok(Field {
@@ -382,7 +587,7 @@ fn snapshot_with_views<T: Visit>(
                 })
             })?
             .collect::<duckdb::Result<Vec<_>>>()?;
-        let definition = db.prepare("SELECT d.object_id,d.query_sql FROM main.__msduck_view_definitions d JOIN sys.objects o ON o.object_id=d.object_id WHERE o.object_id=__msduck_object_id(?,NULL) AND o.type='V'")?
+        let definition = db.prepare("SELECT d.object_id,d.query_sql FROM main.__msduck_view_definitions d JOIN sys.objects o ON o.object_id=d.object_id WHERE o.object_id=__msduck_object_id(?,NULL) AND rtrim(o.type)='V'")?
             .query_map([&name], |row| Ok((row.get::<_,i32>(0)?,row.get::<_,String>(1)?)))?
             .next().transpose()?;
         if let Some((id, sql)) = definition {

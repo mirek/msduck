@@ -2,7 +2,7 @@
 -- Physical LOB placement and temporal retention have no emulation yet.
 CREATE OR REPLACE VIEW sys.tables AS
 SELECT o.*,
-    CAST(NULL AS INTEGER) AS lob_data_space_id,
+    p.lob_data_space_id,
     CAST(NULL AS INTEGER) AS filestream_data_space_id,
     c.max_column_id AS max_column_id_used,
     false AS lock_on_bulk_load,
@@ -31,13 +31,17 @@ SELECT o.*,
     CAST(NULL AS VARCHAR) AS history_retention_period_unit_desc,
     false AS is_node,
     false AS is_edge,
+    CAST(-1 AS INTEGER) AS data_retention_period,
+    CAST(-1 AS INTEGER) AS data_retention_period_unit,
+    'INFINITE' AS data_retention_period_unit_desc,
     CAST(0 AS UTINYINT) AS ledger_type,
     'NON_LEDGER_TABLE' AS ledger_type_desc,
     CAST(NULL AS INTEGER) AS ledger_view_id,
     false AS is_dropped_ledger_table
 FROM sys.objects o
 JOIN main.__msduck_column_counters c USING(object_id)
-WHERE o.type='U';
+JOIN main.__msduck_table_properties p USING(object_id)
+WHERE rtrim(o.type)='U';
 
 CREATE OR REPLACE VIEW sys.views AS
 SELECT o.*,
@@ -47,7 +51,9 @@ SELECT o.*,
     false AS has_unchecked_assembly_data,
     false AS with_check_option,
     false AS is_date_correlation_view,
+    false AS is_tracked_by_cdc,
+    false AS has_snapshot,
     CAST(0 AS UTINYINT) AS ledger_view_type,
     'NON_LEDGER_VIEW' AS ledger_view_type_desc,
     false AS is_dropped_ledger_view
-FROM sys.objects o WHERE o.type='V';
+FROM sys.objects o WHERE rtrim(o.type)='V';
