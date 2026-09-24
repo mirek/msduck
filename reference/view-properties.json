@@ -1,0 +1,1787 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "identicalFreshCaptures": 2,
+  "results": [
+    {
+      "id": "base",
+      "sql": "CREATE TABLE dbo.probe_base(id INT IDENTITY NOT NULL,v INT,nn INT NOT NULL); INSERT INTO dbo.probe_base(v,nn) VALUES(NULL,1),(2,2)",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "id": "direct-definition",
+      "sql": "CREATE VIEW dbo.probe_direct AS SELECT id,v,nn FROM dbo.probe_base",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "aggregate-definition",
+      "sql": "CREATE VIEW dbo.probe_aggregate AS SELECT MIN(v) AS m,MAX(nn) AS n,COUNT(v) AS c,SUM(v) AS s FROM dbo.probe_base",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "nested-definition",
+      "sql": "CREATE VIEW dbo.probe_nested AS SELECT m,n,c,s FROM dbo.probe_aggregate",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "alias-definition",
+      "sql": "CREATE VIEW dbo.probe_alias(x,y,z) AS SELECT id,v,nn FROM dbo.probe_base",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "expression-definition",
+      "sql": "CREATE VIEW dbo.probe_expression AS SELECT 1 AS literal,id+1 AS changed_id,CAST(id AS BIGINT) AS converted_id,v+1 AS changed_v,ISNULL(v,0) AS filled FROM dbo.probe_base",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "constant-definition",
+      "sql": "CREATE VIEW dbo.probe_constant AS SELECT 1 AS literal,CAST(NULL AS INT) AS absent",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "expressions",
+      "sql": "SELECT * FROM dbo.probe_expression",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "literal",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "changed_id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "converted_id",
+                "type": "IntN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "changed_v",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "filled",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                2,
+                "1",
+                null,
+                0
+              ],
+              [
+                1,
+                3,
+                "2",
+                3,
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "id": "constants",
+      "sql": "SELECT * FROM dbo.probe_constant",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "literal",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "absent",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                null
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "union-definition",
+      "sql": "CREATE VIEW dbo.probe_union AS SELECT nn AS result FROM dbo.probe_base UNION ALL SELECT nn FROM dbo.probe_base",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "group-definition",
+      "sql": "CREATE VIEW dbo.probe_group AS SELECT nn FROM dbo.probe_base GROUP BY nn",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "window-definition",
+      "sql": "CREATE VIEW dbo.probe_window AS SELECT ROW_NUMBER() OVER(ORDER BY id) AS rn,SUM(v) OVER() AS total FROM dbo.probe_base",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "typed-definition",
+      "sql": "CREATE VIEW dbo.probe_typed AS SELECT CAST('12:34:56.1234567' AS TIME(7)) AS t,CAST(1 AS DECIMAL(12,3)) AS d,CAST(1 AS SQL_VARIANT) AS v",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "union",
+      "sql": "SELECT * FROM dbo.probe_union ORDER BY result",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "result",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ],
+              [
+                1
+              ],
+              [
+                2
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "group",
+      "sql": "SELECT * FROM dbo.probe_group ORDER BY nn",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "nn",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ],
+              [
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "id": "window",
+      "sql": "SELECT * FROM dbo.probe_window ORDER BY rn",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "rn",
+                "type": "IntN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "total",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "1",
+                2
+              ],
+              [
+                "2",
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "id": "typed",
+      "sql": "SELECT * FROM dbo.probe_typed",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "t",
+                "type": "Time",
+                "length": null,
+                "precision": null,
+                "scale": 7,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "d",
+                "type": "DecimalN",
+                "length": 17,
+                "precision": 12,
+                "scale": 3,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "v",
+                "type": "Variant",
+                "length": 8009,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "kind": "date",
+                  "value": "1970-01-01T12:34:56.123Z",
+                  "nanosecondsDelta": 0.0004567
+                },
+                1,
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "aggregate-expression-definition",
+      "sql": "CREATE VIEW dbo.probe_aggregate_expression AS SELECT CAST(MIN(v) AS BIGINT) AS converted,MIN(v)+1 AS changed,ISNULL(MIN(v),0) AS filled FROM dbo.probe_base",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "cte-expression-definition",
+      "sql": "CREATE VIEW dbo.probe_cte_expression AS WITH c AS (SELECT CAST('12:34' AS TIME) AS t,1 AS n) SELECT t,n FROM c",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "derived-expression-definition",
+      "sql": "CREATE VIEW dbo.probe_derived_expression AS SELECT t,n FROM (SELECT CAST('12:34' AS TIME) AS t,1 AS n) d",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "nested-expression-definition",
+      "sql": "CREATE VIEW dbo.probe_nested_expression AS SELECT t,d,v FROM dbo.probe_typed",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "aggregate-expression",
+      "sql": "SELECT * FROM dbo.probe_aggregate_expression",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "converted",
+                "type": "IntN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "changed",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "filled",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                "2",
+                3,
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "cte-expression",
+      "sql": "SELECT * FROM dbo.probe_cte_expression",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "t",
+                "type": "Time",
+                "length": null,
+                "precision": null,
+                "scale": 7,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "kind": "date",
+                  "value": "1970-01-01T12:34:00.000Z",
+                  "nanosecondsDelta": 0
+                },
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "derived-expression",
+      "sql": "SELECT * FROM dbo.probe_derived_expression",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "t",
+                "type": "Time",
+                "length": null,
+                "precision": null,
+                "scale": 7,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "kind": "date",
+                  "value": "1970-01-01T12:34:00.000Z",
+                  "nanosecondsDelta": 0
+                },
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "nested-expression",
+      "sql": "SELECT * FROM dbo.probe_nested_expression",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "t",
+                "type": "Time",
+                "length": null,
+                "precision": null,
+                "scale": 7,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "d",
+                "type": "DecimalN",
+                "length": 17,
+                "precision": 12,
+                "scale": 3,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "v",
+                "type": "Variant",
+                "length": 8009,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                {
+                  "kind": "date",
+                  "value": "1970-01-01T12:34:56.123Z",
+                  "nanosecondsDelta": 0.0004567
+                },
+                1,
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "direct",
+      "sql": "SELECT * FROM dbo.probe_direct",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 16,
+                "collation": null
+              },
+              {
+                "name": "v",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "nn",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                null,
+                1
+              ],
+              [
+                2,
+                2,
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "id": "aggregate",
+      "sql": "SELECT * FROM dbo.probe_aggregate",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "m",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "c",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2,
+                2,
+                1,
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "nested",
+      "sql": "SELECT * FROM dbo.probe_nested",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "m",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "c",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2,
+                2,
+                1,
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "aliased",
+      "sql": "SELECT * FROM dbo.probe_alias",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "x",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 16,
+                "collation": null
+              },
+              {
+                "name": "y",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "z",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                null,
+                1
+              ],
+              [
+                2,
+                2,
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "id": "empty-nested",
+      "sql": "SELECT * FROM dbo.probe_nested WHERE 1=0",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "m",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "c",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "begin",
+      "sql": "BEGIN TRAN",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "alter",
+      "sql": "ALTER VIEW dbo.probe_aggregate AS SELECT v AS m,nn AS n,v AS c,v AS s FROM dbo.probe_base",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "altered",
+      "sql": "SELECT * FROM dbo.probe_aggregate",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "m",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "c",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                null,
+                1,
+                null,
+                null
+              ],
+              [
+                2,
+                2,
+                2,
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "id": "nested-after-alter",
+      "sql": "SELECT * FROM dbo.probe_nested",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "m",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "c",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                null,
+                1,
+                null,
+                null
+              ],
+              [
+                2,
+                2,
+                2,
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "id": "rollback",
+      "sql": "ROLLBACK",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "restored",
+      "sql": "SELECT * FROM dbo.probe_aggregate",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "m",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "c",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2,
+                2,
+                1,
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "nested-after-rollback",
+      "sql": "SELECT * FROM dbo.probe_nested",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "m",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "c",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2,
+                2,
+                1,
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 8153,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "Warning: Null value is eliminated by an aggregate or other SET operation."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "committed-alter",
+      "sql": "ALTER VIEW dbo.probe_aggregate AS SELECT v AS m,nn AS n,v AS c,v AS s FROM dbo.probe_base",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "id": "nested-after-commit",
+      "sql": "SELECT * FROM dbo.probe_nested",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "m",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "c",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                null,
+                1,
+                null,
+                null
+              ],
+              [
+                2,
+                2,
+                2,
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "id": "refresh",
+      "sql": "EXEC sp_refreshview N'dbo.probe_nested'",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "nested-after-refresh",
+      "sql": "SELECT * FROM dbo.probe_nested",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "m",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "n",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": null
+              },
+              {
+                "name": "c",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                null,
+                1,
+                null,
+                null
+              ],
+              [
+                2,
+                2,
+                2,
+                2
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 2,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    }
+  ]
+}
