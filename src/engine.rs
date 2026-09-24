@@ -1326,11 +1326,28 @@ impl Session {
         }
         let result = (|| {
             let view_columns = crate::query_catalog::view(&self.db, &statement)?;
-            let mut result = self.execute_inner(
-                statement.clone(),
-                parameters,
-                self.transactions == 0 && !own_transaction,
-            )?;
+            let mut result = if let Statement::CreateIndex(index) = &statement {
+                let object_id: Option<i32> = self.db.query_row(
+                    "SELECT __msduck_object_id(?,'U')",
+                    [index.table_name.to_string()],
+                    |r| r.get(0),
+                )?;
+                let object_id = object_id
+                    .ok_or_else(|| anyhow::anyhow!("CREATE INDEX target table does not exist"))?;
+                crate::index_catalog::create(
+                    &self.db,
+                    object_id,
+                    index,
+                    crate::index_catalog::Transaction::CallerOwned,
+                )?;
+                Execution::statement(vec![], None, 200)
+            } else {
+                self.execute_inner(
+                    statement.clone(),
+                    parameters,
+                    self.transactions == 0 && !own_transaction,
+                )?
+            };
             if let Some(command) = ddl_completion_command(&statement) {
                 result.count = None;
                 result.command = command;
@@ -1338,6 +1355,7 @@ impl Session {
             if catalog_ddl {
                 crate::object_catalog::sync(&self.db)?;
                 crate::query_catalog::sync(&self.db)?;
+                crate::index_catalog::sync(&self.db)?;
                 crate::object_catalog::touch(&self.db, &statement)?;
                 crate::declared_columns::record(&self.db, &statement)?;
                 if let Some((name, fields)) = view_columns {
@@ -5341,5 +5359,132 @@ mod output_materialization_tests {
         assert_eq!(count(&session, "image_source"), 3);
         assert_eq!(count(&session, "image_sink"), 3);
         assert_eq!(images(&session), 0);
+    }
+}
+
+#[cfg(test)]
+mod index_catalog_integration_tests {
+    use super::*;
+
+    #[test]
+    fn index_catalog_startup_and_empty_result_descriptors_match_reference() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../reference/index-catalog.json")).unwrap();
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        for view in ["indexes", "index_columns"] {
+            let wire = &fixture["declarations"][view]["wire"]["sets"][0]["columns"];
+            let columns = wire
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|c| {
+                    let kind = match c["type"].as_str().unwrap() {
+                        "Int" => Type::Int(4),
+                        "TinyInt" => Type::Int(1),
+                        "IntN" => Type::Int(c["length"].as_u64().unwrap() as u8),
+                        "BitN" => Type::Bit,
+                        "NVarChar" => {
+                            if c["length"] == 65535 {
+                                Type::Text
+                            } else {
+                                Type::Nvarchar(c["length"].as_u64().unwrap() as u16 / 2)
+                            }
+                        }
+                        other => panic!("unhandled reference type {other}"),
+                    };
+                    let flags = c["flags"].as_u64().unwrap();
+                    let collation = c["collation"].as_object().map(|_| {
+                        tds::collation::Collation::new(
+                            c["collation"]["lcid"].as_u64().unwrap() as u32,
+                            c["collation"]["flags"].as_u64().unwrap() as u8,
+                            c["collation"]["version"].as_u64().unwrap() as u8,
+                            c["collation"]["sortId"].as_u64().unwrap() as u8,
+                        )
+                        .unwrap()
+                    });
+                    Column {
+                        name: c["name"].as_str().unwrap().into(),
+                        kind,
+                        properties: msduck_core::result::Properties {
+                            nullable: Some(flags & 1 != 0),
+                            origin: if flags & 32 != 0 {
+                                msduck_core::result::Origin::Expression
+                            } else {
+                                msduck_core::result::Origin::Stored
+                            },
+                        },
+                        collation,
+                    }
+                })
+                .collect::<Vec<_>>();
+            let mut expected = vec![];
+            tds::metadata(&mut expected, &columns).unwrap();
+            for name in [format!("sys.{view}"), format!("[sys].[{view}]")] {
+                let sql = format!("SELECT * FROM {name} WHERE 1=0");
+                let (actual, ok) = session.batch_response(&sql, &Default::default(), false, None);
+                assert!(ok, "{sql}: {actual:?}");
+                assert!(
+                    actual.starts_with(&expected),
+                    "{sql}: expected {expected:?}, actual {actual:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn index_creation_uses_table_owned_identity_and_transactional_catalog() {
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        for sql in [
+            "CREATE TABLE dbo.a(id INT)",
+            "CREATE TABLE dbo.b(id INT)",
+            "CREATE INDEX ix ON dbo.a(id)",
+            "CREATE UNIQUE INDEX ix ON dbo.b(id)",
+        ] {
+            let (out, ok) = session.batch_response(sql, &Default::default(), false, None);
+            assert!(ok, "{sql}: {out:?}");
+        }
+        let indexes = crate::index_catalog::acquire_complete(&session.db).unwrap();
+        assert_eq!(indexes.len(), 2);
+        assert!(indexes.iter().all(|i| i.name == "ix" && i.index_id == 2));
+        assert_ne!(indexes[0].backend_name, indexes[1].backend_name);
+        for sql in [
+            "BEGIN TRAN; CREATE INDEX transient ON dbo.a(id); ROLLBACK",
+            "BEGIN TRAN; DROP TABLE dbo.a; ROLLBACK",
+        ] {
+            assert!(
+                session
+                    .batch_response(sql, &Default::default(), false, None)
+                    .1,
+                "{sql}"
+            );
+            assert_eq!(
+                crate::index_catalog::acquire_complete(&session.db).unwrap(),
+                indexes
+            );
+        }
+        assert!(
+            session
+                .batch_response("DROP TABLE dbo.a", &Default::default(), false, None)
+                .1
+        );
+        assert_eq!(
+            crate::index_catalog::acquire_complete(&session.db)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            session
+                .db
+                .query_row(
+                    "SELECT count(*) FROM main.__msduck_index_catalog",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            1
+        );
     }
 }

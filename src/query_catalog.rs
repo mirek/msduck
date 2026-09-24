@@ -326,7 +326,7 @@ fn snapshot_with_views<T: Visit>(
     query: &T,
     views: &mut ViewBinding,
 ) -> duckdb::Result<CatalogSnapshot> {
-    struct Tables(std::collections::BTreeSet<String>);
+    struct Tables(std::collections::BTreeMap<String, ObjectName>);
     impl Visitor for Tables {
         type Break = ();
         fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> std::ops::ControlFlow<()> {
@@ -334,7 +334,7 @@ fn snapshot_with_views<T: Visit>(
                 name, args: None, ..
             } = factor
             {
-                self.0.insert(name.to_string());
+                self.0.insert(name.to_string(), name.clone());
             }
             std::ops::ControlFlow::Continue(())
         }
@@ -355,7 +355,18 @@ fn snapshot_with_views<T: Visit>(
         .get("nvarchar")
         .and_then(|t| t.collation_name.clone());
     let mut columns = db.prepare("SELECT c.name,c.system_type_id,c.user_type_id,c.max_length,c.precision,c.scale,c.collation_name,c.is_nullable,c.is_identity,o.type FROM sys.columns c JOIN sys.objects o ON c.object_id=o.object_id WHERE c.object_id=__msduck_object_id(?,NULL) ORDER BY c.column_id")?;
-    for name in names.0 {
+    for (name, object_name) in names.0 {
+        if let [
+            ObjectNamePart::Identifier(schema),
+            ObjectNamePart::Identifier(view),
+        ] = object_name.0.as_slice()
+            && schema.value.eq_ignore_ascii_case("sys")
+            && let Some(collation) = catalog.default_collation.as_deref()
+            && let Some(fields) = crate::index_catalog::fields(&view.value, collation)
+        {
+            catalog.tables.insert(name, fields);
+            continue;
+        }
         let mut fields = columns
             .query_map([&name], |row| {
                 Ok(Field {
