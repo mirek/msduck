@@ -622,6 +622,24 @@
       "dependencies": [],
       "issue": 62,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHOZl"
+    },
+    {
+      "id": "unicode-for-json-metadata-v1",
+      "title": "Retain FOR JSON subquery declarations through scalar consumers",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Native UTF16 FOR JSON integration under #56/#62 exposes a first-party DATALENGTH failure: FOR JSON subqueries have an unconditional logical NVARCHAR(MAX) result, but shared storage inference drops that declaration. This is a disjoint companion; no external content was used. Start from owner-pushed b40ce1d or this worker continuation.",
+      "scope": [
+        "crates/msduck-sql/src/expression_metadata/storage.rs",
+        "crates/msduck-sql/tests/for_json_metadata.rs"
+      ],
+      "acceptance": [
+        "Recognize logical NVARCHAR(MAX) for FOR JSON subqueries, including WITHOUT_ARRAY_WRAPPER and empty sources, and retain that type through the exact internal row-array/unwrapped lowering. Keep type identity distinct from JSON fragment provenance.",
+        "Do not infer types from values, execute subqueries or broadly type unknown scalar subqueries. Keep the rule deterministic and independent of DuckDB, catalog reads and IO.",
+        "Add pure regressions for original and lowered forms and DATALENGTH BIGINT lowering, including nested parentheses and unchanged unknown-subquery behavior. Run deterministic tests, formatting and strict Clippy; runtime adapters remain under existing claims."
+      ],
+      "dependencies": [],
+      "issue": 63,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHRMw"
     }
   ]
 }
