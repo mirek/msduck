@@ -1,6 +1,6 @@
 # Legacy datetime conversion evidence
 
-`reference/legacy-datetime.json` contains 68 RPC observations captured twice
+`reference/legacy-datetime.json` contains 72 RPC observations captured twice
 identically from the pinned SQL Server container. Reproduce them with
 `node scripts/capture-legacy-datetime.mjs`. The generator compares fresh results
 with the retained fixture and records raw repetitions separately. Each case
@@ -48,6 +48,8 @@ Observed rules include:
 - NVARCHAR invalid and seven-digit fractional strings retain the captured
   241/295 diagnostics. Out-of-range DATETIME2-to-SMALLDATETIME conversion
   reports 242/state3/class16 and names `datetime2` as the source type.
+  NVARCHAR range failures name `nvarchar`, so character-source type must remain
+  explicit even when the parser receives the same ISO text.
 
 The inspected mirek/mssqlite revision
 `7f71f2081602f8e3051998f5c11f058e65fe24ec` supplies useful TDS representations in
