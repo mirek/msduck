@@ -66,11 +66,7 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
     db.register_scalar_function::<RowCount<0>>("__msduck_top_count")?;
     db.register_scalar_function::<RowCount<1>>("__msduck_offset_count")?;
     db.register_scalar_function::<RowCount<2>>("__msduck_fetch_count")?;
-    db.register_scalar_function::<crate::integer_conversion::IntegerText>("__msduck_integer_text")?;
-    db.execute_batch(
-        "CREATE OR REPLACE MACRO main.__msduck_integer_input(value, target := '', try_mode := false) AS
-        __msduck_integer_text(CAST(value AS VARCHAR), typeof(value), target, try_mode)",
-    )?;
+    crate::integer_conversion::register(db)?;
     crate::variant_cast::register(db)?;
     db.register_scalar_function::<DateFromParts>("__msduck_datefromparts")?;
     db.execute_batch(
