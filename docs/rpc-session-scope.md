@@ -24,7 +24,22 @@ complete scenarios. Its eight differences are:
 - The LANGUAGE RPC scenario leaks 7 instead of restoring the caller's 3.
 - The LANGUAGE SQL-batch scenario omits informational message 5703.
 
-This evidence establishes a runtime gap, not a completed fix. It does not
-establish all SET options, non-English language behavior, stored-procedure
+Runtime revision `783cf874401274fdd01a00fa443217ec03f051f1` matches all 14
+complete scenarios and passes 29 focused client tests. DATEFIRST and
+ANSI_WARNINGS restore alongside NOCOUNT and XACT_ABORT at the RPC boundary;
+SQL-batch settings persist. The captured batch language message is emitted.
+Rust session state is authoritative. DATEFIRST is synchronized into DuckDB
+before evaluation and after transaction completion, so RPC restoration itself
+cannot fail inside an aborted native transaction or replace the original error.
+A native regression verifies restoration and recovery after a constraint error.
+Full workspace, aggregate-diagnostic and client verification remain pending.
+
+Existing temporal and aggregate tests now establish persistent settings through
+SQL batch, preserving their query/result assertions. They no longer depend on
+the prior RPC leak. The upstream mssqlite review found that
+`packages/engine/src/bind.ts` binds `@@datefirst` to the constant 7; that behavior
+cannot supply this session-scope implementation.
+
+This does not establish all SET options, non-English language behavior, stored-procedure
 nesting, prepared execution, transaction failures or Attention/cancellation.
 Those boundaries need additional evidence before claiming general restoration.
