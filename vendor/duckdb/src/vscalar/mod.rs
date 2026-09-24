@@ -88,6 +88,15 @@ pub trait VScalar: Sized {
     /// The invoke method should be able to handle all of these signatures.
     fn signatures() -> Vec<ScalarFunctionSignature>;
 
+    /// Opt into receiving NULL inputs instead of DuckDB's default NULL propagation.
+    ///
+    /// When true, the callback must handle validity explicitly for every input
+    /// and populate NULL output rows itself. This also permits diagnostics for
+    /// NULL arguments; default handling can bypass the callback entirely.
+    fn special_null_handling() -> bool {
+        false
+    }
+
     /// Whether the scalar function is volatile.
     ///
     /// Volatile functions are re-evaluated for each row, even if they have no parameters.
@@ -201,6 +210,9 @@ impl Connection {
             let scalar_function = ScalarFunction::new(name)?;
             signature.register_with_scalar(&scalar_function);
             scalar_function.set_function(Some(scalar_func::<S>));
+            if S::special_null_handling() {
+                scalar_function.set_special_handling();
+            }
             if S::volatile() {
                 scalar_function.set_volatile();
             }
@@ -223,6 +235,9 @@ impl Connection {
             let scalar_function = ScalarFunction::new(name)?;
             signature.register_with_scalar(&scalar_function);
             scalar_function.set_function(Some(scalar_func::<S>));
+            if S::special_null_handling() {
+                scalar_function.set_special_handling();
+            }
             if S::volatile() {
                 scalar_function.set_volatile();
             }

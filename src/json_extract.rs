@@ -54,12 +54,16 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
         ] => (s.clone(), p.clone()),
         _ => return Err(format!("invalid {name} arguments")),
     };
-    let text = |e| Expr::Cast {
-        kind: CastKind::Cast,
-        expr: Box::new(e),
-        data_type: DataType::Text,
-        format: None,
-    };
+    let mut path_literal = &path;
+    while let Expr::Nested(inner) = path_literal {
+        path_literal = inner;
+    }
+    if name == "JSON_VALUE"
+        && matches!(path_literal, Expr::Value(v) if matches!(v.value,Value::Null))
+    {
+        return Err(msduck_core::json_path::NULL_VALUE_LITERAL.into());
+    }
+    let text = |e| crate::engine::unary_function("__msduck_carrier_input", e);
     *expr = crate::engine::binary_function(
         if query {
             "__msduck_json_query"
@@ -77,16 +81,25 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
 struct Extract<const MODE: u8>;
 impl<const MODE: u8> VScalar for Extract<MODE> {
     type State = ();
+    fn special_null_handling() -> bool {
+        true
+    }
     fn invoke(
         _: &(),
         input: &mut DataChunkHandle,
         output: &mut dyn WritableVector,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        if crate::unicode_carrier::is_logical(&input.flat_vector(0).logical_type()) {
+            return extract_unicode::<MODE>(input, output);
+        }
         let len = input.len();
         let values = [input.flat_vector(0), input.flat_vector(1)];
         let mut result = output.flat_vector();
         for row in 0..len {
-            if values.iter().any(|v| v.row_is_null(row as u64)) {
+            if values[1].row_is_null(row as u64) {
+                return Err(msduck_core::json_path::NULL_PATHS[MODE as usize].into());
+            }
+            if values[0].row_is_null(row as u64) {
                 result.set_null(row);
                 continue;
             }
@@ -118,12 +131,104 @@ impl<const MODE: u8> VScalar for Extract<MODE> {
         Ok(())
     }
     fn signatures() -> Vec<ScalarFunctionSignature> {
-        vec![ScalarFunctionSignature::exact(
-            vec![Id::Varchar.into(), Id::Varchar.into()],
-            if MODE == 2 { Id::Integer } else { Id::Varchar }.into(),
-        )]
+        vec![
+            ScalarFunctionSignature::exact(
+                vec![Id::Varchar.into(), Id::Varchar.into()],
+                if MODE == 2 { Id::Integer } else { Id::Varchar }.into(),
+            ),
+            ScalarFunctionSignature::exact(
+                vec![
+                    crate::unicode_carrier::kind(),
+                    crate::unicode_carrier::kind(),
+                ],
+                if MODE == 2 {
+                    Id::Integer.into()
+                } else {
+                    crate::unicode_carrier::kind()
+                },
+            ),
+        ]
     }
 }
+fn extract_unicode<const MODE: u8>(
+    input: &mut DataChunkHandle,
+    output: &mut dyn WritableVector,
+) -> Result<(), Box<dyn std::error::Error>> {
+    use crate::unicode_carrier::{CELL_LIMIT, CHUNK_LIMIT, bytes};
+    let len = input.len();
+    let parents = [input.flat_vector(0), input.flat_vector(1)];
+    let structures = [input.struct_vector(0), input.struct_vector(1)];
+    let values = [structures[0].child(0, len), structures[1].child(0, len)];
+    let mut encoded = Vec::with_capacity(if MODE == 2 { 0 } else { len });
+    let mut remaining = CHUNK_LIMIT;
+    for row in 0..len {
+        if parents[1].row_is_null(row as u64) {
+            return Err(msduck_core::json_path::NULL_PATHS[MODE as usize].into());
+        }
+        if parents[0].row_is_null(row as u64) {
+            if MODE == 2 {
+                output.flat_vector().set_null(row);
+            } else {
+                encoded.push(None);
+            }
+            continue;
+        }
+        let mut units = [Vec::new(), Vec::new()];
+        for (index, value) in values.iter().enumerate() {
+            if value.row_is_null(row as u64) {
+                return Err("invalid Unicode carrier: NULL payload".into());
+            }
+            let raw = bytes(value, row, len)?;
+            if raw.len() % 2 != 0 {
+                return Err("invalid Unicode carrier byte length".into());
+            }
+            units[index] = raw
+                .chunks_exact(2)
+                .map(|b| u16::from_le_bytes([b[0], b[1]]))
+                .collect();
+        }
+        if MODE == 2 {
+            let present = i32::from(msduck_core::json_path::exists_utf16(&units[0], &units[1]));
+            // The exact existence overload returns INTEGER for every row.
+            unsafe {
+                output.flat_vector().as_mut_slice_with_len::<i32>(len)[row] = present;
+            }
+        } else if let Some(value) =
+            msduck_core::json_path::extract_utf16(&units[0], &units[1], MODE == 1)?
+        {
+            let size = value
+                .len()
+                .checked_mul(2)
+                .ok_or("JSON extraction output size overflow")?;
+            if size > CELL_LIMIT || size > remaining {
+                return Err("JSON extraction result exceeds the configured output limit".into());
+            }
+            remaining -= size;
+            encoded.push(Some(
+                value
+                    .iter()
+                    .flat_map(|u| u.to_le_bytes())
+                    .collect::<Vec<_>>(),
+            ));
+        } else {
+            encoded.push(None);
+        }
+    }
+    if MODE != 2 {
+        let mut result = output.struct_vector();
+        let mut payload = result.child(0, len);
+        for (row, value) in encoded.iter().enumerate() {
+            if let Some(value) = value {
+                payload.insert(row, value.as_slice());
+            } else {
+                result.set_null(row);
+                payload.set_null(row);
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
     db.register_scalar_function::<Extract<0>>("__msduck_json_value")?;
     db.register_scalar_function::<Extract<1>>("__msduck_json_query")?;
@@ -136,7 +241,7 @@ mod tests {
     fn existence_chunk_nulls_and_volatile_arguments() {
         let db = duckdb::Connection::open_in_memory().unwrap();
         crate::scalar::register(&db).unwrap();
-        let wrong: i64 = db.query_row("SELECT count(*) FROM range(6000) r(i) WHERE __msduck_json_path_exists(CASE WHEN i%17=0 THEN NULL WHEN i%5=0 THEN '{bad}' ELSE '[{\"x\":null},{}]' END,CASE WHEN i%19=0 THEN NULL ELSE '$[*].x' END) IS DISTINCT FROM CASE WHEN i%17=0 OR i%19=0 THEN NULL WHEN i%5=0 THEN 0 ELSE 1 END", [], |r|r.get(0)).unwrap();
+        let wrong: i64 = db.query_row("SELECT count(*) FROM range(6000) r(i) WHERE __msduck_json_path_exists(CASE WHEN i%17=0 THEN NULL WHEN i%5=0 THEN '{bad}' ELSE '[{\"x\":null},{}]' END,'$[*].x') IS DISTINCT FROM CASE WHEN i%17=0 THEN NULL WHEN i%5=0 THEN 0 ELSE 1 END", [], |r|r.get(0)).unwrap();
         assert_eq!(wrong, 0);
         db.execute_batch("CREATE SEQUENCE existence_source; CREATE SEQUENCE existence_path")
             .unwrap();
@@ -161,8 +266,26 @@ mod tests {
     fn native_chunk_nulls_and_volatile_inputs() {
         let db = duckdb::Connection::open_in_memory().unwrap();
         crate::scalar::register(&db).unwrap();
-        let wrong:i64=db.query_row("SELECT count(*) FROM range(6000) r(i) WHERE __msduck_json_value(CASE WHEN i%17=0 THEN NULL ELSE printf('{\"n\":%d}',i) END,CASE WHEN i%19=0 THEN NULL ELSE '$.n' END) IS DISTINCT FROM CASE WHEN i%17=0 OR i%19=0 THEN NULL ELSE CAST(i AS VARCHAR) END",[],|r|r.get(0)).unwrap();
+        let wrong:i64=db.query_row("SELECT count(*) FROM range(6000) r(i) WHERE __msduck_json_value(CASE WHEN i%17=0 THEN NULL ELSE printf('{\"n\":%d}',i) END,'$.n') IS DISTINCT FROM CASE WHEN i%17=0 THEN NULL ELSE CAST(i AS VARCHAR) END",[],|r|r.get(0)).unwrap();
         assert_eq!(wrong, 0);
+        for function in [
+            "__msduck_json_value",
+            "__msduck_json_query",
+            "__msduck_json_path_exists",
+        ] {
+            for source in ["NULL", "'{}'"] {
+                let error = db
+                    .prepare(&format!("SELECT {function}({source},NULL)"))
+                    .and_then(|mut s| s.query([]).map(|_| ()))
+                    .unwrap_err();
+                assert!(
+                    error
+                        .to_string()
+                        .contains("Argument data type NULL is invalid for argument 2"),
+                    "{error}"
+                );
+            }
+        }
         db.execute_batch("CREATE SEQUENCE json_source; CREATE SEQUENCE json_path")
             .unwrap();
         let count:i64=db.query_row("SELECT count(__msduck_json_value(printf('{\"n\":%d}',nextval('json_source')),CASE WHEN nextval('json_path')>0 THEN '$.n' ELSE '$' END)) FROM range(6000)",[],|r|r.get(0)).unwrap();

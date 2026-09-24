@@ -110,7 +110,15 @@ await withReferenceContainer(async (config, container) => {
       for (const [operation,sql] of queries) captured.push({operation,...await record(sql)})
       keys.push({sample,expression,setup,operations:captured})
     }
-    await writeFile(output, JSON.stringify({image:container.image,version,types,samples,results,escaped,keys},null,2)+'\n')
-    console.log(JSON.stringify({output,storedCases:results.length,escapedCases:escaped.length,keyCases:keys.length,operations:results.reduce((n,r)=>n+r.operations.length,0)+escaped.reduce((n,r)=>n+r.operations.length,0)+keys.reduce((n,r)=>n+r.operations.length,0)}))
+    const nullPaths = []
+    for (const source of ["N'{}'",'NULL']) for (const path of ['NULL','CAST(NULL AS NVARCHAR(100))','p']) {
+      const setup = `UPDATE ${table} SET j=${source},p=NULL`
+      await command(connection,setup)
+      for (const operation of ['JSON_VALUE','JSON_QUERY','JSON_PATH_EXISTS']) {
+        nullPaths.push({source,path,operation,setup,...await record(`SELECT ${operation}(j,${path}) AS value FROM ${table}`)})
+      }
+    }
+    await writeFile(output, JSON.stringify({image:container.image,version,types,samples,results,escaped,keys,nullPaths},null,2)+'\n')
+    console.log(JSON.stringify({output,storedCases:results.length,escapedCases:escaped.length,keyCases:keys.length,nullPathCases:nullPaths.length,operations:results.reduce((n,r)=>n+r.operations.length,0)+escaped.reduce((n,r)=>n+r.operations.length,0)+keys.reduce((n,r)=>n+r.operations.length,0)+nullPaths.length}))
   } finally { connection.close() }
 })

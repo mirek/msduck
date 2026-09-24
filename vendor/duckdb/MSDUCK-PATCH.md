@@ -29,3 +29,12 @@ feature uses the existing `vtab-arrow` dependency already enabled by `vscalar`.
 including NULLs, nested times, raw UTF16 carrier bytes, decimal values and
 Boolean/UUID extension metadata. It asserts exact Arrow equality and distinct
 TIME_NS versus TIME storage types after materialization.
+
+`VScalar::special_null_handling()` is an opt-in binding extension. Both ordinary
+and stateful registration apply DuckDB's scalar special-handling flag to every
+overload when requested. The default remains false, preserving upstream NULL
+propagation; callback containment, vector flattening and ownership are unchanged.
+JSON extraction opts in because SQL Server rejects a NULL path even when its
+source is NULL, whereas default DuckDB propagation can bypass the callback.
+Regression: `tests/vscalar_nulls.rs` covers both registration APIs, multiple
+signatures, default propagation and recoverable callback errors.

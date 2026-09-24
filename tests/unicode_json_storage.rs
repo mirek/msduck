@@ -128,3 +128,70 @@ fn string_escape_preserves_raw_surrogates_and_control_expansion() {
         "{error}"
     );
 }
+
+#[test]
+fn extraction_preserves_surrogates_and_original_container_spelling() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    for sql in [
+        "CREATE TABLE extraction_source(id INT,j NVARCHAR(MAX))",
+        r#"INSERT INTO extraction_source VALUES(1,N'{"s":"'+LEFT(N'🦆',1)+N'","a":["'+LEFT(N'🦆',1)+N'"]}'),(2,N'{"s":"\ud800","a":["\ud800"]}')"#,
+        "SELECT id,JSON_VALUE(j,'$.s') AS s,JSON_QUERY(j,'$.a') AS a,JSON_PATH_EXISTS(j,'$.a[*]') AS present INTO extraction_result FROM extraction_source",
+    ] {
+        let (_, ok) = session.batch_response(sql, &Default::default(), false, None);
+        assert!(ok, "{sql}");
+    }
+    let rows: Vec<(String,String,i32)> = session.db.prepare("SELECT hex(s.__msduck_utf16le),hex(a.__msduck_utf16le),present FROM extraction_result ORDER BY id").unwrap().query_map([], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).unwrap().collect::<duckdb::Result<_>>().unwrap();
+    assert_eq!(
+        rows,
+        vec![
+            ("3ED8".into(), "5B0022003ED822005D00".into(), 1),
+            (
+                "00D8".into(),
+                "5B0022005C007500640038003000300022005D00".into(),
+                1
+            )
+        ]
+    );
+    let (_, ok) = session.batch_response(r#"CREATE TABLE extraction_keys(j NVARCHAR(MAX),p NVARCHAR(20)); INSERT INTO extraction_keys VALUES(N'{"'+LEFT(N'🦆',1)+N'":7}',N'$."'+LEFT(N'🦆',1)+N'"'); SELECT JSON_VALUE(j,p) AS v,JSON_PATH_EXISTS(j,p) AS present INTO extraction_key_result FROM extraction_keys"#, &Default::default(), false, None);
+    assert!(ok);
+    let row: (String, i32) = session
+        .db
+        .query_row(
+            "SELECT hex(v.__msduck_utf16le),present FROM extraction_key_result",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(row, ("3700".into(), 1));
+}
+
+#[test]
+fn extraction_unicode_inputs_evaluate_once_and_validate_storage() {
+    let server = Server::open(":memory:").unwrap();
+    let session = Session::new(server.connection().unwrap()).unwrap();
+    session
+        .db
+        .execute_batch("CREATE SEQUENCE extract_source; CREATE SEQUENCE extract_path")
+        .unwrap();
+    let count: i64 = session.db.query_row(r#"SELECT count(*) FROM range(6000) WHERE octet_length((__msduck_json_value(__msduck_pack_unicode(printf('{"x":%d}',nextval('extract_source'))),__msduck_pack_unicode(CASE WHEN nextval('extract_path')>0 THEN '$.x' ELSE '$' END))).__msduck_utf16le)>0"#,[],|r|r.get(0)).unwrap();
+    assert_eq!(count, 6000);
+    for name in ["extract_source", "extract_path"] {
+        assert_eq!(
+            session
+                .db
+                .query_row("SELECT currval(?)", [name], |r| r.get::<_, i64>(0))
+                .unwrap(),
+            6000
+        );
+    }
+    for function in [
+        "__msduck_json_value",
+        "__msduck_json_query",
+        "__msduck_json_path_exists",
+    ] {
+        for payload in ["NULL::BLOB", "from_hex('7b')"] {
+            assert!(session.db.prepare(&format!("SELECT {function}(struct_pack(__msduck_utf16le := {payload}),__msduck_pack_unicode('$'))")).and_then(|mut s|s.query([]).map(|_|())).is_err());
+        }
+    }
+}

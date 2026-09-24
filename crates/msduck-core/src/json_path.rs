@@ -11,6 +11,14 @@ pub const SCALAR: &str = "Scalar value cannot be found in the specified JSON pat
 pub const CONTAINER: &str = "Object or array cannot be found in the specified JSON path.";
 pub const WIDTH: &str = "String value in the specified JSON path would be truncated.";
 
+pub const NULL_VALUE_LITERAL: &str =
+    "Argument data type NULL is invalid for argument 2 of json_value function.";
+pub const NULL_PATHS: [&str; 3] = [
+    "Argument data type NULL is invalid for argument 2 of JSON_VALUE function.",
+    "Argument data type NULL is invalid for argument 2 of JSON_QUERY function.",
+    "Argument data type NULL is invalid for argument 2 of JSON_PATH_EXISTS function.",
+];
+
 /// Recognize an exact canonical JSON extraction message.
 /// Backend wrappers must be removed by the caller, never by core rules.
 pub fn diagnostic(message: &str) -> Option<SqlError> {
@@ -21,8 +29,10 @@ pub fn diagnostic(message: &str) -> Option<SqlError> {
         (SCALAR, 13623, 2),
         (CONTAINER, 13624, 2),
         (WIDTH, 13625, 1),
+        (NULL_VALUE_LITERAL, 8116, 1),
     ]
     .into_iter()
+    .chain(NULL_PATHS.into_iter().map(|text| (text, 8116, 8)))
     .find_map(|(text, number, state)| (message == text).then(|| SqlError::new(number, state, text)))
 }
 /// Trim only JSON whitespace.
@@ -245,6 +255,331 @@ pub fn extract(source: &str, path_text: &str, query: bool) -> Result<Option<Stri
     Ok(Some(value))
 }
 
+/// Decode a quoted JSON string without requiring paired UTF-16 surrogates.
+pub fn decode_utf16(text: &[u16]) -> Result<Vec<u16>, &'static str> {
+    let syntax = json_syntax(text);
+    if text.first() != Some(&34)
+        || text.last() != Some(&34)
+        || prefix(&syntax) != Some((Kind::String, text.len()))
+    {
+        return Err(DOCUMENT);
+    }
+    let mut out = Vec::with_capacity(text.len().saturating_sub(2));
+    let mut at = 1;
+    while at < text.len() - 1 {
+        let unit = text[at];
+        at += 1;
+        if unit != 92 {
+            out.push(unit);
+            continue;
+        }
+        let escape = text[at];
+        at += 1;
+        out.push(match escape {
+            34 | 47 | 92 => escape,
+            98 => 8,
+            102 => 12,
+            110 => 10,
+            114 => 13,
+            116 => 9,
+            117 => {
+                let mut value = 0;
+                for &digit in &text[at..at + 4] {
+                    value = value * 16
+                        + match digit {
+                            48..=57 => digit - 48,
+                            65..=70 => digit - 65 + 10,
+                            97..=102 => digit - 97 + 10,
+                            _ => return Err(DOCUMENT),
+                        };
+                }
+                at += 4;
+                value
+            }
+            _ => return Err(DOCUMENT),
+        });
+    }
+    Ok(out)
+}
+
+// One byte per code unit gives the existing ASCII grammar scanner exact UTF-16
+// offsets. Non-ASCII content is never reconstructed from this syntax projection.
+fn json_syntax(text: &[u16]) -> Vec<u8> {
+    text.iter()
+        .map(|&u| if u <= 127 { u as u8 } else { 128 })
+        .collect()
+}
+fn skip_ws(syntax: &[u8], mut at: usize, end: usize) -> usize {
+    while at < end && matches!(syntax[at], b' ' | b'\t' | b'\r' | b'\n') {
+        at += 1;
+    }
+    at
+}
+#[derive(Debug)]
+enum Utf16Step {
+    Key(Vec<u16>),
+    Index(usize),
+    All,
+}
+fn path_utf16(text: &[u16], wildcard: bool) -> Result<(bool, Vec<Utf16Step>), &'static str> {
+    let syntax = json_syntax(text);
+    let mut at = skip_ws(&syntax, 0, syntax.len());
+    let mut end = syntax.len();
+    while end > at && matches!(syntax[end - 1], b' ' | b'\t' | b'\r' | b'\n') {
+        end -= 1;
+    }
+    let mut strict = false;
+    for (mode, value) in [(b"strict".as_slice(), true), (b"lax".as_slice(), false)] {
+        if syntax
+            .get(at..at + mode.len())
+            .is_some_and(|s| s.eq_ignore_ascii_case(mode))
+            && syntax
+                .get(at + mode.len())
+                .is_some_and(u8::is_ascii_whitespace)
+        {
+            strict = value;
+            at = skip_ws(&syntax, at + mode.len(), end);
+            break;
+        }
+    }
+    if syntax.get(at) != Some(&b'$') {
+        return Err(PATH);
+    }
+    at += 1;
+    let mut steps = Vec::new();
+    while at < end {
+        match syntax[at] {
+            b'.' => {
+                at += 1;
+                if syntax.get(at) == Some(&b'"') {
+                    let (kind, len) = prefix(&syntax[at..end]).ok_or(PATH)?;
+                    if kind != Kind::String {
+                        return Err(PATH);
+                    }
+                    steps.push(Utf16Step::Key(
+                        decode_utf16(&text[at..at + len]).map_err(|_| PATH)?,
+                    ));
+                    at += len;
+                } else {
+                    let start = at;
+                    while at < end && !matches!(syntax[at], b'.' | b'[') {
+                        at += 1;
+                    }
+                    let key = String::from_utf16(&text[start..at]).map_err(|_| PATH)?;
+                    if key.is_empty()
+                        || !key.chars().enumerate().all(|(i, c)| {
+                            c == '_'
+                                || c == '$'
+                                || c.is_alphabetic()
+                                || (i > 0 && c.is_ascii_digit())
+                        })
+                    {
+                        return Err(PATH);
+                    }
+                    steps.push(Utf16Step::Key(text[start..at].to_vec()));
+                }
+            }
+            b'[' => {
+                at += 1;
+                let start = at;
+                while at < end && syntax[at] != b']' {
+                    at += 1;
+                }
+                if at == end {
+                    return Err(PATH);
+                }
+                if wildcard && &syntax[start..at] == b"*" {
+                    steps.push(Utf16Step::All);
+                } else {
+                    if start == at {
+                        return Err(PATH);
+                    }
+                    let mut index = 0usize;
+                    for &digit in &syntax[start..at] {
+                        if !digit.is_ascii_digit() {
+                            return Err(PATH);
+                        }
+                        index = index
+                            .checked_mul(10)
+                            .and_then(|n| n.checked_add(usize::from(digit - b'0')))
+                            .ok_or(PATH)?;
+                    }
+                    steps.push(Utf16Step::Index(index));
+                }
+                at += 1;
+            }
+            _ => return Err(PATH),
+        }
+    }
+    Ok((strict, steps))
+}
+struct Utf16Document<'a> {
+    units: &'a [u16],
+    syntax: Vec<u8>,
+}
+impl<'a> Utf16Document<'a> {
+    fn new(units: &'a [u16]) -> Self {
+        Self {
+            units,
+            syntax: json_syntax(units),
+        }
+    }
+    fn prefix(&self, at: usize, end: usize) -> Result<(Kind, usize), &'static str> {
+        prefix(&self.syntax[at..end])
+            .map(|(kind, len)| (kind, at + len))
+            .ok_or(DOCUMENT)
+    }
+    fn selected(
+        &self,
+        start: usize,
+        end: usize,
+        steps: &[Utf16Step],
+    ) -> Result<Option<usize>, &'static str> {
+        let mut current = skip_ws(&self.syntax, start, end);
+        for step in steps {
+            let mut found = None;
+            match step {
+                Utf16Step::All => return Err(PATH),
+                Utf16Step::Key(wanted) if self.syntax.get(current) == Some(&b'{') => {
+                    let mut at = skip_ws(&self.syntax, current + 1, end);
+                    while self.syntax.get(at) != Some(&b'}') {
+                        let (kind, next) = self.prefix(at, end)?;
+                        if kind != Kind::String {
+                            return Err(DOCUMENT);
+                        }
+                        let key = decode_utf16(&self.units[at..next])?;
+                        at = skip_ws(&self.syntax, next, end);
+                        if self.syntax.get(at) != Some(&b':') {
+                            return Err(DOCUMENT);
+                        }
+                        at = skip_ws(&self.syntax, at + 1, end);
+                        if &key == wanted {
+                            found = Some(at);
+                            break;
+                        }
+                        let (_, next) = self.prefix(at, end)?;
+                        at = skip_ws(&self.syntax, next, end);
+                        if self.syntax.get(at) != Some(&b',') {
+                            break;
+                        }
+                        at = skip_ws(&self.syntax, at + 1, end);
+                    }
+                }
+                Utf16Step::Index(wanted) if self.syntax.get(current) == Some(&b'[') => {
+                    let mut at = skip_ws(&self.syntax, current + 1, end);
+                    let mut index = 0;
+                    while self.syntax.get(at) != Some(&b']') {
+                        if index == *wanted {
+                            found = Some(at);
+                            break;
+                        }
+                        let (_, next) = self.prefix(at, end)?;
+                        index += 1;
+                        at = skip_ws(&self.syntax, next, end);
+                        if self.syntax.get(at) != Some(&b',') {
+                            break;
+                        }
+                        at = skip_ws(&self.syntax, at + 1, end);
+                    }
+                }
+                _ => {}
+            }
+            let Some(at) = found else {
+                return Ok(None);
+            };
+            current = at;
+        }
+        Ok(Some(current))
+    }
+}
+/// Extract exact UTF-16 scalar units or unchanged container source text.
+pub fn extract_utf16(
+    source: &[u16],
+    path: &[u16],
+    query: bool,
+) -> Result<Option<Vec<u16>>, &'static str> {
+    let (strict, steps) = path_utf16(path, false)?;
+    let document = Utf16Document::new(source);
+    if steps.is_empty() {
+        root(&document.syntax).ok_or(DOCUMENT)?;
+    }
+    let Some(at) = document.selected(0, source.len(), &steps)? else {
+        root(&document.syntax).ok_or(DOCUMENT)?;
+        return if strict { Err(MISSING) } else { Ok(None) };
+    };
+    let (kind, end) = document.prefix(at, source.len())?;
+    if document
+        .syntax
+        .get(end)
+        .is_some_and(|c| !matches!(c, b' ' | b'\t' | b'\r' | b'\n' | b',' | b'}' | b']'))
+    {
+        return Err(DOCUMENT);
+    }
+    let value = &source[at..end];
+    let container = matches!(kind, Kind::Array | Kind::Object);
+    if query {
+        return if container {
+            Ok(Some(value.to_vec()))
+        } else if strict {
+            Err(CONTAINER)
+        } else {
+            Ok(None)
+        };
+    }
+    if container {
+        return if strict { Err(SCALAR) } else { Ok(None) };
+    }
+    if &document.syntax[at..end] == b"null" {
+        return Ok(None);
+    }
+    let value = if kind == Kind::String {
+        decode_utf16(value)?
+    } else {
+        value.to_vec()
+    };
+    if value.len() > 4000 {
+        return if strict { Err(WIDTH) } else { Ok(None) };
+    }
+    Ok(Some(value))
+}
+/// Existence validates the full document and preserves UTF-16 key identity.
+pub fn exists_utf16(source: &[u16], path: &[u16]) -> bool {
+    fn evaluate(source: &[u16], path: &[u16]) -> Option<bool> {
+        let document = Utf16Document::new(source);
+        root(&document.syntax)?;
+        let (_, steps) = path_utf16(path, true).ok()?;
+        let mut pending = vec![(skip_ws(&document.syntax, 0, source.len()), source.len(), 0)];
+        while let Some((at, end, step)) = pending.pop() {
+            let Some(next) = steps.get(step) else {
+                return Some(true);
+            };
+            if matches!(next, Utf16Step::All) {
+                if document.syntax.get(at) != Some(&b'[') {
+                    continue;
+                }
+                let (_, end) = document.prefix(at, end).ok()?;
+                let mut child = skip_ws(&document.syntax, at + 1, end - 1);
+                while child < end - 1 {
+                    let (_, next) = document.prefix(child, end - 1).ok()?;
+                    pending.push((child, next, step + 1));
+                    child = skip_ws(&document.syntax, next, end - 1);
+                    if document.syntax.get(child) == Some(&b',') {
+                        child = skip_ws(&document.syntax, child + 1, end - 1);
+                    }
+                }
+            } else if let Some(selected) = document
+                .selected(at, end, std::slice::from_ref(next))
+                .ok()?
+            {
+                let (_, end) = document.prefix(selected, end).ok()?;
+                pending.push((selected, end, step + 1));
+            }
+        }
+        Some(false)
+    }
+    evaluate(source, path).unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,6 +704,110 @@ mod tests {
             ("{\"a\":{\"x\":invalid}}", "$.a", true),
         ] {
             assert_eq!(extract(text, path, query), Err(DOCUMENT));
+        }
+    }
+    #[test]
+    fn utf16_extraction_matches_reference_units_and_lexical_containers() {
+        let u = |s: &str| s.encode_utf16().collect::<Vec<_>>();
+        for raw in [
+            vec![0xd83e],
+            vec![0xdd86],
+            vec![0xdd86, 0xd83e],
+            vec![0xd83e, 0xdd86],
+        ] {
+            let mut source = u(r#"{"s":""#);
+            source.extend(&raw);
+            source.extend(u(r#"","a":[""#));
+            source.extend(&raw);
+            source.extend(u(r#""]}"#));
+            assert_eq!(
+                extract_utf16(&source, &u("$.s"), false),
+                Ok(Some(raw.clone()))
+            );
+            let mut array = u(r#"[""#);
+            array.extend(&raw);
+            array.extend(u(r#""]"#));
+            assert_eq!(extract_utf16(&source, &u("$.a"), true), Ok(Some(array)));
+            assert!(exists_utf16(&source, &u("$.a[*]")));
+            let mut keyed = u(r#"{""#);
+            keyed.extend(&raw);
+            keyed.extend(u(r#"":7}"#));
+            let mut path = u(r#"$.""#);
+            path.extend(&raw);
+            path.push(34);
+            assert_eq!(extract_utf16(&keyed, &path, false), Ok(Some(u("7"))));
+            assert!(exists_utf16(&keyed, &path));
+        }
+        for (escape, units) in [
+            (r"\ud800", vec![0xd800]),
+            (r"\udc00\ud800", vec![0xdc00, 0xd800]),
+            (r"\ud83e\udd86", vec![0xd83e, 0xdd86]),
+        ] {
+            let source = u(&format!(r#"{{"s":"{escape}","a":["{escape}"]}}"#));
+            assert_eq!(extract_utf16(&source, &u("$.s"), false), Ok(Some(units)));
+            assert_eq!(
+                extract_utf16(&source, &u("$.a"), true),
+                Ok(Some(u(&format!(r#"["{escape}"]"#))))
+            );
+        }
+        let source = u(r#"{"s":"ok","a":[1],"bad":invalid}"#);
+        assert_eq!(extract_utf16(&source, &u("$.s"), false), Ok(Some(u("ok"))));
+        assert_eq!(extract_utf16(&source, &u("$.a"), true), Ok(Some(u("[1]"))));
+        assert_eq!(
+            extract_utf16(&source, &u("$.missing"), false),
+            Err(DOCUMENT)
+        );
+        assert!(!exists_utf16(&source, &u("$.s")));
+    }
+    #[test]
+    fn utf16_scalar_width_and_legacy_paths_remain_exact() {
+        let u = |s: &str| s.encode_utf16().collect::<Vec<_>>();
+        for size in [4000, 4001] {
+            let mut source = u(r#"{"s":""#);
+            source.extend(vec![0xd800; size]);
+            source.extend(u(r#""}"#));
+            assert_eq!(
+                extract_utf16(&source, &u("$.s"), false),
+                Ok((size == 4000).then(|| vec![0xd800; size]))
+            );
+            if size == 4001 {
+                assert_eq!(extract_utf16(&source, &u("strict $.s"), false), Err(WIDTH));
+            }
+        }
+        for source in [
+            r#"{"雪":{"a":[null,1.20e+2,"🦆"]},"x":"a\n"}"#,
+            r#"[{"x":1},{}]"#,
+            r#"{"x":1,"x":2}"#,
+            r#"{"x":1,"bad":invalid}"#,
+            "{}",
+            "null",
+            "",
+            r#"{"x":[1,]}"#,
+        ] {
+            for path in [
+                "$",
+                "$.x",
+                "strict $.missing",
+                "$.雪.a[2]",
+                "$.雪.a[1]",
+                "$[*].x",
+                "strict $[2]",
+                "$.[",
+                r#"$."雪".a[0]"#,
+            ] {
+                for query in [false, true] {
+                    assert_eq!(
+                        extract_utf16(&u(source), &u(path), query),
+                        extract(source, path, query).map(|v| v.map(|s| u(&s))),
+                        "{source} {path} {query}"
+                    );
+                }
+                assert_eq!(
+                    exists_utf16(&u(source), &u(path)),
+                    exists(source, path),
+                    "{source} {path}"
+                );
+            }
         }
     }
 }

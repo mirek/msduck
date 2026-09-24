@@ -60,7 +60,7 @@ use libduckdb_sys::{
     duckdb_destroy_scalar_function_set, duckdb_function_info, duckdb_scalar_function,
     duckdb_scalar_function_add_parameter, duckdb_scalar_function_set, duckdb_scalar_function_set_extra_info,
     duckdb_scalar_function_set_function, duckdb_scalar_function_set_name, duckdb_scalar_function_set_return_type,
-    duckdb_scalar_function_set_varargs, duckdb_scalar_function_set_volatile, duckdb_vector,
+    duckdb_scalar_function_set_special_handling, duckdb_scalar_function_set_varargs, duckdb_scalar_function_set_volatile, duckdb_vector,
 };
 
 use crate::{Error, callback::drop_boxed, core::LogicalTypeHandle};
@@ -130,6 +130,14 @@ impl ScalarFunction {
     pub fn set_volatile(&self) -> &Self {
         unsafe {
             duckdb_scalar_function_set_volatile(self.ptr);
+        }
+        self
+    }
+
+    /// Delegate NULL input/output handling to the callback.
+    pub fn set_special_handling(&self) -> &Self {
+        unsafe {
+            duckdb_scalar_function_set_special_handling(self.ptr);
         }
         self
     }

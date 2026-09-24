@@ -29471,5 +29471,859 @@
         }
       ]
     }
+  ],
+  "nullPaths": [
+    {
+      "source": "N'{}'",
+      "path": "NULL",
+      "operation": "JSON_VALUE",
+      "setup": "UPDATE dbo.unicode_json_source SET j=N'{}',p=NULL",
+      "sql": "SELECT JSON_VALUE(j,NULL) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of json_value function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "N'{}'",
+      "path": "NULL",
+      "operation": "JSON_QUERY",
+      "setup": "UPDATE dbo.unicode_json_source SET j=N'{}',p=NULL",
+      "sql": "SELECT JSON_QUERY(j,NULL) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "NVarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_QUERY function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "N'{}'",
+      "path": "NULL",
+      "operation": "JSON_PATH_EXISTS",
+      "setup": "UPDATE dbo.unicode_json_source SET j=N'{}',p=NULL",
+      "sql": "SELECT JSON_PATH_EXISTS(j,NULL) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_PATH_EXISTS function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "N'{}'",
+      "path": "CAST(NULL AS NVARCHAR(100))",
+      "operation": "JSON_VALUE",
+      "setup": "UPDATE dbo.unicode_json_source SET j=N'{}',p=NULL",
+      "sql": "SELECT JSON_VALUE(j,CAST(NULL AS NVARCHAR(100))) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_VALUE function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "N'{}'",
+      "path": "CAST(NULL AS NVARCHAR(100))",
+      "operation": "JSON_QUERY",
+      "setup": "UPDATE dbo.unicode_json_source SET j=N'{}',p=NULL",
+      "sql": "SELECT JSON_QUERY(j,CAST(NULL AS NVARCHAR(100))) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "NVarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_QUERY function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "N'{}'",
+      "path": "CAST(NULL AS NVARCHAR(100))",
+      "operation": "JSON_PATH_EXISTS",
+      "setup": "UPDATE dbo.unicode_json_source SET j=N'{}',p=NULL",
+      "sql": "SELECT JSON_PATH_EXISTS(j,CAST(NULL AS NVARCHAR(100))) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_PATH_EXISTS function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "N'{}'",
+      "path": "p",
+      "operation": "JSON_VALUE",
+      "setup": "UPDATE dbo.unicode_json_source SET j=N'{}',p=NULL",
+      "sql": "SELECT JSON_VALUE(j,p) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_VALUE function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "N'{}'",
+      "path": "p",
+      "operation": "JSON_QUERY",
+      "setup": "UPDATE dbo.unicode_json_source SET j=N'{}',p=NULL",
+      "sql": "SELECT JSON_QUERY(j,p) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "NVarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_QUERY function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "N'{}'",
+      "path": "p",
+      "operation": "JSON_PATH_EXISTS",
+      "setup": "UPDATE dbo.unicode_json_source SET j=N'{}',p=NULL",
+      "sql": "SELECT JSON_PATH_EXISTS(j,p) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_PATH_EXISTS function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "NULL",
+      "path": "NULL",
+      "operation": "JSON_VALUE",
+      "setup": "UPDATE dbo.unicode_json_source SET j=NULL,p=NULL",
+      "sql": "SELECT JSON_VALUE(j,NULL) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of json_value function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "NULL",
+      "path": "NULL",
+      "operation": "JSON_QUERY",
+      "setup": "UPDATE dbo.unicode_json_source SET j=NULL,p=NULL",
+      "sql": "SELECT JSON_QUERY(j,NULL) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "NVarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_QUERY function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "NULL",
+      "path": "NULL",
+      "operation": "JSON_PATH_EXISTS",
+      "setup": "UPDATE dbo.unicode_json_source SET j=NULL,p=NULL",
+      "sql": "SELECT JSON_PATH_EXISTS(j,NULL) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_PATH_EXISTS function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "NULL",
+      "path": "CAST(NULL AS NVARCHAR(100))",
+      "operation": "JSON_VALUE",
+      "setup": "UPDATE dbo.unicode_json_source SET j=NULL,p=NULL",
+      "sql": "SELECT JSON_VALUE(j,CAST(NULL AS NVARCHAR(100))) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_VALUE function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "NULL",
+      "path": "CAST(NULL AS NVARCHAR(100))",
+      "operation": "JSON_QUERY",
+      "setup": "UPDATE dbo.unicode_json_source SET j=NULL,p=NULL",
+      "sql": "SELECT JSON_QUERY(j,CAST(NULL AS NVARCHAR(100))) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "NVarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_QUERY function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "NULL",
+      "path": "CAST(NULL AS NVARCHAR(100))",
+      "operation": "JSON_PATH_EXISTS",
+      "setup": "UPDATE dbo.unicode_json_source SET j=NULL,p=NULL",
+      "sql": "SELECT JSON_PATH_EXISTS(j,CAST(NULL AS NVARCHAR(100))) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_PATH_EXISTS function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "NULL",
+      "path": "p",
+      "operation": "JSON_VALUE",
+      "setup": "UPDATE dbo.unicode_json_source SET j=NULL,p=NULL",
+      "sql": "SELECT JSON_VALUE(j,p) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_VALUE function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "NULL",
+      "path": "p",
+      "operation": "JSON_QUERY",
+      "setup": "UPDATE dbo.unicode_json_source SET j=NULL,p=NULL",
+      "sql": "SELECT JSON_QUERY(j,p) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "NVarChar",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_QUERY function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    },
+    {
+      "source": "NULL",
+      "path": "p",
+      "operation": "JSON_PATH_EXISTS",
+      "setup": "UPDATE dbo.unicode_json_source SET j=NULL,p=NULL",
+      "sql": "SELECT JSON_PATH_EXISTS(j,p) AS value FROM dbo.unicode_json_source",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 8116,
+            "state": 8,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Argument data type NULL is invalid for argument 2 of JSON_PATH_EXISTS function."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      }
+    }
   ]
 }

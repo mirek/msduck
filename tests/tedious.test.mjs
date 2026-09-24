@@ -6186,8 +6186,9 @@ test('JSON_VALUE and JSON_QUERY preserve paths text and lax strict behavior', { 
   const j='{"number":1.20e+2,"number":3,"boolean":true,"string":"a\\u0062","null":null,"object": { "x": 1 },"array":[10,20],"first name":"Ada"}'
   const r=await query(c,`SELECT JSON_VALUE(@j,'$.number'),JSON_VALUE(@j,'$.boolean'),JSON_VALUE(@j,'$.string'),JSON_VALUE(@j,'$.null'),JSON_VALUE(@j,'$.array[1]'),JSON_VALUE(@j,'$."first name"'),JSON_QUERY(@j,'$.object'),JSON_QUERY(@j,'$.array')`,[['j',TYPES.NVarChar,j]])
   assert.deepEqual(r.rows,[['1.20e+2','true','ab',null,'20','Ada','{ "x": 1 }','[10,20]']]);assert.ok(r.columns[0].slice(0,6).every(c=>c.dataLength===8000));assert.ok(r.columns[0].slice(6).every(c=>c.dataLength===65535))
-  assert.deepEqual((await query(c,"SELECT JSON_QUERY(@j),JSON_VALUE(@j,'$.missing'),JSON_QUERY(@j,'$.number'),JSON_VALUE(@j,'$.object'),JSON_QUERY(NULL),JSON_VALUE(@j,NULL)",[['j',TYPES.NVarChar,j]])).rows,[[j,null,null,null,null,null]])
+  assert.deepEqual((await query(c,"SELECT JSON_QUERY(@j),JSON_VALUE(@j,'$.missing'),JSON_QUERY(@j,'$.number'),JSON_VALUE(@j,'$.object'),JSON_QUERY(NULL)",[['j',TYPES.NVarChar,j]])).rows,[[j,null,null,null,null]])
   for(const [sql,number] of [["JSON_VALUE(@j,'strict $.missing')",13608],["JSON_VALUE(@j,'strict $.object')",13623],["JSON_QUERY(@j,'strict $.number')",13624],["JSON_VALUE(@j,'$.[')",13607],["JSON_QUERY('{bad}')",13609]]) await assert.rejects(query(c,`SELECT ${sql}`,[['j',TYPES.NVarChar,j]]),e=>e.number===number)
+  await assert.rejects(query(c,'SELECT JSON_VALUE(@j,NULL)',[['j',TYPES.NVarChar,j]]),e=>e.number===8116 && e.state===1)
   const long=JSON.stringify({s:'🦆'.repeat(2000)});assert.equal((await query(c,"SELECT JSON_VALUE(@j,'$.s')",[['j',TYPES.NVarChar,long]])).rows[0][0],'🦆'.repeat(2000))
   const tooLong=JSON.stringify({s:'🦆'.repeat(2000)+'x'});assert.deepEqual((await query(c,"SELECT JSON_VALUE(@j,'$.s')",[['j',TYPES.NVarChar,tooLong]])).rows,[[null]]);await assert.rejects(query(c,"SELECT JSON_VALUE(@j,'strict $.s')",[['j',TYPES.NVarChar,tooLong]]),e=>e.number===13625)
   const p=await prepare(c,'SELECT JSON_VALUE(@j,@p)',[['j',TYPES.NVarChar],['p',TYPES.NVarChar]])
@@ -6529,8 +6530,8 @@ test('DATALENGTH temporal widths retain scales casts catalog types and NULLs', {
 test('JSON_PATH_EXISTS preserves presence wildcard NULL and INT semantics', { timeout: 30000 }, async t => {
   const c = await start(t)
   const doc = '{"info":{"address":[{"town":null},{"city":"London"}]},"empty":[],"obj":{},"A":1,"a.b":{"雪":1}}'
-  const r = await query(c, `SELECT JSON_PATH_EXISTS(@j,'$.info.address[*].town'),JSON_PATH_EXISTS(@j,'$.info.address[0].town'),JSON_PATH_EXISTS(@j,'$.info.address[1].town'),JSON_PATH_EXISTS(@j,'$.empty'),JSON_PATH_EXISTS(@j,'$.empty[*]'),JSON_PATH_EXISTS(@j,'$.obj'),JSON_PATH_EXISTS(@j,'$.a'),JSON_PATH_EXISTS(@j,'$."a.b".雪'),JSON_PATH_EXISTS(@j,'strict $.absent'),JSON_PATH_EXISTS(NULL,'$'),JSON_PATH_EXISTS(@j,NULL)`, [['j', TYPES.NVarChar, doc]])
-  assert.deepEqual(r.rows, [[1,1,0,1,0,1,0,1,0,null,null]])
+  const r = await query(c, `SELECT JSON_PATH_EXISTS(@j,'$.info.address[*].town'),JSON_PATH_EXISTS(@j,'$.info.address[0].town'),JSON_PATH_EXISTS(@j,'$.info.address[1].town'),JSON_PATH_EXISTS(@j,'$.empty'),JSON_PATH_EXISTS(@j,'$.empty[*]'),JSON_PATH_EXISTS(@j,'$.obj'),JSON_PATH_EXISTS(@j,'$.a'),JSON_PATH_EXISTS(@j,'$."a.b".雪'),JSON_PATH_EXISTS(@j,'strict $.absent'),JSON_PATH_EXISTS(NULL,'$')`, [['j', TYPES.NVarChar, doc]])
+  assert.deepEqual(r.rows, [[1,1,0,1,0,1,0,1,0,null]])
   assert.ok(r.columns[0].every(col => col.type.name === 'IntN' && col.dataLength === 4))
   const p = await prepare(c, 'SELECT JSON_PATH_EXISTS(@j,@p)', [['j', TYPES.NVarChar], ['p', TYPES.NVarChar]])
   for (const [j, path, wanted] of [
@@ -6541,9 +6542,9 @@ test('JSON_PATH_EXISTS preserves presence wildcard NULL and INT semantics', { ti
     ['{}','$.bad[',0],
     [JSON.stringify({s:'🦆'.repeat(5000)}),'$.s',1],
     [null,'$',null],
-    ['{}',null,null],
     ['{"x":null}','$.x',1],
   ]) assert.deepEqual(await p.run({j,p:path}), [[wanted]])
+  await assert.rejects(p.run({j:'{}',p:null}),e=>e.number===8116 && e.state===8)
   await p.release()
   await query(c, `CREATE TABLE dbo.json_exists_input(id INT,j NVARCHAR(MAX),p NVARCHAR(100)); INSERT INTO dbo.json_exists_input VALUES(1,N'{"x":null}','$.x'),(2,N'{"y":1}','$.x'),(3,NULL,'$'),(4,N'{bad}','$')`)
   assert.deepEqual((await query(c, 'SELECT id FROM dbo.json_exists_input WHERE JSON_PATH_EXISTS(j,p)=1 ORDER BY id')).rows, [[1]])
