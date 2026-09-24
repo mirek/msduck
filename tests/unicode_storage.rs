@@ -21,6 +21,63 @@ fn bytes(session: &Session, sql: &str) -> Vec<Option<Vec<u8>>> {
 }
 
 #[test]
+fn ansi_storage_accepts_mixed_text_carriers_and_keeps_width_failure_atomic() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    execute(
+        &mut session,
+        "CREATE TABLE dbo.ansi_carriers(id INT,v VARCHAR(2),f CHAR(2)); INSERT INTO dbo.ansi_carriers VALUES(1,N'e',N'e'),(2,LEFT(N'€x',1),LEFT(N'€x',1)),(3,NULL,NULL)",
+    );
+    let rows = session
+        .db
+        .prepare("SELECT v,f FROM dbo.ansi_carriers ORDER BY id")
+        .unwrap()
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, Option<String>>(0)?,
+                r.get::<_, Option<String>>(1)?,
+            ))
+        })
+        .unwrap()
+        .collect::<duckdb::Result<Vec<_>>>()
+        .unwrap();
+    assert_eq!(
+        rows,
+        vec![
+            (Some("e".into()), Some("e ".into())),
+            (Some("€".into()), Some("€ ".into())),
+            (None, None)
+        ]
+    );
+    assert!(
+        !session
+            .batch_response(
+                "INSERT INTO dbo.ansi_carriers VALUES(4,N'ok',N'ok'),(5,LEFT(N'abcx',3),N'x')",
+                &Default::default(),
+                false,
+                None
+            )
+            .1
+    );
+    let count: i64 = session
+        .db
+        .query_row("SELECT count(*) FROM dbo.ansi_carriers", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 3);
+    execute(
+        &mut session,
+        "UPDATE dbo.ansi_carriers SET v=LEFT(N'€x',1),f=LEFT(N'€x',1) WHERE id=1",
+    );
+    let row: (String, String) = session
+        .db
+        .query_row("SELECT v,f FROM dbo.ansi_carriers WHERE id=1", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap();
+    assert_eq!(row, ("€".into(), "€ ".into()));
+}
+
+#[test]
 fn declared_unicode_columns_preserve_raw_units_and_atomic_width_checks() {
     let server = Server::open(":memory:").unwrap();
     let mut session = Session::new(server.connection().unwrap()).unwrap();

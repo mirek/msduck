@@ -44,10 +44,20 @@ pub fn alter_table(table: &AlterTable) -> Result<()> {
                                     | ColumnOption::Null
                                     | ColumnOption::NotNull
                                     | ColumnOption::Default(_)
+                                    | ColumnOption::Collation(_)
                             ) || crate::dialect::is_with_values(&option.option)),
                         "unsupported added column constraint"
                     );
                 }
+                ensure!(
+                    column_def
+                        .options
+                        .iter()
+                        .filter(|o| matches!(o.option, ColumnOption::Collation(_)))
+                        .count()
+                        <= 1,
+                    "multiple column collation declarations"
+                );
                 let with_values = column_def
                     .options
                     .iter()

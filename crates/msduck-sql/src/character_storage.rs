@@ -101,6 +101,17 @@ pub fn unicode_storage_type(kind: &DataType) -> Option<DataType> {
 
 pub fn convert_with_layout(value: Expr, kind: &DataType, layout: Layout) -> Option<Expr> {
     let spec = spec(kind)?;
+    if !spec.unicode {
+        return Some(crate::expr::binary_function(
+            if spec.fixed {
+                "__msduck_store_carrier_char"
+            } else {
+                "__msduck_store_carrier_varchar"
+            },
+            crate::expr::unary_function("__msduck_carrier_input", value),
+            Expr::Value(Value::Number(spec.width.to_string(), false).into()),
+        ));
+    }
     if matches!(layout, Layout::Utf16) {
         let function = match (spec.unicode, spec.fixed) {
             (true, false) => "__msduck_store_carrier_nvarchar",

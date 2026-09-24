@@ -163,16 +163,23 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
     // Bind each explicit source arm to the target's physical Unicode domain
     // before DuckDB tries to unify VALUES/UNION rows containing both VARCHAR
     // literals and raw UTF-16 carriers. Width validation remains target-side.
-    fn unicode_sources(body: &mut SetExpr, unicode: &[bool]) {
-        fn pack(value: &mut Expr) {
+    fn unicode_sources(body: &mut SetExpr, unicode: &[bool], ansi: &[bool]) {
+        fn pack(value: &mut Expr, ansi: bool) {
             *value = crate::engine::unary_function("__msduck_carrier_input", value.clone());
+            if ansi {
+                *value = crate::engine::binary_function(
+                    "__msduck_cast_carrier_varchar",
+                    value.clone(),
+                    msduck_sql::expr::number(-1),
+                );
+            }
         }
         match body {
             SetExpr::Values(values) => {
                 for row in &mut values.rows {
-                    for (value, unicode) in row.iter_mut().zip(unicode) {
-                        if *unicode {
-                            pack(value);
+                    for ((value, unicode), ansi) in row.iter_mut().zip(unicode).zip(ansi) {
+                        if *unicode || *ansi {
+                            pack(value, *ansi);
                         }
                     }
                 }
@@ -186,21 +193,21 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
                         )
                     }) =>
             {
-                for (item, unicode) in select.projection.iter_mut().zip(unicode) {
-                    if *unicode {
+                for ((item, unicode), ansi) in select.projection.iter_mut().zip(unicode).zip(ansi) {
+                    if *unicode || *ansi {
                         match item {
                             SelectItem::UnnamedExpr(value)
-                            | SelectItem::ExprWithAlias { expr: value, .. } => pack(value),
+                            | SelectItem::ExprWithAlias { expr: value, .. } => pack(value, *ansi),
                             _ => unreachable!(),
                         }
                     }
                 }
             }
             SetExpr::SetOperation { left, right, .. } => {
-                unicode_sources(left, unicode);
-                unicode_sources(right, unicode);
+                unicode_sources(left, unicode, ansi);
+                unicode_sources(right, unicode, ansi);
             }
-            SetExpr::Query(query) => unicode_sources(&mut query.body, unicode),
+            SetExpr::Query(query) => unicode_sources(&mut query.body, unicode, ansi),
             _ => {}
         }
     }
@@ -210,6 +217,10 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
             .iter()
             .map(|t| utf16.contains(&t.0.to_lowercase()))
             .collect::<Vec<_>>(),
+        &targets.iter().enumerate().map(|(i,t)| {
+            money_columns.get(i) != Some(&true) && matches!(target_kind(&t.1).and_then(|t| msduck_sql::sql_type::declaration(&t).ok()),
+                Some(msduck_core::types::Type::Character(t)) if matches!(t.family(), msduck_core::character::Family::Varchar | msduck_core::character::Family::Char))
+        }).collect::<Vec<_>>(),
     );
     // Describe the source without executing its rows. Binding the original
     // INSERT would apply DuckDB's rounding cast before our rewrite, rejecting

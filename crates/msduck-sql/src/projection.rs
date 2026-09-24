@@ -8,6 +8,7 @@ use msduck_core::catalog::TypeMetadata as Info;
 use sqlparser::ast::*;
 use std::collections::HashMap;
 
+pub mod character_extrema;
 mod collation_validation;
 mod constant_case;
 pub use collation_validation::{
@@ -365,6 +366,14 @@ fn expression_collation(
             let FunctionArguments::List(args) = &function.args else {
                 return None;
             };
+            if matches!(
+                function.name.to_string().to_ascii_uppercase().as_str(),
+                "MIN" | "MAX"
+            ) && crate::aggregate::validate(function).is_ok()
+                && let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] = args.args.as_slice()
+            {
+                return recurse(character_extrema::logical_source(value));
+            }
             if function.over.is_some()
                 || function.filter.is_some()
                 || function.null_treatment.is_some()

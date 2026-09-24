@@ -8,14 +8,63 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
     db.execute_batch(include_str!("columns.sql"))
 }
 
+/// SQL Server collation names belong to the logical declaration catalog, never
+/// DuckDB's physical column type (which may be a UTF-16 carrier STRUCT).
+pub fn lower_collation(column: &mut ColumnDef) -> Result<(), String> {
+    let Some(collation) = column_collation(column) else {
+        return Ok(());
+    };
+    if !matches!(
+        msduck_sql::sql_type::declaration(&column.data_type),
+        Ok(msduck_core::types::Type::Character(_))
+    ) {
+        return Err("COLLATE requires a character column declaration".into());
+    }
+    if column
+        .options
+        .iter()
+        .filter(|option| matches!(option.option, ColumnOption::Collation(_)))
+        .count()
+        != 1
+    {
+        return Err("multiple column collation declarations".into());
+    }
+    let name = collation_name(collation)?;
+    if crate::tds::collation::Collation::for_name(&name).is_none() {
+        return Err(format!("unsupported column collation {name}"));
+    }
+    column
+        .options
+        .retain(|option| !matches!(option.option, ColumnOption::Collation(_)));
+    Ok(())
+}
+
+fn collation_name(name: &ObjectName) -> Result<String, String> {
+    match name.0.as_slice() {
+        [ObjectNamePart::Identifier(id)] => Ok(id.value.clone()),
+        _ => Err("unsupported qualified column collation".into()),
+    }
+}
+
+fn column_collation(column: &ColumnDef) -> Option<&ObjectName> {
+    column
+        .options
+        .iter()
+        .find_map(|option| match &option.option {
+            ColumnOption::Collation(name) => Some(name),
+            _ => None,
+        })
+}
+
+type Declaration<'a> = (&'a Ident, &'a DataType, Option<&'a ObjectName>);
 pub fn record(db: &duckdb::Connection, statement: &Statement) -> anyhow::Result<()> {
-    let (name, columns): (&ObjectName, Vec<(&Ident, &DataType)>) = match statement {
+    let (name, columns): (&ObjectName, Vec<Declaration<'_>>) = match statement {
         Statement::CreateTable(table) => (
             &table.name,
             table
                 .columns
                 .iter()
-                .map(|c| (&c.name, &c.data_type))
+                .map(|c| (&c.name, &c.data_type, column_collation(c)))
                 .collect(),
         ),
         Statement::AlterTable(table) => (
@@ -24,13 +73,15 @@ pub fn record(db: &duckdb::Connection, statement: &Statement) -> anyhow::Result<
                 .operations
                 .iter()
                 .filter_map(|op| match op {
-                    AlterTableOperation::AddColumn { column_def, .. } => {
-                        Some((&column_def.name, &column_def.data_type))
-                    }
+                    AlterTableOperation::AddColumn { column_def, .. } => Some((
+                        &column_def.name,
+                        &column_def.data_type,
+                        column_collation(column_def),
+                    )),
                     AlterTableOperation::AlterColumn {
                         column_name,
                         op: AlterColumnOperation::SetDataType { data_type, .. },
-                    } => Some((column_name, data_type)),
+                    } => Some((column_name, data_type, None)),
                     _ => None,
                 })
                 .collect(),
@@ -45,7 +96,7 @@ pub fn record(db: &duckdb::Connection, statement: &Statement) -> anyhow::Result<
     let Some(object_id) = object_id else {
         return Ok(());
     };
-    for (column, kind) in columns {
+    for (column, kind, collation) in columns {
         let column_id: Option<i32> = db.query_row(
             "SELECT max(column_id) FROM main.__msduck_columns WHERE object_id=? AND lower(name)=lower(?)",
             duckdb::params![object_id, column.value],
@@ -58,6 +109,10 @@ pub fn record(db: &duckdb::Connection, statement: &Statement) -> anyhow::Result<
         )?;
         if let Some(s) = catalog_shape::declaration(kind) {
             db.execute("INSERT INTO main.__msduck_declared_columns SELECT ?,?,system_type_id,user_type_id,coalesce(?,max_length),coalesce(?,precision),coalesce(?,scale),collation_name FROM sys.types WHERE name=?",duckdb::params![object_id,column_id,s.length,s.precision,s.scale,s.name])?;
+            if let Some(collation) = collation {
+                let name = collation_name(collation).map_err(anyhow::Error::msg)?;
+                db.execute("UPDATE main.__msduck_declared_columns SET collation_name=? WHERE object_id=? AND column_id=?", duckdb::params![name,object_id,column_id])?;
+            }
         }
     }
     Ok(())

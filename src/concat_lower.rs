@@ -329,7 +329,9 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
                     if msduck_sql::money_cast::money_type(data_type).is_some());
             let json_consumer = matches!(expr, Expr::Function(function)
                 if matches!(function.name.to_string().to_ascii_uppercase().as_str(),
-                    "ISJSON" | "JSON_VALUE" | "JSON_QUERY" | "JSON_PATH_EXISTS" | "STRING_ESCAPE"));
+                    "ISJSON" | "JSON_VALUE" | "JSON_QUERY" | "JSON_PATH_EXISTS" | "STRING_ESCAPE"
+                    | "__MSDUCK_MIN_BIN2_UNICODE" | "__MSDUCK_MAX_BIN2_UNICODE"
+                    | "__MSDUCK_MIN_BIN2_ANSI" | "__MSDUCK_MAX_BIN2_ANSI"));
             // Only the direct migrated operand (through parentheses/casts) changes
             // representation. Descendant text producers own their own adapters.
             self.consumer.push(
@@ -344,11 +346,17 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
             let consumer = self.consumer.last() == Some(&true);
             let json_result = matches!(expr, Expr::Cast { expr: source, .. }
                 if msduck_sql::for_json::unicode_result(source));
+            let extrema_result = matches!(expr, Expr::Cast { expr: source, .. }
+                if msduck_sql::projection::character_extrema::bound_result(source));
             let known_carrier = matches!(expr, Expr::Cast { expr: source, .. }
                 if matches!(source.as_ref(), Expr::Function(f)
                     if matches!(f.name.to_string().as_str(),
                         "__msduck_cast_carrier_nvarchar" | "__msduck_cast_carrier_nchar")));
-            if (consumer || json_result || known_carrier || self.recursive.last() == Some(&true))
+            if (consumer
+                || json_result
+                || extrema_result
+                || known_carrier
+                || self.recursive.last() == Some(&true))
                 && let Expr::Cast {
                     expr: source,
                     data_type,
@@ -356,7 +364,7 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
                     format: None,
                 } = expr
                 && let Ok(Type::Character(target)) = msduck_sql::sql_type::declaration(data_type)
-                && matches!(target.family(), Family::Nchar | Family::Nvarchar)
+                && (extrema_result || matches!(target.family(), Family::Nchar | Family::Nvarchar))
             {
                 // typeof is bind-time only. Each selected branch evaluates its
                 // source once; ordinary numeric conversions retain the original
@@ -380,18 +388,23 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
                         std::ops::ControlFlow::Continue(())
                     }
                 }
-                if known_carrier || json_result {
+                if known_carrier || json_result || extrema_result {
                     // A nested normalized cast already has the exact physical type.
                     // Repeating a typeof dispatch would multiply the source AST.
                     dispatch = *source.clone();
+                    if extrema_result {
+                        dispatch =
+                            msduck_sql::expr::unary_function("__msduck_carrier_input", dispatch);
+                    }
                 } else {
                     let _ = VisitMut::visit(&mut dispatch, &mut Substitute(*source.clone()));
                 }
                 *expr = msduck_sql::expr::binary_function(
-                    if target.family() == Family::Nchar {
-                        "__msduck_cast_carrier_nchar"
-                    } else {
-                        "__msduck_cast_carrier_nvarchar"
+                    match target.family() {
+                        Family::Nchar => "__msduck_cast_carrier_nchar",
+                        Family::Nvarchar => "__msduck_cast_carrier_nvarchar",
+                        Family::Char => "__msduck_cast_carrier_char",
+                        Family::Varchar => "__msduck_cast_carrier_varchar",
                     },
                     dispatch,
                     msduck_sql::expr::number(match target.length() {

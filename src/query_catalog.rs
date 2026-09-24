@@ -91,7 +91,7 @@ fn contains_unicode_operations<T: Visit>(node: &T) -> bool {
     impl Visitor for Find {
         type Break = ();
         fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
-            if matches!(expr, Expr::Function(f) if matches!(f.name.to_string().to_ascii_uppercase().as_str(), "LOWER" | "UPPER"))
+            if matches!(expr, Expr::Function(f) if matches!(f.name.to_string().to_ascii_uppercase().as_str(), "LOWER" | "UPPER" | "MIN" | "MAX"))
                 || matches!(
                     expr,
                     Expr::Cast {
@@ -165,6 +165,12 @@ pub fn bind_unicode_operations<T: Visit + VisitMut>(
     impl VisitorMut for Annotate<'_> {
         type Break = msduck_core::diagnostic::SqlError;
         fn pre_visit_query(&mut self, query: &mut Query) -> std::ops::ControlFlow<Self::Break> {
+            if self.depth == 0
+                && let Err(error) =
+                    infer::character_extrema::annotate(self.catalog, query, self.scope)
+            {
+                return std::ops::ControlFlow::Break(error);
+            }
             if self.depth == 0
                 && let Err(error) =
                     infer::annotate_unicode_case_inputs(self.catalog, query, self.scope)

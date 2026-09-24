@@ -87,7 +87,7 @@ pub fn kind(
             data_type: Some(data_type),
             ..
         } => Some(data_type.clone()),
-        Expr::Nested(value) => kind(value, parameters, column),
+        Expr::Nested(value) | Expr::Collate { expr: value, .. } => kind(value, parameters, column),
         Expr::UnaryOp { op, expr } if matches!(op, UnaryOperator::Plus | UnaryOperator::Minus) => {
             let source = kind(expr, parameters, column)?;
             if *op == UnaryOperator::Minus
@@ -131,6 +131,17 @@ pub fn kind(
             Some(DataType::Nvarchar(Some(CharacterLength::Max)))
         }
         Expr::Function(f) => {
+            if matches!(
+                f.name.to_string().to_ascii_uppercase().as_str(),
+                "MIN" | "MAX"
+            ) && crate::aggregate::validate(f).is_ok()
+                && let FunctionArguments::List(args) = &f.args
+                && let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] = args.args.as_slice()
+                && let Some(source) = kind(value, parameters, column)
+                && crate::character_storage::is_character(&source)
+            {
+                return Some(source);
+            }
             if let Some(kind) = crate::replicate::result_type(expr, parameters, column)
                 .or_else(|| crate::left_right::result_type(expr, parameters, column))
             {

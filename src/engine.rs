@@ -2714,6 +2714,9 @@ impl VisitorMut for Translator<'_> {
                     }
                 }
                 if let AlterTableOperation::AddColumn { column_def, .. } = operation {
+                    if let Err(error) = crate::declared_columns::lower_collation(column_def) {
+                        return ControlFlow::Break(error);
+                    }
                     msduck_sql::money_cast::column(column_def);
                     if let Err(error) = crate::character_storage::column(column_def) {
                         return ControlFlow::Break(error);
@@ -2736,6 +2739,9 @@ impl VisitorMut for Translator<'_> {
         }
         if let Statement::CreateTable(table) = stmt {
             for col in &mut table.columns {
+                if let Err(error) = crate::declared_columns::lower_collation(col) {
+                    return ControlFlow::Break(error);
+                }
                 msduck_sql::money_cast::column(col);
                 if let Err(error) = crate::character_storage::column(col) {
                     return ControlFlow::Break(error);
@@ -2996,6 +3002,11 @@ impl VisitorMut for Translator<'_> {
         if let Err(error) = msduck_sql::money_format::lower(expr, self.parameters, &|_| None) {
             return ControlFlow::Break(error);
         }
+        if matches!(expr, Expr::Cast { expr: source, .. }
+            if msduck_sql::projection::character_extrema::bound_result(source))
+        {
+            crate::concat_lower::annotated_unicode_casts(expr);
+        }
         if let Err(error) = crate::varchar::lower(expr) {
             return ControlFlow::Break(error);
         }
@@ -3011,6 +3022,33 @@ impl VisitorMut for Translator<'_> {
         }
         if let Err(error) = crate::aggregate::mark(expr, self.parameters) {
             return ControlFlow::Break(error);
+        }
+        if msduck_sql::projection::character_extrema::lower(expr) {
+            crate::concat_lower::annotated_unicode_casts(expr);
+            let Expr::Function(function) = expr else {
+                unreachable!()
+            };
+            let ansi = function.name.to_string().ends_with("_ansi");
+            let FunctionArguments::List(args) = &mut function.args else {
+                unreachable!()
+            };
+            let FunctionArg::Unnamed(FunctionArgExpr::Expr(value)) = &mut args.args[0] else {
+                unreachable!()
+            };
+            fn operand(value: Expr) -> Expr {
+                match value {
+                    Expr::Nested(value) | Expr::Collate { expr: value, .. } => operand(*value),
+                    value => msduck_sql::expr::unary_function("__msduck_carrier_input", value),
+                }
+            }
+            *value = operand(value.clone());
+            if ansi {
+                *expr = msduck_sql::expr::binary_function(
+                    "__msduck_cast_carrier_varchar",
+                    expr.clone(),
+                    msduck_sql::expr::number(-1),
+                );
+            }
         }
         if let Err(error) = crate::percentile::lower(expr) {
             return ControlFlow::Break(error);
