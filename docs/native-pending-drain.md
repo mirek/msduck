@@ -42,3 +42,12 @@ workers during drain. A production design must preserve/classify those errors;
 this experiment does not establish that discarding a racing native error is safe.
 Ten-second elapsed assertions are failure bounds after native calls return, and
 the subprocess watchdog contains a hang; neither establishes a latency guarantee.
+
+## Verification
+
+At `9dbec5d3aed57d5648266541021b7902df3695d7`, the focused six-scenario probe,
+full `cargo test --workspace --locked`, `cargo fmt --all --check`, workspace
+all-targets build, and strict workspace all-targets Clippy passed on linux.local.
+The workspace run exercised the probe again successfully. No server/client
+compatibility pass is inferred from this native-only evidence. The final change
+after that revision only adds this verification paragraph.
