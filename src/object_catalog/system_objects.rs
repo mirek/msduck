@@ -57,12 +57,17 @@ pub(super) fn register(db: &Connection) -> Result<()> {
         db.query_row("SELECT CAST(current_timestamp AS VARCHAR)", [], |row| {
             row.get(0)
         })?;
-    db.execute_batch("BEGIN TRANSACTION")?;
+    db.execute_batch(
+        "BEGIN TRANSACTION;
+        CREATE TABLE main.__msduck_builtin_seed(
+            name VARCHAR, object_id INTEGER, principal_id INTEGER,
+            schema_id INTEGER, parent_object_id INTEGER, type VARCHAR,
+            type_desc VARCHAR, create_date VARCHAR, modify_date VARCHAR,
+            is_ms_shipped BOOLEAN, is_published BOOLEAN, is_schema_published BOOLEAN,
+            in_objects BOOLEAN, in_system_objects BOOLEAN);",
+    )?;
     let result: Result<()> = (|| {
-        let mut insert = db.prepare(
-            "INSERT INTO main.__msduck_builtin_objects VALUES (
-                ?,?,?,?,?,?,?,CAST(? AS TIMESTAMP),CAST(? AS TIMESTAMP),?,?,?,?,?)",
-        )?;
+        let mut appender = db.appender("__msduck_builtin_seed")?;
         for values in rows {
             let row = values.as_array().context("seed row is not an array")?;
             ensure!(
@@ -97,7 +102,7 @@ pub(super) fn register(db: &Connection) -> Result<()> {
                     .to_owned())
             };
             let principal_id = row[2].as_i64().map(i32::try_from).transpose()?;
-            insert.execute(duckdb::params![
+            appender.append_row(duckdb::params![
                 string(0)?,
                 integer(1)?,
                 principal_id,
@@ -114,6 +119,16 @@ pub(super) fn register(db: &Connection) -> Result<()> {
                 boolean(13)?,
             ])?;
         }
+        appender.flush()?;
+        drop(appender);
+        db.execute_batch(
+            "INSERT INTO main.__msduck_builtin_objects
+             SELECT name,object_id,principal_id,schema_id,parent_object_id,type,type_desc,
+                    CAST(create_date AS TIMESTAMP),CAST(modify_date AS TIMESTAMP),
+                    is_ms_shipped,is_published,is_schema_published,in_objects,in_system_objects
+             FROM main.__msduck_builtin_seed;
+             DROP TABLE main.__msduck_builtin_seed;",
+        )?;
         Ok(())
     })();
     if result.is_err() {
