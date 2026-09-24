@@ -1075,6 +1075,28 @@
       "dependencies": [],
       "issue": 105,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PIrSo"
+    },
+    {
+      "id": "drop-index-binding-v1",
+      "title": "Bind DROP INDEX ON to its declared table and preserve SQL Server diagnostics",
+      "state": "ready",
+      "authorization": "Direct owner continuing SQL Server compatibility goal and request for disjoint claimable work for parallel agents. Owner-run fresh SQL Server captures confirm DROP INDEX ddl_index ON dbo.ddl_plain succeeds, omits DONE row count, and uses command201. Current msduck forwards ON to DuckDB and fails syntax. No external content consumed.",
+      "scope": [
+        "crates/msduck-sql/src/drop_index.rs",
+        "crates/msduck-sql/tests/drop_index.rs",
+        "reference/drop-index.json",
+        "scripts/capture-drop-index.mjs",
+        "docs/drop-index.md"
+      ],
+      "acceptance": [
+        "Capture exact SQL Server success/error/completion behavior twice in fresh isolated databases: schema-qualified and quoted names, IF EXISTS, missing tables/indexes, wrong target table, same index name on different tables, multiple targets and unsupported options. Preserve raw failures and do not infer diagnostics.",
+        "Implement deterministic AST binding/lowering against explicit caller-supplied table/index catalog records. Never silently remove ON or drop a same-named index belonging to a different table. No I/O, DuckDB, sessions, environment or mutable global state in the pure module.",
+        "Test binding choices and errors with explicit catalogs and captured cases. The dedicated SQL integration test may include the new module by path; do not edit the currently owned SQL export file, engine, root library or manifests. Document the precise adapter contract for subsequent root integration.",
+        "Provide a focused PR with raw first-party fixtures, reproducible capture command and validation. This task establishes tested binding rules; root execution integration remains a separately owned follow-up and full DROP INDEX compatibility must not be claimed prematurely."
+      ],
+      "dependencies": [],
+      "issue": 107,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PIvRi"
     }
   ]
 }
