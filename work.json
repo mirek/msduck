@@ -1160,6 +1160,24 @@
       "dependencies": [],
       "issue": 114,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PI-HK"
+    },
+    {
+      "id": "catalog-resource-collation-v1",
+      "title": "Encode captured SQL Server resource catalog collation",
+      "state": "ready",
+      "authorization": "Direct owner continuing SQL Server compatibility goal. Owner-captured index catalog descriptors require Latin1_General_CI_AS_KS_WS for type_desc, currently absent from the deterministic TDS mapper. No external content consumed.",
+      "scope": [
+        "crates/msduck-tds/src/collation.rs",
+        "crates/msduck-tds/tests/catalog_collation.rs"
+      ],
+      "acceptance": [
+        "Recognize the exact captured resource collation without suffix inference or changing unknown-name behavior.",
+        "Verify all five descriptor bytes and NVARCHAR metadata against the owner-captured index-catalog fixture, including case-insensitive name lookup.",
+        "Keep encoding deterministic and separate from SQL comparison support; run deterministic tests, strict Clippy and formatting."
+      ],
+      "dependencies": [],
+      "issue": 118,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJI1w"
     }
   ]
 }
