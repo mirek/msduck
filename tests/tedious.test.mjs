@@ -9126,3 +9126,23 @@ test('index catalog exposes captured descriptors and transactional table-owned n
   await query(c, 'DROP TABLE dbo.catalog_a')
   assert.deepEqual((await query(c, sql)).rows, [expected[1]])
 })
+
+
+test('DROP INDEX binds table ownership and preserves successful earlier drops', { timeout: 20000 }, async t => {
+  const c = await start(t)
+  await query(c, 'CREATE TABLE dbo.drop_a(id INT); CREATE TABLE dbo.drop_b(id INT); CREATE INDEX shared ON dbo.drop_a(id); CREATE INDEX shared ON dbo.drop_b(id)')
+  const inventory = "SELECT OBJECT_NAME(object_id),name FROM sys.indexes WHERE name IS NOT NULL ORDER BY object_id,name"
+  const before = (await query(c, inventory)).rows
+  assert.equal(before.length, 2)
+  await assert.rejects(query(c, 'DROP INDEX shared ON dbo.drop_a, absent ON dbo.drop_b'), e => e.number === 3701 && e.state === 7 && e.class === 11)
+  assert.deepEqual((await query(c, inventory)).rows, [['drop_b', 'shared']])
+  await query(c, 'BEGIN TRAN')
+  await query(c, 'DROP INDEX shared ON dbo.drop_b WITH(ONLINE=OFF)')
+  assert.deepEqual((await query(c, inventory)).rows, [])
+  await query(c, 'ROLLBACK')
+  assert.deepEqual((await query(c, inventory)).rows, [['drop_b', 'shared']])
+  await query(c, 'DROP INDEX IF EXISTS absent ON dbo.drop_a, shared ON dbo.drop_b')
+  assert.deepEqual((await query(c, inventory)).rows, [])
+  await assert.rejects(query(c, 'DROP INDEX shared'), e => e.number === 159 && e.class === 15)
+  assert.deepEqual((await query(c, 'SELECT 7 AS recovered')).rows, [[7]])
+})

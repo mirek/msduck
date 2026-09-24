@@ -4856,9 +4856,8 @@ mod ddl_completion_tests {
             ("ALTER TABLE dbo.ddl_plain ADD extra INT", 216, None),
             ("ALTER TABLE dbo.ddl_plain DROP COLUMN extra", 216, None),
             ("TRUNCATE TABLE dbo.ddl_plain", 234, None),
-            // DROP INDEX ... ON remains unsupported (retained in the raw audit).
-            // Create this index after ALTER/TRUNCATE, then drop its table below.
             ("CREATE INDEX ddl_index ON dbo.ddl_plain(v)", 200, None),
+            ("DROP INDEX ddl_index ON dbo.ddl_plain", 201, None),
             ("DROP TABLE dbo.ddl_plain", 199, None),
             ("DROP TABLE dbo.ddl_identity", 199, None),
             ("DROP SCHEMA ddl_schema", 253, None),
