@@ -9258,6 +9258,52 @@ test('system object and schema projections retain captured descriptors across ca
   }
 })
 
+test('all_objects exposes captured built-ins and transactional user membership over TDS', { timeout: 30000 }, async t => {
+  const fixture = JSON.parse(readFileSync(new URL('../reference/all-objects.json', import.meta.url), 'utf8'))
+  const observations = new Map(fixture.runs[0].map(entry => [entry.name, entry]))
+  const c = await start(t)
+  for (const view of ['all_objects', 'objects', 'system_objects']) {
+    const observation = observations.get(`${view} descriptor`)
+    const actual = canonical(await capture(c, observation.sql))
+    assert.deepEqual(actual.errors, [], view)
+    assert.deepEqual(actual.sets[0].rows, [], view)
+    assert.deepEqual(actual.sets[0].columns, observation.result.sets[0].columns, view)
+  }
+
+  const full = observations.get('fresh full catalog')
+  const actual = canonical(await capture(c, full.sql))
+  assert.deepEqual(actual.errors, [])
+  const expectedRows = full.result.sets[0].rows
+  const actualRows = actual.sets[0].rows
+  assert.equal(actualRows.length, expectedRows.length)
+  const byId = new Map(actualRows.map(row => [row[1], row]))
+  assert.equal(byId.size, expectedRows.length)
+  for (const expected of expectedRows) {
+    const row = byId.get(expected[1])
+    assert.ok(row, `missing built-in object ${expected[0]}`)
+    const normalized = [...expected]
+    if (expected[0] === 'wpr_bucket_table') {
+      // SQL Server generates these two dates when its system catalog is created.
+      normalized[7] = row[7]
+      normalized[8] = row[8]
+    }
+    assert.deepEqual(row, normalized, `built-in object ${expected[0]}`)
+  }
+
+  await query(c, 'CREATE TABLE dbo.all_objects_wire(id INT)')
+  const membership = () => query(c, "SELECT o.object_id,u.object_id,s.object_id FROM sys.all_objects o LEFT JOIN sys.objects u ON u.object_id=o.object_id LEFT JOIN sys.system_objects s ON s.object_id=o.object_id WHERE o.name=N'all_objects_wire'")
+  const created = (await membership()).rows
+  assert.equal(created.length, 1)
+  assert.ok(created[0][0] > 0)
+  assert.deepEqual(created[0], [created[0][0], created[0][0], null])
+  await query(c, 'BEGIN TRAN; DROP TABLE dbo.all_objects_wire')
+  assert.deepEqual((await membership()).rows, [])
+  await query(c, 'ROLLBACK')
+  assert.deepEqual((await membership()).rows, created)
+  await query(c, 'DROP TABLE dbo.all_objects_wire')
+  assert.deepEqual((await membership()).rows, [])
+})
+
 
 test('object catalog CHAR type values retain padding and filter semantics', { timeout: 20000 }, async t => {
   const { canonical } = await import('../scripts/lib/compatibility.mjs')
