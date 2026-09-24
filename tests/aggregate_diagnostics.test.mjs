@@ -35,10 +35,10 @@ async function orderedCapture(connection, sql) {
 const fixture = JSON.parse(await readFile(new URL('../reference/aggregate-warnings.json', import.meta.url), 'utf8'))
 const boundaries = JSON.parse(await readFile(new URL('../reference/aggregate-warning-boundaries.json', import.meta.url), 'utf8'))
 
-test('window diagnostics match consumed frames including empty frames and COUNT', async t => {
+async function replayBoundaries(t, samples, artifact) {
   const connection = await start(t)
   const records = []
-  for (const sample of boundaries.results.filter(sample => sample.id.includes('-window-'))) {
+  for (const sample of samples) {
     for (const sql of [...sample.setup, `SET ANSI_WARNINGS ${sample.mode}`]) {
       assert.deepEqual((await capture(connection, sql)).errors, [], sql)
     }
@@ -52,8 +52,17 @@ test('window diagnostics match consumed frames including empty frames and COUNT'
     records.push({ id: sample.id, actual, expected: sample.executions, differences: differences(actual, sample.executions) })
   }
   await mkdir('artifacts/compatibility', { recursive: true })
-  await writeFile('artifacts/compatibility/aggregate-window-boundaries.json', JSON.stringify(records, null, 2) + '\n')
+  await writeFile(`artifacts/compatibility/${artifact}.json`, JSON.stringify(records, null, 2) + '\n')
   assert.deepEqual(records.flatMap(record => record.differences.map(difference => ({ id: record.id, ...difference }))), [])
+}
+
+test('window diagnostics match consumed frames including empty frames and COUNT', async t => {
+  await replayBoundaries(t, boundaries.results.filter(sample => sample.id.includes('-window-')), 'aggregate-window-boundaries')
+})
+
+test('DML and scalar assignment diagnostics match reference state and completion order', async t => {
+  const selected = new Set(['insert-select', 'insert-empty-source', 'insert-grouped', 'update-scalar', 'update-no-targets', 'delete-subquery', 'select-into', 'select-assignment', 'set-subquery', 'declare-subquery'])
+  await replayBoundaries(t, boundaries.results.filter(sample => selected.has(sample.id.slice(sample.mode.length + 1))), 'aggregate-consumer-boundaries')
 })
 
 test('prepared aggregate executions keep diagnostic state isolated and honor setting changes', async t => {

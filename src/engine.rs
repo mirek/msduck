@@ -1430,8 +1430,12 @@ impl Session {
                         Some(DeclareAssignment::MsSqlAssignment(value)) => *value.clone(),
                         _ => bail!("unsupported variable initializer"),
                     };
-                    let value =
-                        self.evaluate_scalar(expression, crate::sql_type::ast(kind), parameters)?;
+                    let value = self.evaluate_scalar_observed(
+                        expression,
+                        crate::sql_type::ast(kind),
+                        parameters,
+                        Some(diagnostics),
+                    )?;
                     parameters.insert(
                         name,
                         Parameter {
@@ -1465,7 +1469,12 @@ impl Session {
                     .ok_or_else(|| anyhow::anyhow!("Must declare the scalar variable {name}"))?
                     .data_type;
                 let value = self
-                    .evaluate_scalar(values[0].clone(), crate::sql_type::ast(kind), parameters)
+                    .evaluate_scalar_observed(
+                        values[0].clone(),
+                        crate::sql_type::ast(kind),
+                        parameters,
+                        Some(diagnostics),
+                    )
                     .map_err(|error| {
                         if error
                             .downcast_ref::<SqlError>()
@@ -2288,20 +2297,40 @@ impl Session {
         data_type: DataType,
         parameters: &HashMap<String, Parameter>,
     ) -> Result<Value> {
+        self.evaluate_scalar_observed(expression, data_type, parameters, None)
+    }
+
+    fn evaluate_scalar_observed(
+        &self,
+        expression: Expr,
+        data_type: DataType,
+        parameters: &HashMap<String, Parameter>,
+        diagnostics: Option<&crate::statement_diagnostics::Scope>,
+    ) -> Result<Value> {
         let expression = Expr::Cast {
             kind: CastKind::Cast,
             expr: Box::new(expression),
             data_type,
             format: None,
         };
-        self.evaluate_expression(expression, parameters, false)
+        self.evaluate_expression_observed(expression, parameters, false, diagnostics)
     }
 
     fn evaluate_expression(
         &self,
+        expression: Expr,
+        parameters: &HashMap<String, Parameter>,
+        predicate: bool,
+    ) -> Result<Value> {
+        self.evaluate_expression_observed(expression, parameters, predicate, None)
+    }
+
+    fn evaluate_expression_observed(
+        &self,
         mut expression: Expr,
         parameters: &HashMap<String, Parameter>,
         predicate: bool,
+        diagnostics: Option<&crate::statement_diagnostics::Scope>,
     ) -> Result<Value> {
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
@@ -2340,10 +2369,24 @@ impl Session {
             {
                 bail!(error);
             }
+            if let Some(diagnostics) = diagnostics {
+                crate::aggregate_diagnostics::bind_expressions(
+                    &mut checked.query,
+                    diagnostics,
+                    &mut translator.values,
+                );
+            }
             (checked.query.to_string(), true)
         } else {
             if let ControlFlow::Break(error) = VisitMut::visit(&mut expression, &mut translator) {
                 bail!(error);
+            }
+            if let Some(diagnostics) = diagnostics {
+                crate::aggregate_diagnostics::bind_expressions(
+                    &mut expression,
+                    diagnostics,
+                    &mut translator.values,
+                );
             }
             (format!("SELECT {expression}"), false)
         };

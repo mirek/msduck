@@ -38,9 +38,11 @@ suppresses this diagnostic; this does not implement its other arithmetic or
 truncation semantics. Errors drop the scope but do not yet retain warnings from
 partially executed work.
 
-Instrumentation currently visits query statements only. Persisted definitions
-must never retain execution tickets. Aggregates inside stored views and DML
-consumers require additional integration.
+Instrumentation visits query statements and ordinary INSERT/UPDATE/DELETE
+execution. SET and DECLARE scalar subqueries receive the owning statement's
+scope explicitly, including checked scalar plans. Persisted definitions must
+never retain execution tickets. Aggregates inside stored views and specialized
+DML execution paths still require additional integration.
 
 Keep the distinction between all-NULL and empty groups, and preserve diagnostics
 when HAVING removes every row. Do not insert a separate NULL-probing query or
@@ -121,3 +123,13 @@ than the original native aggregate. It is a correctness correction under
 verification, not a completed performance design; bounded-memory staging or
 native aggregate observation remains necessary before treating it as ready for
 large workloads. The other boundary defects above remain open.
+
+## DML and assignment integration under verification
+
+The native session regression passes for ordinary INSERT, UPDATE, DELETE,
+SET and DECLARE, with ANSI_WARNINGS ON/OFF and an UPDATE with no target rows.
+Assignment evaluators share the caller-owned statement scope instead of creating
+a separate warning channel. Preparation does not receive an execution scope.
+Twenty exact DML/assignment reference programs are included in the client replay;
+verification against the rebuilt server is pending. This does not yet resolve
+stored-view expansion, joined OUTPUT paths or partial-error warning ordering.
