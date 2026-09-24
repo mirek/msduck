@@ -28,7 +28,7 @@
     {
       "id": "coordination-v1",
       "title": "Establish owner-only intake and exclusive agent claims",
-      "state": "ready",
+      "state": "done",
       "scope": [
         "scripts/agent-work.mjs",
         "scripts/lib/agent-work.mjs",
@@ -1543,7 +1543,7 @@
     {
       "id": "all-objects-reference-v1",
       "title": "Capture SQL Server all_objects catalog membership and metadata",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility and independently claimable work goals. Engine cancellation integration at 045bddc reproduced missing sys.all_objects; publish a disjoint reference task so another worker can establish catalog requirements without touching active engine scopes.",
       "scope": [
         "scripts/capture-all-objects.mjs",
