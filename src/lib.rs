@@ -9,6 +9,7 @@ pub(crate) use msduck_sql::{
     window_frame, window_placement,
 };
 pub(crate) use msduck_sql::{case_types, choose, nullif, percentile, predicate, ranking};
+pub mod request_control;
 pub mod rpc;
 pub mod server;
 pub mod tds;
