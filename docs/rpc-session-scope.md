@@ -32,7 +32,7 @@ Rust session state is authoritative. DATEFIRST is synchronized into DuckDB
 before evaluation and after transaction completion, so RPC restoration itself
 cannot fail inside an aborted native transaction or replace the original error.
 A native regression verifies restoration and recovery after a constraint error.
-Full workspace, aggregate-diagnostic and client verification remain pending.
+All 679 workspace Rust tests, strict Clippy and 13 standard aggregate/character checks pass. The existing opt-in aggregate boundary audit is skipped because it retains unrelated known gaps. Full client verification remains pending.
 
 Existing temporal and aggregate tests now establish persistent settings through
 SQL batch, preserving their query/result assertions. They no longer depend on
@@ -41,7 +41,7 @@ the prior RPC leak. The upstream mssqlite review found that
 cannot supply this session-scope implementation.
 
 This does not establish all SET options, non-English language behavior, stored-procedure
-nesting, prepared execution, transaction failures or Attention/cancellation.
+nesting, prepared execution beyond the traces below, full transaction behavior or Attention/cancellation.
 Those boundaries need additional evidence before claiming general restoration.
 
 ## Prepared execution
