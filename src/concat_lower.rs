@@ -295,19 +295,50 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
             std::ops::ControlFlow::Continue(())
         }
         fn pre_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<()> {
+            let inherited = self.consumer.last().copied().unwrap_or(false);
+            let unicode_cast = matches!(expr,
+                Expr::Cast { data_type, kind: CastKind::Cast, format: None, .. }
+                    if matches!(msduck_sql::sql_type::declaration(data_type),
+                        Ok(Type::Character(target)) if matches!(target.family(), Family::Nchar | Family::Nvarchar)));
+            if unicode_cast && (inherited || self.recursive.last() == Some(&true)) {
+                // Operand annotation can revisit a leaf through several enclosing
+                // expressions. Reapplying an identical character cast is idempotent;
+                // keep the first conversion, including its truncation and errors.
+                if let Expr::Cast {
+                    expr: source,
+                    data_type,
+                    ..
+                } = expr
+                {
+                    loop {
+                        let Expr::Cast {
+                            expr: inner,
+                            data_type: inner_type,
+                            kind: CastKind::Cast,
+                            format: None,
+                        } = source.as_ref()
+                        else {
+                            break;
+                        };
+                        if inner_type != data_type {
+                            break;
+                        }
+                        *source = inner.clone();
+                    }
+                }
+            }
             let currency_cast = matches!(expr,
                 Expr::Cast { data_type, .. } | Expr::Convert { data_type: Some(data_type), .. }
                     if msduck_sql::money_cast::money_type(data_type).is_some());
             let json_consumer = matches!(expr, Expr::Function(function)
                 if matches!(function.name.to_string().to_ascii_uppercase().as_str(),
                     "ISJSON" | "JSON_VALUE" | "JSON_QUERY" | "JSON_PATH_EXISTS" | "STRING_ESCAPE"));
-            // Only the direct migrated operand (through parentheses) changes
+            // Only the direct migrated operand (through parentheses/casts) changes
             // representation. Descendant text producers own their own adapters.
             self.consumer.push(
                 currency_cast
                     || json_consumer
-                    || matches!(expr, Expr::Nested(_))
-                        && self.consumer.last().copied().unwrap_or(false),
+                    || (unicode_cast || matches!(expr, Expr::Nested(_))) && inherited,
             );
             std::ops::ControlFlow::Continue(())
         }
@@ -346,7 +377,16 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
                         std::ops::ControlFlow::Continue(())
                     }
                 }
-                let _ = VisitMut::visit(&mut dispatch, &mut Substitute(*source.clone()));
+                let known_carrier = matches!(source.as_ref(), Expr::Function(f)
+                    if matches!(f.name.to_string().as_str(),
+                        "__msduck_cast_carrier_nvarchar" | "__msduck_cast_carrier_nchar"));
+                if known_carrier {
+                    // A nested normalized cast already has the exact physical type.
+                    // Repeating a typeof dispatch would multiply the source AST.
+                    dispatch = *source.clone();
+                } else {
+                    let _ = VisitMut::visit(&mut dispatch, &mut Substitute(*source.clone()));
+                }
                 *expr = msduck_sql::expr::binary_function(
                     if target.family() == Family::Nchar {
                         "__msduck_cast_carrier_nchar"

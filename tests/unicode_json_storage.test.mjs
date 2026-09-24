@@ -77,6 +77,11 @@ test('JSON document construction from stored Unicode values completes inside UPD
   const { readFile } = await import('node:fs/promises')
   const fixture = JSON.parse(await readFile(new URL('../reference/unicode-json-storage.json',import.meta.url),'utf8'))
   const c = await start(t)
-  await query(c,fixture.results[0].setup)
-  assert.deepEqual((await query(c,'SELECT j FROM dbo.unicode_json_source')).rows,[[null]])
+  for (const item of fixture.results) {
+    await query(c,item.setup)
+    const document = item.operations.find(op => op.operation === 'document')
+    const expected = document.result.sets[0].rows.map(row => row.map(value =>
+      value?.kind === 'binary' ? Buffer.from(value.value,'hex') : value))
+    assert.deepEqual((await query(c,document.sql)).rows,expected,`${item.type}: ${item.sample}`)
+  }
 })
