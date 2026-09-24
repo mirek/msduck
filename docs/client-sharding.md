@@ -83,5 +83,13 @@ two-worker run took 861859 ms but failed: 403 passed and the BIT aggregate
 validation matrix hit its unchanged 20000 ms deadline. That matrix had taken
 17813 ms in the passing baseline. Both runs accounted for all 404 tests with
 no skips or missing identities, and the binary hash remained unchanged. The
-runner correctly returned failure; this is not a passing speedup result. CI
-integration remains pending resolution and a complete passing comparison.
+runner correctly returned failure; this is not a passing speedup result.
+
+The separate test-only follow-up `52142d4` splits the BIT matrix into four
+aggregate cases and one widening case, retaining the assertions and unchanged
+20-second deadlines. With that test file, the same executable and two CPUs
+passed all 408 tests in 862726 ms, with no missing/repeated identities, skips,
+cancellations or changed inputs. The assertion workload is retained, but test
+granularity and startup count changed, so this is not identical test source to
+the 404-test baseline. The observed wall-time ratio is 1.70 versus that baseline.
+CI integration remains a separate change; this runner stays opt-in.
