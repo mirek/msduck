@@ -1495,6 +1495,28 @@
       "dependencies": [],
       "issue": 158,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJ9T5"
+    },
+    {
+      "id": "rust-pending-read-v1",
+      "title": "Expose worker-owned cancellable materialized reads through Rust",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. PR159 provides guarded native drain with racing-error retention. Add a Rust prepared-read adapter driven only by an atomic cancellation flag; no server activation. Existing root native-pending-error-drain-v1 claim owns native eligibility helper changes.",
+      "scope": [
+        "vendor/duckdb/src/pending_read.rs",
+        "vendor/duckdb/src/lib.rs",
+        "vendor/duckdb/src/raw_statement.rs",
+        "vendor/duckdb/src/statement.rs",
+        "tests/cancellable_read.rs",
+        "docs/cancellable-read.md"
+      ],
+      "acceptance": [
+        "Return a distinct cancelled outcome, preserve native errors and Arrow results, bind parameters normally and keep all native task/interrupt/drain operations on the owning worker.",
+        "Reject backend-ineligible prepared statements before pending execution, handle pre-cancelled requests without effects, retain pending/result ownership and document side-effecting SELECT eligibility and preparation/streaming limitations.",
+        "Test completed/empty/NULL/parameterized results, active cancellation and explicit transaction reuse, native failure and write rejection; run Linux workspace, strict Clippy and formatting checks."
+      ],
+      "dependencies": [],
+      "issue": 160,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJ_CS"
     }
   ]
 }
