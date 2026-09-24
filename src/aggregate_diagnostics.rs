@@ -73,6 +73,46 @@ mod tests {
     use crate::{engine::Session, server::Server};
 
     #[test]
+    fn disabled_warnings_do_not_require_available_diagnostic_contexts() {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        assert!(
+            session
+                .batch_response("SET ANSI_WARNINGS OFF", &Default::default(), false, None)
+                .1
+        );
+        let scopes = (0..4096)
+            .map(|_| session.diagnostic_scope().unwrap())
+            .collect::<Vec<_>>();
+        assert!(session.diagnostic_scope().is_err());
+        for sql in [
+            "SELECT MIN(v) FROM (VALUES(1),(NULL)) d(v)",
+            "SELECT COUNT(v) OVER(ORDER BY id ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM (VALUES(1,CAST(NULL AS INT)),(2,2)) d(id,v)",
+            "DECLARE @v INT=(SELECT MIN(v) FROM (VALUES(1),(NULL)) d(v)); SET @v=(SELECT MAX(v) FROM (VALUES(2),(NULL)) d(v)); SELECT @v",
+            "SET ANSI_WARNINGS ON",
+        ] {
+            let (tokens, ok) = session.batch_response(sql, &Default::default(), false, None);
+            assert!(ok, "{sql}: {tokens:?}");
+        }
+        assert!(
+            !session
+                .batch_response("SELECT 1", &Default::default(), false, None)
+                .1
+        );
+        drop(scopes);
+        let (tokens, ok) = session.batch_response(
+            "SELECT MIN(v) FROM (VALUES(1),(NULL)) d(v)",
+            &Default::default(),
+            false,
+            None,
+        );
+        assert!(ok, "{tokens:?}");
+        let mut warning = Vec::new();
+        super::append_warning(&mut warning);
+        assert!(tokens.windows(warning.len()).any(|bytes| bytes == warning));
+    }
+
+    #[test]
     fn dml_and_scalar_assignments_share_their_statement_diagnostics() {
         let server = Server::open(":memory:").unwrap();
         let mut session = Session::new(server.connection().unwrap()).unwrap();

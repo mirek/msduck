@@ -26,7 +26,7 @@ DuckDB connection for existing adapter code.
 
 ## Execution integration under verification
 
-Each statement execution now allocates an owned scope. After logical binding
+Each statement execution with ANSI_WARNINGS ON allocates an owned scope. After logical binding
 and backend lowering, a deterministic AST pass wraps recognized unary aggregate
 operands with the observation expression below. Root execution binds the ticket
 as an additional BLOB parameter. COUNT(*) remains unchanged. Result metadata is
@@ -37,6 +37,13 @@ completion token when the scope observed NULL and ANSI_WARNINGS is ON. OFF
 suppresses this diagnostic; this does not implement its other arithmetic or
 truncation semantics. Errors drop the scope but do not yet retain warnings from
 partially executed work.
+
+With ANSI_WARNINGS OFF, execution receives no diagnostic scope, binds no ticket,
+and leaves the native aggregate plan uninstrumented, including windows and
+scalar assignments. Switching ON takes effect for the next statement. This
+avoids diagnostic allocation and frame materialization when warning 8153 is
+disabled; it does not change the remaining ANSI arithmetic policy gaps. The
+ON path still needs a scalable alternative to materializing window frames.
 
 Instrumentation visits query statements and ordinary INSERT/UPDATE/DELETE
 execution. SET and DECLARE scalar subqueries receive the owning statement's

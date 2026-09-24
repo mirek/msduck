@@ -1332,9 +1332,17 @@ impl Session {
         parameters: &mut HashMap<String, Parameter>,
         autocommit: bool,
     ) -> Result<Execution> {
-        let diagnostics = self.diagnostic_scope()?;
-        let mut result = self.execute_observed(statement, parameters, autocommit, &diagnostics)?;
-        if self.ansi_warnings && diagnostics.null_eliminated() {
+        let diagnostics = self
+            .ansi_warnings
+            .then(|| self.diagnostic_scope())
+            .transpose()?;
+        let mut result =
+            self.execute_observed(statement, parameters, autocommit, diagnostics.as_ref())?;
+        if self.ansi_warnings
+            && diagnostics
+                .as_ref()
+                .is_some_and(|scope| scope.null_eliminated())
+        {
             crate::aggregate_diagnostics::append_warning(&mut result.tokens);
         }
         Ok(result)
@@ -1345,7 +1353,7 @@ impl Session {
         mut statement: Statement,
         parameters: &mut HashMap<String, Parameter>,
         autocommit: bool,
-        diagnostics: &crate::statement_diagnostics::Scope,
+        diagnostics: Option<&crate::statement_diagnostics::Scope>,
     ) -> Result<Execution> {
         validate_transaction_syntax(&statement)?;
         if let Statement::Print(print) = &statement {
@@ -1434,7 +1442,7 @@ impl Session {
                         expression,
                         crate::sql_type::ast(kind),
                         parameters,
-                        Some(diagnostics),
+                        diagnostics,
                     )?;
                     parameters.insert(
                         name,
@@ -1473,7 +1481,7 @@ impl Session {
                         values[0].clone(),
                         crate::sql_type::ast(kind),
                         parameters,
-                        Some(diagnostics),
+                        diagnostics,
                     )
                     .map_err(|error| {
                         if error
@@ -1736,13 +1744,16 @@ impl Session {
         }
         crate::insert::lower(&self.db, &mut statement, &money_columns)?;
         crate::update::lower(&self.db, &mut statement, &money_assignments)?;
-        let ticket = Expr::Value(
-            sqlparser::ast::Value::Placeholder(format!("${}", translator.values.len() + 1)).into(),
-        );
-        if crate::aggregate_diagnostics::instrument(&mut statement, ticket) > 0 {
-            translator
-                .values
-                .push(Value::Blob(diagnostics.ticket().to_vec()));
+        if let Some(diagnostics) = diagnostics {
+            let ticket = Expr::Value(
+                sqlparser::ast::Value::Placeholder(format!("${}", translator.values.len() + 1))
+                    .into(),
+            );
+            if crate::aggregate_diagnostics::instrument(&mut statement, ticket) > 0 {
+                translator
+                    .values
+                    .push(Value::Blob(diagnostics.ticket().to_vec()));
+            }
         }
         // Identity parameters are integer constants, not numeric result expressions.
         match (identity_source.as_ref(), &mut statement) {
