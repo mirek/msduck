@@ -154,8 +154,11 @@ NULL frames, all-NULL typed operands, 6000 volatile evaluations, and exact
 counts across 100000 expanding frames. A generated-expression test counts
 6000 non-NULL sequence values and checks both prefix counts and sequence usage;
 it makes no assumption about which sequence value is assigned to each row.
-All twelve focused client tests and all 640 workspace Rust tests pass on Linux.
-The full standard client suite and diagnostic audit remain under verification.
+All twelve focused client tests, all 640 workspace Rust tests and all 404
+standard client tests pass on Linux for the runtime committed at `094a9a7`.
+The client run had zero failures or cancellations and took 1072761ms. The
+325-case diagnostic capture remains under verification; passing client tests
+does not establish equivalence for the unresolved boundary programs below.
 
 ## DML and assignment integration under verification
 
