@@ -1,6 +1,15 @@
 //! Validated SQL character types and deterministic storage / CAST rules.
-use crate::encoding::{decode_cp1252, encode_cp1252};
+use crate::encoding::decode_cp1252;
 use std::{borrow::Cow, fmt};
+
+// Exhaustive SQL Server captures for the six supported non-SC CP1252
+// collations, reproduced with two fresh pinned containers. This is SQL's
+// best-fit conversion; strict encoding at the wire boundary stays separate.
+// See reference/windows-1252-best-fit.json and its capture script.
+const WINDOWS_1252: &[u8; 65536] = include_bytes!("character/windows_1252.bin");
+fn ansi_bytes(units: impl Iterator<Item = u16>) -> Vec<u8> {
+    units.map(|unit| WINDOWS_1252[usize::from(unit)]).collect()
+}
 
 pub const TRUNCATED: &str = "String or binary data would be truncated.";
 pub const INVALID_LENGTH: &str = "invalid character column length";
@@ -107,8 +116,8 @@ impl CharacterType {
         Ok(Self { family, length })
     }
     /// Explicit character conversion under the current non-SC collation.
-    /// Surrogates convert individually to '?' for ANSI targets. Other best-fit
-    /// code-page mappings remain unsupported rather than silently substituted.
+    /// ANSI targets use SQL Server's captured per-unit best-fit mapping;
+    /// surrogate halves each convert to '?', including a valid pair.
     pub fn cast_utf16(self, source: &[u16]) -> Result<ConvertedUnicode, Error> {
         let width = match self.length {
             Length::Max => source.len(),
@@ -127,17 +136,7 @@ impl CharacterType {
         } else {
             source.len()
         });
-        for &unit in source {
-            if (0xd800..=0xdfff).contains(&unit) {
-                bytes.push(b'?');
-            } else {
-                let ch = char::from_u32(u32::from(unit)).expect("BMP non-surrogate");
-                let mut utf8 = [0; 4];
-                bytes.extend(
-                    encode_cp1252(ch.encode_utf8(&mut utf8)).map_err(|_| Error::Unrepresentable)?,
-                );
-            }
-        }
+        bytes.extend(source.iter().map(|unit| WINDOWS_1252[usize::from(*unit)]));
         if self.family.fixed() {
             bytes.resize(width, b' ');
         }
@@ -168,7 +167,14 @@ impl CharacterType {
             }
             self.unicode_prefix(text, width).map(Cow::into_owned)
         } else {
-            let mut bytes = encode_cp1252(text).map_err(|_| Error::Unrepresentable)?;
+            // Width checks precede best-fit conversion: U+2000 maps to an
+            // ordinary space, but is not discardable Unicode trailing space.
+            if let Length::Bounded(width) = self.length
+                && text.trim_end_matches(' ').encode_utf16().count() > usize::from(width)
+            {
+                return Err(Error::Truncated);
+            }
+            let mut bytes = ansi_bytes(text.encode_utf16());
             if let Length::Bounded(width) = self.length {
                 let width = usize::from(width);
                 if bytes
@@ -205,7 +211,7 @@ impl CharacterType {
             }
             self.unicode_prefix(text, width)
         } else {
-            let mut bytes = encode_cp1252(text).map_err(|_| Error::Unrepresentable)?;
+            let mut bytes = ansi_bytes(text.encode_utf16());
             if let Length::Bounded(width) = self.length {
                 let width = usize::from(width);
                 if bytes.len() > width {
@@ -385,7 +391,7 @@ mod tests {
         );
         let c = CharacterType::new(Family::Char, Length::Bounded(2)).unwrap();
         assert_eq!(c.cast("123", CastInput::SmallInteger).unwrap(), "* ");
-        assert_eq!(v.cast("🦆", CastInput::Text), Err(Error::Unrepresentable));
+        assert_eq!(v.cast("🦆", CastInput::Text).unwrap(), "??");
         let n = CharacterType::new(Family::Nvarchar, Length::Bounded(2)).unwrap();
         assert_eq!(n.cast("🦆x", CastInput::Text).unwrap(), "🦆");
         assert_eq!(

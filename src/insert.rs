@@ -164,22 +164,15 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
     // before DuckDB tries to unify VALUES/UNION rows containing both VARCHAR
     // literals and raw UTF-16 carriers. Width validation remains target-side.
     fn unicode_sources(body: &mut SetExpr, unicode: &[bool], ansi: &[bool]) {
-        fn pack(value: &mut Expr, ansi: bool) {
+        fn pack(value: &mut Expr) {
             *value = crate::engine::unary_function("__msduck_carrier_input", value.clone());
-            if ansi {
-                *value = crate::engine::binary_function(
-                    "__msduck_cast_carrier_varchar",
-                    value.clone(),
-                    msduck_sql::expr::number(-1),
-                );
-            }
         }
         match body {
             SetExpr::Values(values) => {
                 for row in &mut values.rows {
                     for ((value, unicode), ansi) in row.iter_mut().zip(unicode).zip(ansi) {
                         if *unicode || *ansi {
-                            pack(value, *ansi);
+                            pack(value);
                         }
                     }
                 }
@@ -197,7 +190,7 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
                     if *unicode || *ansi {
                         match item {
                             SelectItem::UnnamedExpr(value)
-                            | SelectItem::ExprWithAlias { expr: value, .. } => pack(value, *ansi),
+                            | SelectItem::ExprWithAlias { expr: value, .. } => pack(value),
                             _ => unreachable!(),
                         }
                     }
