@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 use anyhow::{Result, bail, ensure};
 
+pub mod attention_completion;
 pub mod collation;
 pub mod framing;
 pub mod request_lifecycle;
