@@ -73,12 +73,14 @@ pub fn register(db: &Connection) -> Result<()> {
 
 /// Remove stale logical records after transactional object synchronization. A
 /// replacement table with the same name cannot inherit an older table's index.
+/// The caller must synchronize logical objects after every DDL mutation. Native
+/// DuckDB OIDs are used only for current ownership joins; they change on reopen.
 pub fn sync(db: &Connection) -> Result<()> {
     db.execute_batch("DELETE FROM main.__msduck_index_catalog c WHERE NOT EXISTS(
         SELECT 1 FROM sys.objects o JOIN sys.schemas s USING(schema_id)
         JOIN duckdb_tables() t ON t.schema_name=s.name AND t.table_name=o.name
         JOIN duckdb_indexes() i ON i.schema_name=c.backend_schema AND i.index_name=c.backend_name AND i.table_oid=t.table_oid
-        WHERE o.object_id=c.object_id AND o.type='U' AND t.table_oid=c.table_oid);
+        WHERE o.object_id=c.object_id AND o.type='U');
         DELETE FROM main.__msduck_index_keys k WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_index_catalog c WHERE c.incarnation=k.incarnation)")?;
     Ok(())
 }
@@ -88,7 +90,7 @@ pub fn acquire(db: &Connection) -> Result<Vec<Index>> {
     Ok(db.prepare("SELECT c.object_id,c.index_id,c.name,c.is_unique,c.incarnation,c.backend_schema,c.backend_name
         FROM main.__msduck_index_catalog c JOIN sys.objects o ON o.object_id=c.object_id AND o.type='U'
         JOIN sys.schemas s ON s.schema_id=o.schema_id
-        JOIN duckdb_tables() t ON t.schema_name=s.name AND t.table_name=o.name AND t.table_oid=c.table_oid
+        JOIN duckdb_tables() t ON t.schema_name=s.name AND t.table_name=o.name
         JOIN duckdb_indexes() i ON i.schema_name=c.backend_schema AND i.index_name=c.backend_name AND i.table_oid=t.table_oid
         ORDER BY c.object_id,c.index_id")?.query_map([], |r| Ok(Index {
             object_id:r.get(0)?,index_id:r.get(1)?,name:r.get(2)?,unique:r.get(3)?,incarnation:r.get(4)?,backend_schema:r.get(5)?,backend_name:r.get(6)?,
