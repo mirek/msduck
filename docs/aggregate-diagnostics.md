@@ -24,20 +24,29 @@ unaccompanied `duckdb::Connection`. The wrapper prevents losing execution
 services during ordinary connection cloning. `Session::db` remains the native
 DuckDB connection for existing adapter code.
 
-## Remaining work
+## Execution integration under verification
 
-Warning 8153 is not emitted yet. Registration and ownership alone do not observe
-public aggregate inputs. The deterministic binder still needs a plan that
-materializes each operand once and places observation according to captured
-aggregate semantics. Root execution must allocate and retain its scope, bind
-the ticket, collect its flag after execution, and emit the warning after rows
-and before DONE under the correct ANSI_WARNINGS policy.
+Each statement execution now allocates an owned scope. After logical binding
+and backend lowering, a deterministic AST pass wraps recognized unary aggregate
+operands with the observation expression below. Root execution binds the ticket
+as an additional BLOB parameter. COUNT(*) remains unchanged. Result metadata is
+bound before instrumentation, independently of the ticket and runtime values.
+
+Successful statements append warning 8153 after result tokens and before their
+completion token when the scope observed NULL and ANSI_WARNINGS is ON. OFF
+suppresses this diagnostic; this does not implement its other arithmetic or
+truncation semantics. Errors drop the scope but do not yet retain warnings from
+partially executed work.
+
+Instrumentation currently visits query statements only. Persisted definitions
+must never retain execution tickets. Aggregates inside stored views and DML
+consumers require additional integration.
 
 Keep the distinction between all-NULL and empty groups, and preserve diagnostics
 when HAVING removes every row. Do not insert a separate NULL-probing query or
 evaluate volatile operands twice. Window frames, correlated execution, errors,
 cancellation and DML consumers need exact reference coverage. The reference
-contract is in [PR #98](https://github.com/mirek/msduck/pull/98); this integration
+contract is in [the captured reference](aggregate-warnings.md); this integration
 must retain its raw diagnostics and ordering rather than ignore them for a pass.
 
 ## Single-evaluation operand mechanism
@@ -57,7 +66,19 @@ integer, DECIMAL(38,10), VARCHAR, binary, TIME_NS and Unicode STRUCT payloads,
 including an unpaired surrogate and a typed NULL carrier. This avoids requiring
 a second source query or global materialization merely to inspect NULLness.
 
-The binder must still construct the expression as AST, preserve original logical
-metadata, bind the ticket independently of parameter values, and verify placement
-against the reference matrix. This mechanism alone does not prove window-frame,
-optimizer, partial-error or warning-completion behavior.
+The AST pass parses only a fixed backend template and substitutes caller-owned
+operand and ticket nodes without revisiting inserted expressions. Pure tests
+check single occurrence, identifier preservation, DISTINCT, windows and COUNT(*).
+The full 126-case client replay compares values, descriptors, diagnostics,
+completion state and event order, retaining raw differences under
+`artifacts/compatibility/aggregate-warnings-ON.json` and `-OFF.json`.
+All 126 captured programs now match exactly, including event order and the
+TRY/CATCH completion reset of @@ROWCOUNT. The prepared-execution regression
+passes with repeated nullable/nonnullable inputs and setting changes. All seven
+character-extrema tests also pass, including the five exact BIN2 reference
+comparisons that previously retained 20 missing warning messages. Pure AST
+tests and strict workspace/all-target Clippy pass.
+
+These checks cover the captured window and optimizer shapes, not every frame
+or rewrite. Partial errors, stored aggregate views and DML remain incomplete;
+full workspace/client/audit verification is recorded separately by revision.

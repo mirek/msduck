@@ -156,6 +156,7 @@ pub struct Session {
     pub original_login: String,
     transaction_name: String,
     xact_abort: bool,
+    ansi_warnings: bool,
     transaction_doomed: bool,
     caught_error: Option<SqlError>,
 }
@@ -183,6 +184,7 @@ impl Session {
             original_login: "sa".into(),
             transaction_name: String::new(),
             xact_abort: false,
+            ansi_warnings: true,
             transaction_doomed: false,
             caught_error: None,
         })
@@ -586,6 +588,9 @@ impl Session {
             }
             if let Some(previous) = work.restore_error {
                 self.caught_error = previous;
+                // END TRY/CATCH resets @@ROWCOUNT even when no exception was
+                // raised. An informational aggregate warning is not an error.
+                self.rowcount = 0;
                 if let Some(offset) = control_done(&mut out, rpc, self.nocount, 351) {
                     last_done = Some(offset);
                 }
@@ -1323,9 +1328,24 @@ impl Session {
     }
     fn execute_inner(
         &mut self,
+        statement: Statement,
+        parameters: &mut HashMap<String, Parameter>,
+        autocommit: bool,
+    ) -> Result<Execution> {
+        let diagnostics = self.diagnostic_scope()?;
+        let mut result = self.execute_observed(statement, parameters, autocommit, &diagnostics)?;
+        if self.ansi_warnings && diagnostics.null_eliminated() {
+            crate::aggregate_diagnostics::append_warning(&mut result.tokens);
+        }
+        Ok(result)
+    }
+
+    fn execute_observed(
+        &mut self,
         mut statement: Statement,
         parameters: &mut HashMap<String, Parameter>,
         autocommit: bool,
+        diagnostics: &crate::statement_diagnostics::Scope,
     ) -> Result<Execution> {
         validate_transaction_syntax(&statement)?;
         if let Statement::Print(print) = &statement {
@@ -1489,6 +1509,12 @@ impl Session {
                     .execute_batch("SET VARIABLE __msduck_datefirst = 7")?;
             }
             let normalized = statement.to_string().to_uppercase().replace(" = ", " ");
+            if matches!(
+                normalized.as_str(),
+                "SET ANSI_WARNINGS ON" | "SET ANSI_WARNINGS OFF"
+            ) {
+                self.ansi_warnings = normalized.ends_with(" ON");
+            }
             if matches!(
                 normalized.as_str(),
                 "SET XACT_ABORT ON" | "SET XACT_ABORT OFF"
@@ -1701,6 +1727,14 @@ impl Session {
         }
         crate::insert::lower(&self.db, &mut statement, &money_columns)?;
         crate::update::lower(&self.db, &mut statement, &money_assignments)?;
+        let ticket = Expr::Value(
+            sqlparser::ast::Value::Placeholder(format!("${}", translator.values.len() + 1)).into(),
+        );
+        if crate::aggregate_diagnostics::instrument(&mut statement, ticket) > 0 {
+            translator
+                .values
+                .push(Value::Blob(diagnostics.ticket().to_vec()));
+        }
         // Identity parameters are integer constants, not numeric result expressions.
         match (identity_source.as_ref(), &mut statement) {
             (Some(Statement::CreateTable(original)), Statement::CreateTable(table)) => {
@@ -2366,6 +2400,7 @@ fn session_setting(statement: &Statement) -> Result<Option<bool>> {
             "SET ANSI_NULL_DFLT_ON ON",
             "SET ANSI_PADDING ON",
             "SET ANSI_WARNINGS ON",
+            "SET ANSI_WARNINGS OFF",
             "SET ARITHABORT ON",
             "SET QUOTED_IDENTIFIER ON",
             "SET CONCAT_NULL_YIELDS_NULL ON",
