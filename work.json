@@ -697,6 +697,24 @@
       "dependencies": [],
       "issue": 69,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHYXS"
+    },
+    {
+      "id": "column-collation-storage-v1",
+      "title": "Retain explicit column collations across backend DDL lowering",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. First-party task69 captured BIN2 client setup exposed CREATE TABLE COLLATE being rejected by DuckDB and declared_columns.record ignoring explicit collation. No external content used. Shared engine changes remain under original task26 receipt.",
+      "scope": [
+        "src/declared_columns.rs",
+        "tests/column_collation_storage.test.mjs"
+      ],
+      "acceptance": [
+        "Preserve supported explicit character column collations in logical catalog metadata for CREATE TABLE and ADD COLUMN, with unchanged source declarations and transactional catalog recording. Do not pass SQL Server collation identifiers into DuckDB physical DDL.",
+        "Validate declared collation before stripping physical metadata; reject unsupported names and noncharacter applications explicitly rather than silently accepting them. Shared translator integration remains under original task26 root claim.",
+        "Test sys.columns metadata, restart persistence, BIN2 selection and failed DDL rollback through public clients. Do not claim implementation of missing linguistic comparison weights. Run applicable workspace and client checks."
+      ],
+      "dependencies": [],
+      "issue": 70,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHaMQ"
     }
   ]
 }
