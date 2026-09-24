@@ -95,6 +95,10 @@ fn contains_unicode_operations<T: Visit>(node: &T, binary_only: bool) -> bool {
         fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
             if !self.binary_only
                 && matches!(expr, Expr::Function(f) if matches!(f.name.to_string().to_ascii_uppercase().as_str(), "LOWER" | "UPPER" | "MIN" | "MAX"))
+                || matches!(expr,
+                    Expr::Cast { data_type, .. } | Expr::Convert { data_type: Some(data_type), .. }
+                    if matches!(data_type, DataType::Nvarchar(_))
+                    || matches!(data_type, DataType::Custom(name, _) if name.to_string().eq_ignore_ascii_case("nchar")))
                 || matches!(
                     expr,
                     Expr::Cast {

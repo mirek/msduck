@@ -351,7 +351,9 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
             let known_carrier = matches!(expr, Expr::Cast { expr: source, .. }
                 if matches!(source.as_ref(), Expr::Function(f)
                     if matches!(f.name.to_string().as_str(),
-                        "__msduck_cast_carrier_nvarchar" | "__msduck_cast_carrier_nchar")));
+                        "__msduck_cast_carrier_nvarchar" | "__msduck_cast_carrier_nchar"
+                        | "__msduck_binary_nvarchar" | "__msduck_binary_nchar"
+                        | "__msduck_try_binary_nvarchar" | "__msduck_try_binary_nchar")));
             if (consumer
                 || json_result
                 || extrema_result
@@ -364,7 +366,9 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
                     format: None,
                 } = expr
                 && let Ok(Type::Character(target)) = msduck_sql::sql_type::declaration(data_type)
-                && (extrema_result || matches!(target.family(), Family::Nchar | Family::Nvarchar))
+                && (extrema_result
+                    || known_carrier
+                    || matches!(target.family(), Family::Nchar | Family::Nvarchar))
             {
                 // typeof is bind-time only. Each selected branch evaluates its
                 // source once; ordinary numeric conversions retain the original
@@ -399,6 +403,24 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
                 } else {
                     let _ = VisitMut::visit(&mut dispatch, &mut Substitute(*source.clone()));
                 }
+                let cast_width = match target.family() {
+                    Family::Nvarchar => {
+                        msduck_sql::expression_metadata::character::nvarchar_cast_width(data_type)
+                            .ok()
+                            .map(|n| n.map(i32::from).unwrap_or(-1))
+                    }
+                    Family::Nchar => {
+                        msduck_sql::expression_metadata::character::nchar_cast_width(data_type)
+                            .ok()
+                            .flatten()
+                            .map(i32::from)
+                    }
+                    Family::Varchar | Family::Char => {
+                        msduck_sql::expression_metadata::character::varchar_cast_width(data_type)
+                            .ok()
+                            .map(|n| if n == u16::MAX { -1 } else { i32::from(n) })
+                    }
+                };
                 *expr = msduck_sql::expr::binary_function(
                     match target.family() {
                         Family::Nchar => "__msduck_cast_carrier_nchar",
@@ -407,10 +429,10 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
                         Family::Varchar => "__msduck_cast_carrier_varchar",
                     },
                     dispatch,
-                    msduck_sql::expr::number(match target.length() {
+                    msduck_sql::expr::number(cast_width.unwrap_or_else(|| match target.length() {
                         Length::Max => -1,
                         Length::Bounded(n) => i32::from(n),
-                    }),
+                    })),
                 );
             }
             std::ops::ControlFlow::Continue(())

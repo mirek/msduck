@@ -31,6 +31,7 @@ use msduck_core::{types::Type as SqlType, value::Value as ParameterValue};
 fn runtime_diagnostic(message: &str) -> Option<SqlError> {
     crate::json_extract::diagnostic(message)
         .or_else(|| crate::integer_conversion::diagnostic(message))
+        .or_else(|| crate::binary_unicode::diagnostic(message))
         .or_else(|| crate::query_error::integer_overflow(message))
         .or_else(|| {
             msduck_core::left_right::diagnostic(
