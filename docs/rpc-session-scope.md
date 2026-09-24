@@ -1,6 +1,6 @@
 # RPC session setting scope
 
-`reference/rpc-session-scope.json` retains 14 scenarios captured twice in fresh
+`reference/rpc-session-scope.json` retains 24 batch/direct-RPC scenarios captured twice in fresh
 SQL Server databases, then independently recaptured against the retained file.
 Reproduce with `node scripts/capture-rpc-session-scope.mjs` using the pinned
 reference container. Each scenario records a SQL-batch baseline, an execution
@@ -25,14 +25,16 @@ complete scenarios. Its eight differences are:
 - The LANGUAGE SQL-batch scenario omits informational message 5703.
 
 Runtime revision `783cf874401274fdd01a00fa443217ec03f051f1` matches all 14
-complete scenarios and passes 29 focused client tests. DATEFIRST and
+original scenarios and passes 29 focused client tests. DATEFIRST and
 ANSI_WARNINGS restore alongside NOCOUNT and XACT_ABORT at the RPC boundary;
 SQL-batch settings persist. The captured batch language message is emitted.
 Rust session state is authoritative. DATEFIRST is synchronized into DuckDB
 before evaluation and after transaction completion, so RPC restoration itself
 cannot fail inside an aborted native transaction or replace the original error.
 A native regression verifies restoration and recovery after a constraint error.
-All 679 workspace Rust tests, strict Clippy and 13 standard aggregate/character checks pass. The existing opt-in aggregate boundary audit is skipped because it retains unrelated known gaps. Full client verification remains pending.
+All 679 workspace Rust tests, strict Clippy, 13 standard aggregate/character
+checks and 458 client tests pass at that revision. The existing opt-in aggregate
+boundary audit is skipped because it retains unrelated known gaps.
 
 Existing temporal and aggregate tests now establish persistent settings through
 SQL batch, preserving their query/result assertions. They no longer depend on
@@ -64,3 +66,13 @@ ANSI_WARNINGS trace and six of eight complete execution/reuse observations.
 The zero and NULL cases instead report error 50000 and end the request, omitting
 the subsequent result and completion events. These are retained compatibility
 gaps; the fixture does not normalize them away.
+
+Runtime revision `d106f0d` corrects the retained DATEFIRST error/continuation
+gaps and matches all 24 batch/direct-RPC cases plus both complete prepared
+traces. All 41 focused temporal/session clients pass. Invalid DATEFIRST reports
+2742 and ends only the SET statement. Subsequent queries run with unchanged
+settings. The RPC adapter passes prepared execution identity explicitly:
+sp_execute retains status -6 after these errors, while successful follow-up
+statements through sp_executesql reset its status to 0. The reference includes
+the same parameterized SQL through both paths to establish this distinction.
+Expanded workspace and full-client verification are still in progress.
