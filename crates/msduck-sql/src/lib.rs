@@ -93,6 +93,7 @@ pub mod replicate;
 
 pub mod left_right;
 
+pub mod aggregate_diagnostics;
 pub mod output;
 pub mod output_bind;
 pub mod output_join;

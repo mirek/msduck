@@ -21,15 +21,19 @@ fresh active ticket for every execution. The callback validates the 16-byte
 ticket before reading its bytes, caches one resolved ticket per vector, and
 retains no native pointers after returning.
 
-## Required integration
+## Execution integration
 
-The observer is not automatically registered in ordinary sessions and public SQL
-is not rewritten yet. This change does not emit warning 8153 or complete the
-aggregate-warning feature. The next integration must pass the same registry
-explicitly from the database owner to each session and create a scope for each
-statement execution. It must preserve statement scope through internal helper
-queries, collect the flag after execution, apply the session's ANSI_WARNINGS
-policy, and emit at most one warning before that statement's DONE token. See
+The server registers the observer once and carries the matching registry into
+its connection wrappers and sessions. With ANSI_WARNINGS ON, statement execution
+opens a scope, instruments supported aggregate expressions and binds its ticket.
+Successful execution emits at most one warning 8153 before the statement's DONE
+token when the scope recorded NULL elimination. Internal scalar queries used by
+SET and DECLARE share their statement's scope. With ANSI_WARNINGS OFF, execution
+opens no diagnostic scope and leaves aggregate expressions uninstrumented.
+See [aggregate diagnostic integration](aggregate-diagnostics.md) for the exact
+reference coverage and remaining gaps, including stored views, specialized DML
+and warnings from partially executed failures. These mechanisms do not establish
+complete aggregate-warning compatibility. See
 [the warning reference contract](https://github.com/mirek/msduck/blob/8e399bb/docs/aggregate-warnings.md)
 for captured SQL Server behavior.
 
@@ -42,6 +46,15 @@ aggregate inputs after filtering and match reference window-frame behavior;
 a generic pre-scan of a table is insufficient. Counts of rows and constants must not observe unrelated
 nullable columns. TOP(0), empty inputs, correlated execution, DISTINCT, errors,
 cancellation and DML consumers need reference-driven integration coverage.
+
+COUNT windows use a separate native aggregate, `__msduck_count_frame`, returning
+the count and a NULL-elimination flag as a STRUCT. Its fixed-size state contains
+no frame values and performs no statement observation during update or combine.
+The scalar observer consumes the flag only from a returned frame result, so
+unused intermediate window states cannot emit warnings. Other window aggregates
+currently collect frame values with LIST; their wide-frame time and memory cost
+remains unresolved. Grouped aggregates use a singleton binding to evaluate the
+operand once before observing its NULLness.
 
 Native regressions exercise a materialized 6000-row volatile source, empty and
 all-NULL inputs, HAVING without result rows, concurrent windowed queries on

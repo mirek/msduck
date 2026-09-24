@@ -34,10 +34,14 @@ workstreams and bounded tasks. Readiness is informational: workers discover only
 the owner-approved registry and claim through `scripts/agent-work.mjs`.
 See [exclusive claims and owner-only intake](agent-work.md).
 
-During the owner-requested integration checkpoint (#93), the full
-**Workspace and clients** check is temporarily non-blocking for merging to main;
-**Deterministic crates** remains required with strict up-to-date checking.
-The full workflow still runs and its failures remain visible. See
-[the checkpoint](integration-checkpoint.md) for ancestry, revision-specific
-verification, retained failures and the requirement to restore the full gate
-once its reproducible failures are resolved.
+The temporary merge exception for the owner-requested integration checkpoint
+(#93) ended on 2026-09-24. Both **Deterministic crates** and **Workspace and
+clients** are required again, with strict up-to-date checking. The complete
+[CI run on main](https://github.com/mirek/msduck/actions/runs/35973323293)
+passed at `6016b8605189b347e81fe48f3f17bee1f127314f`, including Rust tests,
+independent clients and diagnostic capture. Passing capture is not full SQL
+Server equivalence.
+
+[The checkpoint](integration-checkpoint.md) records the earlier consolidation,
+temporary gate and retained compatibility gaps. Owner-only intake and permanent
+claim protections remain unchanged.

@@ -116,5 +116,6 @@ pub mod tls;
 
 pub mod authentication;
 
+mod aggregate_diagnostics;
 mod concat_lower;
 pub mod statement_diagnostics;

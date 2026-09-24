@@ -147,6 +147,7 @@ impl<'a> Work<'a> {
 }
 pub struct Session {
     pub db: Connection,
+    diagnostics: crate::statement_diagnostics::Registry,
     pub nocount: bool,
     pub transactions: u32,
     pub rowcount: u64,
@@ -155,11 +156,13 @@ pub struct Session {
     pub original_login: String,
     transaction_name: String,
     xact_abort: bool,
+    ansi_warnings: bool,
     transaction_doomed: bool,
     caught_error: Option<SqlError>,
 }
 impl Session {
-    pub fn new(db: Connection) -> Result<Self> {
+    pub fn new(connection: crate::server::Connection) -> Result<Self> {
+        let (db, diagnostics) = connection.into_parts();
         db.execute_batch("SET schema = 'dbo'; SET arrow_lossless_conversion = true; SET VARIABLE __msduck_datefirst = 7")?;
         db.execute_batch(
             "CREATE TEMP MACRO __msduck_time_round(value, quantum) AS
@@ -172,6 +175,7 @@ impl Session {
             CREATE TEMP MACRO __msduck_int_mod(a,b) AS CASE WHEN b=0 THEN error('Divide by zero error encountered.') ELSE a % b END")?;
         Ok(Self {
             db,
+            diagnostics,
             nocount: false,
             transactions: 0,
             rowcount: 0,
@@ -180,9 +184,16 @@ impl Session {
             original_login: "sa".into(),
             transaction_name: String::new(),
             xact_abort: false,
+            ansi_warnings: true,
             transaction_doomed: false,
             caught_error: None,
         })
+    }
+
+    /// Open an explicit context for one execution. Preparing SQL must not open
+    /// or mutate a current-session context in the shared native catalog.
+    pub fn diagnostic_scope(&self) -> Result<crate::statement_diagnostics::Scope> {
+        self.diagnostics.begin().map_err(anyhow::Error::msg)
     }
     pub fn batch(
         &mut self,
@@ -577,6 +588,9 @@ impl Session {
             }
             if let Some(previous) = work.restore_error {
                 self.caught_error = previous;
+                // END TRY/CATCH resets @@ROWCOUNT even when no exception was
+                // raised. An informational aggregate warning is not an error.
+                self.rowcount = 0;
                 if let Some(offset) = control_done(&mut out, rpc, self.nocount, 351) {
                     last_done = Some(offset);
                 }
@@ -1314,9 +1328,32 @@ impl Session {
     }
     fn execute_inner(
         &mut self,
+        statement: Statement,
+        parameters: &mut HashMap<String, Parameter>,
+        autocommit: bool,
+    ) -> Result<Execution> {
+        let diagnostics = self
+            .ansi_warnings
+            .then(|| self.diagnostic_scope())
+            .transpose()?;
+        let mut result =
+            self.execute_observed(statement, parameters, autocommit, diagnostics.as_ref())?;
+        if self.ansi_warnings
+            && diagnostics
+                .as_ref()
+                .is_some_and(|scope| scope.null_eliminated())
+        {
+            crate::aggregate_diagnostics::append_warning(&mut result.tokens);
+        }
+        Ok(result)
+    }
+
+    fn execute_observed(
+        &mut self,
         mut statement: Statement,
         parameters: &mut HashMap<String, Parameter>,
         autocommit: bool,
+        diagnostics: Option<&crate::statement_diagnostics::Scope>,
     ) -> Result<Execution> {
         validate_transaction_syntax(&statement)?;
         if let Statement::Print(print) = &statement {
@@ -1401,8 +1438,12 @@ impl Session {
                         Some(DeclareAssignment::MsSqlAssignment(value)) => *value.clone(),
                         _ => bail!("unsupported variable initializer"),
                     };
-                    let value =
-                        self.evaluate_scalar(expression, crate::sql_type::ast(kind), parameters)?;
+                    let value = self.evaluate_scalar_observed(
+                        expression,
+                        crate::sql_type::ast(kind),
+                        parameters,
+                        diagnostics,
+                    )?;
                     parameters.insert(
                         name,
                         Parameter {
@@ -1436,7 +1477,12 @@ impl Session {
                     .ok_or_else(|| anyhow::anyhow!("Must declare the scalar variable {name}"))?
                     .data_type;
                 let value = self
-                    .evaluate_scalar(values[0].clone(), crate::sql_type::ast(kind), parameters)
+                    .evaluate_scalar_observed(
+                        values[0].clone(),
+                        crate::sql_type::ast(kind),
+                        parameters,
+                        diagnostics,
+                    )
                     .map_err(|error| {
                         if error
                             .downcast_ref::<SqlError>()
@@ -1480,6 +1526,12 @@ impl Session {
                     .execute_batch("SET VARIABLE __msduck_datefirst = 7")?;
             }
             let normalized = statement.to_string().to_uppercase().replace(" = ", " ");
+            if matches!(
+                normalized.as_str(),
+                "SET ANSI_WARNINGS ON" | "SET ANSI_WARNINGS OFF"
+            ) {
+                self.ansi_warnings = normalized.ends_with(" ON");
+            }
             if matches!(
                 normalized.as_str(),
                 "SET XACT_ABORT ON" | "SET XACT_ABORT OFF"
@@ -1692,6 +1744,17 @@ impl Session {
         }
         crate::insert::lower(&self.db, &mut statement, &money_columns)?;
         crate::update::lower(&self.db, &mut statement, &money_assignments)?;
+        if let Some(diagnostics) = diagnostics {
+            let ticket = Expr::Value(
+                sqlparser::ast::Value::Placeholder(format!("${}", translator.values.len() + 1))
+                    .into(),
+            );
+            if crate::aggregate_diagnostics::instrument(&mut statement, ticket) > 0 {
+                translator
+                    .values
+                    .push(Value::Blob(diagnostics.ticket().to_vec()));
+            }
+        }
         // Identity parameters are integer constants, not numeric result expressions.
         match (identity_source.as_ref(), &mut statement) {
             (Some(Statement::CreateTable(original)), Statement::CreateTable(table)) => {
@@ -2245,20 +2308,40 @@ impl Session {
         data_type: DataType,
         parameters: &HashMap<String, Parameter>,
     ) -> Result<Value> {
+        self.evaluate_scalar_observed(expression, data_type, parameters, None)
+    }
+
+    fn evaluate_scalar_observed(
+        &self,
+        expression: Expr,
+        data_type: DataType,
+        parameters: &HashMap<String, Parameter>,
+        diagnostics: Option<&crate::statement_diagnostics::Scope>,
+    ) -> Result<Value> {
         let expression = Expr::Cast {
             kind: CastKind::Cast,
             expr: Box::new(expression),
             data_type,
             format: None,
         };
-        self.evaluate_expression(expression, parameters, false)
+        self.evaluate_expression_observed(expression, parameters, false, diagnostics)
     }
 
     fn evaluate_expression(
         &self,
+        expression: Expr,
+        parameters: &HashMap<String, Parameter>,
+        predicate: bool,
+    ) -> Result<Value> {
+        self.evaluate_expression_observed(expression, parameters, predicate, None)
+    }
+
+    fn evaluate_expression_observed(
+        &self,
         mut expression: Expr,
         parameters: &HashMap<String, Parameter>,
         predicate: bool,
+        diagnostics: Option<&crate::statement_diagnostics::Scope>,
     ) -> Result<Value> {
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
@@ -2297,10 +2380,24 @@ impl Session {
             {
                 bail!(error);
             }
+            if let Some(diagnostics) = diagnostics {
+                crate::aggregate_diagnostics::bind_expressions(
+                    &mut checked.query,
+                    diagnostics,
+                    &mut translator.values,
+                );
+            }
             (checked.query.to_string(), true)
         } else {
             if let ControlFlow::Break(error) = VisitMut::visit(&mut expression, &mut translator) {
                 bail!(error);
+            }
+            if let Some(diagnostics) = diagnostics {
+                crate::aggregate_diagnostics::bind_expressions(
+                    &mut expression,
+                    diagnostics,
+                    &mut translator.values,
+                );
             }
             (format!("SELECT {expression}"), false)
         };
@@ -2357,6 +2454,7 @@ fn session_setting(statement: &Statement) -> Result<Option<bool>> {
             "SET ANSI_NULL_DFLT_ON ON",
             "SET ANSI_PADDING ON",
             "SET ANSI_WARNINGS ON",
+            "SET ANSI_WARNINGS OFF",
             "SET ARITHABORT ON",
             "SET QUOTED_IDENTIFIER ON",
             "SET CONCAT_NULL_YIELDS_NULL ON",
