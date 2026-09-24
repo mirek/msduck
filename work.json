@@ -800,6 +800,28 @@
       "dependencies": [],
       "issue": 77,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHf5I"
+    },
+    {
+      "id": "storage-truncation-diagnostics-v1",
+      "title": "Preserve detailed character truncation diagnostics and failed-write completion",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Owner-generated PR78 unchanged best-fit replay has 52 rejected storage writes differing in error 2628 details, termination info 3621 and batch continuation. No external content approved.",
+      "scope": [
+        "src/storage_diagnostic.rs",
+        "tests/storage_diagnostic.rs",
+        "tests/storage_diagnostic.test.mjs",
+        "scripts/capture-storage-diagnostic.mjs",
+        "tests/reference/storage-diagnostic.json"
+      ],
+      "acceptance": [
+        "Capture pinned SQL Server INSERT/UPDATE character truncation errors, previews, names, statement termination, subsequent statements and rollback behavior, including Unicode and multirow writes.",
+        "Implement bounded detailed truncation context without reevaluating volatile operands, losing surrogate units or weakening statement atomicity. Existing #51 storage/assignment/insert/update integration and #26 engine/module integration and #35 registration remain under original receipts.",
+        "Retain exact 2628 diagnostics, 3621 information and statement-specific completion/batch continuation. Preserve TRY/CATCH and transaction behavior; do not reinterpret compile failures as runtime writes.",
+        "Replay all 140 best-fit boundary probes unchanged and new full reference fixtures. Run pure/native/client and workspace/Clippy/audit verification on immutable revisions; preserve all remaining gaps."
+      ],
+      "dependencies": [],
+      "issue": 79,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHiF0"
     }
   ]
 }
