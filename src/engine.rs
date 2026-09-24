@@ -2568,7 +2568,30 @@ fn string_expr(expr: &Expr, parameters: &HashMap<String, Parameter>) -> bool {
     }
 }
 pub(crate) fn integer_input(argument: Expr, target: &DataType, is_try: bool) -> Expr {
-    let mut result = unary_function("__msduck_integer_input", argument);
+    // A proven integer source cannot be a Unicode carrier or SQL_VARIANT.
+    // Dispatching it through a CASE macro repeats nested conditional ASTs.
+    // Keep the existing numeric range check, with one source occurrence.
+    let integer = crate::case_types::integer_rank(&argument, &Default::default());
+    let mut result = if let Some(rank) = integer {
+        let kind = match rank {
+            0 => "UTINYINT",
+            1 => "SMALLINT",
+            2 => "INTEGER",
+            _ => "BIGINT",
+        };
+        binary_function(
+            "__msduck_integer_text",
+            Expr::Cast {
+                kind: CastKind::Cast,
+                expr: Box::new(argument),
+                data_type: DataType::Varchar(None),
+                format: None,
+            },
+            Expr::Value(sqlparser::ast::Value::SingleQuotedString(kind.into()).into()),
+        )
+    } else {
+        unary_function("__msduck_integer_input", argument)
+    };
     if let Expr::Function(f) = &mut result
         && let FunctionArguments::List(args) = &mut f.args
     {
@@ -3266,7 +3289,10 @@ impl VisitorMut for Translator<'_> {
                         data_type,
                         matches!(kind, CastKind::TryCast | CastKind::SafeCast),
                     );
-                    if explicit && let Expr::Function(f) = argument.as_mut() {
+                    if explicit
+                        && let Expr::Function(f) = argument.as_mut()
+                        && f.name.to_string() == "__msduck_integer_input"
+                    {
                         f.name =
                             ObjectName::from(vec![Ident::new("__msduck_explicit_integer_input")]);
                     }
