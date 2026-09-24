@@ -11,7 +11,7 @@ const baseline = 'SET DATEFIRST 7; SET ANSI_WARNINGS ON'
 const probe = 'SELECT @@DATEFIRST AS first_day; SELECT SUM(n) AS total FROM (VALUES (CAST(NULL AS INT)),(1)) v(n)'
 export const cases = []
 for (const mode of ['batch', 'rpc']) {
-  for (const setting of ['SET DATEFIRST 3', 'SET ANSI_WARNINGS OFF']) {
+  for (const setting of ['SET DATEFIRST 3', 'SET ANSI_WARNINGS OFF', 'SET DATEFIRST 0']) {
     for (const ending of ['', "; RAISERROR('scope probe',16,1)", "; THROW 51000,'scope probe',1"]) {
       cases.push({name: `${mode}: ${setting}: ${ending || 'success'}`, steps: [
         {mode: 'batch', sql: baseline},
@@ -29,12 +29,31 @@ for (const mode of ['batch', 'rpc']) {
   ]})
 }
 
-export async function captureStep(connection, {mode, sql}) {
+cases.push({name:'rpc: invalid DATEFIRST without warning',steps:[
+  {mode:'batch',sql:baseline},
+  {mode:'rpc',sql:'SET DATEFIRST 0; SELECT @@DATEFIRST AS first_day'},
+  {mode:'rpc',sql:probe},
+]})
+for(const first of [0,null]) cases.push({name:`rpc: invalid DATEFIRST parameter ${first}`,steps:[
+  {mode:'batch',sql:baseline},
+  {mode:'rpc',sql:'SET DATEFIRST @first; SELECT @@DATEFIRST AS first_day',parameters:{first}},
+  {mode:'rpc',sql:probe},
+]})
+cases.push({name:'rpc: invalid DATEFIRST before conditional',steps:[
+  {mode:'batch',sql:baseline},
+  {mode:'rpc',sql:"SET DATEFIRST @first; SELECT @@DATEFIRST AS first_day; IF @fail=1 THROW 51000,'scope probe',1",parameters:{first:0,fail:0}},
+  {mode:'rpc',sql:probe},
+]})
+
+export async function captureStep(connection, {mode, sql, parameters={}}) {
   assert.ok(['batch', 'rpc'].includes(mode))
   const transport = mode === 'batch' ? connection : {
     on: (...args) => connection.on(...args),
     off: (...args) => connection.off(...args),
-    execSqlBatch: request => connection.execSql(request),
+    execSqlBatch: request => {
+      for(const [name,value] of Object.entries(parameters)) request.addParameter(name,TYPES.Int,value)
+      connection.execSql(request)
+    },
   }
   return canonical(await capture(transport, sql))
 }

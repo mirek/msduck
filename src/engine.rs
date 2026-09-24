@@ -166,6 +166,12 @@ impl<'a> Work<'a> {
         }
     }
 }
+#[derive(Clone, Copy)]
+enum RpcExecution {
+    Direct,
+    Prepared,
+}
+
 pub struct Session {
     pub db: Connection,
     diagnostics: crate::statement_diagnostics::Registry,
@@ -566,12 +572,31 @@ impl Session {
         rpc: bool,
         handle: Option<(&str, i32)>,
     ) -> (Vec<u8>, bool) {
+        self.batch_response_context(sql, parameters, rpc.then_some(RpcExecution::Direct), handle)
+    }
+
+    pub fn prepared_batch(
+        &mut self,
+        sql: &str,
+        parameters: &HashMap<String, Parameter>,
+    ) -> Vec<u8> {
+        self.batch_response_context(sql, parameters, Some(RpcExecution::Prepared), None)
+            .0
+    }
+
+    fn batch_response_context(
+        &mut self,
+        sql: &str,
+        parameters: &HashMap<String, Parameter>,
+        rpc_execution: Option<RpcExecution>,
+        handle: Option<(&str, i32)>,
+    ) -> (Vec<u8>, bool) {
         let saved_nocount = self.nocount;
         let saved_xact_abort = self.xact_abort;
         let saved_ansi_warnings = self.ansi_warnings;
         let saved_datefirst = self.datefirst;
-        let result = self.batch_response_inner(sql, parameters, rpc, handle);
-        if rpc {
+        let result = self.batch_response_inner(sql, parameters, rpc_execution, handle);
+        if rpc_execution.is_some() {
             self.nocount = saved_nocount;
             self.xact_abort = saved_xact_abort;
             self.ansi_warnings = saved_ansi_warnings;
@@ -607,9 +632,10 @@ impl Session {
         &mut self,
         sql: &str,
         parameters: &HashMap<String, Parameter>,
-        rpc: bool,
+        rpc_execution: Option<RpcExecution>,
         handle: Option<(&str, i32)>,
     ) -> (Vec<u8>, bool) {
+        let rpc = rpc_execution.is_some();
         self.caught_error = None;
         let mut out = Vec::new();
         let mut had_runtime_error = false;
@@ -656,6 +682,7 @@ impl Session {
         let mut steps = 0usize;
         let mut last_done = None;
         let mut return_status = 0i32;
+        let mut preserve_return_status = false;
         let mut executed_leaf = false;
         while let Some(work) = pending.pop() {
             steps += 1;
@@ -881,6 +908,7 @@ impl Session {
                     }
                     continue;
                 }
+                preserve_return_status = false;
                 self.last_error = raised.error_number;
                 if is_error {
                     had_runtime_error = true;
@@ -961,7 +989,7 @@ impl Session {
                     }
                     out.extend(tokens);
                     self.last_error = 0;
-                    if had_runtime_error {
+                    if had_runtime_error && !preserve_return_status {
                         return_status = 0;
                     }
                     // A declaration without an initializer changes neither the
@@ -1056,11 +1084,24 @@ impl Session {
                         }
                         continue;
                     }
+                    preserve_return_status = false;
                     self.last_error = emit_error(&mut out, &e);
                     if self.transaction_doomed {
                         self.rollback_doomed(&mut out);
                         tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
                         return (out, false);
+                    }
+                    if self.last_error == 2742 && matches!(statement, Statement::Set(_)) {
+                        // Invalid DATEFIRST ends only SET. SQL Server preserves
+                        // its RPC failure status even when later queries succeed.
+                        had_runtime_error = true;
+                        preserve_return_status =
+                            matches!(rpc_execution, Some(RpcExecution::Prepared));
+                        return_status = -6;
+                        self.rowcount = 0;
+                        last_done = Some(out.len());
+                        tds::done(&mut out, if rpc { 0xff } else { 0xfd }, 2 | more, 0, 0);
+                        continue;
                     }
                     let failed_dml =
                         e.downcast_ref::<crate::query_error::FailedQuery>()
@@ -1745,13 +1786,19 @@ impl Session {
         if let Statement::Set(_) = &statement {
             if let Some(value) = crate::datepart::setting(&statement).map_err(anyhow::Error::msg)? {
                 let value = self.evaluate_scalar(value, DataType::Int(None), parameters)?;
-                let Value::Int(first) = value else {
-                    bail!("DATEFIRST must be between 1 and 7")
+                let first = match value {
+                    Value::Int(first) => first,
+                    Value::Null => 0,
+                    _ => bail!("DATEFIRST requires an integer value"),
                 };
-                ensure!(
-                    (1..=7).contains(&first),
-                    "DATEFIRST must be between 1 and 7"
-                );
+                if !(1..=7).contains(&first) {
+                    return Err(SqlError::new(
+                        2742,
+                        1,
+                        format!("SET DATEFIRST {first} is out of range."),
+                    )
+                    .into());
+                }
                 self.set_datefirst(first)?;
                 return Ok(Execution::statement(vec![], None, 0));
             }

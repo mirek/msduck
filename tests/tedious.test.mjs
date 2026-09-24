@@ -9290,3 +9290,12 @@ for (const entry of sessionScopeCases) {
     for (const step of entry.steps) assert.deepEqual(await captureStep(c,step),step.result,`${entry.name}: ${step.sql}`)
   })
 }
+
+const preparedScopeCases=JSON.parse(readFileSync(new URL('../reference/rpc-session-scope.json',import.meta.url),'utf8')).prepared
+for (const entry of preparedScopeCases) {
+  test(`session setting scope: ${entry.name}`, {timeout:20000}, async t => {
+    const {runPreparedCase}=await import('../scripts/capture-rpc-session-scope.mjs')
+    const c=await start(t)
+    assert.deepEqual(await runPreparedCase(c,entry),entry.result)
+  })
+}
