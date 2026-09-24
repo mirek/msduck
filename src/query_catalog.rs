@@ -23,6 +23,24 @@ pub fn record_view_definition(db: &Connection, statement: &Statement) -> duckdb:
         Statement::AlterView { name, query, .. } => (name, query),
         _ => return Ok(()),
     };
+    // Batch parsing marks explicit integer inputs once. Persist SQL without
+    // those parser annotations so reparsing does not nest markers and lose
+    // the original operand's logical type/provenance.
+    struct Unmark;
+    impl VisitorMut for Unmark {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<()> {
+            match expr {
+                Expr::Cast { expr, .. } | Expr::Convert { expr, .. } => {
+                    msduck_sql::variant_cast::take(expr);
+                }
+                _ => {}
+            }
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    let mut query = query.clone();
+    let _ = VisitMut::visit(&mut query, &mut Unmark);
     db.execute(
         "INSERT OR REPLACE INTO main.__msduck_view_definitions SELECT object_id,? FROM sys.objects WHERE object_id=__msduck_object_id(?,NULL) AND type='V'",
         duckdb::params![query.to_string(), name.to_string()],
@@ -452,6 +470,52 @@ pub fn record(db: &Connection, name: &str, fields: &[Field]) -> duckdb::Result<(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn persisted_view_casts_rebind_without_duplicate_parser_annotations() {
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let mut session = crate::engine::Session::new(server.connection().unwrap()).unwrap();
+        for sql in [
+            "CREATE TABLE dbo.cast_base(id INT IDENTITY NOT NULL,v INT)",
+            "CREATE VIEW dbo.cast_view AS SELECT CAST(id AS BIGINT) AS converted,CAST(NULL AS INT) AS absent FROM dbo.cast_base",
+            "CREATE VIEW dbo.cast_aggregate AS SELECT CAST(MIN(v) AS BIGINT) AS converted FROM dbo.cast_base",
+        ] {
+            let (tokens, ok) = session.batch_response(sql, &Default::default(), false, None);
+            assert!(ok, "{sql}: {tokens:?}");
+        }
+        let definitions: Vec<String> = session
+            .db
+            .prepare("SELECT query_sql FROM main.__msduck_view_definitions")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<duckdb::Result<_>>()
+            .unwrap();
+        assert_eq!(definitions.len(), 2);
+        assert!(
+            definitions
+                .iter()
+                .all(|sql| !sql.contains("__msduck_explicit_integer_source"))
+        );
+        for _ in 0..3 {
+            for sql in [
+                "SELECT * FROM dbo.cast_view",
+                "SELECT * FROM dbo.cast_aggregate",
+            ] {
+                let statements = msduck_sql::batch::parse(sql).unwrap();
+                let sqlparser::ast::Statement::Query(query) = &statements[0] else {
+                    unreachable!()
+                };
+                let fields = super::projection(&session.db, query).unwrap().unwrap();
+                assert!(!fields.is_empty());
+                assert!(
+                    fields.iter().all(|field| field.properties
+                        == msduck_core::result::Properties::expression(true)),
+                    "{sql}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn view_properties_survive_restart_and_follow_transactional_definitions() {
         use msduck_core::result::{Origin, Properties};
