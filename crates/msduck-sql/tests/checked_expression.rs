@@ -80,3 +80,69 @@ fn planning_limits_reject_large_or_deep_trees_without_partial_plans() {
     }
     assert!(plan(&deep, &HashMap::new()).is_none());
 }
+
+#[test]
+fn scoped_operands_respect_qualified_names_ambiguity_and_shadowing() {
+    use msduck_core::catalog::TypeMetadata;
+    use msduck_sql::binding_scope::{Field, Scope, Source};
+    use msduck_sql::checked_expression::plan_in_scope;
+    fn source(qualifier: &str, system_type_id: Option<u8>) -> Source {
+        Source {
+            qualifiers: vec![qualifier.into()],
+            fields: vec![Field {
+                name: "n".into(),
+                info: system_type_id.map(|id| TypeMetadata {
+                    system_type_id: Some(id),
+                    ..Default::default()
+                }),
+                properties: Default::default(),
+                collation: None,
+                json_fragment: false,
+            }],
+        }
+    }
+    let mut scope = Scope {
+        rows: vec![Some(vec![source("outer", Some(127))])],
+        ..Default::default()
+    };
+    scope.parameters.insert(
+        "@d".into(),
+        TypeMetadata {
+            system_type_id: Some(56),
+            ..Default::default()
+        },
+    );
+    let expression = expr("[outer].[n]/@d");
+    let bound = plan_in_scope(&expression, &scope).unwrap();
+    assert_eq!(bound.kind, Kind::BigInt);
+    assert_eq!(bound.query.to_string().matches("[outer].[n]").count(), 1);
+    assert!(
+        plan(
+            &expression,
+            &HashMap::from([("outer.n".into(), Kind::BigInt), ("@d".into(), Kind::Int)])
+        )
+        .is_none()
+    );
+    scope.rows.push(Some(vec![source("local", None)]));
+    assert!(plan_in_scope(&expr("n/1"), &scope).is_none());
+    assert!(plan_in_scope(&expression, &scope).is_some());
+    scope.rows.push(None);
+    assert!(plan_in_scope(&expression, &scope).is_none());
+    // Variables retain their explicit declarations across unresolved row scopes.
+    assert_eq!(
+        plan_in_scope(&expr("@d/1"), &scope).unwrap().kind,
+        Kind::Int
+    );
+    scope.rows = vec![Some(vec![source("a", Some(56)), source("b", Some(127))])];
+    assert!(plan_in_scope(&expr("n/1"), &scope).is_none());
+    assert_eq!(
+        plan_in_scope(&expr("a.n/1"), &scope).unwrap().kind,
+        Kind::Int
+    );
+    assert_eq!(
+        plan_in_scope(&expr("b.n/1"), &scope).unwrap().kind,
+        Kind::BigInt
+    );
+    scope.rows = vec![Some(vec![source("a", Some(106))])];
+    assert!(plan_in_scope(&expr("a.n/1"), &scope).is_none());
+}

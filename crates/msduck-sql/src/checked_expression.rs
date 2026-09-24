@@ -26,7 +26,7 @@ pub struct Plan {
     pub kind: Kind,
 }
 struct Builder<'a> {
-    parameters: &'a HashMap<String, Kind>,
+    binding: &'a dyn Fn(&Expr) -> Option<Kind>,
     nodes: Vec<String>,
     leaves: Vec<(usize, Expr)>,
     checked: bool,
@@ -151,10 +151,7 @@ impl Builder<'_> {
                 Value::Null => Some(self.leaf(expr, Kind::Int)),
                 _ => None,
             },
-            Expr::Identifier(id) => self
-                .parameters
-                .get(&id.value.to_lowercase())
-                .copied()
+            Expr::Identifier(_) | Expr::CompoundIdentifier(_) => (self.binding)(expr)
                 .filter(|kind| kind.integer())
                 .map(|kind| self.leaf(expr, kind)),
             Expr::BinaryOp { left, op, right } => {
@@ -219,8 +216,42 @@ impl Builder<'_> {
 /// Materialized nodes prevent repeated evaluation when value and error fields
 /// are read separately. Original leaf ASTs are inserted without text reparsing.
 pub fn plan(expression: &Expr, parameters: &HashMap<String, Kind>) -> Option<Plan> {
+    build(expression, &|expr| match expr {
+        Expr::Identifier(id) => parameters.get(&id.value.to_lowercase()).copied(),
+        _ => None,
+    })
+}
+
+/// Bind scalar operands against explicit logical row scopes and parameter
+/// declarations. Unknown/ambiguous local sources shadow outer declarations;
+/// physical storage types and current parameter values never resolve a leaf.
+/// The returned query may be correlated with its enclosing row source. It does
+/// not itself implement SELECT projection, ordering or predicate error policy.
+pub fn plan_in_scope(expression: &Expr, scope: &crate::binding_scope::Scope) -> Option<Plan> {
+    build(expression, &|expr| {
+        let ids = match expr {
+            Expr::Identifier(id) => vec![id],
+            Expr::CompoundIdentifier(ids) => ids.iter().collect(),
+            _ => return None,
+        };
+        let info = if ids.len() == 1 && ids[0].value.starts_with('@') {
+            scope.parameters.get(&ids[0].value.to_lowercase())?
+        } else {
+            crate::binding_scope::resolve(&ids, &[], &scope.rows)?
+                .info
+                .as_ref()?
+        };
+        match info.system_type_id? {
+            56 => Some(Kind::Int),
+            127 => Some(Kind::BigInt),
+            _ => None,
+        }
+    })
+}
+
+fn build(expression: &Expr, binding: &dyn Fn(&Expr) -> Option<Kind>) -> Option<Plan> {
     let mut builder = Builder {
-        parameters,
+        binding,
         nodes: vec![],
         leaves: vec![],
         checked: false,
