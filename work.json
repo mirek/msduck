@@ -1385,6 +1385,24 @@
       "dependencies": [],
       "issue": 144,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJzGx"
+    },
+    {
+      "id": "tds-reader-integration-v1",
+      "title": "Use deterministic incremental framing in root TDS reads",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Owner-authored incremental decoder at 34936f2 should replace duplicated root framing while preserving message boundaries and current blocking API. Protected registry contains no active scope for src/tds.rs.",
+      "scope": [
+        "src/tds.rs",
+        "docs/tds-reader-integration.md"
+      ],
+      "acceptance": [
+        "Replace duplicate root read_message parsing with the deterministic decoder without over-reading a following message. Preserve clean versus truncated EOF and handle interrupted/short reads.",
+        "Test back-to-back messages, fragments, IGNORE flags, interrupted readers and malformed EOF at the root adapter boundary. Pure read-hint additions remain under original incremental-tds-framing-v1 ownership.",
+        "Run formatting, strict workspace Clippy, workspace tests and independent clients on Linux. Preserve TLS/PRELOGIN behavior and explicitly state that responsive duplex transport and active cancellation remain outstanding."
+      ],
+      "dependencies": [],
+      "issue": 146,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJ0J0"
     }
   ]
 }
