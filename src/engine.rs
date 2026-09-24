@@ -1724,20 +1724,39 @@ impl Session {
                 .transpose()?
         };
         if self.transactions > 0 && !is_query && output.is_none() {
-            let count =
-                crate::storage_diagnostic::checked_insert(&self.db, &statement, &translator.values)
-                    .map_err(|error| {
-                        if error
-                            .downcast_ref::<SqlError>()
-                            .is_some_and(|e| e.number == 2628)
-                        {
-                            crate::query_error::attach_context(error, vec![], 0xc3)
-                        } else {
-                            error
-                        }
-                    })?;
+            let checked = match write_command {
+                Some(0xc3) => crate::storage_diagnostic::checked_insert(
+                    &self.db,
+                    &statement,
+                    &translator.values,
+                ),
+                Some(0xc5) => crate::storage_diagnostic::checked_update(
+                    &self.db,
+                    &statement,
+                    &translator.values,
+                ),
+                _ => Ok(None),
+            };
+            let count = checked.map_err(|error| {
+                if error
+                    .downcast_ref::<SqlError>()
+                    .is_some_and(|e| e.number == 2628)
+                {
+                    crate::query_error::attach_context(
+                        error,
+                        vec![],
+                        write_command.expect("checked DML"),
+                    )
+                } else {
+                    error
+                }
+            })?;
             if let Some(count) = count {
-                return Ok(Execution::statement(vec![], Some(count), 0xc3));
+                return Ok(Execution::statement(
+                    vec![],
+                    Some(count),
+                    write_command.expect("checked DML"),
+                ));
             }
         }
         let mut prepared = self.db.prepare(&rendered).map_err(|error| {

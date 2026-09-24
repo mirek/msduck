@@ -152,3 +152,97 @@ fn staged_insert_binds_parameters_and_preserves_unicode_and_null_storage() {
         ]
     );
 }
+
+#[test]
+fn rejected_update_preserves_the_transaction_and_all_original_rows() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    assert!(session.batch_response("CREATE TABLE dbo.update_tx(i INT,s VARCHAR(1),n INT); INSERT dbo.update_tx VALUES(1,'a',10),(2,'b',20); BEGIN TRAN; INSERT dbo.update_tx VALUES(3,'c',30)",&Default::default(),false,None).1);
+    assert!(
+        !session
+            .batch_response(
+                "UPDATE dbo.update_tx SET s=CASE WHEN i=2 THEN 'long' ELSE 'x' END,n=n+1 WHERE i<3",
+                &Default::default(),
+                false,
+                None
+            )
+            .1
+    );
+    assert_eq!(session.transactions, 1);
+    let (tokens,ok)=session.batch_response("DECLARE @id INT=1; DECLARE @s NVARCHAR(1)=N'Ā'; UPDATE dbo.update_tx SET s=@s,n=n+1 WHERE i=@id; COMMIT",&Default::default(),false,None);
+    assert!(ok, "{tokens:?}");
+    let rows: Vec<(i32, String, i32)> = session
+        .db
+        .prepare("SELECT i,s,n FROM dbo.update_tx ORDER BY i")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(
+        rows,
+        vec![
+            (1, "A".into(), 11),
+            (2, "b".into(), 20),
+            (3, "c".into(), 30)
+        ]
+    );
+    assert_eq!(session.db.query_row("SELECT count(*) FROM duckdb_tables() WHERE database_name='temp' AND table_name LIKE '__msduck_checked_insert_%'",[],|r|r.get::<_,i64>(0)).unwrap(),0);
+}
+
+#[test]
+fn staged_update_materializes_volatile_assignments_once() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    assert!(session.batch_response("CREATE TABLE dbo.update_once(i INT,s VARCHAR(1)); INSERT dbo.update_once VALUES(0,'a'),(0,'b'),(0,'c')",&Default::default(),false,None).1);
+    session
+        .db
+        .execute_batch("CREATE SEQUENCE update_once_calls START 1")
+        .unwrap();
+    let (tokens, ok) = session.batch_response(
+        "BEGIN TRAN; UPDATE dbo.update_once SET i=nextval('update_once_calls'),s='z'; COMMIT",
+        &Default::default(),
+        false,
+        None,
+    );
+    assert!(ok, "{tokens:?}");
+    assert_eq!(
+        session
+            .db
+            .query_row("SELECT currval('update_once_calls')", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        3
+    );
+    let rows: Vec<i32> = session
+        .db
+        .prepare("SELECT i FROM dbo.update_once ORDER BY i")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec![1, 2, 3]);
+}
+
+#[test]
+fn user_rowid_columns_do_not_become_physical_update_identifiers() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    assert!(session.batch_response("CREATE TABLE dbo.shadow_rowid(rowid INT,n INT,s VARCHAR(1)); INSERT dbo.shadow_rowid VALUES(5,0,'a'),(5,0,'b')",&Default::default(),false,None).1);
+    session
+        .db
+        .execute_batch("CREATE SEQUENCE shadow_rowid_calls START 1")
+        .unwrap();
+    let (tokens,ok)=session.batch_response("BEGIN TRAN; UPDATE dbo.shadow_rowid SET n=nextval('shadow_rowid_calls'),s='z' WHERE rowid=5; COMMIT",&Default::default(),false,None);
+    assert!(ok, "{tokens:?}");
+    let rows: Vec<i32> = session
+        .db
+        .prepare("SELECT n FROM dbo.shadow_rowid ORDER BY n")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec![1, 2]);
+}

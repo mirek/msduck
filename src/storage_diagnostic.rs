@@ -281,46 +281,7 @@ pub fn checked_insert(
     if checked.is_empty() {
         return Ok(None);
     }
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static NEXT_STAGE: AtomicU64 = AtomicU64::new(1);
-    let name = ObjectName::from(vec![
-        Ident::new("temp"),
-        Ident::new("main"),
-        Ident::with_quote(
-            '"',
-            format!(
-                "__msduck_checked_insert_{}",
-                NEXT_STAGE.fetch_add(1, Ordering::Relaxed)
-            ),
-        ),
-    ]);
-    db.execute(
-        &format!("CREATE TEMP TABLE {name} AS {source}"),
-        duckdb::params_from_iter(values.iter()),
-    )?;
-    struct Stage<'a>(&'a duckdb::Connection, ObjectName, bool);
-    impl Drop for Stage<'_> {
-        fn drop(&mut self) {
-            if self.2 {
-                let _ = self.0.execute_batch(&format!("DROP TABLE {}", self.1));
-            }
-        }
-    }
-    let mut stage = Stage(db, name, true);
-    for &(index, _) in &checked {
-        let alias = &aliases[index];
-        let mut query = db.prepare(&format!(
-            "SELECT {alias}.error FROM {} WHERE {alias}.error IS NOT NULL LIMIT 1",
-            stage.1
-        ))?;
-        let mut rows = query.query([])?;
-        if let Some(row) = rows.next()? {
-            let encoded: String = row.get(0)?;
-            let error = diagnostic(&format!("Invalid Input Error: {encoded}"))
-                .ok_or_else(|| anyhow::anyhow!("invalid staged storage diagnostic"))?;
-            return Err(error.into());
-        }
-    }
+    let mut stage = stage(db, &source, values, &checked, &aliases)?;
     let projection = aliases
         .iter()
         .enumerate()
@@ -345,6 +306,184 @@ pub fn checked_insert(
     let count = db.execute(&Statement::Insert(write).to_string(), [])? as u64;
     // On success, surface cleanup failures. On a write failure the enclosing
     // transaction may already be aborted; rollback removes its temporary table.
+    db.execute_batch(&format!("DROP TABLE {}", stage.1))?;
+    stage.2 = false;
+    Ok(Some(count))
+}
+
+struct Stage<'a>(&'a duckdb::Connection, ObjectName, bool);
+impl Drop for Stage<'_> {
+    fn drop(&mut self) {
+        if self.2 {
+            let _ = self.0.execute_batch(&format!("DROP TABLE {}", self.1));
+        }
+    }
+}
+
+fn stage<'a>(
+    db: &'a duckdb::Connection,
+    source: &Query,
+    values: &[duckdb::types::Value],
+    checked: &[(usize, bool)],
+    aliases: &[Ident],
+) -> anyhow::Result<Stage<'a>> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT_STAGE: AtomicU64 = AtomicU64::new(1);
+    let name = ObjectName::from(vec![
+        Ident::new("temp"),
+        Ident::new("main"),
+        Ident::with_quote(
+            '"',
+            format!(
+                "__msduck_checked_insert_{}",
+                NEXT_STAGE.fetch_add(1, Ordering::Relaxed)
+            ),
+        ),
+    ]);
+    db.execute(
+        &format!("CREATE TEMP TABLE {name} AS {source}"),
+        duckdb::params_from_iter(values.iter()),
+    )?;
+    let stage = Stage(db, name, true);
+    for &(index, _) in checked {
+        let alias = &aliases[index];
+        let mut query = db.prepare(&format!(
+            "SELECT {alias}.error FROM {} WHERE {alias}.error IS NOT NULL LIMIT 1",
+            stage.1
+        ))?;
+        let mut rows = query.query([])?;
+        if let Some(row) = rows.next()? {
+            let encoded: String = row.get(0)?;
+            let error = diagnostic(&format!("Invalid Input Error: {encoded}"))
+                .ok_or_else(|| anyhow::anyhow!("invalid staged storage diagnostic"))?;
+            return Err(error.into());
+        }
+    }
+    Ok(stage)
+}
+
+/// Capture selected physical rows and all assignments together. The final write
+/// uses only row IDs and captured values; neither predicates nor assignments run
+/// a second time. Joined/CTE/OUTPUT plans require their own identity proofs.
+pub fn checked_update(
+    db: &duckdb::Connection,
+    statement: &Statement,
+    values: &[duckdb::types::Value],
+) -> anyhow::Result<Option<u64>> {
+    let Statement::Update(original) = statement else {
+        return Ok(None);
+    };
+    if original.or.is_some()
+        || !original.optimizer_hints.is_empty()
+        || original.from.is_some()
+        || original.returning.is_some()
+        || original.output.is_some()
+        || !original.table.joins.is_empty()
+        || original.limit.is_some()
+        || !original.order_by.is_empty()
+    {
+        return Ok(None);
+    }
+    let TableFactor::Table { name, alias, .. } = &original.table.relation else {
+        return Ok(None);
+    };
+    if alias.as_ref().is_some_and(|a| !a.columns.is_empty()) {
+        return Ok(None);
+    }
+    let parts = name
+        .0
+        .iter()
+        .map(|p| p.as_ident().map(|i| i.value.as_str()))
+        .collect::<Option<Vec<_>>>();
+    let Some(parts) = parts else {
+        return Ok(None);
+    };
+    let (schema, table) = match parts.as_slice() {
+        [table] => ("dbo", *table),
+        [schema, table] => (*schema, *table),
+        _ => return Ok(None),
+    };
+    // A user column named rowid shadows DuckDB's physical identity. Never use it
+    // as though it were a hidden unique row identifier.
+    let shadowed:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_catalog=current_database() AND table_schema=? COLLATE NOCASE AND table_name=? COLLATE NOCASE AND column_name='rowid' COLLATE NOCASE)",[schema,table],|r|r.get(0))?;
+    if shadowed {
+        return Ok(None);
+    }
+    let qualifier = alias
+        .as_ref()
+        .map(|a| a.name.clone())
+        .unwrap_or_else(|| Ident::with_quote('"', table));
+    let rowid = Expr::CompoundIdentifier(vec![qualifier, Ident::new("rowid")]);
+    let mut checked = Vec::new();
+    let mut aliases = Vec::new();
+    let mut projection = Vec::new();
+    for (index, assignment) in original.assignments.iter().enumerate() {
+        if !matches!(assignment.target, AssignmentTarget::ColumnName(_)) {
+            return Ok(None);
+        }
+        let mut value = assignment.value.clone();
+        if let Expr::Function(f) = &mut value {
+            let name = match f.name.to_string().as_str() {
+                "__msduck_store_context_varchar" => Some(("__msduck_check_store_varchar", false)),
+                "__msduck_store_context_char" => Some(("__msduck_check_store_char", false)),
+                "__msduck_store_context_nvarchar" => Some(("__msduck_check_store_nvarchar", true)),
+                "__msduck_store_context_nchar" => Some(("__msduck_check_store_nchar", true)),
+                _ => None,
+            };
+            if let Some((name, unicode)) = name {
+                f.name = ObjectName::from(vec![Ident::new(name)]);
+                checked.push((index, unicode));
+            }
+        }
+        let alias = Ident::with_quote('"', format!("__store_col_{index}"));
+        projection.push(SelectItem::ExprWithAlias {
+            expr: value,
+            alias: alias.clone(),
+        });
+        aliases.push(alias);
+    }
+    if checked.is_empty() {
+        return Ok(None);
+    }
+    projection.push(SelectItem::ExprWithAlias {
+        expr: rowid.clone(),
+        alias: Ident::new("__target_rowid"),
+    });
+    let mut parsed =
+        sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::DuckDbDialect {}, "SELECT 1")?;
+    let Statement::Query(mut source) = parsed.remove(0) else {
+        unreachable!();
+    };
+    let SetExpr::Select(select) = source.body.as_mut() else {
+        unreachable!();
+    };
+    select.projection = projection;
+    select.from = vec![original.table.clone()];
+    select.selection = original.selection.clone();
+    let mut stage = stage(db, &source, values, &checked, &aliases)?;
+    let stage_qualifier = stage.1.0.last().and_then(|p| p.as_ident()).unwrap().clone();
+    let assignments = original
+        .assignments
+        .iter()
+        .enumerate()
+        .map(|(index, assignment)| {
+            let value = format!("{stage_qualifier}.{}", aliases[index]);
+            let value = match checked.iter().find(|(i, _)| *i == index) {
+                Some((_, true)) => format!("__msduck_unicode_from_le({value}.value)"),
+                Some((_, false)) => format!("decode({value}.value)"),
+                None => value,
+            };
+            format!("{}={value}", assignment.target)
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let count = db.execute(
+        &format!(
+            "UPDATE {} SET {assignments} FROM {} WHERE {rowid}={stage_qualifier}.__target_rowid",
+            original.table, stage.1
+        ),
+        [],
+    )? as u64;
     db.execute_batch(&format!("DROP TABLE {}", stage.1))?;
     stage.2 = false;
     Ok(Some(count))
