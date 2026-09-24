@@ -896,6 +896,25 @@
       "dependencies": [],
       "issue": 87,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHpen"
+    },
+    {
+      "id": "checked-expression-plan-v1",
+      "title": "Propagate checked arithmetic through scalar expression plans",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Native checked integer outcomes at 36e9633 now permit scalar control-flow arithmetic to return diagnostics without aborting DuckDB.",
+      "scope": [
+        "crates/msduck-sql/src/checked_expression.rs",
+        "crates/msduck-sql/tests/checked_expression.rs",
+        "tests/checked_expression.rs"
+      ],
+      "acceptance": [
+        "Build deterministic bounded scalar plans for supported typed INT/BIGINT arithmetic, comparisons and null predicates, materializing operands once and retaining diagnostic fields through nested nodes.",
+        "Integrate standalone scalar/control-flow evaluation under original #26 engine ownership; retain unsupported plan fallback and logical type validation. SQL crate export remains with original concat-binding receipt.",
+        "Verify nested arithmetic, parameters, NULL, width promotion, error propagation and transaction reuse against retained SQL Server captures. Preserve unresolved relational/constraint/other-type gaps."
+      ],
+      "dependencies": [],
+      "issue": 89,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHqci"
     }
   ]
 }
