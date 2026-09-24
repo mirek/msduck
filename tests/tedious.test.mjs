@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { readFileSync } from 'node:fs'
 import { TYPES, Request, Connection } from 'tedious'
 import { start, query } from './support/client.mjs'
 import { capture } from '../scripts/lib/compatibility.mjs'
@@ -2434,10 +2435,15 @@ test('SUM resolves integer source columns with aliases, joins and query scopes',
   assert.equal(widened.columns[0][0].dataLength, 8)
 })
 
-test('SUM follows integer types through CTE and derived output projections', { timeout: 20000 }, async t => {
+async function startSumProjectionSource(t) {
   const c = await start(t)
   await query(c, 'CREATE TABLE dbo.sum_projection_source (n INT, b BIGINT)')
   await query(c, 'INSERT INTO dbo.sum_projection_source VALUES (1,3000000000),(2,4),(NULL,NULL)')
+  return c
+}
+
+test('SUM follows integer types through CTE and derived output projections', { timeout: 20000 }, async t => {
+  const c = await startSumProjectionSource(t)
   for (const sql of [
     'WITH q AS (SELECT n,b FROM dbo.sum_projection_source) SELECT SUM(n),SUM(b) FROM q',
     'WITH q AS (SELECT * FROM dbo.sum_projection_source) SELECT SUM(n),SUM(b) FROM q',
@@ -2451,11 +2457,19 @@ test('SUM follows integer types through CTE and derived output projections', { t
     assert.deepEqual(result.rows, [[3,'3000000004']], sql)
     assert.deepEqual(result.columns[0].map(c => c.dataLength), [4,8], sql)
   }
+})
+
+test('SUM follows integer types through composed and shadowed projections', { timeout: 20000 }, async t => {
+  const c = await startSumProjectionSource(t)
   assert.deepEqual((await query(c, 'SELECT SUM(x) FROM (SELECT n+1 AS x FROM dbo.sum_projection_source) q')).rows, [[5]])
   assert.deepEqual((await query(c, 'WITH q AS (SELECT SUM(n) AS x FROM dbo.sum_projection_source) SELECT SUM(x) FROM q')).rows, [[3]])
   assert.deepEqual((await query(c, 'WITH q AS (SELECT n AS x FROM dbo.sum_projection_source UNION ALL SELECT b AS x FROM dbo.sum_projection_source) SELECT SUM(x) FROM q')).rows, [['3000000007']])
   // Shadowing must retain the CTE's BIGINT instead of the catalog table's INT.
   assert.deepEqual((await query(c, 'WITH sum_projection_source AS (SELECT CAST(3000000000 AS BIGINT) AS n) SELECT SUM(n) FROM sum_projection_source')).rows, [['3000000000']])
+})
+
+test('SUM preserves prepared and empty CTE output types', { timeout: 20000 }, async t => {
+  const c = await startSumProjectionSource(t)
   const prepared = await prepare(c, 'WITH q AS (SELECT @value AS n FROM dbo.sum_projection_source) SELECT SUM(n) FROM q', [['value', TYPES.BigInt]])
   assert.deepEqual(await prepared.run({ value: '3000000000' }), [['9000000000']])
   assert.deepEqual(await prepared.run({ value: null }), [[null]])
@@ -2463,6 +2477,10 @@ test('SUM follows integer types through CTE and derived output projections', { t
   const empty = await query(c, 'WITH q AS (SELECT n,b FROM dbo.sum_projection_source WHERE 1=0) SELECT SUM(n),SUM(b) FROM q')
   assert.deepEqual(empty.rows, [[null,null]])
   assert.deepEqual(empty.columns[0].map(c => c.dataLength), [4,8])
+})
+
+test('SUM preserves view output types and CTE overflow recovery', { timeout: 20000 }, async t => {
+  const c = await startSumProjectionSource(t)
   await query(c, 'CREATE VIEW dbo.sum_projection_view AS WITH q AS (SELECT n FROM dbo.sum_projection_source) SELECT SUM(n) AS total FROM q')
   assert.deepEqual((await query(c, 'SELECT total FROM dbo.sum_projection_view')).rows, [[3]])
   await query(c, 'INSERT INTO dbo.sum_projection_source VALUES (2147483647,NULL)')
@@ -6062,16 +6080,21 @@ test('TODATETIMEOFFSET attaches fixed offsets to local temporal fields', { timeo
   for(const [value,zone] of [['0001-01-01T00:00:00',1],['9999-12-31T23:59:59',-1]]) await assert.rejects(query(c,`SELECT TODATETIMEOFFSET(CAST('${value}' AS DATETIME2(7)),${zone})`),e=>e.number===9813 && e.message.includes('todatetimeoffset'))
 })
 
-test('TIME set sources retain precision through derived queries and windows', { timeout: 30000 }, async t => {
-  const c=await start(t)
-  await query(c,"CREATE TABLE dbo.time_set_a(t TIME(2)); CREATE TABLE dbo.time_set_b(t TIME(4)); INSERT INTO dbo.time_set_a VALUES('12:00:00.1234'),(NULL); INSERT INTO dbo.time_set_b VALUES('12:00:00.1234'),(NULL)")
-  for(const op of ['UNION ALL','UNION','INTERSECT','EXCEPT']) {
+for(const op of ['UNION ALL','UNION','INTERSECT','EXCEPT']) {
+  test(`TIME set sources retain precision through derived queries: ${op}`, { timeout: 30000 }, async t => {
+    const c=await start(t)
+    await query(c,"CREATE TABLE dbo.time_set_a(t TIME(2)); CREATE TABLE dbo.time_set_b(t TIME(4)); INSERT INTO dbo.time_set_a VALUES('12:00:00.1234'),(NULL); INSERT INTO dbo.time_set_b VALUES('12:00:00.1234'),(NULL)")
     const source=`SELECT t FROM dbo.time_set_a ${op} SELECT t FROM dbo.time_set_b`
     const direct=await query(c,source);assert.equal(direct.columns[0][0].scale,4,op)
     const derived=await query(c,`SELECT t FROM (${source}) q ORDER BY t`);assert.equal(derived.columns[0][0].scale,4,op)
     const empty=await query(c,`SELECT t FROM (${source}) q WHERE 1=0`);assert.deepEqual(empty.rows,[]);assert.equal(empty.columns[0][0].scale,4,op)
     const agg=await query(c,`WITH q AS (${source}) SELECT MIN(t),MAX(t) FROM q`);assert.deepEqual(agg.columns[0].map(c=>c.scale),[4,4],op)
-  }
+  })
+}
+
+test('TIME set sources retain precision through windows views and nested sets', { timeout: 30000 }, async t => {
+  const c=await start(t)
+  await query(c,"CREATE TABLE dbo.time_set_a(t TIME(2)); CREATE TABLE dbo.time_set_b(t TIME(4)); INSERT INTO dbo.time_set_a VALUES('12:00:00.1234'),(NULL); INSERT INTO dbo.time_set_b VALUES('12:00:00.1234'),(NULL)")
   const source='SELECT t FROM dbo.time_set_a UNION ALL SELECT t FROM dbo.time_set_b'
   const r=await query(c,`WITH q AS (${source}) SELECT LAG(t,5,'01:02:03.1234567') OVER(ORDER BY t),DATEPART(ns,LAG(t,5,'01:02:03.1234567') OVER(ORDER BY t)),DATEADD(ns,50000,t) FROM q ORDER BY t`)
   assert.deepEqual(r.columns[0].map(c=>c.scale),[4,undefined,4]);assert.deepEqual(r.rows.map(r=>r[1]),[123500000,123500000,123500000,123500000])
@@ -8706,26 +8729,25 @@ test('OUTPUT expression failures preserve metadata completion commands and atomi
   }
 })
 
-test('UPDATE DELETE OUTPUT failures preserve commands for native and materialized images', { timeout: 60000 }, async t => {
-  const { readFile } = await import('node:fs/promises')
-  const { canonical } = await import('../scripts/lib/compatibility.mjs')
-  const c = await start(t)
-  let tokens = []
-  const debugToken = c.debug.token.bind(c.debug)
-  c.debug.token = token => {
-    if (token.name.startsWith('DONE')) tokens.push({ ...token })
-    debugToken(token)
-  }
-  const fixture = JSON.parse(await readFile(new URL('../reference/output-update-delete-errors.json', import.meta.url), 'utf8'))
-  for (const entry of fixture.results) {
+const outputFailureCases = JSON.parse(readFileSync(new URL('../reference/output-update-delete-errors.json', import.meta.url), 'utf8')).results
+for (const [index, entry] of outputFailureCases.entries()) {
+  test(`UPDATE DELETE OUTPUT failures preserve commands: case ${index + 1}`, { timeout: 60000 }, async t => {
+    const { canonical } = await import('../scripts/lib/compatibility.mjs')
+    const c = await start(t)
+    let tokens = []
+    const debugToken = c.debug.token.bind(c.debug)
+    c.debug.token = token => {
+      if (token.name.startsWith('DONE')) tokens.push({ ...token })
+      debugToken(token)
+    }
     await query(c, entry.setup)
     tokens = []
     assert.deepEqual(canonical(await capture(c, entry.query)), entry.reference, entry.query)
     assert.deepEqual(JSON.parse(JSON.stringify(tokens)), entry.tokens, `completion commands: ${entry.query}`)
     assert.deepEqual(canonical(await capture(c, entry.readback)), entry.after)
     await query(c, 'DROP TABLE output_ref; DROP TABLE output_sink')
-  }
-})
+  })
+}
 
 test('UPDATE OUTPUT pairs old and new images across key changes parameters defaults and CTEs', { timeout: 60000 }, async t => {
   const { readFile } = await import('node:fs/promises')
