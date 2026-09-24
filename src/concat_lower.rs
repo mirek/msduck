@@ -350,14 +350,19 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
             let json_consumer = matches!(expr, Expr::Function(function)
                 if matches!(function.name.to_string().to_ascii_uppercase().as_str(),
                     "ISJSON" | "JSON_VALUE" | "JSON_QUERY" | "JSON_PATH_EXISTS" | "STRING_ESCAPE"
-                    | "MIN" | "MAX"
                     | "__MSDUCK_MIN_BIN2_UNICODE" | "__MSDUCK_MAX_BIN2_UNICODE"
                     | "__MSDUCK_MIN_BIN2_ANSI" | "__MSDUCK_MAX_BIN2_ANSI"));
+            // Scoped BIN2 annotations must survive until aggregate lowering.
+            // Rewriting their CAST wrapper here would erase the binding proof.
+            let unbound_extrema = matches!(expr, Expr::Function(f)
+                if matches!(f.name.to_string().to_ascii_uppercase().as_str(), "MIN" | "MAX"))
+                && !msduck_sql::projection::character_extrema::bound_result(expr);
             // Only the direct migrated operand (through parentheses/casts) changes
             // representation. Descendant text producers own their own adapters.
             self.consumer.push(
                 currency_cast
                     || json_consumer
+                    || unbound_extrema
                     || (unicode_cast || matches!(expr, Expr::Nested(_))) && inherited,
             );
             std::ops::ControlFlow::Continue(())
@@ -468,4 +473,42 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
         }
     }
     let _ = node.visit(&mut Normalize::default());
+}
+
+#[cfg(test)]
+mod aggregate_cast_tests {
+    use super::*;
+
+    #[test]
+    fn cast_normalization_preserves_scoped_bin2_aggregate_annotations() {
+        for name in ["MIN", "MAX"] {
+            for (marker, kind, suffix) in [
+                ("unicode", "NVARCHAR(8)", "unicode"),
+                ("ansi", "VARCHAR(8)", "ansi"),
+            ] {
+                let sql = format!(
+                    "{name}(CAST(__msduck_extrema_input_{marker}(s) AS {kind}) COLLATE Latin1_General_100_BIN2)"
+                );
+                let mut expr =
+                    sqlparser::parser::Parser::new(&sqlparser::dialect::GenericDialect {})
+                        .try_with_sql(&sql)
+                        .unwrap()
+                        .parse_expr()
+                        .unwrap();
+                assert!(msduck_sql::projection::character_extrema::bound_result(
+                    &expr
+                ));
+                annotated_unicode_casts(&mut expr);
+                assert!(
+                    msduck_sql::projection::character_extrema::bound_result(&expr),
+                    "{expr}"
+                );
+                assert!(msduck_sql::projection::character_extrema::lower(&mut expr));
+                assert_eq!(
+                    expr.to_string(),
+                    format!("__msduck_{}_bin2_{suffix}(s)", name.to_ascii_lowercase())
+                );
+            }
+        }
+    }
 }
