@@ -111,7 +111,10 @@ fn rust_read_adapter_preserves_results_errors_and_cancelled_transactions() {
         .query_arrow_cancellable_read([], &flag)
         .err()
         .unwrap();
-    assert!(matches!(error, duckdb::Error::InvalidQuery));
+    assert!(matches!(
+        error,
+        duckdb::CancellableReadError::Query(duckdb::Error::InvalidQuery)
+    ));
     assert_eq!(
         db.query_row("SELECT COUNT(*) FROM write_probe", [], |r| r
             .get::<_, i64>(0))
@@ -125,6 +128,7 @@ fn rust_read_adapter_preserves_results_errors_and_cancelled_transactions() {
         .err()
         .unwrap();
     assert!(error.to_string().contains("Conversion Error"));
+    assert!(matches!(error, duckdb::CancellableReadError::Query(_)));
 
     for threads in [1, 4] {
         let db = Connection::open_in_memory().unwrap();

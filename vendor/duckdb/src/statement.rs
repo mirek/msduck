@@ -135,13 +135,14 @@ impl Statement<'_> {
     /// The caller must exclude side-effecting SELECTs; backend read-only flags
     /// do not prove absence of volatile or external effects. Preparation and
     /// parameter binding are not interruptible through this flag. On an unexpected
-    /// native drain/eligibility error, discard the connection. Streaming is not supported.
+    /// native drain error, `CancellableReadError::ConnectionUnusable` requires closing
+    /// the connection. `Query` preserves ordinary query errors. Streaming is not supported.
     #[cfg(all(feature = "bundled", not(feature = "bundled-cmake")))]
     pub fn query_arrow_cancellable_read<P: Params>(
         &mut self,
         params: P,
         cancel: &std::sync::atomic::AtomicBool,
-    ) -> Result<Option<Arrow<'_>>> {
+    ) -> std::result::Result<Option<Arrow<'_>>, crate::CancellableReadError> {
         params.__bind_in(self)?;
         if self.stmt.execute_read_cancellable(cancel)? {
             Ok(Some(Arrow::new(self)))

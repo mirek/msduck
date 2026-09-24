@@ -1055,6 +1055,13 @@ impl Session {
                     );
                 }
                 Err(e) => {
+                    if e.downcast_ref::<crate::read_cancellation::UnusableRead>()
+                        .is_some()
+                    {
+                        self.read_cancel_cleanup_failed = true;
+                        self.last_error = emit_error(&mut out, &e);
+                        return (out, false); // no CATCH, later statements, rollback SQL, or ACK
+                    }
                     if let Some(cancelled) =
                         e.downcast_ref::<crate::read_cancellation::CancelledRead>()
                     {
@@ -2386,7 +2393,10 @@ impl Session {
                         }
                         .into());
                     }
-                    Err(error) => Err(error),
+                    Err(duckdb::CancellableReadError::Query(error)) => Err(error),
+                    Err(duckdb::CancellableReadError::ConnectionUnusable(error)) => {
+                        return Err(crate::read_cancellation::UnusableRead(error).into());
+                    }
                 }
             } else {
                 prepared.query_arrow(duckdb::params_from_iter(translator.values.iter()))

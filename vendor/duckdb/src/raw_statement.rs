@@ -192,7 +192,10 @@ impl RawStatement {
     }
 
     #[cfg(all(feature = "bundled", not(feature = "bundled-cmake")))]
-    pub(crate) fn execute_read_cancellable(&mut self, cancel: &std::sync::atomic::AtomicBool) -> Result<bool> {
+    pub(crate) fn execute_read_cancellable(
+        &mut self,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> std::result::Result<bool, crate::CancellableReadError> {
         self.reset_result();
         match unsafe { crate::pending_read::execute(self.ptr, cancel)? } {
             Some(result) => {

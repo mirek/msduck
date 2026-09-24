@@ -9,7 +9,10 @@ A drained read cancellation carries its metadata as a distinct internal outcome,
 bypasses T-SQL CATCH and stops every later batch statement. The session applies
 XACT_ABORT rollback outside native execution, then returns the original response
 and a separate Attention ACK. Cleanup failure is distinct and requires connection
-closure; it does not return an ACK. Native errors remain ordinary errors.
+closure; it does not return an ACK. A native drain failure also returns
+`CleanupFailed`, bypasses CATCH and later statements, and never runs rollback SQL
+on the uncertain connection. Ordinary native query errors remain SQL errors; the
+Rust adapter preserves this distinction in its typed error.
 
 The deterministic `attention_completion::ActiveRead` plan takes explicit RPC,
 transaction, XACT_ABORT and TRY inputs. Its completion/rollback ordering and ACK

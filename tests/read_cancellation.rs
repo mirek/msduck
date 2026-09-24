@@ -185,3 +185,35 @@ fn cancelled_computations_match_reference_completion_and_preserve_session_work()
         eprintln!("matched engine read cancellation {e}");
     }
 }
+
+#[test]
+fn ordinary_native_read_error_still_enters_catch_and_keeps_session_usable() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let (_, ok) = session.batch_response(
+        "CREATE TABLE dbo.bad_input(v VARCHAR(8)); INSERT dbo.bad_input VALUES('bad'); CREATE TABLE dbo.caught(n INT)",
+        &Default::default(),
+        false,
+        None,
+    );
+    assert!(ok);
+    let outcome = session.batch_response_with_read_cancel(
+        "BEGIN TRY SELECT CAST(v AS INT) AS n FROM dbo.bad_input; INSERT dbo.caught VALUES(1); END TRY BEGIN CATCH INSERT dbo.caught VALUES(2); END CATCH; INSERT dbo.caught VALUES(3)",
+        &Default::default(),
+        Mode::Batch,
+        Arc::new(AtomicBool::new(false)),
+    );
+    assert!(
+        matches!(outcome, Outcome::Finished { success: true, .. }),
+        "{outcome:?}"
+    );
+    let values = session
+        .db
+        .prepare("SELECT n FROM dbo.caught ORDER BY n")
+        .unwrap()
+        .query_map([], |row| row.get::<_, i32>(0))
+        .unwrap()
+        .collect::<duckdb::Result<Vec<_>>>()
+        .unwrap();
+    assert_eq!(values, [2, 3]);
+}

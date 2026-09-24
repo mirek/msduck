@@ -124,6 +124,8 @@ mod raw_statement;
 mod row;
 #[cfg(all(feature = "bundled", not(feature = "bundled-cmake")))]
 mod pending_read;
+#[cfg(all(feature = "bundled", not(feature = "bundled-cmake")))]
+pub use pending_read::CancellableReadError;
 mod statement;
 mod transaction;
 

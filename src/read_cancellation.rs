@@ -15,7 +15,7 @@ pub enum Outcome {
         tokens: Vec<u8>,
         attention_ack: [u8; 13],
     },
-    /// Native work drained, but session cleanup failed. Close the connection;
+    /// Native drain or session cleanup failed. Close the connection;
     /// this must never become an Attention acknowledgement or reusable session.
     CleanupFailed {
         tokens: Vec<u8>,
@@ -31,3 +31,17 @@ impl std::fmt::Display for CancelledRead {
     }
 }
 impl std::error::Error for CancelledRead {}
+
+/// A native cancellation error whose connection cannot safely execute cleanup SQL.
+#[derive(Debug)]
+pub(crate) struct UnusableRead(pub duckdb::Error);
+impl std::fmt::Display for UnusableRead {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+impl std::error::Error for UnusableRead {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.0)
+    }
+}

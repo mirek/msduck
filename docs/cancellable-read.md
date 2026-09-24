@@ -2,7 +2,9 @@
 
 The patched DuckDB Rust `Statement::query_arrow_cancellable_read` binds parameters
 normally and returns `Some(Arrow)` for completion, `None` for a drained cancellation,
-or a native error. It reuses the existing executed-result and Arrow conversion
+or a typed `CancellableReadError`. `Query` preserves an ordinary native/binding
+error; `ConnectionUnusable` requires connection disposal and preserves the native
+diagnostic. It reuses the existing executed-result and Arrow conversion
 path. A shared atomic flag is the only cross-thread cancellation input. Native
 pending task calls, interruption, drain and result transfer stay on the worker.
 
@@ -11,7 +13,7 @@ execution starts. A pre-set flag returns cancellation without starting execution
 An observed flag before result transfer wins over completion; native errors from
 a task poll remain errors. This policy is not yet a claim about TDS completion races.
 The native drain repeats eligibility/active-result validation. An unexpected
-eligibility/drain error requires the caller to discard the connection; it must
+drain error is returned as `ConnectionUnusable` and requires the caller to discard the connection; it must
 never be presented as successful cancellation or worker quiescence.
 
 Pending handles are owned and destroyed on every return path; an active guard
@@ -24,7 +26,7 @@ The server adapter must establish supported semantics from a bound plan before
 using this method. Preparation, binding, writes, side-effecting SELECTs, streaming,
 commit and blocked external I/O remain outside the cancellation guarantee. The API
 is compiled only for bundled cc builds, matching the private native ABI. Server
-execution does not use it yet.
+execution uses it only through the opt-in active-read session entry point.
 
 The native regression compares full Arrow batches for completed/empty/NULL results,
 checks parameter rebinding after pre-cancellation, preserves conversion errors and
@@ -42,3 +44,7 @@ strict all-targets workspace Clippy. The workspace run also passed both correcte
 native drain probes, including the gated background-error case. The final commit
 only records this evidence. No production client behavior change or client rerun
 is claimed; server integration remains separate.
+
+A native stale-pending-handle regression verifies the failed-drain disposition
+through the Rust adapter itself. Ordinary conversion failures and pre-execution
+write rejection retain the separate `Query` disposition.
