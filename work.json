@@ -1517,6 +1517,28 @@
       "dependencies": [],
       "issue": 160,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJ_CS"
+    },
+    {
+      "id": "engine-read-cancellation-v1",
+      "title": "Integrate typed active-read cancellation into session batch execution",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. PR161 exposes owned cancellable reads and SQL Server computation captures establish completion/transaction behavior. Add an opt-in session path before responsive transport integration. Original root concat-integration-v1 owns engine/lib integration and smp-codec-v1 owns TDS exports.",
+      "scope": [
+        "src/read_cancellation.rs",
+        "tests/read_cancellation.rs",
+        "docs/read-cancellation.md",
+        "crates/msduck-tds/src/attention_completion.rs",
+        "crates/msduck-tds/tests/attention_completion.rs"
+      ],
+      "acceptance": [
+        "Derive deterministic cancelled-read completion/rollback ordering and separate Attention ACK from all 24 retained computation cases; keep rollback effects in the session adapter.",
+        "Use a request-scoped atomic flag for eligible materialized read execution, preserve metadata, bypass CATCH and later statements on cancellation, retain XACT_ABORT OFF transaction work and roll back ON after native drain. Return typed cancellation separate from native errors.",
+        "Test batch/direct RPC/prepared, explicit/autocommit, XACT_ABORT ON/OFF and TRY/CATCH using actual native execution markers; verify response bytes against retained evidence and connection/state reuse. Keep live transport unchanged and document unsupported cancellation classes.",
+        "Run deterministic/workspace/Clippy/format checks and client/audit verification appropriate to changes on the Linux builder."
+      ],
+      "dependencies": [],
+      "issue": 162,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PKB6A"
     }
   ]
 }
