@@ -80,3 +80,43 @@ fn integer_dispatch_keeps_unselected_variant_branches_bindable() {
             .is_err()
     );
 }
+
+#[test]
+fn nested_integer_conditionals_keep_one_volatile_evaluation() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    session
+        .db
+        .execute_batch("CREATE SEQUENCE nested_integer_calls")
+        .unwrap();
+    let mut expression = "CAST(nextval('nested_integer_calls') AS INT)".to_owned();
+    for _ in 0..10 {
+        expression = format!("IIF(1=1,{expression},0)");
+    }
+    let sql = format!("SELECT {expression} AS n INTO nested_integer_results FROM range(6000)");
+    let (response, ok) = session.batch_response(&sql, &Default::default(), false, None);
+    assert!(ok, "{response:?}");
+    assert_eq!(
+        session
+            .db
+            .query_row(
+                "SELECT count(*),min(n),max(n) FROM nested_integer_results",
+                [],
+                |r| Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i32>(1)?,
+                    r.get::<_, i32>(2)?
+                ))
+            )
+            .unwrap(),
+        (6000, 1, 6000)
+    );
+    assert_eq!(
+        session
+            .db
+            .query_row("SELECT currval('nested_integer_calls')", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        6000
+    );
+}
