@@ -45,6 +45,8 @@ native drain probes, including the gated background-error case. The final commit
 only records this evidence. No production client behavior change or client rerun
 is claimed; server integration remains separate.
 
-A native stale-pending-handle regression verifies the failed-drain disposition
-through the Rust adapter itself. Ordinary conversion failures and pre-execution
-write rejection retain the separate `Query` disposition.
+The existing native stale-pending-handle and racing-error probes exercise drain
+failures. Rust adapter tests separately verify that ordinary conversion failures
+and pre-execution write rejection retain the `Query` disposition. A session
+regression checks that an ordinary native read error still enters CATCH and permits
+subsequent work; a drain failure instead follows the connection-disposal branch.
