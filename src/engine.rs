@@ -154,6 +154,8 @@ pub struct Session {
     pub transaction_descriptor: u64,
     pub original_login: String,
     transaction_name: String,
+    xact_abort: bool,
+    transaction_doomed: bool,
     caught_error: Option<SqlError>,
 }
 impl Session {
@@ -177,6 +179,8 @@ impl Session {
             transaction_descriptor: 0,
             original_login: "sa".into(),
             transaction_name: String::new(),
+            xact_abort: false,
+            transaction_doomed: false,
             caught_error: None,
         })
     }
@@ -411,6 +415,7 @@ impl Session {
                 values: Vec::new(),
                 parameter_slots: HashMap::new(),
                 transactions: self.transactions,
+                transaction_doomed: self.transaction_doomed,
                 original_login: &self.original_login,
                 rowcount: self.rowcount,
                 last_error: self.last_error,
@@ -499,6 +504,7 @@ impl Session {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: self.transactions,
+            transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
             rowcount: self.rowcount,
             last_error: self.last_error,
@@ -905,6 +911,11 @@ impl Session {
                                 );
                             }
                         }
+                        if matches!(statement, Statement::Commit { .. })
+                            && let Some(offset) = control_done(&mut out, rpc, self.nocount, 0)
+                        {
+                            last_done = Some(offset);
+                        }
                         if matches!(statement, Statement::Throw(_))
                             && let Some(offset) = control_done(&mut out, rpc, self.nocount, 246)
                         {
@@ -922,6 +933,16 @@ impl Session {
                         continue;
                     }
                     self.last_error = emit_error(&mut out, &e);
+                    if self.transaction_doomed {
+                        match self.rollback_transaction("") {
+                            Ok(tokens) => out.extend(tokens),
+                            Err(error) => {
+                                emit_error(&mut out, &error);
+                            }
+                        }
+                        tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
+                        return (out, false);
+                    }
                     let failed_dml =
                         e.downcast_ref::<crate::query_error::FailedQuery>()
                             .map(|failed| failed.command)
@@ -990,6 +1011,21 @@ impl Session {
                 }
             }
         }
+        if self.transaction_doomed {
+            if let Some(offset) = last_done {
+                out[offset + 1] |= 1;
+            }
+            match self.rollback_transaction("") {
+                Ok(tokens) => out.extend(tokens),
+                Err(error) => {
+                    emit_error(&mut out, &error);
+                }
+            }
+            self.error(&mut out, 3998, "Uncommittable transaction is detected at the end of the batch. The transaction is rolled back.");
+            tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
+            self.caught_error = None;
+            return (out, false);
+        }
         if rpc {
             if let Some((name, value)) = handle.filter(|_| !had_runtime_error) {
                 tds::return_handle(&mut out, name, value);
@@ -1022,6 +1058,12 @@ impl Session {
         // Same-level binding/compilation failures are not runtime catch targets.
         if binding_failure(error) {
             return false;
+        }
+        // Retain the transaction for CATCH reads and explicit ROLLBACK. The
+        // pinned 17.0.4065.4 reference also dooms caught RAISERROR 11/16;
+        // informational severity 10 never enters this path.
+        if self.xact_abort && self.transactions > 0 && caught.severity >= 11 {
+            self.transaction_doomed = true;
         }
         let Some(index) = pending
             .iter()
@@ -1078,7 +1120,14 @@ impl Session {
         self.transactions += 1;
         Ok(out)
     }
+    fn require_committable(&self) -> Result<()> {
+        if self.transaction_doomed {
+            return Err(SqlError::new(3930, 1, "The current transaction cannot be committed and cannot support operations that write to the log file. Roll back the transaction.").into());
+        }
+        Ok(())
+    }
     pub fn commit_transaction(&mut self) -> Result<Vec<u8>> {
+        self.require_committable()?;
         ensure!(
             self.transactions > 0,
             "COMMIT has no corresponding BEGIN TRANSACTION"
@@ -1106,6 +1155,7 @@ impl Session {
         let mut out = Vec::new();
         tds::transaction_env(&mut out, 10, self.transaction_descriptor);
         self.transactions = 0;
+        self.transaction_doomed = false;
         self.transaction_descriptor = 0;
         self.transaction_name.clear();
         Ok(out)
@@ -1209,6 +1259,24 @@ impl Session {
         statement: Statement,
         parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Execution> {
+        if self.transaction_doomed {
+            let command = match &statement {
+                Statement::Insert(_) => Some(0xc3),
+                Statement::Update(_) => Some(0xc5),
+                Statement::Delete(_) => Some(0xc4),
+                _ => None,
+            };
+            if let Some(command) = command {
+                return Err(crate::query_error::attach_context(
+                    self.require_committable().unwrap_err(),
+                    vec![],
+                    command,
+                ));
+            }
+            if crate::object_catalog::is_ddl(&statement) {
+                self.require_committable()?;
+            }
+        }
         crate::query_catalog::validate_cte_columns(&self.db, &statement)?;
         let catalog_ddl = crate::object_catalog::is_ddl(&statement);
         let own_transaction =
@@ -1400,6 +1468,13 @@ impl Session {
                 self.db
                     .execute_batch("SET VARIABLE __msduck_datefirst = 7")?;
             }
+            let normalized = statement.to_string().to_uppercase().replace(" = ", " ");
+            if matches!(
+                normalized.as_str(),
+                "SET XACT_ABORT ON" | "SET XACT_ABORT OFF"
+            ) {
+                self.xact_abort = normalized.ends_with(" ON");
+            }
             if let Some(nocount) = session_setting(&statement)? {
                 self.nocount = nocount;
                 return Ok(Execution::statement(
@@ -1491,6 +1566,7 @@ impl Session {
                 values: vec![],
                 parameter_slots: HashMap::new(),
                 transactions: self.transactions,
+                transaction_doomed: self.transaction_doomed,
                 original_login: &self.original_login,
                 rowcount: self.rowcount,
                 last_error: self.last_error,
@@ -1575,6 +1651,7 @@ impl Session {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: self.transactions,
+            transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
             rowcount: self.rowcount,
             last_error: self.last_error,
@@ -1667,6 +1744,7 @@ impl Session {
                 values: vec![],
                 parameter_slots: HashMap::new(),
                 transactions: self.transactions,
+                transaction_doomed: self.transaction_doomed,
                 original_login: &self.original_login,
                 rowcount: self.rowcount,
                 last_error: self.last_error,
@@ -2147,6 +2225,7 @@ impl Session {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: self.transactions,
+            transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
             rowcount: self.rowcount,
             last_error: self.last_error,
@@ -2197,6 +2276,7 @@ fn session_setting(statement: &Statement) -> Result<Option<bool>> {
             "SET IMPLICIT_TRANSACTIONS OFF",
             "SET CURSOR_CLOSE_ON_COMMIT OFF",
             "SET XACT_ABORT OFF",
+            "SET XACT_ABORT ON",
             "SET TEXTSIZE 2147483647",
             "SET DATEFORMAT MDY",
             "SET LANGUAGE US_ENGLISH",
@@ -2558,6 +2638,7 @@ struct Translator<'a> {
     values: Vec<Value>,
     parameter_slots: HashMap<String, usize>,
     transactions: u32,
+    transaction_doomed: bool,
     original_login: &'a str,
     rowcount: u64,
     last_error: i32,
@@ -3587,6 +3668,11 @@ impl VisitorMut for Translator<'_> {
                 }
                 if msduck_sql::session_function::is_xact_state(f) {
                     *expr = msduck_sql::session_function::xact_state(self.transactions > 0);
+                    if self.transaction_doomed
+                        && let Expr::Cast { expr, .. } = expr
+                    {
+                        **expr = number(-1);
+                    }
                 } else if msduck_sql::session_function::is_original_login(f) {
                     *expr = msduck_sql::session_function::original_login(self.original_login);
                 } else if f.name.to_string().eq_ignore_ascii_case("DB_NAME") {
@@ -4232,6 +4318,7 @@ mod tests {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: 0,
+            transaction_doomed: false,
             original_login: "sa",
             rowcount: 0,
             last_error: 0,

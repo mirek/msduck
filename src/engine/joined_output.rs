@@ -365,6 +365,7 @@ impl Session {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: self.transactions,
+            transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
             rowcount: self.rowcount,
             last_error: self.last_error,
