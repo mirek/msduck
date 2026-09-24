@@ -1097,6 +1097,25 @@
       "dependencies": [],
       "issue": 107,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PIvRi"
+    },
+    {
+      "id": "ddl-completion-reference-v1",
+      "title": "Preserve SQL Server DDL completion token reference evidence",
+      "state": "ready",
+      "authorization": "Direct owner continuing SQL Server compatibility goal. First-party owner-run captures in this session establish DDL completion command IDs, row-count omission, RPC schema completion suppression and session row-count state. No external submissions consumed.",
+      "scope": [
+        "reference/ddl-completion.json",
+        "scripts/capture-ddl-completion.mjs",
+        "docs/ddl-completion-reference.md"
+      ],
+      "acceptance": [
+        "Preserve the exact 15-statement DDL/DML sequence in batch and RPC modes, including raw DONE token fields, errors, canonical results and subsequent @@ROWCOUNT/@@ERROR state.",
+        "Provide a pinned-image capture command which repeats the complete suites in fresh isolated databases, requires identical observations, and compares retained reference without overwriting it.",
+        "Document known msduck DROP INDEX ON lowering failure and the validation limits of the separately implemented completion fix. Validate the actual committed capture command against the retained evidence."
+      ],
+      "dependencies": [],
+      "issue": 108,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PIwMa"
     }
   ]
 }
