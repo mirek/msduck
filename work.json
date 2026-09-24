@@ -1221,7 +1221,7 @@
     {
       "id": "object-catalog-type-width-v1",
       "title": "Preserve CHAR(2) object type values and internal catalog predicates",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Client verification exposed sys.objects.type values shorter than captured CHAR(2) metadata. Correct public catalog rows and adapt backend predicates without weakening wire width validation. Existing same-worker engine/query/index claims retain their files.",
       "scope": [
         "src/object_catalog.rs",
