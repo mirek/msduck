@@ -979,7 +979,7 @@
     {
       "id": "aggregate-warnings-reference-v1",
       "title": "Capture SQL Server aggregate NULL-elimination warning semantics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal and priority to make verification green. Owner-run BIN2 extrema reference replay has exact rows and metadata but lacks warning 8153. Capture first-party ground truth before changing execution; no external content consumed.",
       "scope": [
         "scripts/capture-aggregate-warnings.mjs",
