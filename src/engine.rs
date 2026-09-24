@@ -1527,6 +1527,17 @@ impl Session {
             parameters,
         )?;
         let is_query = output.is_some() || crate::update::is_query(&statement);
+        let write_command = match &statement {
+            Statement::Insert(_) => Some(0xc3),
+            Statement::Update(_) => Some(0xc5),
+            Statement::Delete(_) => Some(0xc4),
+            Statement::Query(query) => match query.body.as_ref() {
+                SetExpr::Update(_) => Some(0xc5),
+                SetExpr::Delete(_) => Some(0xc4),
+                _ => None,
+            },
+            _ => None,
+        };
         ensure!(
             matches!(
                 statement,
@@ -1727,9 +1738,25 @@ impl Session {
             anyhow::Error::new(error)
         })?;
         if !is_query {
-            let count =
-                prepared.execute(duckdb::params_from_iter(translator.values.iter()))? as u64;
-            return Ok(Execution::statement(vec![], Some(count), 0xc3));
+            let count = prepared
+                .execute(duckdb::params_from_iter(translator.values.iter()))
+                .map_err(|error| {
+                    // A rejected character write terminates this statement. Keep
+                    // its operation identity for 3621 and subsequent batch work;
+                    // preparation/binding errors never enter this execution path.
+                    if let Some(command) = write_command
+                        && matches!(error_number(&error.to_string()), 8152 | 2628)
+                    {
+                        crate::query_error::attach(error, vec![], command)
+                    } else {
+                        anyhow::Error::new(error)
+                    }
+                })? as u64;
+            return Ok(Execution::statement(
+                vec![],
+                Some(count),
+                write_command.unwrap_or(0xc3),
+            ));
         }
         let names = if json.is_some() {
             crate::for_json::Output::names(&self.db, &rendered, &translator.values)?

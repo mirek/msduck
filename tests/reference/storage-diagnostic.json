@@ -1,0 +1,2468 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "cases": [
+    {
+      "declaration": "VARCHAR(1)",
+      "mode": "insert",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s VARCHAR(1)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "INSERT dbo.truncation_target VALUES(1,N'aĀ🦆z'); SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "78"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'a'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "VARCHAR(1)",
+      "mode": "multirow",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s VARCHAR(1)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "INSERT dbo.truncation_target VALUES(1,'y'),(2,N'aĀ🦆z'); SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "78"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'a'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "VARCHAR(1)",
+      "mode": "update",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s VARCHAR(1)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "UPDATE dbo.truncation_target SET s=N'aĀ🦆z'; SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "78"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'a'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "VARCHAR(1)",
+      "mode": "caught",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s VARCHAR(1)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "BEGIN TRY INSERT dbo.truncation_target VALUES(1,N'aĀ🦆z'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,ERROR_STATE() AS s,ERROR_SEVERITY() AS severity,ERROR_MESSAGE() AS message; END CATCH; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "severity",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "message",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                16,
+                "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'a'."
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "78"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "CHAR(3)",
+      "mode": "insert",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s CHAR(3)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "INSERT dbo.truncation_target VALUES(1,N'aĀ🦆z'); SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "782020"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'aA?'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "CHAR(3)",
+      "mode": "multirow",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s CHAR(3)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "INSERT dbo.truncation_target VALUES(1,'y'),(2,N'aĀ🦆z'); SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "782020"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'aA?'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "CHAR(3)",
+      "mode": "update",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s CHAR(3)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "UPDATE dbo.truncation_target SET s=N'aĀ🦆z'; SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "782020"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'aA?'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "CHAR(3)",
+      "mode": "caught",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s CHAR(3)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "BEGIN TRY INSERT dbo.truncation_target VALUES(1,N'aĀ🦆z'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,ERROR_STATE() AS s,ERROR_SEVERITY() AS severity,ERROR_MESSAGE() AS message; END CATCH; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "severity",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "message",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                16,
+                "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'aA?'."
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "782020"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "NVARCHAR(1)",
+      "mode": "insert",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s NVARCHAR(1)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "INSERT dbo.truncation_target VALUES(1,N'aĀ🦆z'); SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "7800"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'a'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "NVARCHAR(1)",
+      "mode": "multirow",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s NVARCHAR(1)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "INSERT dbo.truncation_target VALUES(1,'y'),(2,N'aĀ🦆z'); SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "7800"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'a'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "NVARCHAR(1)",
+      "mode": "update",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s NVARCHAR(1)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "UPDATE dbo.truncation_target SET s=N'aĀ🦆z'; SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "7800"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'a'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "NVARCHAR(1)",
+      "mode": "caught",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s NVARCHAR(1)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "BEGIN TRY INSERT dbo.truncation_target VALUES(1,N'aĀ🦆z'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,ERROR_STATE() AS s,ERROR_SEVERITY() AS severity,ERROR_MESSAGE() AS message; END CATCH; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "severity",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "message",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                16,
+                "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'a'."
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "7800"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "NCHAR(3)",
+      "mode": "insert",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s NCHAR(3)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "INSERT dbo.truncation_target VALUES(1,N'aĀ🦆z'); SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "780020002000"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'aĀ\ud83e'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "NCHAR(3)",
+      "mode": "multirow",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s NCHAR(3)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "INSERT dbo.truncation_target VALUES(1,'y'),(2,N'aĀ🦆z'); SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "780020002000"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'aĀ\ud83e'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "NCHAR(3)",
+      "mode": "update",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s NCHAR(3)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "UPDATE dbo.truncation_target SET s=N'aĀ🦆z'; SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "780020002000"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'aĀ\ud83e'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "NCHAR(3)",
+      "mode": "caught",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s NCHAR(3)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "BEGIN TRY INSERT dbo.truncation_target VALUES(1,N'aĀ🦆z'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,ERROR_STATE() AS s,ERROR_SEVERITY() AS severity,ERROR_MESSAGE() AS message; END CATCH; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "severity",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "message",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                16,
+                "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'aĀ\ud83e'."
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "780020002000"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "VARCHAR(120)",
+      "mode": "insert",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s VARCHAR(120)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "INSERT dbo.truncation_target VALUES(1,REPLICATE(N'Ā',130)); SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "78"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "VARCHAR(120)",
+      "mode": "multirow",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s VARCHAR(120)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "INSERT dbo.truncation_target VALUES(1,'y'),(2,REPLICATE(N'Ā',130)); SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "78"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "VARCHAR(120)",
+      "mode": "update",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s VARCHAR(120)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "UPDATE dbo.truncation_target SET s=REPLICATE(N'Ā',130); SELECT @@ERROR AS e,@@ROWCOUNT AS rc; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "rc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                0
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "78"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "declaration": "VARCHAR(120)",
+      "mode": "caught",
+      "setup": "DROP TABLE IF EXISTS dbo.truncation_target; CREATE TABLE dbo.truncation_target(id INT,s VARCHAR(120)); INSERT dbo.truncation_target VALUES(0,'x')",
+      "sql": "BEGIN TRY INSERT dbo.truncation_target VALUES(1,REPLICATE(N'Ā',130)); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,ERROR_STATE() AS s,ERROR_SEVERITY() AS severity,ERROR_MESSAGE() AS message; END CATCH; SELECT id,CONVERT(VARBINARY(MAX),s) AS raw FROM dbo.truncation_target ORDER BY id",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "s",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "severity",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "message",
+                "type": "NVarChar",
+                "length": 8000,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                16,
+                "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'."
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "id",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": null
+              },
+              {
+                "name": "raw",
+                "type": "VarBinary",
+                "length": 65535,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                {
+                  "kind": "binary",
+                  "value": "78"
+                }
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "setup": "",
+      "sql": "BEGIN TRAN; INSERT dbo.truncation_target VALUES(1,REPLICATE('a',130)); SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; ROLLBACK; SELECT COUNT(*) AS n FROM dbo.truncation_target",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1,
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 1,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.truncation_target', column 's'. Truncated value: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      }
+    },
+    {
+      "setup": "",
+      "sql": "SET XACT_ABORT ON; BEGIN TRY BEGIN TRAN; INSERT dbo.truncation_target VALUES(1,REPLICATE('a',130)); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; IF @@TRANCOUNT>0 ROLLBACK; END CATCH; SET XACT_ABORT OFF",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      }
+    }
+  ]
+}
