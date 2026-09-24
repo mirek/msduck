@@ -24,6 +24,7 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
     crate::integer_aggregate::register(db)?;
     crate::character_aggregate::register(db)?;
     crate::ansi_binary::register(db)?;
+    crate::binary_unicode::register(db)?;
     crate::decimal_aggregate::register(db)?;
     crate::decimal_division::register(db)?;
     crate::replicate::register(db)?;

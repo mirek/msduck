@@ -47,6 +47,7 @@ mod unicode_case;
 mod unicode_trim;
 pub(crate) use msduck_sql::delete;
 mod ansi_binary;
+mod binary_unicode;
 mod character_aggregate;
 mod decimal_aggregate;
 mod decimal_division;
