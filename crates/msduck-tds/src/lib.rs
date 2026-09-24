@@ -3,6 +3,7 @@
 use anyhow::{Result, bail, ensure};
 
 pub mod collation;
+pub mod request_lifecycle;
 pub mod smp;
 
 pub const MAX_MESSAGE: usize = 16 * 1024 * 1024;
