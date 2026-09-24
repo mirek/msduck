@@ -43,7 +43,8 @@ and leaves the native aggregate plan uninstrumented, including windows and
 scalar assignments. Switching ON takes effect for the next statement. This
 avoids diagnostic allocation and frame materialization when warning 8153 is
 disabled; it does not change the remaining ANSI arithmetic policy gaps. The
-ON path still needs a scalable alternative to materializing window frames.
+ON path still needs a scalable alternative for the remaining materialized window
+aggregate families.
 
 Instrumentation visits query statements and ordinary INSERT/UPDATE/DELETE
 execution. SET and DECLARE scalar subqueries receive the owning statement's
@@ -145,8 +146,9 @@ and frame on this aggregate. A singleton lambda binds its result once, passes
 the returned NULL flag to the statement observer, and extracts the count.
 COALESCE preserves zero for an empty frame. Observation happens on the returned
 frame result, keeping intermediate segment-tree state construction free of
-diagnostic effects. COUNT(*) remains untouched. Other window aggregates retain
-the LIST implementation and its unresolved wide-frame cost.
+diagnostic effects. COUNT(*) remains untouched. Integer and money SUM/AVG now
+have the bounded implementation described below; the other window aggregates
+retain LIST and its unresolved wide-frame cost.
 
 Four pure AST tests and eight native diagnostic tests pass on Linux, as does
 strict workspace/all-target Clippy. The native tests retain unused/consumed
@@ -160,6 +162,30 @@ The client run had zero failures or cancellations and took 1072761ms. The
 325-case diagnostic capture completed with zero differences from `d2a5614`.
 These checks do not establish equivalence for the unresolved boundary programs
 below.
+
+## Bounded integer and money SUM/AVG windows under verification
+
+The six native integer and money SUM/AVG functions now have paired window
+variants. Each returns its original typed value and a BOOLEAN NULL-elimination
+flag. Fixed-size state reuses the deterministic bounded-sum rules, including
+integer-width overflow and average truncation toward zero. Money values retain
+their scaled coefficients and DECIMAL(19,4) result type. No frame values are
+collected. Overflow remains sticky in intermediate states but is reported only
+when a state is finalized for a returned frame.
+
+The AST rewrite retains the original operand, partition, ordering and frame.
+A singleton binding observes the returned flag and extracts the typed value;
+empty and all-NULL frames remain NULL. Grouped aggregates retain their existing
+operand observer. Decimal, approximate numeric and extrema window diagnostics
+still use the LIST path. This change does not resolve their scalability or the
+stored-view and partial-error compatibility gaps.
+
+Five AST tests and eleven native diagnostic tests pass on Linux, along with
+strict workspace/all-target Clippy and the build. Native coverage includes all
+six functions, empty/unused/consumed NULL frames, type preservation, signed and
+fractional values, grouped execution with four workers, overflow in used versus
+unused states, 6000 volatile evaluations, and 100000 expanding SUM frames.
+Reference replay and full Rust/client/audit verification remain in progress.
 
 ## DML and assignment integration under verification
 

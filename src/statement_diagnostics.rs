@@ -65,6 +65,7 @@ impl Registry {
     /// must retain this registry and open a fresh scope for every execution.
     pub fn register(&self, db: &Connection) -> duckdb::Result<()> {
         count_frame::register(db)?;
+        integer_frame::register(db)?;
         db.register_scalar_function_with_state::<Observe>("__msduck_observe_null", self)
     }
 }
@@ -695,5 +696,407 @@ mod count_frame {
         let wrong: i64 = db.query_row("SELECT count(*) FROM (SELECT i,__msduck_count_frame(CASE WHEN i%17=0 THEN NULL ELSE i END) OVER(ORDER BY i ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) d FROM range(100000) r(i)) WHERE NOT d.eliminated OR d.value<>i-i//17",[],|r|r.get(0)).unwrap();
         assert_eq!(wrong, 0);
         assert!(std::mem::size_of::<State>() <= 24);
+    }
+}
+
+// Carry diagnostics as data until the actual window result is observed.
+mod integer_frame {
+    use duckdb::{Connection, ffi::*};
+    use std::{
+        ffi::CStr,
+        panic::{AssertUnwindSafe, catch_unwind},
+    };
+
+    use msduck_core::bounded_aggregate::{State as ValueState, add};
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    struct State {
+        value: ValueState,
+        eliminated: bool,
+    }
+
+    fn protect(info: duckdb_function_info, action: impl FnOnce()) {
+        if catch_unwind(AssertUnwindSafe(action)).is_err() {
+            unsafe {
+                duckdb_aggregate_function_set_error(
+                    info,
+                    c"Rust aggregate callback panicked".as_ptr(),
+                );
+            }
+        }
+    }
+    unsafe fn overflow<const BIG: bool, const MONEY: bool>(info: duckdb_function_info) {
+        let message = if MONEY {
+            c"Arithmetic overflow error converting expression to data type money."
+        } else if BIG {
+            c"Arithmetic overflow error converting expression to data type bigint."
+        } else {
+            c"Arithmetic overflow error converting expression to data type int."
+        };
+        unsafe {
+            duckdb_aggregate_function_set_error(info, message.as_ptr());
+        }
+    }
+    unsafe extern "C" fn state_size(_: duckdb_function_info) -> idx_t {
+        std::mem::size_of::<State>() as idx_t
+    }
+    unsafe extern "C" fn init(_: duckdb_function_info, state: duckdb_aggregate_state) {
+        // DuckDB allocates the state_size bytes, aligned for aggregate state data.
+        unsafe {
+            state.cast::<State>().write(State::default());
+        }
+    }
+    unsafe extern "C" fn update<const BIG: bool, const MONEY: bool>(
+        info: duckdb_function_info,
+        input: duckdb_data_chunk,
+        states: *mut duckdb_aggregate_state,
+    ) {
+        protect(info, || unsafe {
+            // DuckDB's C API flattens input vectors and provides one state pointer
+            // per input row; states may repeat for rows belonging to the same group.
+            let len = duckdb_data_chunk_get_size(input);
+            let vector = duckdb_data_chunk_get_vector(input, 0);
+            let data = duckdb_vector_get_data(vector);
+            let validity = duckdb_vector_get_validity(vector);
+            for index in 0..len as usize {
+                if !validity.is_null() && !duckdb_validity_row_is_valid(validity, index as idx_t) {
+                    (*(*states.add(index)).cast::<State>()).eliminated = true;
+                    continue;
+                }
+                let value = if MONEY {
+                    let raw = *data.cast::<duckdb_hugeint>().add(index);
+                    let scaled = (i128::from(raw.upper) << 64) | i128::from(raw.lower);
+                    let Ok(value) = i64::try_from(scaled) else {
+                        (*(*states.add(index)).cast::<State>()).value.failed = true;
+                        continue;
+                    };
+                    value
+                } else if BIG {
+                    *data.cast::<i64>().add(index)
+                } else {
+                    i64::from(*data.cast::<i32>().add(index))
+                };
+                let state = &mut *(*states.add(index)).cast::<State>();
+                if let Some(next) = add::<BIG>(state.value, value, 1) {
+                    state.value = next;
+                } else {
+                    state.value.failed = true;
+                }
+            }
+        });
+    }
+    unsafe extern "C" fn combine<const BIG: bool>(
+        info: duckdb_function_info,
+        source: *mut duckdb_aggregate_state,
+        target: *mut duckdb_aggregate_state,
+        count: idx_t,
+    ) {
+        protect(info, || unsafe {
+            for index in 0..count as usize {
+                let source = (*source.add(index)).cast::<State>().read();
+                let target = &mut *(*target.add(index)).cast::<State>();
+                target.eliminated |= source.eliminated;
+                if let Some(next) = (!source.value.failed)
+                    .then(|| add::<BIG>(target.value, source.value.sum, source.value.count))
+                    .flatten()
+                {
+                    target.value = next;
+                } else {
+                    target.value.failed = true;
+                }
+            }
+        });
+    }
+    unsafe extern "C" fn finalize<const BIG: bool, const AVG: bool, const MONEY: bool>(
+        info: duckdb_function_info,
+        states: *mut duckdb_aggregate_state,
+        output: duckdb_vector,
+        count: idx_t,
+        offset: idx_t,
+    ) {
+        protect(info, || unsafe {
+            let values = duckdb_struct_vector_get_child(output, 0);
+            let flags = duckdb_struct_vector_get_child(output, 1);
+            for vector in [output, values, flags] {
+                duckdb_vector_ensure_validity_writable(vector);
+            }
+            let validity = duckdb_vector_get_validity(values);
+            let data = duckdb_vector_get_data(values);
+            for index in 0..count as usize {
+                let state = (*states.add(index)).cast::<State>().read();
+                // Window segment trees can build states that no output frame uses.
+                // Keep overflow sticky in each state, but report only finalized ones.
+                let row = offset as usize + index;
+                duckdb_validity_set_row_valid(duckdb_vector_get_validity(output), row as idx_t);
+                duckdb_validity_set_row_valid(duckdb_vector_get_validity(flags), row as idx_t);
+                duckdb_vector_get_data(flags)
+                    .cast::<bool>()
+                    .add(row)
+                    .write(state.eliminated);
+                let value = match state.value.value(AVG) {
+                    Err(_) => {
+                        overflow::<BIG, MONEY>(info);
+                        return;
+                    }
+                    Ok(None) => {
+                        duckdb_validity_set_row_invalid(validity, row as idx_t);
+                        continue;
+                    }
+                    Ok(Some(value)) => value,
+                };
+                duckdb_validity_set_row_valid(validity, row as idx_t);
+                if MONEY {
+                    data.cast::<duckdb_hugeint>()
+                        .add(row)
+                        .write(duckdb_hugeint {
+                            lower: value as u64,
+                            upper: if value < 0 { -1 } else { 0 },
+                        });
+                } else if BIG {
+                    data.cast::<i64>().add(row).write(value);
+                } else {
+                    data.cast::<i32>().add(row).write(value as i32);
+                }
+            }
+        });
+    }
+
+    fn register_one<const BIG: bool, const AVG: bool, const MONEY: bool>(
+        db: &Connection,
+        name: &CStr,
+    ) -> duckdb::Result<()> {
+        // All callbacks are static and state is plain, trivially dropped data.
+        // Registration copies the definition; destroy our construction handles on
+        // both success and failure. No raw connection escapes the Rust wrapper.
+        unsafe {
+            let mut function = duckdb_create_aggregate_function();
+            let mut kind = if MONEY {
+                duckdb_create_decimal_type(19, 4)
+            } else {
+                duckdb_create_logical_type(if BIG {
+                    DUCKDB_TYPE_DUCKDB_TYPE_BIGINT
+                } else {
+                    DUCKDB_TYPE_DUCKDB_TYPE_INTEGER
+                })
+            };
+            let mut flag = duckdb_create_logical_type(DUCKDB_TYPE_DUCKDB_TYPE_BOOLEAN);
+            let mut output = std::ptr::null_mut();
+            let result = if function.is_null() || kind.is_null() || flag.is_null() {
+                Err(duckdb::Error::InvalidQuery)
+            } else {
+                let mut children = [kind, flag];
+                let mut names = [c"value".as_ptr(), c"eliminated".as_ptr()];
+                output = duckdb_create_struct_type(children.as_mut_ptr(), names.as_mut_ptr(), 2);
+                if output.is_null() {
+                    Err(duckdb::Error::InvalidQuery)
+                } else {
+                    duckdb_aggregate_function_set_name(function, name.as_ptr());
+                    duckdb_aggregate_function_add_parameter(function, kind);
+                    duckdb_aggregate_function_set_return_type(function, output);
+                    duckdb_aggregate_function_set_special_handling(function);
+                    duckdb_aggregate_function_set_functions(
+                        function,
+                        Some(state_size),
+                        Some(init),
+                        Some(update::<BIG, MONEY>),
+                        Some(combine::<BIG>),
+                        Some(finalize::<BIG, AVG, MONEY>),
+                    );
+                    db.register_aggregate_function(function)
+                }
+            };
+            for logical in [&mut output, &mut flag, &mut kind] {
+                if !logical.is_null() {
+                    duckdb_destroy_logical_type(logical);
+                }
+            }
+            if !function.is_null() {
+                duckdb_destroy_aggregate_function(&mut function);
+            }
+            result
+        }
+    }
+    pub(super) fn register(db: &Connection) -> duckdb::Result<()> {
+        register_one::<false, false, false>(db, c"__msduck_sum_int_frame")?;
+        register_one::<true, false, false>(db, c"__msduck_sum_big_frame")?;
+        register_one::<false, true, false>(db, c"__msduck_avg_int_frame")?;
+        register_one::<true, true, false>(db, c"__msduck_avg_big_frame")?;
+        register_one::<true, false, true>(db, c"__msduck_sum_money_frame")?;
+        register_one::<true, true, true>(db, c"__msduck_avg_money_frame")
+    }
+
+    #[test]
+    fn generated_integer_windows_observe_only_consumed_frames() {
+        let db = Connection::open_in_memory().unwrap();
+        crate::integer_aggregate::register(&db).unwrap();
+        let registry = super::Registry::default();
+        registry.register(&db).unwrap();
+        let instrument = |sql: &str| {
+            let mut statement =
+                sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::DuckDbDialect {}, sql)
+                    .unwrap()
+                    .remove(0);
+            let ticket =
+                sqlparser::ast::Expr::Value(sqlparser::ast::Value::Placeholder("$1".into()).into());
+            assert_eq!(
+                crate::aggregate_diagnostics::instrument(&mut statement, ticket),
+                1
+            );
+            statement.to_string()
+        };
+        for (family, kind, two) in [
+            ("int", "INT", "2"),
+            ("big", "BIGINT", "2"),
+            ("money", "DECIMAL(19,4)", "2.0000"),
+        ] {
+            for aggregate in ["sum", "avg"] {
+                for (source, frame, expected, warned) in [
+                    (
+                        format!("(VALUES(1,NULL::{kind}),(2,2::{kind}))"),
+                        "1 FOLLOWING AND 1 FOLLOWING",
+                        vec![Some(two.to_owned()), None],
+                        false,
+                    ),
+                    (
+                        format!("(VALUES(1,NULL::{kind}),(2,2::{kind}))"),
+                        "1 PRECEDING AND 1 PRECEDING",
+                        vec![None, None],
+                        true,
+                    ),
+                    (
+                        format!("(VALUES(1,NULL::{kind}))"),
+                        "1 FOLLOWING AND 1 FOLLOWING",
+                        vec![None],
+                        false,
+                    ),
+                ] {
+                    let scope = registry.begin().unwrap();
+                    let sql = instrument(&format!(
+                        "SELECT CAST(__msduck_{aggregate}_{family}(v) OVER(ORDER BY id ROWS BETWEEN {frame}) AS VARCHAR) FROM {source} s(id,v) ORDER BY id"
+                    ));
+                    let mut statement = db.prepare(&sql).unwrap();
+                    let actual = statement
+                        .query_map([scope.ticket().as_slice()], |r| {
+                            r.get::<_, Option<String>>(0)
+                        })
+                        .unwrap()
+                        .collect::<duckdb::Result<Vec<_>>>()
+                        .unwrap();
+                    assert_eq!(actual, expected, "{sql}");
+                    assert_eq!(scope.null_eliminated(), warned, "{sql}");
+                }
+                db.execute_batch("CREATE OR REPLACE SEQUENCE observed_frame_calls")
+                    .unwrap();
+                let scope = registry.begin().unwrap();
+                let query = instrument(&format!(
+                    "SELECT __msduck_{aggregate}_{family}(CAST(CASE WHEN nextval('observed_frame_calls')%17=0 THEN NULL ELSE 1 END AS {kind})) OVER() AS v FROM range(6000)"
+                ));
+                let expected = if aggregate == "sum" { 5648 } else { 1 };
+                let wrong:i64=db.query_row(&format!("SELECT count(*) FROM ({query}) WHERE v IS DISTINCT FROM CAST({expected} AS {kind})"),[scope.ticket().as_slice()],|r|r.get(0)).unwrap();
+                assert_eq!(wrong, 0, "{query}");
+                assert!(scope.null_eliminated());
+                assert_eq!(
+                    db.query_row("SELECT currval('observed_frame_calls')", [], |r| r
+                        .get::<_, i64>(0))
+                        .unwrap(),
+                    6000
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn paired_integer_frames_preserve_values_types_and_null_presence() {
+        let db = Connection::open_in_memory().unwrap();
+        crate::integer_aggregate::register(&db).unwrap();
+        register(&db).unwrap();
+        for (family, kind) in [
+            ("int", "INT"),
+            ("big", "BIGINT"),
+            ("money", "DECIMAL(19,4)"),
+        ] {
+            for aggregate in ["sum", "avg"] {
+                for frame in [
+                    "UNBOUNDED PRECEDING AND CURRENT ROW",
+                    "1 PRECEDING AND 1 FOLLOWING",
+                    "1 FOLLOWING AND 1 FOLLOWING",
+                    "1 PRECEDING AND 1 PRECEDING",
+                    "UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING",
+                ] {
+                    let sql = format!(
+                        "SELECT count(*) FROM (SELECT __msduck_{aggregate}_{family}_frame(v) OVER w d, __msduck_{aggregate}_{family}(v) OVER w expected, count(*) OVER w <> count(v) OVER w eliminated FROM (SELECT i, CAST(CASE WHEN i%17=0 THEN NULL ELSE (i%7-3)*1.1234 END AS {kind}) v FROM range(6000) r(i)) s WINDOW w AS (ORDER BY i ROWS BETWEEN {frame})) WHERE d.value IS DISTINCT FROM expected OR typeof(d.value)<>typeof(expected) OR coalesce(d.eliminated,false)<>eliminated"
+                    );
+                    let wrong: i64 = db.query_row(&sql, [], |r| r.get(0)).unwrap();
+                    assert_eq!(wrong, 0, "{aggregate}/{family}/{frame}");
+                }
+                // Exercise combining many independent groups with mixed signs,
+                // fractional money coefficients and NULLs, using four workers.
+                db.execute_batch("SET threads=4").unwrap();
+                let sql = format!(
+                    "SELECT count(*) FROM (SELECT i%10000 g,__msduck_{aggregate}_{family}_frame(v) d,__msduck_{aggregate}_{family}(v) expected,count(*)<>count(v) eliminated FROM (SELECT i,CAST(CASE WHEN i%17=0 THEN NULL ELSE (i%37-18)*1.1234 END AS {kind}) v FROM range(200000) r(i)) s GROUP BY g) WHERE d.value IS DISTINCT FROM expected OR typeof(d.value)<>typeof(expected) OR d.eliminated IS DISTINCT FROM eliminated"
+                );
+                assert_eq!(
+                    db.query_row(&sql, [], |r| r.get::<_, i64>(0)).unwrap(),
+                    0,
+                    "{aggregate}/{family} groups"
+                );
+                for (source, warned) in [
+                    (format!("SELECT NULL::{kind} v"), true),
+                    (format!("SELECT NULL::{kind} v WHERE false"), false),
+                ] {
+                    let sql = format!(
+                        "SELECT d.value IS NULL,coalesce(d.eliminated,false) FROM (SELECT __msduck_{aggregate}_{family}_frame(v) d FROM ({source}) s)"
+                    );
+                    let actual: (bool, bool) = db
+                        .query_row(&sql, [], |r| Ok((r.get(0)?, r.get(1)?)))
+                        .unwrap();
+                    assert_eq!(actual, (true, warned), "{sql}");
+                }
+            }
+        }
+        assert!(std::mem::size_of::<State>() <= 32);
+    }
+
+    #[test]
+    fn paired_integer_frames_preserve_overflow_and_single_evaluation() {
+        let db = Connection::open_in_memory().unwrap();
+        register(&db).unwrap();
+        for (family, kind, maximum) in [
+            ("int", "INT", "2147483647"),
+            ("big", "BIGINT", "9223372036854775807"),
+            ("money", "DECIMAL(19,4)", "922337203685477.5807"),
+        ] {
+            for aggregate in ["sum", "avg"] {
+                // Overflow in unused segment-tree states must not become a query error.
+                let sql = format!(
+                    "SELECT count(*) FROM (SELECT __msduck_{aggregate}_{family}_frame(CAST({maximum} AS {kind})) OVER(ORDER BY i ROWS BETWEEN CURRENT ROW AND CURRENT ROW) d FROM range(6000) r(i)) WHERE d.value IS DISTINCT FROM CAST({maximum} AS {kind}) OR d.eliminated"
+                );
+                assert_eq!(db.query_row(&sql, [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+                let sql = format!(
+                    "SELECT d.value FROM (SELECT __msduck_{aggregate}_{family}_frame(v) OVER() d FROM (VALUES(CAST({maximum} AS {kind})),(CAST(1 AS {kind})),(NULL)) s(v))"
+                );
+                let error = db.query_row(&sql, [], |r| r.get::<_, i64>(0)).unwrap_err();
+                assert!(
+                    error.to_string().contains("Arithmetic overflow"),
+                    "{sql}: {error}"
+                );
+                db.execute_batch("CREATE OR REPLACE SEQUENCE integer_frame_calls")
+                    .unwrap();
+                let expected = if aggregate == "sum" { 5648 } else { 1 };
+                let sql = format!(
+                    "SELECT count(*) FROM (SELECT __msduck_{aggregate}_{family}_frame(CAST(CASE WHEN nextval('integer_frame_calls')%17=0 THEN NULL ELSE 1 END AS {kind})) OVER() d FROM range(6000)) WHERE d.value IS DISTINCT FROM CAST({expected} AS {kind}) OR NOT d.eliminated"
+                );
+                assert_eq!(db.query_row(&sql, [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+                assert_eq!(
+                    db.query_row("SELECT currval('integer_frame_calls')", [], |r| r
+                        .get::<_, i64>(0))
+                        .unwrap(),
+                    6000
+                );
+            }
+        }
+        let wrong: i64 = db.query_row("SELECT count(*) FROM (SELECT i,__msduck_sum_big_frame(i%2) OVER(ORDER BY i ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) d FROM range(100000) r(i)) WHERE d.value<>(i+1)//2 OR d.eliminated", [], |r|r.get(0)).unwrap();
+        assert_eq!(wrong, 0);
     }
 }
