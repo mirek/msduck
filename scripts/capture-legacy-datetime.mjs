@@ -43,6 +43,11 @@ for (const target of ['DATETIME', 'SMALLDATETIME']) {
   cases.push({id: `${target}-assignment-rounding`, sql: `CREATE TABLE legacy_assignment(id INT,value ${target}); INSERT INTO legacy_assignment VALUES(1,'2000-01-01T12:00:29.999'),(2,CAST('2000-01-01T12:00:29.999' AS DATETIME2(7))); SELECT id,CONVERT(VARCHAR(33),CAST(value AS DATETIME2(7)),126) AS rounded,DATEPART(ns,value) AS fraction FROM legacy_assignment ORDER BY id; DROP TABLE legacy_assignment`})
   cases.push({id: `${target}-separate-assignment-rounding`, sql: `CREATE TABLE legacy_assignment(id INT,value ${target}); INSERT INTO legacy_assignment VALUES(1,'2000-01-01T12:00:29.999'); INSERT INTO legacy_assignment VALUES(2,CAST('2000-01-01T12:00:29.999' AS DATETIME2(7))); SELECT id,CONVERT(VARCHAR(33),CAST(value AS DATETIME2(7)),126) AS rounded,DATEPART(ns,value) AS fraction FROM legacy_assignment ORDER BY id; DROP TABLE legacy_assignment`})
 }
+for (const target of ['DATETIME', 'SMALLDATETIME']) {
+  for (const text of ['0001-01-01T00:00:00', '1752-12-31T23:59:59.9983333', '1752-12-31T23:59:59.9983334', '9999-12-31T23:59:59.9983334']) {
+    cases.push({id: `${target}-typed-edge-${text}`, sql: `SELECT CAST(CAST('${text}' AS DATETIME2(7)) AS ${target}) AS value`})
+  }
+}
 const output = resolve(process.argv[2] ?? 'artifacts/compatibility/legacy-datetime-reference')
 await mkdir(output, {recursive: true})
 await withReferenceContainer(async (config, container) => {
