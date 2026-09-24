@@ -42,11 +42,13 @@ The local [TDS skill](../.agents/skills/tds-protocol/SKILL.md), its
 [Attention notes](../.agents/skills/tds-protocol/messages.md#22-attention-signal)
 and [response patterns](../.agents/skills/tds-protocol/response-patterns.md)
 distinguish pre-EOM IGNORE from post-EOM Attention. Retain the original response
-message boundary before a separate tabular Attention ACK: payload
-`FD 20 00 00 00 00 00 00 00 00 00 00 00`.
-Do not concatenate that ACK into the original response. Exact cancellation
-response contents, repeated-Attention behavior and transaction effects still
-require first-party SQL Server captures.
+message boundary before a separate tabular Attention ACK. The copied upstream
+notes and existing vector use a zero command field; first-party follow-up captures
+for task #140 instead observe `FD 20 00 FD 00 00 00 00 00 00 00 00 00`
+(command 253) after cancelling WAITFOR. The upstream vector is not SQL Server
+ground truth. Do not concatenate that ACK into the original response. Exact
+response contents for other workloads, repeated-Attention behavior and broader
+transaction effects still require first-party captures.
 
 Inspected upstream `mirek/mssqlite` at
 `7f71f2081602f8e3051998f5c11f058e65fe24ec`:
