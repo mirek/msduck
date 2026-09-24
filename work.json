@@ -994,6 +994,24 @@
       "dependencies": [],
       "issue": 97,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PH22W"
+    },
+    {
+      "id": "statement-diagnostics-native-v1",
+      "title": "Add explicit statement-scoped native diagnostic contexts",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Captured warning 8153 requires execution-state tracking independent of output rows and safe across sessions. Implement a bounded database-owned registry and a native NULL observer as groundwork for single-evaluation aggregate lowering; no external content used. Original root exports retain verified concat-integration-v1 ownership.",
+      "scope": [
+        "src/statement_diagnostics.rs",
+        "docs/statement-diagnostics.md"
+      ],
+      "acceptance": [
+        "Use explicit database-owned state and unguessable per-statement tickets, bounded active scopes, and cleanup on scope drop. Never use mutable process-global warning state or leak a statement flag into another session.",
+        "Provide a native NULL observer whose BOOL output preserves NULL semantics and whose input is evaluated once when supplied by a materialized plan. Verify empty and all-NULL groups, HAVING with no rows, window aggregates, volatile source evaluation, stale tickets and concurrent connections.",
+        "Document required binder/session integration and do not claim warning emission implemented until exact reference replay passes. Keep the live client-test executable unchanged."
+      ],
+      "dependencies": [],
+      "issue": 99,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PH8K7"
     }
   ]
 }
