@@ -105,6 +105,22 @@ identity relies on the logical object ID and recorded incarnation. The caller
 must synchronize logical objects after each DDL mutation. The reopen regression
 now proves that the logical index identity remains usable after restart.
 
-At runtime checkpoint `b6d47ce`, all eight focused Linux native tests, all 648
+At runtime checkpoint `d9d423b`, all nine focused Linux native tests, all 649
 workspace Rust tests, strict workspace Clippy and formatting passed. The initial
 local native build was cancelled for disk pressure; no local pass is claimed.
+
+`fields(view, catalog_collation)` now provides the logical declarations for the
+columns currently published by these views. Tests compare system/user type IDs,
+length, precision, scale, collation and nullability to captured sys.all_columns,
+and provenance flags to direct empty-result descriptors. Sysname retains user
+type ID256; type_desc uses Latin1_General_CI_AS_KS_WS independently of the caller's
+catalog collation. The root query-catalog hook and the corresponding TDS
+collation mapping remain integration work. The five reference columns not yet
+published by these views remain an explicit schema gap.
+
+The capture now reads system declarations through sys.all_columns, asserts they
+are nonempty, and captures direct empty-result descriptors. These probes run
+after the existing programs so they do not change the programs' @@ROWCOUNT
+state. All prior27 observations are unchanged. Owned reference containers use
+explicit cleanup, preserving startup logs before removal; an earlier automatic
+removal race obscured a startup failure and is retained in local evidence.
