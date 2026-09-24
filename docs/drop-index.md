@@ -42,7 +42,8 @@ entire statement in a transaction that rolls them back would contradict the
 captures. Ordinary backend failures still stop execution and need adapter-owned
 error handling. A plan does not itself execute, commit or emit completion tokens.
 
-The binder rejects ambiguous catalog records. Incomplete snapshots are invalid
+The binder rejects ambiguous catalog records, duplicate table/index IDs, orphan
+index owners and duplicate backend identities before producing any plan. Incomplete snapshots are invalid
 inputs, never evidence of absence. Cross-database names, options beyond the
 captured forms, clustered-index options and constraint-backed indexes remain
 explicitly unsupported. Unsupported inputs do not yield an executable plan.

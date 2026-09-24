@@ -154,3 +154,26 @@ fn schema_precedence_and_backend_identity_are_caller_owned() {
         Err(Error::Unsupported(_))
     ));
 }
+
+#[test]
+fn inconsistent_catalog_identities_cannot_drop_another_tables_index() {
+    let (mut tables, mut indexes) = catalog();
+    let r = parse("DROP INDEX only_a ON dbo.b").unwrap();
+    tables[1].id = tables[0].id;
+    assert!(matches!(
+        bind(&r, &tables, &indexes, &["dbo"], str::eq),
+        Err(Error::Unsupported(_))
+    ));
+    let (tables, _) = catalog();
+    indexes[2].backend_name = indexes[0].backend_name.clone();
+    assert!(matches!(
+        bind(&r, &tables, &indexes, &["dbo"], str::eq),
+        Err(Error::Unsupported(_))
+    ));
+    let (_, mut indexes) = catalog();
+    indexes[2].table_id = 900;
+    assert!(matches!(
+        bind(&r, &tables, &indexes, &["dbo"], str::eq),
+        Err(Error::Unsupported(_))
+    ));
+}

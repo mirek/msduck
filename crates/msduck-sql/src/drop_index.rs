@@ -186,6 +186,27 @@ pub fn bind(
     if request.targets.is_empty() || schemas.is_empty() {
         return Err(unsupported("Empty request or schema search path"));
     }
+    // IDs are the ownership boundary, so validate the snapshot before emitting
+    // any plan. Duplicate IDs could otherwise attach another table's index.
+    let mut table_ids = std::collections::HashSet::new();
+    for table in tables {
+        if !table_ids.insert(table.id) {
+            return Err(unsupported("Duplicate table identity in catalog"));
+        }
+    }
+    let mut index_ids = std::collections::HashSet::new();
+    let mut backend_names = std::collections::HashSet::new();
+    for index in indexes {
+        if !table_ids.contains(&index.table_id)
+            || !index_ids.insert((index.table_id, index.id))
+            || !backend_names.insert(index.backend_name.clone())
+            || identifiers(&index.backend_name)?.is_empty()
+        {
+            return Err(unsupported(
+                "Inconsistent index ownership or backend identity",
+            ));
+        }
+    }
     let mut plan = Plan {
         drops: vec![],
         terminal: None,
