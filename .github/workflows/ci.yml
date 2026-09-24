@@ -88,6 +88,8 @@ jobs:
         run: cargo test --workspace --locked 2>&1 | tee artifacts/ci/rust.log
       - name: Independent client tests
         run: npm test 2>&1 | tee artifacts/ci/clients.log
+      - name: Aggregate diagnostic reference replays
+        run: node --test --test-concurrency=1 tests/aggregate_diagnostics.test.mjs tests/character_extrema.test.mjs 2>&1 | tee artifacts/ci/aggregate-diagnostics.log
       - name: Diagnostic compatibility capture
         run: npm run audit:local 2>&1 | tee artifacts/ci/audit.log
       - name: Preserve logs and raw captures

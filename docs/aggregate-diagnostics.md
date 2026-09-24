@@ -82,7 +82,7 @@ comparisons that previously retained 20 missing warning messages. Pure AST
 tests and strict workspace/all-target Clippy pass.
 
 These checks cover the captured window and optimizer shapes, not every frame
-or rewrite. Partial errors, stored aggregate views and DML remain incomplete;
+or rewrite. Partial errors, stored aggregate views and specialized DML remain incomplete;
 full workspace/client/audit verification is recorded separately by revision.
 
 At `e10a8cd`, all 634 workspace Rust tests pass. The 325-case local diagnostic
@@ -90,10 +90,10 @@ audit changes only by adding 25 warning-8153 messages compared with `5e18a0e`;
 that audit is not a SQL Server equivalence test.
 
 The additional 50 boundary programs in [PR #104](https://github.com/mirek/msduck/pull/104)
-expose concrete remaining defects: the current pre-window operand observer emits
-three false warnings for NULLs consumed by no frame, and diagnostics are missing
+exposed concrete defects at `e10a8cd`: the pre-window operand observer emitted
+three false warnings for NULLs consumed by no frame, and diagnostics were missing
 from stored views, ordinary DML, SET/DECLARE subqueries and partial failures.
-That replay matches 25/50 programs, with two setup failures and 129 differences
+That replay matched 25/50 programs, with two setup failures and 129 differences
 across the remaining 23 programs. It also retains independent descriptor and
 error-detail gaps. The original 126-case pass must not be generalized to these
 boundaries; this integration remains draft.
@@ -137,3 +137,11 @@ extrema. The complete boundary replay now matches 35/50 programs: two setup
 failures and 55 differences across thirteen executions remain, with no new or
 worsened case compared with `43d9c9d`. This does not yet resolve stored-view
 expansion, joined OUTPUT paths or partial-error warning ordering.
+
+The required full CI job runs the focused diagnostic and character-extrema
+suites explicitly after `npm test`, with one test file at a time. This checks
+the 126 initial reference programs, ten window programs, twenty DML/assignment
+programs and prepared-execution isolation, retaining a separate CI log. These
+files also remain directly runnable. The complete fifty-program boundary replay
+still retains the unresolved failures described above; it is not a passing CI
+gate. `npm test` alone does not include the focused suites.
