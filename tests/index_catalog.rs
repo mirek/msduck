@@ -212,11 +212,19 @@ fn catalog_rows(s: &Session, sql: &str) -> serde_json::Value {
                 (0..r.as_ref().column_count())
                     .map(|i| {
                         let value: Value = r.get(i)?;
-                        if matches!(
-                            value,
-                            Value::TinyInt(_) | Value::UTinyInt(_) | Value::Boolean(_)
-                        ) {
-                            eprintln!("catalog column {i}: {value:?}");
+                        // DuckDB lossless Arrow exports BOOLEAN as signed int8
+                        // with arrow.bool8 metadata; generic Row::get loses that
+                        // logical tag. Match the engine's metadata-aware reader.
+                        let schema = r.as_ref().schema();
+                        if schema
+                            .field(i)
+                            .metadata()
+                            .get("ARROW:extension:name")
+                            .is_some_and(|s| s == "arrow.bool8")
+                            && let Value::TinyInt(v) = value
+                        {
+                            assert!(v == 0 || v == 1, "Invalid Boolean storage");
+                            return Ok(serde_json::json!(v != 0));
                         }
                         Ok(match value {
                             Value::Null => serde_json::Value::Null,
@@ -266,9 +274,6 @@ fn supported_catalog_rows_match_captured_heap_index_and_column_snapshots() {
             let (response, ok) = s.batch_response(sql, &Default::default(), false, None);
             assert!(ok, "{id}: {response:?}");
         }
-        if id == "heaps" {
-            eprintln!("physical bool {:?}",s.db.query_row("SELECT typeof(false),typeof(is_unique),typeof(ignore_dup_key) FROM sys.indexes LIMIT 1",[],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?))));
-        }
         for (query, key) in [("indexSql", "indexes"), ("columnSql", "columns")] {
             assert_eq!(
                 catalog_rows(&s, fixture[query].as_str().unwrap()),
@@ -279,12 +284,10 @@ fn supported_catalog_rows_match_captured_heap_index_and_column_snapshots() {
     }
     s.db.execute_batch("CREATE INDEX unmanaged ON dbo.a(value)")
         .unwrap();
-    assert!(
-        s.db.prepare("SELECT name FROM sys.indexes")
-            .unwrap()
-            .query([])
-            .unwrap()
-            .next()
-            .is_err()
-    );
+    let result = (|| -> duckdb::Result<Vec<Option<String>>> {
+        s.db.prepare("SELECT name FROM sys.indexes")?
+            .query_map([], |r| r.get(0))?
+            .collect()
+    })();
+    assert!(result.is_err());
 }
