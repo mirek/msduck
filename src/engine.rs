@@ -1051,6 +1051,12 @@ impl Session {
                             self.rowcount = 0;
                             if self.last_error == 3748 { 253 } else { 201 }
                         } else if !rpc
+                            && matches!(statement, Statement::CreateIndex(_))
+                            && self.last_error == 1913
+                        {
+                            self.rowcount = 0;
+                            253
+                        } else if !rpc
                             && e.downcast_ref::<crate::query_error::CompilationFailure>()
                                 .is_some()
                         {
@@ -5681,6 +5687,81 @@ mod drop_index_runtime_tests {
                 .unwrap()
                 .len(),
             1
+        );
+    }
+}
+
+#[cfg(test)]
+mod duplicate_index_runtime_tests {
+    use super::*;
+    #[test]
+    fn duplicate_index_errors_match_captured_tokens_and_preserve_the_session() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../reference/index-catalog.json")).unwrap();
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        for sql in [
+            "CREATE TABLE dbo.a(id INT,value INT)",
+            "CREATE INDEX ix ON dbo.a(id)",
+            "CREATE SCHEMA alt",
+            "CREATE TABLE alt.[odd.table]([odd.column] INT,other INT)",
+            "CREATE INDEX [odd.index] ON alt.[odd.table]([odd.column])",
+        ] {
+            let (out, ok) = session.batch_response(sql, &Default::default(), false, None);
+            assert!(ok, "{sql}: {out:?}");
+        }
+        let before = crate::index_catalog::acquire_complete(&session.db).unwrap();
+        let mut checked = 0;
+        for case in fixture["results"].as_array().unwrap() {
+            if !case["id"].as_str().unwrap().starts_with("duplicate-") {
+                continue;
+            }
+            let error = &case["result"]["errors"][0];
+            let mut expected = vec![];
+            tds::sql_error(
+                &mut expected,
+                &SqlError::from_utf16(
+                    error["number"].as_i64().unwrap() as i32,
+                    error["state"].as_u64().unwrap() as u8,
+                    error["class"].as_u64().unwrap() as u8,
+                    error["message"].as_str().unwrap().encode_utf16().collect(),
+                ),
+            );
+            tds::done(
+                &mut expected,
+                0xfd,
+                2,
+                case["completion"][0]["curCmd"].as_u64().unwrap() as u16,
+                0,
+            );
+            let (actual, ok) = session.batch_response(
+                case["sql"].as_str().unwrap(),
+                &Default::default(),
+                false,
+                None,
+            );
+            assert!(!ok);
+            assert_eq!(actual, expected, "{}", case["id"]);
+            assert_eq!(
+                serde_json::json!([[session.rowcount, session.last_error, session.transactions]]),
+                case["state"]["sets"][0]["rows"]
+            );
+            assert_eq!(
+                crate::index_catalog::acquire_complete(&session.db).unwrap(),
+                before
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, 4);
+        assert!(
+            session
+                .batch_response(
+                    "CREATE INDEX usable ON dbo.a(value)",
+                    &Default::default(),
+                    false,
+                    None
+                )
+                .1
         );
     }
 }
