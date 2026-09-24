@@ -85,11 +85,17 @@ impl<'a> Pending<'a> {
     fn execute_tasks(&self) {
         let start = Instant::now();
         let mut worked = false;
-        for _ in 0..16 {
+        let mut calls = 0;
+        while calls < 16 || !worked {
+            calls += 1;
             let state = unsafe { ffi::duckdb_pending_execute_task(self.result) };
             match state {
                 ffi::duckdb_pending_state_DUCKDB_PENDING_RESULT_NOT_READY => worked = true,
-                ffi::duckdb_pending_state_DUCKDB_PENDING_NO_TASKS_AVAILABLE => {}
+                ffi::duckdb_pending_state_DUCKDB_PENDING_NO_TASKS_AVAILABLE => {
+                    let progress = unsafe { ffi::duckdb_query_progress(self._connection.0) };
+                    worked |= progress.rows_processed > 0;
+                    std::thread::yield_now();
+                }
                 ffi::duckdb_pending_state_DUCKDB_PENDING_ERROR => {
                     let error = unsafe { ffi::duckdb_pending_error(self.result) };
                     assert!(!error.is_null());
@@ -129,6 +135,7 @@ fn abandoning_pending_read_preserves_prior_transaction_work() {
             let connection = db.connect();
             let observer = db.connect();
             connection.query(&format!("SET threads={threads}"));
+            connection.query("SET enable_progress_bar=true; SET enable_progress_bar_print=false; SET progress_bar_time=0");
             connection.query("CREATE TABLE preserved(n INTEGER)");
             if ending != "autocommit" {
                 connection.query("BEGIN TRANSACTION");

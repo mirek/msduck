@@ -8,8 +8,9 @@ it does not wire cancellation into the server.
 
 `tests/native_pending_cancellation.rs` uses the pinned DuckDB C API directly,
 with owned handles and lifetime-bound connections. It creates a table, optionally
-begins an explicit transaction, inserts row 1, then executes 16 pending tasks of
-a trillion-pair aggregate. At least one task must report unfinished work; early
+begins an explicit transaction, inserts row 1, then services at least 16 pending task calls for
+a trillion-pair aggregate. The caller must observe unfinished work or positive processed-row progress from
+background workers; early
 completion and native errors fail with their actual outcome. The test destroys
 the pending handle without issuing an interrupt, then starts a query on the same
 connection to force cleanup of the abandoned executor.
