@@ -1,3 +1,6 @@
+#[path = "msduck_pending_drain.rs"]
+mod msduck_pending_drain;
+
 use crate::{is_compiler, link_windows_system_libs, win_target, write_bindings};
 use std::{
     collections::{HashMap, HashSet},
@@ -57,6 +60,7 @@ fn untar_archive(out_dir: &str) {
 
 pub fn main(out_dir: &str, out_path: &Path) {
     untar_archive(out_dir);
+    msduck_pending_drain::apply(out_dir);
     // msduck: the C API promises one state pointer per row. Constant window
     // state vectors must be flattened before exposing their backing storage.
     let capi_path = Path::new(out_dir).join("duckdb/src/main/capi/aggregate_function-c.cpp");

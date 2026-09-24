@@ -188,6 +188,9 @@ pub struct Session {
     backend_datefirst: std::cell::Cell<i32>,
     transaction_doomed: bool,
     caught_error: Option<SqlError>,
+    read_cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    read_cancelled: bool,
+    read_cancel_cleanup_failed: bool,
 }
 impl Session {
     pub fn new(connection: crate::server::Connection) -> Result<Self> {
@@ -218,6 +221,9 @@ impl Session {
             backend_datefirst: std::cell::Cell::new(7),
             transaction_doomed: false,
             caught_error: None,
+            read_cancel: None,
+            read_cancelled: false,
+            read_cancel_cleanup_failed: false,
         })
     }
 
@@ -565,6 +571,38 @@ impl Session {
         // directly from the prepared statement without executing it.
         Ok(prepared.column_logical_type(0).id())
     }
+    /// Opt-in worker entry point for the captured active-read cancellation class.
+    /// Other execution classes and live Attention reception remain separate work.
+    pub fn batch_response_with_read_cancel(
+        &mut self,
+        sql: &str,
+        parameters: &HashMap<String, Parameter>,
+        mode: crate::read_cancellation::Mode,
+        cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    ) -> crate::read_cancellation::Outcome {
+        use crate::read_cancellation::{Mode, Outcome};
+        let previous = self.read_cancel.replace(cancel);
+        self.read_cancelled = false;
+        self.read_cancel_cleanup_failed = false;
+        let rpc = match mode {
+            Mode::Batch => None,
+            Mode::Rpc => Some(RpcExecution::Direct),
+            Mode::Prepared => Some(RpcExecution::Prepared),
+        };
+        let (tokens, success) = self.batch_response_context(sql, parameters, rpc, None);
+        self.read_cancel = previous;
+        if self.read_cancel_cleanup_failed {
+            Outcome::CleanupFailed { tokens }
+        } else if self.read_cancelled {
+            Outcome::Cancelled {
+                tokens,
+                attention_ack: msduck_tds::attention_completion::ACK,
+            }
+        } else {
+            Outcome::Finished { tokens, success }
+        }
+    }
+
     pub fn batch_response(
         &mut self,
         sql: &str,
@@ -1017,6 +1055,48 @@ impl Session {
                     );
                 }
                 Err(e) => {
+                    if e.downcast_ref::<crate::read_cancellation::UnusableRead>()
+                        .is_some()
+                    {
+                        self.read_cancel_cleanup_failed = true;
+                        self.last_error = emit_error(&mut out, &e);
+                        return (out, false); // no CATCH, later statements, rollback SQL, or ACK
+                    }
+                    if let Some(cancelled) =
+                        e.downcast_ref::<crate::read_cancellation::CancelledRead>()
+                    {
+                        let plan = msduck_tds::attention_completion::ActiveRead::new(
+                            rpc,
+                            self.transactions > 0,
+                            self.xact_abort,
+                            pending.iter().any(|work| work.catch_handler.is_some()),
+                        );
+                        if out
+                            .len()
+                            .saturating_add(cancelled.metadata.len())
+                            .saturating_add(64)
+                            > tds::MAX_MESSAGE
+                        {
+                            self.read_cancel_cleanup_failed = true;
+                            return (out, false);
+                        }
+                        out.extend_from_slice(&cancelled.metadata);
+                        plan.before_rollback(&mut out);
+                        if plan.rollback {
+                            match self.rollback_transaction("") {
+                                Ok(rollback) => out.extend(rollback),
+                                Err(error) => {
+                                    self.read_cancel_cleanup_failed = true;
+                                    self.last_error = emit_error(&mut out, &error);
+                                    return (out, false);
+                                }
+                            }
+                        }
+                        plan.finish(&mut out);
+                        self.rowcount = 0;
+                        self.read_cancelled = true;
+                        return (out, false); // bypass CATCH and every later statement
+                    }
                     // Boundary events are speculative until the first leaf
                     // binds. A compilation failure must precede those events.
                     let failed_binding = binding_failure(&e);
@@ -2295,18 +2375,42 @@ impl Session {
                 .query_arrow(duckdb::params_from_iter(values.iter()))
                 .map_err(describe)?
         } else {
-            let batches = prepared
-                .query_arrow(duckdb::params_from_iter(translator.values.iter()))
-                .map_err(|error| match &error_metadata {
-                    Some(metadata) => {
-                        crate::query_error::attach(error, metadata.clone(), output_command)
+            let execution = if let Some(cancel) = &self.read_cancel
+                && matches!(statement, Statement::Query(_))
+                && output.is_none()
+                && assignments.is_empty()
+                && json.is_none()
+                && error_metadata.is_some()
+            {
+                match prepared.query_arrow_cancellable_read(
+                    duckdb::params_from_iter(translator.values.iter()),
+                    cancel,
+                ) {
+                    Ok(Some(batches)) => Ok(batches),
+                    Ok(None) => {
+                        return Err(crate::read_cancellation::CancelledRead {
+                            metadata: error_metadata.clone().expect("checked read metadata"),
+                        }
+                        .into());
                     }
-                    None if output_sink.is_some() => crate::output_sink::failed(
-                        anyhow::Error::new(error),
-                        output.as_ref().unwrap().operation,
-                    ),
-                    None => anyhow::Error::new(error),
-                })?;
+                    Err(duckdb::CancellableReadError::Query(error)) => Err(error),
+                    Err(duckdb::CancellableReadError::ConnectionUnusable(error)) => {
+                        return Err(crate::read_cancellation::UnusableRead(error).into());
+                    }
+                }
+            } else {
+                prepared.query_arrow(duckdb::params_from_iter(translator.values.iter()))
+            };
+            let batches = execution.map_err(|error| match &error_metadata {
+                Some(metadata) => {
+                    crate::query_error::attach(error, metadata.clone(), output_command)
+                }
+                None if output_sink.is_some() => crate::output_sink::failed(
+                    anyhow::Error::new(error),
+                    output.as_ref().unwrap().operation,
+                ),
+                None => anyhow::Error::new(error),
+            })?;
             if let Some((_, _, values)) = &materialized {
                 image
                     .as_ref()
