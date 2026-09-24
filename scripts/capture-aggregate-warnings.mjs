@@ -5,6 +5,33 @@ import { withReferenceContainer } from './lib/reference-container.mjs'
 import { connect, command } from './lib/reference.mjs'
 import { capture, canonical } from './lib/compatibility.mjs'
 
+async function orderedCapture(connection, sql) {
+  const events = []
+  const info = message => events.push({ kind: 'info', number: message.number })
+  const error = message => events.push({ kind: 'error', number: message.number })
+  connection.on('infoMessage', info)
+  connection.on('errorMessage', error)
+  // Adapt the capture helper's connection interface without mutating a shared
+  // connection method or evaluating the SQL twice.
+  const observed = {
+    on: connection.on.bind(connection),
+    off: connection.off.bind(connection),
+    execSqlBatch(request) {
+      request.on('columnMetadata', () => events.push({ kind: 'metadata' }))
+      request.on('row', () => events.push({ kind: 'row' }))
+      for (const kind of ['done', 'doneInProc', 'doneProc']) {
+        request.on(kind, (count, more) => events.push({ kind, rowCount: count ?? null, more }))
+      }
+      connection.execSqlBatch(request)
+    },
+  }
+  try { return canonical({ ...await capture(observed, sql), events }) }
+  finally {
+    connection.off('infoMessage', info)
+    connection.off('errorMessage', error)
+  }
+}
+
 const cases = []
 const add = (id, sql) => cases.push({ id, sql })
 for (const aggregate of ['MIN', 'MAX', 'SUM', 'AVG', 'COUNT', 'COUNT_BIG', 'STDEV', 'VAR']) {
@@ -50,7 +77,7 @@ await withReferenceContainer(async (config, container) => {
     for (const mode of ['ON', 'OFF']) for (const sample of cases) {
       await command(connection, `SET ANSI_WARNINGS ${mode}`)
       const sql = `${sample.sql}; SELECT @@ERROR AS last_error,@@ROWCOUNT AS last_rowcount`
-      const result = canonical(await capture(connection, sql))
+      const result = await orderedCapture(connection, sql)
       assert.deepEqual(result.errors, [], `${mode} ${sample.id}`)
       results.push({ id: `${mode}-${sample.id}`, mode, sql, result })
     }
