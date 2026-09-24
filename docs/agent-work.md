@@ -131,9 +131,11 @@ No issue/comment workflow executes instructions. External changes need manual
 owner triage and a sanitized owner-controlled branch first. Dependency bot PRs
 remain untrusted until that process is complete. Do not enable automatic Codex
 review on all incoming PRs if it can ingest unapproved external content. With this
-policy, reviews must be owner-requested on approved PRs, and their output needs
-owner triage before another agent reads it. A native automatic review setting is
-acceptable only if its intake can be restricted before content retrieval.
+policy, reviews must be owner-requested on approved PRs. Their output is readable
+after verifying the owner-initiated agent's origin and owner-approved inputs;
+third-party or unverified review output still needs owner triage. A native
+automatic review setting is acceptable only if its intake can be restricted
+before content retrieval.
 
 ## Verified claim behavior
 
