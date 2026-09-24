@@ -12,6 +12,7 @@ pub enum Error {
     RootWithoutArrayWrapper,
     InvalidNumber,
     InvalidJson,
+    OutputLimit,
     RowWidth { expected: usize, actual: usize },
 }
 impl std::fmt::Display for Error {
@@ -25,6 +26,7 @@ impl std::fmt::Display for Error {
             }
             Self::InvalidNumber => f.write_str("invalid JSON number"),
             Self::InvalidJson => f.write_str("invalid JSON fragment"),
+            Self::OutputLimit => f.write_str("FOR JSON result exceeds the configured output limit"),
             Self::RowWidth { expected, actual } => {
                 write!(f, "FOR JSON row has {actual} values, expected {expected}")
             }
@@ -63,6 +65,34 @@ pub enum Value<'a> {
     Boolean(bool),
     Number(Number<'a>),
     Json(Fragment<'a>),
+}
+
+/// Validated JSON code units. Validation never changes surrogate units or spelling.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Utf16Fragment<'a>(&'a [u16]);
+impl<'a> Utf16Fragment<'a> {
+    pub fn new(units: &'a [u16]) -> Result<Self, Error> {
+        if json::valid_utf16(units, 1) {
+            Ok(Self(units))
+        } else {
+            Err(Error::InvalidJson)
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Utf16Value<'a> {
+    Null,
+    Text(&'a [u16]),
+    Boolean(bool),
+    Number(Number<'a>),
+    Json(Utf16Fragment<'a>),
+}
+
+enum Part<'a> {
+    Punctuation(u8),
+    Name(&'a str),
+    Value(usize),
 }
 
 #[derive(Clone, Debug)]
@@ -151,18 +181,72 @@ impl PathPlan {
     /// Render one row. Empty nested objects caused solely by omitted SQL NULLs
     /// disappear; an explicitly supplied empty JSON object remains present.
     pub fn row(&self, values: &[Value<'_>], include_null_values: bool) -> Result<String, Error> {
-        if values.len() != self.columns {
+        let mut output = String::new();
+        self.render(
+            values.len(),
+            |column| include_null_values || !matches!(values[column], Value::Null),
+            |part| {
+                match part {
+                    Part::Punctuation(byte) => output.push(char::from(byte)),
+                    Part::Name(name) => quoted(&mut output, name),
+                    Part::Value(column) => match values[column] {
+                        Value::Null => output.push_str("null"),
+                        Value::Text(text) => quoted(&mut output, text),
+                        Value::Boolean(value) => {
+                            output.push_str(if value { "true" } else { "false" })
+                        }
+                        Value::Number(number) => output.push_str(number.0),
+                        Value::Json(fragment) => output.push_str(fragment.0),
+                    },
+                }
+                Ok(())
+            },
+        )?;
+        Ok(output)
+    }
+
+    /// Render exact UTF-16 units with an explicit maximum output-unit count.
+    pub fn row_utf16(
+        &self,
+        values: &[Utf16Value<'_>],
+        include_null_values: bool,
+        max_units: usize,
+    ) -> Result<Vec<u16>, Error> {
+        let mut output = Utf16Buffer::new(max_units);
+        self.render(
+            values.len(),
+            |column| include_null_values || !matches!(values[column], Utf16Value::Null),
+            |part| match part {
+                Part::Punctuation(byte) => output.ascii(byte),
+                Part::Name(name) => output.quoted(&name.encode_utf16().collect::<Vec<_>>()),
+                Part::Value(column) => match values[column] {
+                    Utf16Value::Null => output.text("null"),
+                    Utf16Value::Text(text) => output.quoted(text),
+                    Utf16Value::Boolean(value) => output.text(if value { "true" } else { "false" }),
+                    Utf16Value::Number(number) => output.text(number.0),
+                    Utf16Value::Json(fragment) => output.extend(fragment.0),
+                },
+            },
+        )?;
+        Ok(output.units)
+    }
+
+    fn render(
+        &self,
+        width: usize,
+        present: impl Fn(usize) -> bool,
+        mut emit: impl FnMut(Part<'_>) -> Result<(), Error>,
+    ) -> Result<(), Error> {
+        if width != self.columns {
             return Err(Error::RowWidth {
                 expected: self.columns,
-                actual: values.len(),
+                actual: width,
             });
         }
         let mut visible = vec![false; self.nodes.len()];
         for (index, node) in self.nodes.iter().enumerate().rev() {
             visible[index] = node.entries.iter().any(|entry| match entry.target {
-                Target::Column(column) => {
-                    include_null_values || !matches!(values[column], Value::Null)
-                }
+                Target::Column(column) => present(column),
                 Target::Object(child) => visible[child],
             });
         }
@@ -173,18 +257,15 @@ impl PathPlan {
             Close,
         }
         let mut pending = vec![Task::Object(0)];
-        let mut output = String::new();
         while let Some(task) = pending.pop() {
             match task {
                 Task::Object(index) => {
-                    output.push('{');
+                    emit(Part::Punctuation(b'{'))?;
                     pending.push(Task::Close);
                     let mut later = false;
                     for entry in self.nodes[index].entries.iter().rev() {
                         let present = match entry.target {
-                            Target::Column(column) => {
-                                include_null_values || !matches!(values[column], Value::Null)
-                            }
+                            Target::Column(column) => present(column),
                             Target::Object(child) => visible[child],
                         };
                         if present {
@@ -197,32 +278,80 @@ impl PathPlan {
                     }
                 }
                 Task::Member(entry) => {
-                    quoted(&mut output, &entry.name);
-                    output.push(':');
+                    emit(Part::Name(&entry.name))?;
+                    emit(Part::Punctuation(b':'))?;
                     match entry.target {
                         Target::Object(child) => pending.push(Task::Object(child)),
-                        Target::Column(column) => match values[column] {
-                            Value::Null => output.push_str("null"),
-                            Value::Text(text) => quoted(&mut output, text),
-                            Value::Boolean(value) => {
-                                output.push_str(if value { "true" } else { "false" })
-                            }
-                            Value::Number(number) => output.push_str(number.0),
-                            Value::Json(fragment) => output.push_str(fragment.0),
-                        },
+                        Target::Column(column) => emit(Part::Value(column))?,
                     }
                 }
-                Task::Comma => output.push(','),
-                Task::Close => output.push('}'),
+                Task::Comma => emit(Part::Punctuation(b','))?,
+                Task::Close => emit(Part::Punctuation(b'}'))?,
             }
         }
-        Ok(output)
+        Ok(())
     }
 }
 fn quoted(output: &mut String, text: &str) {
     output.push('"');
     output.push_str(&json_escape::escape(text, "json").expect("JSON format is supported"));
     output.push('"');
+}
+
+struct Utf16Buffer {
+    units: Vec<u16>,
+    limit: usize,
+}
+impl Utf16Buffer {
+    fn new(limit: usize) -> Self {
+        Self {
+            units: Vec::new(),
+            limit,
+        }
+    }
+    fn remaining(&self) -> usize {
+        self.limit - self.units.len()
+    }
+    fn check(&self, count: usize) -> Result<(), Error> {
+        if count > self.remaining() {
+            Err(Error::OutputLimit)
+        } else {
+            Ok(())
+        }
+    }
+    fn ascii(&mut self, byte: u8) -> Result<(), Error> {
+        self.check(1)?;
+        self.units.push(u16::from(byte));
+        Ok(())
+    }
+    fn text(&mut self, text: &str) -> Result<(), Error> {
+        self.check(text.encode_utf16().count())?;
+        self.units.extend(text.encode_utf16());
+        Ok(())
+    }
+    fn extend(&mut self, units: &[u16]) -> Result<(), Error> {
+        self.check(units.len())?;
+        self.units.extend_from_slice(units);
+        Ok(())
+    }
+    fn quoted(&mut self, units: &[u16]) -> Result<(), Error> {
+        let count = units.iter().try_fold(2_usize, |size, &unit| {
+            size.checked_add(match unit {
+                8 | 9 | 10 | 12 | 13 | 34 | 47 | 92 => 2,
+                0..=31 => 6,
+                _ => 1,
+            })
+            .ok_or(Error::OutputLimit)
+        })?;
+        // Check the expanded size before escape_utf16 allocates a temporary.
+        self.check(count)?;
+        let escaped = json_escape::escape_utf16(units, &[106, 115, 111, 110])
+            .expect("JSON format is supported");
+        self.units.push(u16::from(b'"'));
+        self.units.extend_from_slice(&escaped);
+        self.units.push(u16::from(b'"'));
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -283,6 +412,70 @@ impl<'a> Writer<'a> {
             self.output.push('}');
         }
         self.output
+    }
+}
+
+/// Caller-owned, bounded UTF-16 result writer. No lossy string conversion.
+pub struct Utf16Writer<'a> {
+    plan: &'a PathPlan,
+    options: Options,
+    output: Utf16Buffer,
+    has_rows: bool,
+}
+impl<'a> Utf16Writer<'a> {
+    pub fn new(plan: &'a PathPlan, options: Options, max_units: usize) -> Result<Self, Error> {
+        if options.root.is_some() && options.without_array_wrapper {
+            return Err(Error::RootWithoutArrayWrapper);
+        }
+        let closing =
+            usize::from(!options.without_array_wrapper) + usize::from(options.root.is_some());
+        let mut output =
+            Utf16Buffer::new(max_units.checked_sub(closing).ok_or(Error::OutputLimit)?);
+        if let Some(root) = &options.root {
+            output.ascii(b'{')?;
+            output.quoted(&root.encode_utf16().collect::<Vec<_>>())?;
+            output.ascii(b':')?;
+        }
+        if !options.without_array_wrapper {
+            output.ascii(b'[')?;
+        }
+        Ok(Self {
+            plan,
+            options,
+            output,
+            has_rows: false,
+        })
+    }
+    /// A malformed row or exceeded limit leaves accumulated output unchanged.
+    pub fn push(&mut self, row: &[Utf16Value<'_>]) -> Result<(), Error> {
+        let available = self
+            .output
+            .remaining()
+            .checked_sub(usize::from(self.has_rows))
+            .ok_or(Error::OutputLimit)?;
+        let row = self
+            .plan
+            .row_utf16(row, self.options.include_null_values, available)?;
+        // row_utf16 checked the complete size before any accumulated state changes.
+        if self.has_rows {
+            self.output.units.push(u16::from(b','));
+        }
+        self.output.units.extend(row);
+        self.has_rows = true;
+        Ok(())
+    }
+    pub fn buffered_units(&self) -> usize {
+        self.output.units.len()
+    }
+    pub fn finish(mut self) -> Vec<u16> {
+        // Closing punctuation was reserved by new, before any rows were accepted.
+        if !self.options.without_array_wrapper {
+            self.output.units.push(u16::from(b']'));
+        }
+        if self.options.root.is_some() {
+            self.output.units.push(u16::from(b'}'));
+        }
+        self.output.units
     }
 }
 
@@ -520,6 +713,41 @@ pub fn wrap_rows(
     }
 }
 
+/// Wrap ordered, separately serialized rows without a VARCHAR intermediate.
+pub fn wrap_rows_utf16<'a>(
+    rows: impl IntoIterator<Item = &'a [u16]>,
+    root: Option<&str>,
+    without_array_wrapper: bool,
+    max_units: usize,
+) -> Result<Vec<u16>, Error> {
+    if root.is_some() && without_array_wrapper {
+        return Err(Error::RootWithoutArrayWrapper);
+    }
+    let mut output = Utf16Buffer::new(max_units);
+    if let Some(root) = root {
+        output.ascii(b'{')?;
+        output.quoted(&root.encode_utf16().collect::<Vec<_>>())?;
+        output.ascii(b':')?;
+    }
+    if !without_array_wrapper {
+        output.ascii(b'[')?;
+    }
+    for (index, row) in rows.into_iter().enumerate() {
+        Utf16Fragment::new(row)?;
+        if index != 0 {
+            output.ascii(b',')?;
+        }
+        output.extend(row)?;
+    }
+    if !without_array_wrapper {
+        output.ascii(b']')?;
+    }
+    if root.is_some() {
+        output.ascii(b'}')?;
+    }
+    Ok(output.units)
+}
+
 #[cfg(test)]
 mod aggregate_tests {
     use super::*;
@@ -541,5 +769,200 @@ mod aggregate_tests {
         for invalid in ["{} ,", "{", "null true", "{}]junk"] {
             assert_eq!(wrap_rows(invalid, None, false), Err(Error::InvalidJson));
         }
+    }
+}
+
+#[cfg(test)]
+mod utf16_tests {
+    use super::*;
+    fn u(text: &str) -> Vec<u16> {
+        text.encode_utf16().collect()
+    }
+
+    #[test]
+    fn raw_surrogates_remain_raw_and_fragments_keep_original_spelling() {
+        let plan = PathPlan::new(["s", "fragment", "escaped"]).unwrap();
+        let escaped = u("{ \"e\":\"\\ud800\",\"e\":1.20e+2 }");
+        for unit in 0xd800..=0xdfff {
+            let text = [unit, 0, 47];
+            let mut fragment = u("{\"r\":\"");
+            fragment.push(unit);
+            fragment.extend(u("\"}"));
+            let actual = plan
+                .row_utf16(
+                    &[
+                        Utf16Value::Text(&text),
+                        Utf16Value::Json(Utf16Fragment::new(&fragment).unwrap()),
+                        Utf16Value::Json(Utf16Fragment::new(&escaped).unwrap()),
+                    ],
+                    false,
+                    1000,
+                )
+                .unwrap();
+            let mut expected = u("{\"s\":\"");
+            expected.push(unit);
+            expected.extend(u("\\u0000\\/\",\"fragment\":"));
+            expected.extend(&fragment);
+            expected.extend(u(",\"escaped\":"));
+            expected.extend(&escaped);
+            expected.push(u16::from(b'}'));
+            assert_eq!(actual, expected);
+        }
+        for invalid in [vec![0xd800], u("{} trailing"), u("[1,]"), u("\"\\uxxxx\"")] {
+            assert_eq!(Utf16Fragment::new(&invalid), Err(Error::InvalidJson));
+        }
+    }
+
+    #[test]
+    fn utf16_layout_matches_utf8_for_order_omission_numbers_and_fragments() {
+        let plan = PathPlan::new([
+            "id",
+            "info.name",
+            "info.optional",
+            "omitted.child",
+            "json",
+            "flag",
+        ])
+        .unwrap();
+        let text = "雪/🦆\n";
+        let fragment = "{ \"a\":1,\"a\":2 }";
+        let text_units = u(text);
+        let fragment_units = u(fragment);
+        let number = Number::new("12345678901234567890.1200").unwrap();
+        let old = [
+            Value::Number(number),
+            Value::Text(text),
+            Value::Null,
+            Value::Null,
+            Value::Json(Fragment::new(fragment).unwrap()),
+            Value::Boolean(true),
+        ];
+        let new = [
+            Utf16Value::Number(number),
+            Utf16Value::Text(&text_units),
+            Utf16Value::Null,
+            Utf16Value::Null,
+            Utf16Value::Json(Utf16Fragment::new(&fragment_units).unwrap()),
+            Utf16Value::Boolean(true),
+        ];
+        for include in [false, true] {
+            let expected = u(&plan.row(&old, include).unwrap());
+            assert_eq!(
+                plan.row_utf16(&new, include, expected.len()).unwrap(),
+                expected
+            );
+            assert_eq!(
+                plan.row_utf16(&new, include, expected.len() - 1),
+                Err(Error::OutputLimit)
+            );
+        }
+    }
+
+    #[test]
+    fn utf16_limits_account_for_escape_expansion_and_keep_writer_atomic() {
+        let plan = PathPlan::new(["s"]).unwrap();
+        let controls = [0, 1, 8, 9, 10, 12, 13, 31, 34, 47, 92];
+        let expected = u(&plan
+            .row(
+                &[Value::Text(&String::from_utf16(&controls).unwrap())],
+                false,
+            )
+            .unwrap());
+        assert_eq!(
+            plan.row_utf16(&[Utf16Value::Text(&controls)], false, expected.len())
+                .unwrap(),
+            expected
+        );
+        assert_eq!(
+            plan.row_utf16(&[Utf16Value::Text(&controls)], false, expected.len() - 1),
+            Err(Error::OutputLimit)
+        );
+        let mut writer = Utf16Writer::new(&plan, Options::default(), 64).unwrap();
+        writer.push(&[Utf16Value::Text(&u("first"))]).unwrap();
+        let before = writer.buffered_units();
+        assert_eq!(
+            writer.push(&[]),
+            Err(Error::RowWidth {
+                expected: 1,
+                actual: 0
+            })
+        );
+        assert_eq!(
+            writer.push(&[Utf16Value::Text(&[0; 100])]),
+            Err(Error::OutputLimit)
+        );
+        assert_eq!(writer.buffered_units(), before);
+        writer.push(&[Utf16Value::Null]).unwrap();
+        assert_eq!(writer.finish(), u("[{\"s\":\"first\"},{}]"));
+        assert!(matches!(
+            Utf16Writer::new(&plan, Options::default(), 1),
+            Err(Error::OutputLimit)
+        ));
+        assert_eq!(
+            Utf16Writer::new(&plan, Options::default(), 2)
+                .unwrap()
+                .finish(),
+            u("[]")
+        );
+    }
+
+    #[test]
+    fn utf16_aggregate_and_writer_keep_options_empty_results_and_row_order() {
+        let plan = PathPlan::new(["s"]).unwrap();
+        let text = [0xdc00, 0xd800];
+        let row = plan
+            .row_utf16(&[Utf16Value::Text(&text)], false, 100)
+            .unwrap();
+        for root in [None, Some("a/\"雪")] {
+            for without in [false, true] {
+                let options = Options {
+                    root: root.map(str::to_owned),
+                    without_array_wrapper: without,
+                    ..Options::default()
+                };
+                if root.is_some() && without {
+                    assert!(matches!(
+                        Utf16Writer::new(&plan, options, 100),
+                        Err(Error::RootWithoutArrayWrapper)
+                    ));
+                    assert_eq!(
+                        wrap_rows_utf16([row.as_slice()], root, without, 100),
+                        Err(Error::RootWithoutArrayWrapper)
+                    );
+                    continue;
+                }
+                let mut writer = Utf16Writer::new(&plan, options, 100).unwrap();
+                writer.push(&[Utf16Value::Text(&text)]).unwrap();
+                writer.push(&[Utf16Value::Text(&text)]).unwrap();
+                let result = writer.finish();
+                assert_eq!(
+                    wrap_rows_utf16(
+                        [row.as_slice(), row.as_slice()],
+                        root,
+                        without,
+                        result.len()
+                    )
+                    .unwrap(),
+                    result
+                );
+                assert_eq!(
+                    wrap_rows_utf16(
+                        [row.as_slice(), row.as_slice()],
+                        root,
+                        without,
+                        result.len() - 1
+                    ),
+                    Err(Error::OutputLimit)
+                );
+                assert_eq!(
+                    wrap_rows_utf16([], root, without, 100).unwrap(),
+                    u(&wrap_rows("", root, without).unwrap())
+                );
+            }
+        }
+        assert_eq!(
+            wrap_rows_utf16([u("{},{}").as_slice()], None, false, 100),
+            Err(Error::InvalidJson)
+        );
     }
 }
