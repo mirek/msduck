@@ -157,8 +157,9 @@ it makes no assumption about which sequence value is assigned to each row.
 All twelve focused client tests, all 640 workspace Rust tests and all 404
 standard client tests pass on Linux for the runtime committed at `094a9a7`.
 The client run had zero failures or cancellations and took 1072761ms. The
-325-case diagnostic capture remains under verification; passing client tests
-does not establish equivalence for the unresolved boundary programs below.
+325-case diagnostic capture completed with zero differences from `d2a5614`.
+These checks do not establish equivalence for the unresolved boundary programs
+below.
 
 ## DML and assignment integration under verification
 
