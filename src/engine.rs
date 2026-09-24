@@ -562,6 +562,21 @@ impl Session {
         rpc: bool,
         handle: Option<(&str, i32)>,
     ) -> (Vec<u8>, bool) {
+        let saved_nocount = self.nocount;
+        let result = self.batch_response_inner(sql, parameters, rpc, handle);
+        if rpc {
+            self.nocount = saved_nocount;
+        }
+        result
+    }
+
+    fn batch_response_inner(
+        &mut self,
+        sql: &str,
+        parameters: &HashMap<String, Parameter>,
+        rpc: bool,
+        handle: Option<(&str, i32)>,
+    ) -> (Vec<u8>, bool) {
         self.caught_error = None;
         let mut out = Vec::new();
         let mut had_runtime_error = false;

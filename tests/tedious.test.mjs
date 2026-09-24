@@ -9177,7 +9177,9 @@ test('DROP INDEX RPC errors retain completion tokens and continue after missing 
   assert.deepEqual(missing.errors.map(e => e.number), [3701])
   assert.equal(missing.returnStatus, 3701)
   assert.deepEqual(tokens, [done('DONEINPROC', true, true, 201), done('DONEPROC', false, false, 224)])
-  assert.deepEqual((await query(c, 'SELECT @@ROWCOUNT,@@ERROR')).rows, [[0,3701]])
+  const restored = await query(c, 'SELECT @@ROWCOUNT,@@ERROR')
+  assert.deepEqual(restored.rows, [[0,3701]])
+  assert.equal(restored.rowCount, 1)
 })
 
 
