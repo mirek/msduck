@@ -195,3 +195,20 @@ fn extraction_unicode_inputs_evaluate_once_and_validate_storage() {
         }
     }
 }
+
+#[test]
+fn extraction_inside_arithmetic_preserves_stored_input() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let (response,ok)=session.batch_response(r#"CREATE TABLE json_arithmetic(j NVARCHAR(MAX)); INSERT INTO json_arithmetic VALUES(N'{"x":"7"}'),(NULL); SELECT JSON_VALUE(j,'$.x')+1 AS n INTO json_arithmetic_result FROM json_arithmetic"#,&Default::default(),false,None);
+    assert!(ok, "{response:?}");
+    let rows: Vec<Option<i32>> = session
+        .db
+        .prepare("SELECT n FROM json_arithmetic_result ORDER BY n NULLS FIRST")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(rows, vec![None, Some(8)]);
+}

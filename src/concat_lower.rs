@@ -271,7 +271,7 @@ pub fn statement<T: VisitMut>(
     }
 }
 
-/// Preserve Unicode carriers through currency operand annotations and recursive
+/// Preserve Unicode carriers through migrated consumer annotations and recursive
 /// set members. Other consumers migrate with their native adapter; forcing every
 /// legacy Unicode producer to STRUCT here would break still-text-only functions.
 /// Run after binding so wrappers cannot erase declarations during inference.
@@ -279,7 +279,7 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
     #[derive(Default)]
     struct Normalize {
         recursive: Vec<bool>,
-        currency: Vec<bool>,
+        consumer: Vec<bool>,
     }
     impl VisitorMut for Normalize {
         type Break = ();
@@ -298,19 +298,23 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
             let currency_cast = matches!(expr,
                 Expr::Cast { data_type, .. } | Expr::Convert { data_type: Some(data_type), .. }
                     if msduck_sql::money_cast::money_type(data_type).is_some());
-            // Only the direct currency operand (through parentheses) changes
+            let json_consumer = matches!(expr, Expr::Function(function)
+                if matches!(function.name.to_string().to_ascii_uppercase().as_str(),
+                    "ISJSON" | "JSON_VALUE" | "JSON_QUERY" | "JSON_PATH_EXISTS" | "STRING_ESCAPE"));
+            // Only the direct migrated operand (through parentheses) changes
             // representation. Descendant text producers own their own adapters.
-            self.currency.push(
+            self.consumer.push(
                 currency_cast
+                    || json_consumer
                     || matches!(expr, Expr::Nested(_))
-                        && self.currency.last().copied().unwrap_or(false),
+                        && self.consumer.last().copied().unwrap_or(false),
             );
             std::ops::ControlFlow::Continue(())
         }
         fn post_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<()> {
-            self.currency.pop();
-            let currency = self.currency.last() == Some(&true);
-            if (currency || self.recursive.last() == Some(&true))
+            self.consumer.pop();
+            let consumer = self.consumer.last() == Some(&true);
+            if (consumer || self.recursive.last() == Some(&true))
                 && let Expr::Cast {
                     expr: source,
                     data_type,
