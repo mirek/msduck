@@ -9116,6 +9116,9 @@ test('index catalog exposes captured descriptors and transactional table-owned n
   }
   await query(c, 'CREATE TABLE dbo.catalog_a(id INT); CREATE TABLE dbo.catalog_b(id INT)')
   await query(c, 'CREATE INDEX shared ON dbo.catalog_a(id); CREATE UNIQUE INDEX shared ON dbo.catalog_b(id)')
+  await assert.rejects(query(c, 'CREATE INDEX SHARED ON catalog_a(id)'), e =>
+    e.number === 1913 && e.state === 1 && e.class === 16 &&
+    e.message === "The operation failed because an index or statistics with name 'SHARED' already exists on table 'catalog_a'.")
   const sql = "SELECT name,index_id,type_desc,is_unique,compression_delay FROM sys.indexes WHERE name IS NOT NULL ORDER BY is_unique"
   const expected = [['shared',2,'NONCLUSTERED',false,null],['shared',2,'NONCLUSTERED',true,null]]
   assert.deepEqual((await query(c, sql)).rows, expected)
