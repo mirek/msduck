@@ -51,6 +51,29 @@ fn window(mut function: Function, ticket: Expr) -> Expr {
             ],
         );
     }
+    if matches!(
+        name.to_ascii_lowercase().as_str(),
+        "__msduck_sum_int"
+            | "__msduck_sum_big"
+            | "__msduck_sum_money"
+            | "__msduck_avg_int"
+            | "__msduck_avg_big"
+            | "__msduck_avg_money"
+    ) {
+        function.name = ObjectName::from(vec![Ident::new(format!(
+            "{}_frame",
+            name.to_ascii_lowercase()
+        ))]);
+        // The native pair retains the original value type and bounded arithmetic.
+        // Empty/all-NULL values stay NULL; only COUNT needs a zero fallback.
+        return template(
+            "list_extract(list_transform([__msduck_window_pair], __msduck_aggregate_pair -> CASE WHEN __msduck_observe_null(__msduck_ticket, __msduck_aggregate_pair.eliminated) IS NOT NULL THEN __msduck_aggregate_pair.value ELSE NULL END), 1)",
+            &[
+                ("__msduck_window_pair", Expr::Function(function)),
+                ("__msduck_ticket", ticket),
+            ],
+        );
+    }
     function.name = ObjectName::from(vec![Ident::new("list")]);
     // LIST retains NULLs and uses the original partition, ordering and frame.
     // Its operand is evaluated once per input row, outside the lambda. Observe

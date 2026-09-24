@@ -56,6 +56,7 @@ impl Server {
         crate::object_catalog::register(&owner)?;
         crate::type_catalog::register(&owner)?;
         crate::declared_columns::register(&owner)?;
+        crate::query_catalog::register(&owner)?;
         Ok(Self {
             owner: Arc::new(Mutex::new(owner)),
             diagnostics,

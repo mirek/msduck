@@ -82,3 +82,29 @@ fn count_window_keeps_volatile_operands_outside_the_result_lambda() {
     assert!(!sql.contains("list_aggregate"));
     assert!(!sql.contains("list_count"));
 }
+
+#[test]
+fn bounded_sum_average_windows_preserve_single_evaluation_and_null_results() {
+    for family in ["int", "big", "money"] {
+        for aggregate in ["sum", "avg"] {
+            let name = format!("__msduck_{aggregate}_{family}");
+            let mut statement = Parser::parse_sql(
+                &GenericDialect {},
+                &format!("SELECT {name}(nextval('calls') + __msduck_aggregate_pair) OVER(PARTITION BY g ORDER BY i ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) FROM t"),
+            ).unwrap().remove(0);
+            let ticket = Expr::Value(Value::Placeholder("$1".into()).into());
+            assert_eq!(instrument(&mut statement, &ticket, |n| n == name), 1);
+            let sql = statement.to_string();
+            assert!(sql.contains(&format!(
+                "[{name}_frame(nextval('calls') + __msduck_aggregate_pair) OVER"
+            )));
+            assert!(
+                sql.contains("PARTITION BY g ORDER BY i ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING")
+            );
+            assert_eq!(sql.matches("nextval('calls')").count(), 1);
+            assert!(!sql.contains("list_aggregate"));
+            assert!(!sql.contains("COALESCE"));
+            assert_eq!(sql.matches("__msduck_observe_null($1").count(), 1);
+        }
+    }
+}

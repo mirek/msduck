@@ -51,10 +51,12 @@ COUNT windows use a separate native aggregate, `__msduck_count_frame`, returning
 the count and a NULL-elimination flag as a STRUCT. Its fixed-size state contains
 no frame values and performs no statement observation during update or combine.
 The scalar observer consumes the flag only from a returned frame result, so
-unused intermediate window states cannot emit warnings. Other window aggregates
-currently collect frame values with LIST; their wide-frame time and memory cost
-remains unresolved. Grouped aggregates use a singleton binding to evaluate the
-operand once before observing its NULLness.
+unused intermediate window states cannot emit warnings. Integer and money
+SUM/AVG windows use the same paired-result mechanism, retaining their typed
+values and bounded arithmetic. Other window aggregate families currently collect
+frame values with LIST; their wide-frame time and memory cost remains unresolved.
+Grouped aggregates use a singleton binding to evaluate the operand once before
+observing its NULLness.
 
 Native regressions exercise a materialized 6000-row volatile source, empty and
 all-NULL inputs, HAVING without result rows, concurrent windowed queries on
