@@ -29,11 +29,13 @@ the captured is_tracked_by_cdc and has_snapshot columns. Physical LOB placement,
 configured retention and unsupported table/view kinds are not established by
 these default-object observations.
 
-Five additional LOB lifecycle scenarios capture VARCHAR(MAX), NVARCHAR(MAX),
-VARBINARY(MAX), column add/drop, table recreation and transaction rollback.
+Nine additional LOB lifecycle scenarios capture VARCHAR(MAX), NVARCHAR(MAX),
+VARBINARY(MAX), column add/drop, table recreation, ALTER between bounded and MAX
+types, and transaction rollback.
 The logical default LOB data-space ID becomes 1 when a MAX column is declared
-and remains 1 after that column is dropped. Recreating the table starts at 0;
-rolling back the declaration restores the prior value. A private per-object
+and remains 1 after that column is dropped or altered back to a bounded type.
+Recreating the table starts at 0; rolling back either ADD or ALTER of a MAX
+declaration restores the prior value. A private per-object
 property records this history in the DDL transaction and survives restart.
 This is the captured logical default-filegroup identity, not DuckDB physical
 LOB placement. Older databases can recover current MAX declarations, but the

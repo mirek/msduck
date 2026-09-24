@@ -39,6 +39,19 @@ lobCases.push({name: 'add drop and recreate', steps: [
   'ALTER TABLE dbo.width_lob ADD payload NVARCHAR(MAX)', lobSnapshot,
   'ROLLBACK TRANSACTION', lobSnapshot, 'DROP TABLE dbo.width_lob',
 ]})
+for (const type of ['VARCHAR', 'NVARCHAR', 'VARBINARY']) {
+  lobCases.push({name: `ALTER MAX and bounded ${type}`, steps: [
+    `CREATE TABLE dbo.width_lob(id INT,payload ${type}(20))`, lobSnapshot,
+    `ALTER TABLE dbo.width_lob ALTER COLUMN payload ${type}(MAX)`, lobSnapshot,
+    `ALTER TABLE dbo.width_lob ALTER COLUMN payload ${type}(20)`, lobSnapshot,
+    'DROP TABLE dbo.width_lob',
+  ]})
+}
+lobCases.push({name: 'ALTER MAX rollback', steps: [
+  'CREATE TABLE dbo.width_lob(id INT,payload VARCHAR(20))', lobSnapshot,
+  'BEGIN TRANSACTION', 'ALTER TABLE dbo.width_lob ALTER COLUMN payload VARCHAR(MAX)', lobSnapshot,
+  'ROLLBACK TRANSACTION', lobSnapshot, 'DROP TABLE dbo.width_lob',
+]})
 const output = resolve(process.argv[2] ?? 'artifacts/compatibility/object-catalog-width-reference')
 await mkdir(output, {recursive: true})
 await withReferenceContainer(async (config, container) => {
@@ -75,5 +88,5 @@ await withReferenceContainer(async (config, container) => {
   try { fixture = JSON.parse(await readFile(new URL('../reference/object-catalog-width.json', import.meta.url), 'utf8')) }
   catch (error) { if (error.code !== 'ENOENT') throw error }
   if (fixture) assert.deepEqual(actual, fixture, 'Retained object catalog capture differs')
-  console.log(`Captured ${actual.results.length} catalog observations twice identically${fixture ? ' and matched retained fixture' : ''}`)
+  console.log(`Captured ${actual.results.length} catalog observations and ${actual.lob.length} LOB scenarios twice identically${fixture ? ' and matched retained fixture' : ''}`)
 })
