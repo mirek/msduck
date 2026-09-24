@@ -1,6 +1,6 @@
 # Table-owned index catalog
 
-`reference/index-catalog.json` retains 27 first-party SQL Server catalog
+`reference/index-catalog.json` retains 30 first-party SQL Server catalog
 snapshots captured identically in two fresh databases against the pinned image.
 The explicit projections retain column descriptors, flags and values from
 `sys.indexes` and `sys.index_columns`, together with each operation's raw
@@ -127,3 +127,11 @@ after the existing programs so they do not change the programs' @@ROWCOUNT
 state. All prior27 observations are unchanged. Owned reference containers use
 explicit cleanup, preserving startup logs before removal; an earlier automatic
 removal race obscured a startup failure and is retained in local evidence.
+
+Duplicate managed index names now return captured SQL Server error 1913, state 1,
+severity 16. The message retains requested identifier spelling and qualification
+without quoting delimiters. Four native comparisons cover qualified, unqualified,
+uppercase and quoted names and verify that rejection preserves both existing
+indexes and later statement usability. Three added reference programs were
+captured twice identically; all previous observations are unchanged. Other
+CREATE INDEX diagnostics and unique-key violation translation remain unfinished.
