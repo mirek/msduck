@@ -56,3 +56,24 @@ statement rollback or atomic write cancellation. Volatile functions, external
 side effects, commit, streaming, preparation, output buffering, cancellation races
 and worker latency need separate evidence. No prior statements are replayed and
 no backend transaction-validity flags are patched.
+
+## Current result: incomplete strategy
+
+At revision c67aac3 the one-thread autocommit, commit and rollback cases passed,
+including cross-connection visibility. The four-thread autocommit case established
+unfinished execution, destroyed its pending handle, and entered the cleanup query,
+then failed to return before an external 20-second timeout. An earlier unbounded
+probe was explicitly terminated after 48 seconds. Neither run passed the full test;
+workspace and Clippy validation did not run after the failing probe.
+
+The test now runs its native work in a child process with a 20-second watchdog,
+so this known failure is bounded and explicit. It remains a failing diagnostic,
+not a merge-ready regression or an implementation. The phase markers distinguish
+active execution from cleanup and show that handle destruction alone is insufficient.
+
+`TaskScheduler::ExecuteForever` normally sends PROCESS_ALL to background tasks.
+`PipelineTask::ExecuteTask` then executes without a chunk limit, while
+`Executor::CancelTasks` waits for outstanding tasks. The observed stalled drain
+means the single-thread result cannot justify transaction-preserving cancellation
+under ordinary parallel execution. A follow-up must establish a way to stop those
+workers and preserve transaction state before this can become a production path.

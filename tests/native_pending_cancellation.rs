@@ -129,6 +129,38 @@ impl Drop for Pending<'_> {
 
 #[test]
 fn abandoning_pending_read_preserves_prior_transaction_work() {
+    const CHILD: &str = "MSDUCK_PENDING_CANCELLATION_PROBE_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        // Native cleanup can block. Isolate the entire probe so a failure
+        // cannot strand a Rust test thread or the shared build-machine lock.
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "abandoning_pending_read_preserves_prior_transaction_work",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                assert!(
+                    status.success(),
+                    "pending cancellation child failed: {status}"
+                );
+                return;
+            }
+            if Instant::now() >= deadline {
+                child.kill().unwrap();
+                child.wait().unwrap();
+                panic!(
+                    "pending cancellation probe exceeded 20 seconds; child terminated; inspect phase markers"
+                );
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
     for threads in [1, 4] {
         for ending in ["autocommit", "commit", "rollback"] {
             let db = Database::new();
