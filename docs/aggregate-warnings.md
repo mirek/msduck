@@ -4,7 +4,9 @@
 `scripts/capture-aggregate-warnings.mjs`. Two fresh pinned SQL Server containers
 returned byte-identical captures on version 17.0.4065.4. The fixture retains
 rows, descriptors, informational messages, errors, completion counts, and a
-follow-up `@@ERROR`/`@@ROWCOUNT` read. It does not record token interleaving.
+follow-up `@@ERROR`/`@@ROWCOUNT` read. The `events` sequence additionally records
+metadata, rows, informational/error numbers and completion events in their
+observed order from the same execution, without rerunning the query.
 
 The owner-run character-extrema replay on earlier revisions matches result
 values and descriptors but omits informational warning 8153. Capturing that
@@ -31,6 +33,12 @@ programs each produce one warning even when multiple groups or frames consume
 NULL. DISTINCT aggregates retain the warning. Ordinary DISTINCT rows and UNION
 in these probes produce none.
 
+All 34 warning events in the ordered capture follow the statement's result
+metadata and rows and immediately precede its DONE event. HAVING with no result
+rows still emits metadata, then warning, then DONE with count zero. The second
+fresh ordered capture is byte-identical; excluding the new event sequences,
+every field matches the original unordered capture.
+
 HAVING can remove every output row while the statement still warns. TOP(0)
 does not warn in the captured program. COALESCE replacing NULL before aggregation
 suppresses the warning; CASE creating a NULL aggregate input causes it. Both
@@ -54,6 +62,6 @@ Preserve existing result types, ordering and exact payloads independently.
 
 Before declaring the warning implemented, replay this fixture and the original
 character-extrema fixture without dropping informational messages. Additional
-ground truth is needed for wire ordering, cancellation, partial failures,
+ground truth is needed for cancellation, partial failures,
 prepared execution, DML consumers and parallel native execution. Full linguistic
 collation weights and transaction recovery remain separate compatibility gaps.
