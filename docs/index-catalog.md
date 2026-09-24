@@ -82,5 +82,5 @@ snapshot contract. Those reconciliation/public-view steps and wire comparisons
 remain required before root integration can claim this task complete.
 
 At checkpoint `7024c8c`, all four focused Linux native tests and strict workspace
-Clippy passed. The full Rust workspace check is still running. The initial local
+Clippy passed; all 644 workspace Rust tests also passed. The initial local
 native build was cancelled for disk pressure; no local pass is claimed.
