@@ -1425,7 +1425,7 @@
     {
       "id": "attention-compute-reference-v1",
       "title": "Capture SQL Server cancellation during active computation",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. First-party DuckDB probe at f8e7372 shows native interruption aborts explicit transactions; existing SQL Server WAITFOR captures do not establish equivalent computing-query behavior. Capture the matching execution class before engine integration.",
       "scope": [
         "scripts/capture-attention-compute.mjs",
@@ -1462,7 +1462,7 @@
     {
       "id": "native-pending-drain-v1",
       "title": "Probe interrupt-assisted pending read cleanup without transaction invalidation",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full compatibility goal. First-party PR155 shows pending abandonment stalls parallel cleanup; PR153 proves explicit transactions must survive read cancellation with XACT_ABORT OFF. Test a worker-owned interrupt after task polling stops, followed by pending destruction and context cleanup.",
       "scope": [
         "tests/native_pending_drain.rs",
@@ -1480,7 +1480,7 @@
     {
       "id": "native-pending-error-drain-v1",
       "title": "Add explicit native pending-read drain preserving racing errors",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full compatibility goal. PR157 proves worker-owned interrupt/drain preserves read transactions, but pending destruction discards racing executor errors. Add a narrow guarded backend operation before runtime integration. Existing root duckdb-nested-alter-v1 claim owns build patch integration and patch ledger; no scope transfer.",
       "scope": [
         "vendor/libduckdb-sys/msduck_pending_drain.rs",
@@ -1499,7 +1499,7 @@
     {
       "id": "rust-pending-read-v1",
       "title": "Expose worker-owned cancellable materialized reads through Rust",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. PR159 provides guarded native drain with racing-error retention. Add a Rust prepared-read adapter driven only by an atomic cancellation flag; no server activation. Existing root native-pending-error-drain-v1 claim owns native eligibility helper changes.",
       "scope": [
         "vendor/duckdb/src/pending_read.rs",
