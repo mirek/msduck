@@ -146,9 +146,12 @@ fn abandoning_pending_read_preserves_prior_transaction_work() {
                 i64::from(ending == "autocommit")
             );
             let pending = Pending::read(&connection);
+            eprintln!("servicing pending tasks: threads={threads}, ending={ending}");
             pending.execute_tasks();
+            eprintln!("abandoning pending result: threads={threads}, ending={ending}");
             let cleanup = Instant::now();
             drop(pending);
+            eprintln!("starting cleanup query: threads={threads}, ending={ending}");
             // InitialCleanup of this query cancels/drains the old executor.
             // No duckdb_interrupt is issued at any point in this probe.
             assert_eq!(connection.scalar("SELECT SUM(n) FROM preserved"), 1);
