@@ -367,7 +367,7 @@
     {
       "id": "unicode-case-core-v1",
       "title": "Implement deterministic SQL Server UTF16 case maps",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner full compatibility goal; owner-authored SQL Server BMP casing captures at 3dfbe04 establish exact legacy and version-100 maps needed by Unicode carrier consumers.",
       "scope": [
         "crates/msduck-core/src/case_mapping.rs",
@@ -1558,6 +1558,23 @@
       "dependencies": [],
       "issue": 163,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PKDMQ"
+    },
+    {
+      "id": "legacy-datetime-export-v1",
+      "title": "Export deterministic legacy datetime conversion from msduck-core",
+      "state": "ready",
+      "authorization": "Direct owner handoff on 2026-09-24: \"Worker stopped; authorize the handoff\" for crates/msduck-core/src/lib.rs previously reserved by unicode-case-core-v1. Preserve its permanent claim, branch and evidence; revoke the stopped task and transfer only the export file to this successor. PR #129 supplies the conversion module.",
+      "scope": [
+        "crates/msduck-core/src/lib.rs"
+      ],
+      "acceptance": [
+        "Export the existing legacy_datetime conversion module supplied by owner-authored PR #129 without changing conversion semantics or unrelated exports.",
+        "Use a new exclusive claim and private receipt; never adopt the stopped worker receipt. Retain the old immutable claim and branch.",
+        "Run formatting and deterministic core tests and strict core Clippy on the exact export revision; record broader verification still needed before merge."
+      ],
+      "dependencies": [],
+      "issue": 164,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PKD64"
     }
   ]
 }
