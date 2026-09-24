@@ -9266,3 +9266,13 @@ test('object catalog CHAR type values retain padding and filter semantics', { ti
     assert.deepEqual(actual, result, sql)
   }
 })
+
+for (const entry of JSON.parse(readFileSync(new URL('../reference/object-catalog-width.json', import.meta.url), 'utf8')).lob) {
+  test(`table LOB catalog lifecycle: ${entry.name}`, { timeout: 30000 }, async t => {
+    const { canonical } = await import('../scripts/lib/compatibility.mjs')
+    const c = await start(t)
+    for (const {sql, result} of entry.results) {
+      assert.deepEqual(canonical(await capture(c, sql)), result, sql)
+    }
+  })
+}

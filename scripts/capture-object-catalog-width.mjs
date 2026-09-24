@@ -19,6 +19,26 @@ const queries = [
   "SELECT * FROM sys.tables WHERE 1=0",
   "SELECT * FROM sys.views WHERE 1=0",
 ]
+const lobCases = ['VARCHAR', 'NVARCHAR', 'VARBINARY'].map(type => ({
+  name: `MAX declaration ${type}`,
+  steps: [
+    `CREATE TABLE dbo.width_lob(id INT,payload ${type}(MAX))`,
+    "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+    'DROP TABLE dbo.width_lob',
+  ],
+}))
+const lobSnapshot = "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'"
+lobCases.push({name: 'add drop and recreate', steps: [
+  'CREATE TABLE dbo.width_lob(id INT)', lobSnapshot,
+  'ALTER TABLE dbo.width_lob ADD payload VARCHAR(MAX)', lobSnapshot,
+  'ALTER TABLE dbo.width_lob DROP COLUMN payload', lobSnapshot,
+  'DROP TABLE dbo.width_lob', 'CREATE TABLE dbo.width_lob(id INT)', lobSnapshot,
+  'DROP TABLE dbo.width_lob',
+]}, {name: 'transaction rollback', steps: [
+  'CREATE TABLE dbo.width_lob(id INT)', 'BEGIN TRANSACTION',
+  'ALTER TABLE dbo.width_lob ADD payload NVARCHAR(MAX)', lobSnapshot,
+  'ROLLBACK TRANSACTION', lobSnapshot, 'DROP TABLE dbo.width_lob',
+]})
 const output = resolve(process.argv[2] ?? 'artifacts/compatibility/object-catalog-width-reference')
 await mkdir(output, {recursive: true})
 await withReferenceContainer(async (config, container) => {
@@ -38,7 +58,13 @@ await withReferenceContainer(async (config, container) => {
         const values = `SELECT name,${columns.join(',')} FROM sys.${view} WHERE name='${view === 'tables' ? 'width_user' : 'width_view'}'`
         results.push({sql: values, result: canonical(await capture(connection, values))})
       }
-      return {results, declarations}
+      const lob = []
+      for (const entry of lobCases) {
+        const results = []
+        for (const sql of entry.steps) results.push({sql, result: canonical(await capture(connection, sql))})
+        lob.push({name: entry.name, results})
+      }
+      return {results, declarations, lob}
     }))
   }
   assert.deepEqual(runs[0], runs[1], 'Fresh object catalog captures differ')

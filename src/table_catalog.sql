@@ -2,7 +2,7 @@
 -- Physical LOB placement and temporal retention have no emulation yet.
 CREATE OR REPLACE VIEW sys.tables AS
 SELECT o.*,
-    CAST(0 AS INTEGER) AS lob_data_space_id,
+    p.lob_data_space_id,
     CAST(NULL AS INTEGER) AS filestream_data_space_id,
     c.max_column_id AS max_column_id_used,
     false AS lock_on_bulk_load,
@@ -40,6 +40,7 @@ SELECT o.*,
     false AS is_dropped_ledger_table
 FROM sys.objects o
 JOIN main.__msduck_column_counters c USING(object_id)
+JOIN main.__msduck_table_properties p USING(object_id)
 WHERE rtrim(o.type)='U';
 
 CREATE OR REPLACE VIEW sys.views AS

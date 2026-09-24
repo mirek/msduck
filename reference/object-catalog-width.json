@@ -3096,5 +3096,735 @@
         "rowCount": 23
       }
     }
+  ],
+  "lob": [
+    {
+      "name": "MAX declaration VARCHAR",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT,payload VARCHAR(MAX))",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "MAX declaration NVARCHAR",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT,payload NVARCHAR(MAX))",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "MAX declaration VARBINARY",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT,payload VARBINARY(MAX))",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "add drop and recreate",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "ALTER TABLE dbo.width_lob ADD payload VARCHAR(MAX)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "ALTER TABLE dbo.width_lob DROP COLUMN payload",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "transaction rollback",
+      "results": [
+        {
+          "sql": "CREATE TABLE dbo.width_lob(id INT)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "BEGIN TRANSACTION",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "ALTER TABLE dbo.width_lob ADD payload NVARCHAR(MAX)",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    1,
+                    2
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "ROLLBACK TRANSACTION",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        },
+        {
+          "sql": "SELECT lob_data_space_id,max_column_id_used FROM sys.tables WHERE name='width_lob'",
+          "result": {
+            "sets": [
+              {
+                "columns": [
+                  {
+                    "name": "lob_data_space_id",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 32,
+                    "collation": null
+                  },
+                  {
+                    "name": "max_column_id_used",
+                    "type": "Int",
+                    "length": null,
+                    "precision": null,
+                    "scale": null,
+                    "flags": 8,
+                    "collation": null
+                  }
+                ],
+                "rows": [
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              }
+            ],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": 1,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 1
+          }
+        },
+        {
+          "sql": "DROP TABLE dbo.width_lob",
+          "result": {
+            "sets": [],
+            "done": [
+              {
+                "kind": "done",
+                "rowCount": null,
+                "more": false
+              }
+            ],
+            "errors": [],
+            "info": [],
+            "returnStatus": null,
+            "rowCount": 0
+          }
+        }
+      ]
+    }
   ]
 }

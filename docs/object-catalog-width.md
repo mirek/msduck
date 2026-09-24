@@ -29,6 +29,17 @@ the captured is_tracked_by_cdc and has_snapshot columns. Physical LOB placement,
 configured retention and unsupported table/view kinds are not established by
 these default-object observations.
 
+Five additional LOB lifecycle scenarios capture VARCHAR(MAX), NVARCHAR(MAX),
+VARBINARY(MAX), column add/drop, table recreation and transaction rollback.
+The logical default LOB data-space ID becomes 1 when a MAX column is declared
+and remains 1 after that column is dropped. Recreating the table starts at 0;
+rolling back the declaration restores the prior value. A private per-object
+property records this history in the DDL transaction and survives restart.
+This is the captured logical default-filegroup identity, not DuckDB physical
+LOB placement. Older databases can recover current MAX declarations, but the
+history of already dropped or altered-away MAX columns was not retained by
+earlier versions and remains a migration gap.
+
 The retained IN/NOT IN cases also exercise lists containing NULL. ANSI list
 membership uses the same trailing-space equality as a scalar comparison, while
 retaining SQL three-valued logic. The deterministic binder trims each operand
