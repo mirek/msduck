@@ -9149,3 +9149,33 @@ test('DROP INDEX binds table ownership and preserves successful earlier drops', 
   await assert.rejects(query(c, 'DROP INDEX shared'), e => e.number === 159 && e.class === 15)
   assert.deepEqual((await query(c, 'SELECT 7 AS recovered')).rows, [[7]])
 })
+
+test('DROP INDEX RPC errors retain completion tokens and continue after missing targets', { timeout: 20000 }, async t => {
+  const c = await start(t)
+  await query(c, 'CREATE TABLE dbo.a(id INT); CREATE TABLE dbo.b(id INT); CREATE INDEX ix ON dbo.a(id)')
+  c.execSqlBatch = request => c.execSql(request)
+  let tokens = []
+  const debugToken = c.debug.token.bind(c.debug)
+  c.debug.token = token => {
+    if (token.name.startsWith('DONE')) tokens.push(JSON.parse(JSON.stringify(token)))
+    debugToken(token)
+  }
+  const done = (name, more, sqlError, curCmd, rowCount) => ({
+    name, handlerName: name === 'DONEINPROC' ? 'onDoneInProc' : 'onDoneProc',
+    more, sqlError, attention: false, serverError: false,
+    ...(rowCount === undefined ? {} : { rowCount }), curCmd,
+  })
+  const result = await capture(c, 'DROP INDEX ix ON dbo.a, absent ON dbo.b; SELECT 7 AS alive')
+  assert.deepEqual(result.errors.map(e => [e.number, e.state, e.class]), [[3701, 7, 11]])
+  assert.deepEqual(result.sets.map(s => s.rows), [[[7]]])
+  assert.equal(result.returnStatus, 0)
+  assert.deepEqual(tokens, [done('DONEINPROC', true, true, 201), done('DONEINPROC', true, false, 193, 1), done('DONEPROC', false, false, 224)])
+  assert.deepEqual((await query(c, 'SELECT @@ROWCOUNT,@@ERROR')).rows, [[1,0]])
+  assert.deepEqual((await query(c, "SELECT name FROM sys.indexes WHERE name='ix'")).rows, [])
+  tokens = []
+  const missing = await capture(c, 'SET NOCOUNT ON; DROP INDEX absent ON dbo.a')
+  assert.deepEqual(missing.errors.map(e => e.number), [3701])
+  assert.equal(missing.returnStatus, 3701)
+  assert.deepEqual(tokens, [done('DONEINPROC', true, true, 201), done('DONEPROC', false, false, 224)])
+  assert.deepEqual((await query(c, 'SELECT @@ROWCOUNT,@@ERROR')).rows, [[0,3701]])
+})

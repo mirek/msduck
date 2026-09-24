@@ -570,8 +570,14 @@ impl Session {
             Err(e) => {
                 if e.downcast_ref::<SqlError>().is_some() {
                     self.last_error = emit_error(&mut out, &e);
-                    let command = if !rpc && matches!(self.last_error, 156 | 159) {
-                        253
+                    let command = if matches!(self.last_error, 156 | 159) {
+                        if rpc {
+                            out.push(0x79);
+                            out.extend(self.last_error.to_le_bytes());
+                            224
+                        } else {
+                            253
+                        }
                     } else {
                         0
                     };
@@ -1045,6 +1051,22 @@ impl Session {
                             0,
                         );
                         continue;
+                    }
+                    if rpc && msduck_sql::drop_index_syntax::request(statement).is_some() {
+                        self.rowcount = 0;
+                        if self.last_error == 3701 {
+                            // A missing target ends this statement, while later
+                            // RPC statements still run, even with NOCOUNT ON.
+                            had_runtime_error = true;
+                            return_status = self.last_error;
+                            last_done = Some(out.len());
+                            tds::done(&mut out, 0xff, 3, 201, 0);
+                            continue;
+                        }
+                        if self.last_error == 3748 {
+                            tds::done(&mut out, 0xfe, 2, 224, 0);
+                            return (out, false);
+                        }
                     }
                     let command =
                         if !rpc && msduck_sql::drop_index_syntax::request(statement).is_some() {
@@ -5588,63 +5610,99 @@ mod drop_index_runtime_tests {
     fn captured_drop_requests_preserve_diagnostics_completion_and_remaining_indexes() {
         let fixture: serde_json::Value =
             serde_json::from_str(include_str!("../reference/drop-index.json")).unwrap();
-        for case in fixture["results"].as_array().unwrap() {
-            let server = crate::server::Server::open(":memory:").unwrap();
-            let mut session = Session::new(server.connection().unwrap()).unwrap();
-            for sql in fixture["setup"].as_array().unwrap() {
-                let (out, ok) =
-                    session.batch_response(sql.as_str().unwrap(), &Default::default(), false, None);
-                assert!(ok, "setup {sql}: {out:?}");
-            }
-            let sql = case["sql"].as_str().unwrap();
-            let (actual, ok) = session.batch_response(sql, &Default::default(), false, None);
-            let errors = case["result"]["errors"].as_array().unwrap();
-            assert_eq!(ok, errors.is_empty(), "{sql}: {actual:?}");
-            let mut expected = vec![];
-            for e in errors {
-                tds::sql_error(
-                    &mut expected,
-                    &SqlError::from_utf16(
-                        e["number"].as_i64().unwrap() as i32,
-                        e["state"].as_u64().unwrap() as u8,
-                        e["class"].as_u64().unwrap() as u8,
-                        e["message"].as_str().unwrap().encode_utf16().collect(),
-                    ),
+        for rpc in [false, true] {
+            for case in fixture["results"].as_array().unwrap() {
+                let server = crate::server::Server::open(":memory:").unwrap();
+                let mut session = Session::new(server.connection().unwrap()).unwrap();
+                for sql in fixture["setup"].as_array().unwrap() {
+                    let (out, ok) = session.batch_response(
+                        sql.as_str().unwrap(),
+                        &Default::default(),
+                        false,
+                        None,
+                    );
+                    assert!(ok, "setup {sql}: {out:?}");
+                }
+                let sql = case["sql"].as_str().unwrap();
+                let (actual, ok) = session.batch_response(sql, &Default::default(), rpc, None);
+                let errors = case["result"]["errors"].as_array().unwrap();
+                assert_eq!(ok, errors.is_empty(), "{sql}: {actual:?}");
+                let mut expected = vec![];
+                for e in errors {
+                    tds::sql_error(
+                        &mut expected,
+                        &SqlError::from_utf16(
+                            e["number"].as_i64().unwrap() as i32,
+                            e["state"].as_u64().unwrap() as u8,
+                            e["class"].as_u64().unwrap() as u8,
+                            e["message"].as_str().unwrap().encode_utf16().collect(),
+                        ),
+                    );
+                }
+                let number = errors.first().map(|e| e["number"].as_i64().unwrap() as i32);
+                if rpc {
+                    // SQL Server RPC captures distinguish statement errors from
+                    // syntax/option failures that terminate the entire request.
+                    if number.is_none() || number == Some(3701) {
+                        tds::done(
+                            &mut expected,
+                            0xff,
+                            if number.is_some() { 3 } else { 1 },
+                            201,
+                            0,
+                        );
+                    }
+                    if number != Some(3748) {
+                        expected.push(0x79);
+                        expected.extend(number.unwrap_or(0).to_le_bytes());
+                    }
+                    tds::done(
+                        &mut expected,
+                        0xfe,
+                        if matches!(number, Some(156 | 159 | 3748)) {
+                            2
+                        } else {
+                            0
+                        },
+                        224,
+                        0,
+                    );
+                } else {
+                    let done = &case["completion"][0];
+                    tds::done(
+                        &mut expected,
+                        0xfd,
+                        if errors.is_empty() { 0 } else { 2 },
+                        done["curCmd"].as_u64().unwrap() as u16,
+                        0,
+                    );
+                }
+                assert_eq!(actual, expected, "{sql}");
+                assert_eq!(
+                    serde_json::json!([[session.rowcount, session.last_error]]),
+                    case["state"]["sets"][0]["rows"],
+                    "{sql}"
+                );
+                let rows = session
+                    .db
+                    .prepare(fixture["inventory"].as_str().unwrap())
+                    .unwrap()
+                    .query_map([], |r| {
+                        Ok(vec![
+                            r.get::<_, String>(0)?,
+                            r.get::<_, String>(1)?,
+                            r.get::<_, String>(2)?,
+                        ])
+                    })
+                    .unwrap()
+                    .collect::<duckdb::Result<Vec<_>>>()
+                    .unwrap();
+                assert_eq!(
+                    serde_json::json!(rows),
+                    case["remaining"]["sets"][0]["rows"],
+                    "{sql}"
                 );
             }
-            let done = &case["completion"][0];
-            tds::done(
-                &mut expected,
-                0xfd,
-                if errors.is_empty() { 0 } else { 2 },
-                done["curCmd"].as_u64().unwrap() as u16,
-                0,
-            );
-            assert_eq!(actual, expected, "{sql}");
-            assert_eq!(
-                serde_json::json!([[session.rowcount, session.last_error]]),
-                case["state"]["sets"][0]["rows"],
-                "{sql}"
-            );
-            let rows = session
-                .db
-                .prepare(fixture["inventory"].as_str().unwrap())
-                .unwrap()
-                .query_map([], |r| {
-                    Ok(vec![
-                        r.get::<_, String>(0)?,
-                        r.get::<_, String>(1)?,
-                        r.get::<_, String>(2)?,
-                    ])
-                })
-                .unwrap()
-                .collect::<duckdb::Result<Vec<_>>>()
-                .unwrap();
-            assert_eq!(
-                serde_json::json!(rows),
-                case["remaining"]["sets"][0]["rows"],
-                "{sql}"
-            );
         }
     }
     #[test]
