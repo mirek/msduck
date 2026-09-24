@@ -60,8 +60,8 @@ node --test tests/client-shards.test.mjs
 They cover exhaustive deterministic partitioning, exact name matching, duplicate
 names across files, nested execution, intentional skips, missing/repeated events,
 assertions, crashes, unsupported discovery and cancellation during discovery and
-test execution. A two-CPU comparison remains required before recommending
-concurrency for CI. Balanced sums of historical test durations alone do not
+test execution. The two-CPU comparison below found a timeout, so CI concurrency
+is not recommended yet. Balanced sums of historical test durations alone do not
 establish a speedup.
 
 Harness verification: all eight regressions pass on Node 24.13.0 (Linux) and
@@ -77,5 +77,11 @@ The earlier unsharded run of that runtime passed all 404 tests in 1164028 ms,
 an observed wall-time ratio of 3.21. These runs shared a 32-CPU Linux host with
 other verification work and did not have identical host load; this is one
 measurement, not a general performance guarantee or a GitHub runner result.
-The two-CPU comparison uses the same immutable executable for sequential
-unsharded and two-worker runs and is still pending.
+The same immutable executable was then tested sequentially with affinity to
+two CPUs. The unsharded baseline passed all 404 tests in 1466053 ms. The
+two-worker run took 861859 ms but failed: 403 passed and the BIT aggregate
+validation matrix hit its unchanged 20000 ms deadline. That matrix had taken
+17813 ms in the passing baseline. Both runs accounted for all 404 tests with
+no skips or missing identities, and the binary hash remained unchanged. The
+runner correctly returned failure; this is not a passing speedup result. CI
+integration remains pending resolution and a complete passing comparison.
