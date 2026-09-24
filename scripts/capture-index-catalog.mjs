@@ -14,6 +14,9 @@ const programs = [
  ['quoted-table', 'CREATE TABLE alt.[odd.table]([odd.column] INT,other INT)'],
  ['ordinary', 'CREATE INDEX ix ON dbo.a(id)'],
  ['same-name-other-table', 'CREATE UNIQUE INDEX ix ON dbo.b(id)'],
+ ['unique-null', 'INSERT INTO dbo.b(id,value) VALUES(NULL,10)'],
+ ['unique-null-duplicate', 'INSERT INTO dbo.b(id,value) VALUES(NULL,20)'],
+ ['unique-null-cleanup', 'DELETE FROM dbo.b WHERE id IS NULL'],
  ['quoted-index', 'CREATE INDEX [odd.index] ON alt.[odd.table]([odd.column])'],
  ['descending-include', 'CREATE INDEX mixed ON dbo.a(value DESC,id ASC) INCLUDE(payload)'],
  ['filtered', 'CREATE INDEX filtered ON dbo.a(value) WHERE value IS NOT NULL'],
@@ -48,7 +51,7 @@ await withReferenceContainer(async(config,container)=>{
     tokens=[]
     const result=canonical(await capture(connection,sql))
     const completion=[...tokens]
-    if(!['duplicate-name-error','constraint-drop-error'].includes(id)) assert.equal(result.errors.length,0,`Unexpected reference failure in ${id}: ${JSON.stringify(result.errors)}`)
+    if(!['duplicate-name-error','constraint-drop-error','unique-null-duplicate'].includes(id)) assert.equal(result.errors.length,0,`Unexpected reference failure in ${id}: ${JSON.stringify(result.errors)}`)
     const state=canonical(await capture(connection,'SELECT @@ROWCOUNT AS r,@@ERROR AS e,@@TRANCOUNT AS t'))
     const indexes=canonical(await capture(connection,indexSql))
     const columns=canonical(await capture(connection,columnSql))

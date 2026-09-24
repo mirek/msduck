@@ -1,7 +1,7 @@
 //! Transactional table-owned logical index identities, separate from backend names.
 use anyhow::{Result, bail, ensure};
 use duckdb::{Connection, params};
-use sqlparser::ast::{CreateIndex, Expr, Ident, ObjectName, ObjectNamePart};
+use sqlparser::ast::{CreateIndex, Expr, Ident, ObjectName, ObjectNamePart, OrderBySort};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Transaction {
@@ -130,7 +130,7 @@ pub fn create(
     for key in &ast.columns {
         ensure!(
             key.operator_class.is_none()
-                && key.column.options.asc != Some(false)
+                && matches!(key.column.options.sort, None | Some(OrderBySort::Asc))
                 && key.column.options.nulls_first.is_none()
                 && key.column.with_fill.is_none(),
             "unsupported index key options"
@@ -162,11 +162,15 @@ pub fn create(
         );
         let mut columns = vec![];
         for name in &keys {
-            let (id, declared): (i32, String) = db.query_row(
-                "SELECT column_id,name FROM sys.columns WHERE object_id=? AND lower(name)=lower(?)",
+            let (id, declared, kind): (i32, String, i32) = db.query_row(
+                "SELECT column_id,name,CAST(system_type_id AS INTEGER) FROM sys.columns WHERE object_id=? AND lower(name)=lower(?)",
                 params![object_id, name],
-                |r| Ok((r.get(0)?, r.get(1)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )?;
+            ensure!(
+                !ast.unique || [48, 52, 56, 127].contains(&kind),
+                "unique index comparison is currently implemented only for integer keys"
+            );
             ensure!(
                 !columns.iter().any(|(previous, _)| *previous == id),
                 "repeated index key column"
@@ -195,7 +199,16 @@ pub fn create(
             quote(&table),
             columns
                 .iter()
-                .map(|(_, n)| quote(n))
+                .map(|(_, n)| {
+                    let name = quote(n);
+                    // SQL Server treats NULL as one comparable index key. The
+                    // discriminator keeps NULL distinct from the zero sentinel.
+                    if ast.unique {
+                        format!("({name} IS NULL),(coalesce({name},0))")
+                    } else {
+                        name
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(",")
         );

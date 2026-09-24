@@ -93,3 +93,20 @@ fn failed_create_and_recreated_tables_do_not_leave_live_catalog_records() {
     assert_ne!(new.backend_name, old.backend_name);
     assert!(drop_index(&s.db, &old, Transaction::Owned).is_err());
 }
+
+#[test]
+fn unique_integer_keys_treat_null_as_one_key_distinct_from_zero() {
+    let s = setup();
+    make(&s, "CREATE UNIQUE INDEX ix ON dbo.a(id)").unwrap();
+    s.db.execute_batch("INSERT INTO dbo.a VALUES(NULL,1),(0,2)")
+        .unwrap();
+    assert!(
+        s.db.execute_batch("INSERT INTO dbo.a VALUES(NULL,3)")
+            .is_err()
+    );
+    assert!(s.db.execute_batch("INSERT INTO dbo.a VALUES(0,4)").is_err());
+    let count: i64 =
+        s.db.query_row("SELECT count(*) FROM dbo.a", [], |r| r.get(0))
+            .unwrap();
+    assert_eq!(count, 2);
+}
