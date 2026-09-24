@@ -618,7 +618,8 @@ test('legacy datetime RPCs decode dates before 1900, boundaries and NULLs', { ti
     assert.equal(result.rows[0][0].toISOString(), text)
     const empty = await query(c, 'SELECT @d;', [['d', type, null]])
     assert.deepEqual(empty.rows, [[null]])
-    assert.equal(empty.columns[0][0].type.name, 'DateTime2')
+    assert.equal(empty.columns[0][0].type.name, 'DateTimeN')
+    assert.equal(empty.columns[0][0].dataLength, type === TYPES.DateTime ? 8 : 4)
   }
   await query(c, 'CREATE TABLE dbo.legacy_dates (d DATETIME, s SMALLDATETIME)')
   const d = new Date('1899-12-31T12:34:56.000Z')

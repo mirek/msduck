@@ -419,7 +419,7 @@ pub enum Type {
     Date,
     Time(u8),
     DateTime,
-    LegacyDateTime,
+    LegacyDateTime(u8),
     DateTime2(u8),
     DateTimeOffset(u8),
     Guid,
@@ -490,7 +490,8 @@ impl Column {
             return None;
         }
         Some(match self.kind {
-            Type::LegacyDateTime => 0x3d,
+            Type::LegacyDateTime(8) => 0x3d,
+            Type::LegacyDateTime(4) => 0x3a,
             Type::Int(1) => 0x30,
             Type::Int(2) => 0x34,
             Type::Int(4) => 0x38,
@@ -590,7 +591,10 @@ pub fn metadata(out: &mut Vec<u8>, columns: &[Column]) -> Result<()> {
                     out.extend([0x29, scale]);
                 }
                 Type::DateTime => out.extend([0x2a, 7]),
-                Type::LegacyDateTime => out.extend([0x6f, 8]),
+                Type::LegacyDateTime(width) => {
+                    ensure!(matches!(width, 4 | 8), "invalid legacy datetime width");
+                    out.extend([0x6f, width]);
+                }
                 Type::DateTimeOffset(scale) => {
                     ensure!(scale <= 7, "invalid DATETIMEOFFSET scale");
                     out.extend([0x2b, scale]);
@@ -606,15 +610,34 @@ pub fn metadata(out: &mut Vec<u8>, columns: &[Column]) -> Result<()> {
     Ok(())
 }
 
-/// DATETIME fixed/nullable payload, rounded to 1/300 second. Input is an
+/// DATETIME/SMALLDATETIME fixed or nullable payload. Round to 1/300 second,
+/// then to minutes for SMALLDATETIME. Input is an
 /// explicit Unix timestamp; encoding performs no clock or environment access.
-pub fn legacy_datetime(out: &mut Vec<u8>, unix_nanos: i128, fixed: bool) -> Result<()> {
+pub fn legacy_datetime(out: &mut Vec<u8>, width: u8, unix_nanos: i128, fixed: bool) -> Result<()> {
+    ensure!(matches!(width, 4 | 8), "invalid legacy datetime width");
     const DAY: i128 = 86_400_000_000_000;
     let mut days = unix_nanos.div_euclid(DAY) + 25_567;
     let mut ticks = (unix_nanos.rem_euclid(DAY) * 3 + 5_000_000) / 10_000_000;
     if ticks == 25_920_000 {
         days += 1;
         ticks = 0;
+    }
+    if width == 4 {
+        let mut minutes = (ticks + 9_000) / 18_000;
+        if minutes == 1_440 {
+            days += 1;
+            minutes = 0;
+        }
+        ensure!(
+            (0..=65_535).contains(&days),
+            "SMALLDATETIME result out of range"
+        );
+        if !fixed {
+            out.push(4);
+        }
+        out.extend((days as u16).to_le_bytes());
+        out.extend((minutes as u16).to_le_bytes());
+        return Ok(());
     }
     ensure!(
         (-53_690..=2_958_463).contains(&days),
@@ -1303,7 +1326,7 @@ mod legacy_datetime_tests {
         for (nullable, token) in [(false, vec![0x3d]), (true, vec![0x6f, 8])] {
             let column = Column {
                 name: "d".into(),
-                kind: Type::LegacyDateTime,
+                kind: Type::LegacyDateTime(8),
                 collation: None,
                 properties: msduck_core::result::Properties {
                     nullable: Some(nullable),
@@ -1315,6 +1338,50 @@ mod legacy_datetime_tests {
             let mut expected = vec![0x81, 1, 0, 0, 0, 0, 0, if nullable { 9 } else { 8 }, 0];
             expected.extend(token);
             expected.extend([1, b'd', 0]);
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn smalldatetime_payload_rounds_minutes_and_checks_unsigned_day_range() {
+        let day = 86_400_000_000_000i128;
+        for (nanos, days, minutes) in [
+            (0, 25_567u16, 0u16),
+            (29_998_000_000, 25_567, 0),
+            (29_999_000_000, 25_567, 1),
+            (day - 30_001_000_000, 25_568, 0),
+            (-25_567 * day, 0, 0),
+            ((65_535 - 25_567) * day, 65_535, 0),
+        ] {
+            for fixed in [false, true] {
+                let mut actual = vec![];
+                legacy_datetime(&mut actual, 4, nanos, fixed).unwrap();
+                let mut expected = if fixed { vec![] } else { vec![4] };
+                expected.extend(days.to_le_bytes());
+                expected.extend(minutes.to_le_bytes());
+                assert_eq!(actual, expected);
+            }
+        }
+        for (width, nanos) in [(4, -25_568 * day), (4, (65_536 - 25_567) * day), (3, 0)] {
+            let mut out = vec![42];
+            assert!(legacy_datetime(&mut out, width, nanos, false).is_err());
+            assert_eq!(out, [42]);
+        }
+        for nullable in [false, true] {
+            let column = Column {
+                name: "s".into(),
+                kind: Type::LegacyDateTime(4),
+                collation: None,
+                properties: msduck_core::result::Properties {
+                    nullable: Some(nullable),
+                    origin: msduck_core::result::Origin::Stored,
+                },
+            };
+            let mut actual = vec![];
+            metadata(&mut actual, &[column]).unwrap();
+            let mut expected = vec![0x81, 1, 0, 0, 0, 0, 0, if nullable { 9 } else { 8 }, 0];
+            expected.extend(if nullable { vec![0x6f, 4] } else { vec![0x3a] });
+            expected.extend([1, b's', 0]);
             assert_eq!(actual, expected);
         }
     }
@@ -1338,7 +1405,7 @@ mod legacy_datetime_tests {
         ] {
             for fixed in [false, true] {
                 let mut actual = vec![];
-                legacy_datetime(&mut actual, nanos, fixed).unwrap();
+                legacy_datetime(&mut actual, 8, nanos, fixed).unwrap();
                 let mut expected = if fixed { vec![] } else { vec![8] };
                 expected.extend(days.to_le_bytes());
                 expected.extend(ticks.to_le_bytes());
@@ -1352,7 +1419,7 @@ mod legacy_datetime_tests {
             i128::MAX,
         ] {
             let mut out = vec![42];
-            assert!(legacy_datetime(&mut out, nanos, false).is_err());
+            assert!(legacy_datetime(&mut out, 8, nanos, false).is_err());
             assert_eq!(out, [42]);
         }
     }
