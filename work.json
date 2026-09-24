@@ -858,6 +858,26 @@
       "dependencies": [],
       "issue": 83,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHoPS"
+    },
+    {
+      "id": "checked-integer-core-v1",
+      "title": "Implement deterministic checked integer arithmetic from SQL Server boundary captures",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal; recovery contract #83 requires explicit value/NULL/diagnostic outcomes before nonthrowing native arithmetic adapters. No external content is approved.",
+      "scope": [
+        "crates/msduck-core/src/checked_integer.rs",
+        "crates/msduck-core/tests/checked_integer.rs",
+        "scripts/capture-checked-integer.mjs",
+        "reference/checked-integer.json"
+      ],
+      "acceptance": [
+        "Capture INT/BIGINT arithmetic boundary successes and exact diagnostic fields, signed division/remainder, NULL and zero-divisor precedence in fresh pinned SQL Server containers.",
+        "Implement deterministic width-explicit checked arithmetic with separate NULL and typed error outcomes, no AST/backend/session dependencies and no panic on minimum-value division/remainder.",
+        "Verify all captured operand outcomes against the core implementation. Core export integration remains with its original owner receipt; native adapters and SQL execution integration are subsequent work."
+      ],
+      "dependencies": [],
+      "issue": 85,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHou9"
     }
   ]
 }
