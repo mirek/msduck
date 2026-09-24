@@ -1,0 +1,4162 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "identicalFreshCaptures": 2,
+  "setup": [
+    "CREATE SCHEMA alt",
+    "CREATE TABLE dbo.a (id INT, value INT)",
+    "CREATE TABLE dbo.b (id INT, value INT)",
+    "CREATE TABLE alt.a (id INT)",
+    "CREATE TABLE alt.[odd.table] (id INT)",
+    "CREATE INDEX ix ON dbo.a(id)",
+    "CREATE INDEX only_a ON dbo.a(value)",
+    "CREATE INDEX ix ON dbo.b(id)",
+    "CREATE INDEX ix ON alt.a(id)",
+    "CREATE INDEX [odd.index] ON alt.[odd.table](id)"
+  ],
+  "inventory": "SELECT s.name AS schema_name,o.name AS table_name,i.name AS index_name FROM sys.indexes i JOIN sys.objects o ON o.object_id=i.object_id JOIN sys.schemas s ON s.schema_id=o.schema_id WHERE i.name IS NOT NULL AND o.type='U' AND s.name IN ('dbo','alt') ORDER BY s.name,o.name,i.name",
+  "results": [
+    {
+      "id": "qualified",
+      "sql": "DROP INDEX ix ON dbo.a",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "unqualified",
+      "sql": "DROP INDEX ix ON a",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "quoted",
+      "sql": "DROP INDEX [odd.index] ON [alt].[odd.table]",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "other-schema",
+      "sql": "DROP INDEX ix ON alt.a",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "same-name-other-table",
+      "sql": "DROP INDEX ix ON dbo.b",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "missing-index",
+      "sql": "DROP INDEX absent ON dbo.a",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 3701,
+            "state": 7,
+            "class": 11,
+            "lineNumber": 1,
+            "message": "Cannot drop the index 'dbo.a.absent', because it does not exist or you do not have permission."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                3701
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 5,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 5
+      }
+    },
+    {
+      "id": "wrong-target",
+      "sql": "DROP INDEX only_a ON dbo.b",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 3701,
+            "state": 7,
+            "class": 11,
+            "lineNumber": 1,
+            "message": "Cannot drop the index 'dbo.b.only_a', because it does not exist or you do not have permission."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                3701
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 5,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 5
+      }
+    },
+    {
+      "id": "missing-table",
+      "sql": "DROP INDEX ix ON dbo.absent",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 3701,
+            "state": 6,
+            "class": 11,
+            "lineNumber": 1,
+            "message": "Cannot drop the index 'dbo.absent.ix', because it does not exist or you do not have permission."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                3701
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 5,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 5
+      }
+    },
+    {
+      "id": "missing-schema",
+      "sql": "DROP INDEX ix ON absent.a",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 3701,
+            "state": 6,
+            "class": 11,
+            "lineNumber": 1,
+            "message": "Cannot drop the index 'absent.a.ix', because it does not exist or you do not have permission."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                3701
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 5,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 5
+      }
+    },
+    {
+      "id": "if-exists-present",
+      "sql": "DROP INDEX IF EXISTS ix ON dbo.a",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "if-exists-missing-index",
+      "sql": "DROP INDEX IF EXISTS absent ON dbo.a",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 5,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 5
+      }
+    },
+    {
+      "id": "if-exists-wrong-target",
+      "sql": "DROP INDEX IF EXISTS only_a ON dbo.b",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 5,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 5
+      }
+    },
+    {
+      "id": "if-exists-missing-table",
+      "sql": "DROP INDEX IF EXISTS ix ON dbo.absent",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 5,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 5
+      }
+    },
+    {
+      "id": "if-exists-missing-schema",
+      "sql": "DROP INDEX IF EXISTS ix ON absent.a",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 5,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 5
+      }
+    },
+    {
+      "id": "multiple",
+      "sql": "DROP INDEX ix ON dbo.a, ix ON dbo.b",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 3,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      }
+    },
+    {
+      "id": "multiple-later-missing",
+      "sql": "DROP INDEX ix ON dbo.a, absent ON dbo.b",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 3701,
+            "state": 7,
+            "class": 11,
+            "lineNumber": 1,
+            "message": "Cannot drop the index 'dbo.b.absent', because it does not exist or you do not have permission."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                3701
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "multiple-first-missing",
+      "sql": "DROP INDEX absent ON dbo.a, ix ON dbo.b",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 3701,
+            "state": 7,
+            "class": 11,
+            "lineNumber": 1,
+            "message": "Cannot drop the index 'dbo.a.absent', because it does not exist or you do not have permission."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                3701
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 5,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 5
+      }
+    },
+    {
+      "id": "multiple-if-exists",
+      "sql": "DROP INDEX IF EXISTS absent ON dbo.a, ix ON dbo.b",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "repeated-target",
+      "sql": "DROP INDEX ix ON dbo.a, ix ON dbo.a",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 3701,
+            "state": 7,
+            "class": 11,
+            "lineNumber": 1,
+            "message": "Cannot drop the index 'dbo.a.ix', because it does not exist or you do not have permission."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                3701
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "legacy",
+      "sql": "DROP INDEX dbo.a.ix",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    },
+    {
+      "id": "missing-on",
+      "sql": "DROP INDEX ix",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 159,
+            "state": 1,
+            "class": 15,
+            "lineNumber": 1,
+            "message": "Must specify the table name and index name for the DROP INDEX statement."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                159
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 5,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 5
+      }
+    },
+    {
+      "id": "qualified-index",
+      "sql": "DROP INDEX dbo.ix ON dbo.a",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 156,
+            "state": 1,
+            "class": 15,
+            "lineNumber": 1,
+            "message": "Incorrect syntax near the keyword 'ON'."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                156
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 5,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 5
+      }
+    },
+    {
+      "id": "maxdop-option",
+      "sql": "DROP INDEX ix ON dbo.a WITH (MAXDOP = 1)",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 3748,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Cannot drop non-clustered index 'dbo.a.ix' using drop clustered index clause."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 253
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                3748
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "ix"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 5,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 5
+      }
+    },
+    {
+      "id": "online-option",
+      "sql": "DROP INDEX ix ON dbo.a WITH (ONLINE = OFF)",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONE",
+          "handlerName": "onDone",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 201
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "remaining": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "schema_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "table_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 8,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              },
+              {
+                "name": "index_name",
+                "type": "NVarChar",
+                "length": 256,
+                "precision": null,
+                "scale": null,
+                "flags": 9,
+                "collation": {
+                  "buffer": {
+                    "kind": "missing"
+                  },
+                  "lcid": 1033,
+                  "flags": 13,
+                  "version": 0,
+                  "sortId": 52,
+                  "codepage": "CP1252"
+                }
+              }
+            ],
+            "rows": [
+              [
+                "alt",
+                "a",
+                "ix"
+              ],
+              [
+                "alt",
+                "odd.table",
+                "odd.index"
+              ],
+              [
+                "dbo",
+                "a",
+                "only_a"
+              ],
+              [
+                "dbo",
+                "b",
+                "ix"
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": 4,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      }
+    }
+  ]
+}
