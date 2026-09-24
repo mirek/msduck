@@ -47,6 +47,9 @@ for (const target of ['DATETIME', 'SMALLDATETIME']) {
   for (const text of ['0001-01-01T00:00:00', '1752-12-31T23:59:59.9983333', '1752-12-31T23:59:59.9983334', '9999-12-31T23:59:59.9983334']) {
     cases.push({id: `${target}-typed-edge-${text}`, sql: `SELECT CAST(CAST('${text}' AS DATETIME2(7)) AS ${target}) AS value`})
   }
+  for (const text of ['1752-12-31T23:59:59.999', '9999-12-31T23:59:59.999']) {
+    cases.push({id: `${target}-nvarchar-range-${text}`, sql: `SELECT CAST(N'${text}' AS ${target}) AS value`})
+  }
 }
 const output = resolve(process.argv[2] ?? 'artifacts/compatibility/legacy-datetime-reference')
 await mkdir(output, {recursive: true})

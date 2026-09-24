@@ -7632,6 +7632,234 @@
       }
     },
     {
+      "id": "DATETIME-nvarchar-range-1752-12-31T23:59:59.999",
+      "sql": "SELECT CAST(N'1752-12-31T23:59:59.999' AS DATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 242,
+            "state": 3,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The conversion of a nvarchar data type to a datetime data type resulted in an out-of-range value."
+          }
+        ],
+        "info": [],
+        "returnStatus": 242,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                242
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "DATETIME-nvarchar-range-9999-12-31T23:59:59.999",
+      "sql": "SELECT CAST(N'9999-12-31T23:59:59.999' AS DATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 8,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 242,
+            "state": 3,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The conversion of a nvarchar data type to a datetime data type resulted in an out-of-range value."
+          }
+        ],
+        "info": [],
+        "returnStatus": 242,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                242
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
       "id": "SMALLDATETIME-typed-edge-0001-01-01T00:00:00",
       "sql": "SELECT CAST(CAST('0001-01-01T00:00:00' AS DATETIME2(7)) AS SMALLDATETIME) AS value",
       "result": {
@@ -8012,6 +8240,234 @@
             "class": 16,
             "lineNumber": 1,
             "message": "The conversion of a datetime2 data type to a smalldatetime data type resulted in an out-of-range value."
+          }
+        ],
+        "info": [],
+        "returnStatus": 242,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                242
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "SMALLDATETIME-nvarchar-range-1752-12-31T23:59:59.999",
+      "sql": "SELECT CAST(N'1752-12-31T23:59:59.999' AS SMALLDATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 242,
+            "state": 3,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The conversion of a nvarchar data type to a smalldatetime data type resulted in an out-of-range value."
+          }
+        ],
+        "info": [],
+        "returnStatus": 242,
+        "rowCount": 0
+      },
+      "completion": [
+        {
+          "name": "DONEINPROC",
+          "handlerName": "onDoneInProc",
+          "more": true,
+          "sqlError": true,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 193
+        },
+        {
+          "name": "DONEPROC",
+          "handlerName": "onDoneProc",
+          "more": false,
+          "sqlError": false,
+          "attention": false,
+          "serverError": false,
+          "curCmd": 224
+        }
+      ],
+      "state": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "r",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "e",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                242
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": 0,
+        "rowCount": 1
+      }
+    },
+    {
+      "id": "SMALLDATETIME-nvarchar-range-9999-12-31T23:59:59.999",
+      "sql": "SELECT CAST(N'9999-12-31T23:59:59.999' AS SMALLDATETIME) AS value",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "value",
+                "type": "DateTimeN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          }
+        ],
+        "done": [
+          {
+            "kind": "doneInProc",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "doneProc",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 242,
+            "state": 3,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "The conversion of a nvarchar data type to a smalldatetime data type resulted in an out-of-range value."
           }
         ],
         "info": [],
