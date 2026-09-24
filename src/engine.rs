@@ -570,7 +570,12 @@ impl Session {
             Err(e) => {
                 if e.downcast_ref::<SqlError>().is_some() {
                     self.last_error = emit_error(&mut out, &e);
-                    tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
+                    let command = if !rpc && matches!(self.last_error, 156 | 159) {
+                        253
+                    } else {
+                        0
+                    };
+                    tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, command, 0);
                     return (out, false);
                 }
                 let message = e.to_string();
@@ -1041,14 +1046,18 @@ impl Session {
                         );
                         continue;
                     }
-                    let command = if !rpc
-                        && e.downcast_ref::<crate::query_error::CompilationFailure>()
-                            .is_some()
-                    {
-                        0xfd
-                    } else {
-                        0
-                    };
+                    let command =
+                        if !rpc && msduck_sql::drop_index_syntax::request(statement).is_some() {
+                            self.rowcount = 0;
+                            if self.last_error == 3748 { 253 } else { 201 }
+                        } else if !rpc
+                            && e.downcast_ref::<crate::query_error::CompilationFailure>()
+                                .is_some()
+                        {
+                            0xfd
+                        } else {
+                            0
+                        };
                     tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, command, 0);
                     return (out, false);
                 }
@@ -5562,6 +5571,116 @@ mod index_catalog_integration_tests {
                     |r| r.get::<_, i64>(0)
                 )
                 .unwrap(),
+            1
+        );
+    }
+}
+
+#[cfg(test)]
+mod drop_index_runtime_tests {
+    use super::*;
+    #[test]
+    fn captured_drop_requests_preserve_diagnostics_completion_and_remaining_indexes() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../reference/drop-index.json")).unwrap();
+        for case in fixture["results"].as_array().unwrap() {
+            let server = crate::server::Server::open(":memory:").unwrap();
+            let mut session = Session::new(server.connection().unwrap()).unwrap();
+            for sql in fixture["setup"].as_array().unwrap() {
+                let (out, ok) =
+                    session.batch_response(sql.as_str().unwrap(), &Default::default(), false, None);
+                assert!(ok, "setup {sql}: {out:?}");
+            }
+            let sql = case["sql"].as_str().unwrap();
+            let (actual, ok) = session.batch_response(sql, &Default::default(), false, None);
+            let errors = case["result"]["errors"].as_array().unwrap();
+            assert_eq!(ok, errors.is_empty(), "{sql}: {actual:?}");
+            let mut expected = vec![];
+            for e in errors {
+                tds::sql_error(
+                    &mut expected,
+                    &SqlError::from_utf16(
+                        e["number"].as_i64().unwrap() as i32,
+                        e["state"].as_u64().unwrap() as u8,
+                        e["class"].as_u64().unwrap() as u8,
+                        e["message"].as_str().unwrap().encode_utf16().collect(),
+                    ),
+                );
+            }
+            let done = &case["completion"][0];
+            tds::done(
+                &mut expected,
+                0xfd,
+                if errors.is_empty() { 0 } else { 2 },
+                done["curCmd"].as_u64().unwrap() as u16,
+                0,
+            );
+            assert_eq!(actual, expected, "{sql}");
+            assert_eq!(
+                serde_json::json!([[session.rowcount, session.last_error]]),
+                case["state"]["sets"][0]["rows"],
+                "{sql}"
+            );
+            let rows = session
+                .db
+                .prepare(fixture["inventory"].as_str().unwrap())
+                .unwrap()
+                .query_map([], |r| {
+                    Ok(vec![
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                    ])
+                })
+                .unwrap()
+                .collect::<duckdb::Result<Vec<_>>>()
+                .unwrap();
+            assert_eq!(
+                serde_json::json!(rows),
+                case["remaining"]["sets"][0]["rows"],
+                "{sql}"
+            );
+        }
+    }
+    #[test]
+    fn caller_transaction_can_rollback_a_drop_before_a_later_missing_target() {
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        assert!(
+            session
+                .batch_response(
+                    "CREATE TABLE dbo.a(id INT); CREATE INDEX ix ON dbo.a(id); BEGIN TRAN",
+                    &Default::default(),
+                    false,
+                    None
+                )
+                .1
+        );
+        assert!(
+            !session
+                .batch_response(
+                    "DROP INDEX ix ON dbo.a, absent ON dbo.a",
+                    &Default::default(),
+                    false,
+                    None
+                )
+                .1
+        );
+        assert_eq!(session.transactions, 1);
+        assert!(
+            crate::index_catalog::acquire_complete(&session.db)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            session
+                .batch_response("ROLLBACK", &Default::default(), false, None)
+                .1
+        );
+        assert_eq!(
+            crate::index_catalog::acquire_complete(&session.db)
+                .unwrap()
+                .len(),
             1
         );
     }
