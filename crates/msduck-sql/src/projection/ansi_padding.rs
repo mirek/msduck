@@ -221,11 +221,12 @@ pub fn lower(catalog: &CatalogSnapshot, query: &mut Query, outer: &Scope) -> Res
         pending: std::iter::Peekable<std::vec::IntoIter<usize>>,
     }
     fn operand(value: &mut Box<Expr>) {
-        if matches!(value.as_ref(), Expr::Function(f) if f.name.to_string() == "__msduck_rtrim") {
-            return;
-        }
         let input = std::mem::replace(value.as_mut(), crate::expr::number(0));
-        **value = crate::expr::unary_function("__msduck_rtrim", input);
+        **value = crate::expr::binary_function(
+            "__msduck_rtrim",
+            input,
+            Expr::Value(Value::SingleQuotedString(" ".into()).into()),
+        );
     }
     impl VisitorMut for Lower {
         type Break = ();

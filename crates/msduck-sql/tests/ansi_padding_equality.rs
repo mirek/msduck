@@ -52,6 +52,10 @@ fn lower(sql: &str) -> String {
 }
 #[test]
 fn ansi_equality_preserves_scope_and_does_not_duplicate_operands() {
+    assert_eq!(
+        lower("SELECT v FROM dbo.t WHERE v='U'"),
+        "SELECT v FROM dbo.t WHERE __msduck_rtrim(v, ' ') = __msduck_rtrim('U', ' ')"
+    );
     for sql in [
         "SELECT v FROM dbo.t WHERE v='U'",
         "SELECT v FROM dbo.t WHERE v<>'U '",
