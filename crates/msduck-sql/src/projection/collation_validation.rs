@@ -88,8 +88,14 @@ struct Bindings {
     extrema: Vec<(usize, super::character_extrema::Input)>,
 }
 enum BinaryDirection {
-    FromCharacter { unicode: bool },
-    ToUnicode { style: Box<Expr>, trying: bool },
+    FromCharacter {
+        unicode: bool,
+    },
+    ToUnicode {
+        style: Box<Expr>,
+        trying: bool,
+        source_id: i32,
+    },
 }
 struct BinaryInput {
     direction: BinaryDirection,
@@ -147,6 +153,7 @@ fn binary_input(catalog: &CatalogSnapshot, expr: &Expr, scope: &Scope) -> Option
             direction: BinaryDirection::ToUnicode {
                 style: Box::new(style),
                 trying,
+                source_id: info.system_type_id.unwrap(),
             },
             target: target.clone(),
             width,
@@ -614,7 +621,11 @@ pub fn lower_unicode_binary_conversions(
                         ),
                         crate::expr::number(input.width),
                     ),
-                    BinaryDirection::ToUnicode { style, trying } => {
+                    BinaryDirection::ToUnicode {
+                        style,
+                        trying,
+                        source_id,
+                    } => {
                         let mut call = crate::expr::binary_function(
                             match (input.fixed, trying) {
                                 (false, false) => "__msduck_binary_nvarchar",
@@ -630,6 +641,9 @@ pub fn lower_unicode_binary_conversions(
                         {
                             args.args
                                 .push(FunctionArg::Unnamed(FunctionArgExpr::Expr(*style)));
+                            args.args.push(FunctionArg::Unnamed(FunctionArgExpr::Expr(
+                                crate::expr::number(source_id),
+                            )));
                         }
                         call
                     }
