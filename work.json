@@ -1403,6 +1403,24 @@
       "dependencies": [],
       "issue": 146,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJ0J0"
+    },
+    {
+      "id": "native-cancellation-control-v1",
+      "title": "Fence native interruption to one request execution lifetime",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Owner-authored cancellation design requires request-scoped native interruption with cleanup fencing and repeated servicing of cancellation that races native entry. Existing server handle has no request identity.",
+      "scope": [
+        "src/request_control.rs",
+        "docs/native-cancellation-control.md"
+      ],
+      "acceptance": [
+        "Implement a request-owned cancellation controller with scoped native-call entry/exit, latched cancellation, retirement and interrupt effects synchronized against disarm. No delayed interrupt may target cleanup or a successor request. Root export wiring retains original concat-integration-v1 ownership.",
+        "Keep original native errors/results separate from cancellation observations. Document the required external interrupt pulse driver for the pre-entry race rather than pretending one-shot cancellation suffices.",
+        "Test cancellation before entry, cancellation racing native entry, repeated pulses, rejection of later statements, retirement and stale controls against a reusable real DuckDB connection. Use synchronization barriers instead of sleep-only active-query claims. Run formatting, strict workspace Clippy and workspace tests on Linux; runtime transport/engine integration remains outstanding."
+      ],
+      "dependencies": [],
+      "issue": 148,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJ1fO"
     }
   ]
 }
