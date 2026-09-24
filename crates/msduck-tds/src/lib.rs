@@ -3,6 +3,7 @@
 use anyhow::{Result, bail, ensure};
 
 pub mod collation;
+pub mod framing;
 pub mod request_lifecycle;
 pub mod smp;
 
