@@ -216,6 +216,112 @@ mod tests {
     }
 
     #[test]
+    fn frame_observation_ignores_unconsumed_nulls_and_evaluates_inputs_once() {
+        let db = Connection::open_in_memory().unwrap();
+        let registry = Registry::default();
+        registry.register(&db).unwrap();
+        let instrument = |sql: &str| {
+            let mut statement =
+                sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::DuckDbDialect {}, sql)
+                    .unwrap()
+                    .remove(0);
+            let ticket =
+                sqlparser::ast::Expr::Value(sqlparser::ast::Value::Placeholder("$1".into()).into());
+            msduck_sql::aggregate_diagnostics::instrument(&mut statement, &ticket, |name| {
+                matches!(name, "min" | "count")
+            });
+            statement.to_string()
+        };
+        for (frame, source, expected, warned) in [
+            (
+                "1 FOLLOWING AND 1 FOLLOWING",
+                "(VALUES(1,NULL::INTEGER),(2,2))",
+                vec![Some(2), None],
+                false,
+            ),
+            (
+                "1 FOLLOWING AND 1 FOLLOWING",
+                "(VALUES(1,NULL::INTEGER))",
+                vec![None],
+                false,
+            ),
+            (
+                "1 PRECEDING AND 1 PRECEDING",
+                "(VALUES(1,NULL::INTEGER),(2,2))",
+                vec![None, None],
+                true,
+            ),
+        ] {
+            let scope = registry.begin().unwrap();
+            let sql = format!(
+                "SELECT MIN(v) OVER (ORDER BY id ROWS BETWEEN {frame}) FROM {source} d(id,v) ORDER BY id"
+            );
+            let mut statement = db.prepare(&instrument(&sql)).unwrap();
+            let actual = statement
+                .query_map([scope.ticket().as_slice()], |r| r.get::<_, Option<i32>>(0))
+                .unwrap()
+                .collect::<duckdb::Result<Vec<_>>>()
+                .unwrap();
+            assert_eq!(actual, expected, "{sql}");
+            assert_eq!(scope.null_eliminated(), warned, "{sql}");
+            let count_scope = registry.begin().unwrap();
+            let count_sql = instrument(&sql.replace("MIN(v)", "COUNT(v)"));
+            let counts = db
+                .prepare(&count_sql)
+                .unwrap()
+                .query_map([count_scope.ticket().as_slice()], |r| r.get::<_, i64>(0))
+                .unwrap()
+                .collect::<duckdb::Result<Vec<_>>>()
+                .unwrap();
+            assert_eq!(
+                counts,
+                expected
+                    .iter()
+                    .map(|v| i64::from(v.is_some()))
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(count_scope.null_eliminated(), warned, "{count_sql}");
+        }
+        db.execute_batch("CREATE SEQUENCE frame_operand_calls")
+            .unwrap();
+        let scope = registry.begin().unwrap();
+        let count: i64 = db.query_row(
+            &instrument("SELECT COUNT(*) FROM (SELECT MIN(nextval('frame_operand_calls')) OVER (ORDER BY i ROWS BETWEEN 2 PRECEDING AND 2 FOLLOWING) AS v FROM range(6000) d(i)) WHERE v IS NOT NULL"),
+            [scope.ticket().as_slice()], |r| r.get(0),
+        ).unwrap();
+        assert_eq!(count, 6000);
+        assert_eq!(
+            db.query_row("SELECT currval('frame_operand_calls')", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            6000
+        );
+        assert!(!scope.null_eliminated());
+        for value in [
+            "1::TINYINT",
+            "NULL::INTEGER",
+            "123.456::DECIMAL(38,10)",
+            "'🦆'::VARCHAR",
+            "from_hex('0080ff')",
+            "'12:34:56.1234567'::TIME_NS",
+            "struct_pack(__msduck_utf16le := from_hex('3ed8'))",
+            "NULL::STRUCT(__msduck_utf16le BLOB)",
+        ] {
+            let scope = registry.begin().unwrap();
+            let actual = instrument(&format!("SELECT MIN({value}) OVER () AS actual"));
+            let sql = format!(
+                "SELECT typeof(actual)=typeof(expected),actual IS NOT DISTINCT FROM expected FROM ({actual}) a CROSS JOIN (SELECT MIN({value}) OVER () AS expected) e"
+            );
+            let result: (bool, bool) = db
+                .query_row(&sql, [scope.ticket().as_slice()], |r| {
+                    Ok((r.get(0)?, r.get(1)?))
+                })
+                .unwrap();
+            assert_eq!(result, (true, true), "{value}");
+        }
+    }
+
+    #[test]
     fn scopes_are_bounded_isolated_and_released_during_unwind() {
         let registry = Registry::default();
         let scopes: Vec<_> = (0..LIMIT).map(|_| registry.begin().unwrap()).collect();

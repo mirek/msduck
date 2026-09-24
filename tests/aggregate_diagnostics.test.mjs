@@ -33,6 +33,29 @@ async function orderedCapture(connection, sql) {
 }
 
 const fixture = JSON.parse(await readFile(new URL('../reference/aggregate-warnings.json', import.meta.url), 'utf8'))
+const boundaries = JSON.parse(await readFile(new URL('../reference/aggregate-warning-boundaries.json', import.meta.url), 'utf8'))
+
+test('window diagnostics match consumed frames including empty frames and COUNT', async t => {
+  const connection = await start(t)
+  const records = []
+  for (const sample of boundaries.results.filter(sample => sample.id.includes('-window-'))) {
+    for (const sql of [...sample.setup, `SET ANSI_WARNINGS ${sample.mode}`]) {
+      assert.deepEqual((await capture(connection, sql)).errors, [], sql)
+    }
+    const actual = []
+    for (const _ of sample.executions) {
+      const result = await orderedCapture(connection, sample.sql)
+      const state = await orderedCapture(connection, 'SELECT @@ERROR AS last_error,@@ROWCOUNT AS last_rowcount,@@TRANCOUNT AS transaction_count,XACT_STATE() AS transaction_state')
+      const contents = await orderedCapture(connection, sample.followup)
+      actual.push({ result, state, contents })
+    }
+    records.push({ id: sample.id, actual, expected: sample.executions, differences: differences(actual, sample.executions) })
+  }
+  await mkdir('artifacts/compatibility', { recursive: true })
+  await writeFile('artifacts/compatibility/aggregate-window-boundaries.json', JSON.stringify(records, null, 2) + '\n')
+  assert.deepEqual(records.flatMap(record => record.differences.map(difference => ({ id: record.id, ...difference }))), [])
+})
+
 test('prepared aggregate executions keep diagnostic state isolated and honor setting changes', async t => {
   const connection = await start(t)
   const info = []

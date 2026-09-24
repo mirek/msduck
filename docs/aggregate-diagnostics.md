@@ -95,3 +95,29 @@ That replay matches 25/50 programs, with two setup failures and 129 differences
 across the remaining 23 programs. It also retains independent descriptor and
 error-detail gaps. The original 126-case pass must not be generalized to these
 boundaries; this integration remains draft.
+
+## Window frame correction under verification
+
+The window rewrite now collects the operand with LIST over the original
+partition, order and frame. A singleton lambda binds that resulting frame once,
+compares its length with its non-NULL count, and observes NULL elimination only
+for values in that frame. It applies the original aggregate to the frame with
+`list_aggregate`; COUNT restores zero for an empty frame. The original operand
+appears once, outside the lambda. Ordinary grouped aggregates retain their
+existing operand observer.
+
+The generated expression passes native tests for unused NULLs, entirely empty
+frames, consumed NULLs, empty COUNT, integer/decimal/binary/temporal/UTF16 types,
+and exactly 6000 calls from a 6000-row volatile operand. Three pure AST tests
+also pass. All 11 focused client tests pass: the original 126 reference programs,
+all 10 window-boundary programs, repeated prepared execution and the seven
+character-extrema tests. Strict workspace/all-target Clippy and the all-target
+build pass. Full Rust/client regression runs and the complete boundary replay
+are recorded separately by revision.
+
+This implementation materializes frame values and reaggregates them. Wide
+overlapping frames can therefore require substantially more time and memory
+than the original native aggregate. It is a correctness correction under
+verification, not a completed performance design; bounded-memory staging or
+native aggregate observation remains necessary before treating it as ready for
+large workloads. The other boundary defects above remain open.

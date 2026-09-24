@@ -37,3 +37,28 @@ fn original_identifiers_are_not_substituted_or_captured() {
     assert_eq!(sql.matches("__msduck_ticket").count(), 1);
     assert_eq!(sql.matches("__msduck_operand").count(), 1);
 }
+
+#[test]
+fn windows_observe_the_frame_once_and_keep_empty_count_zero() {
+    let mut statement = Parser::parse_sql(
+        &GenericDialect {},
+        "SELECT MIN(nextval('calls')) OVER w,COUNT(v) OVER w,COUNT(*) OVER w FROM t WINDOW w AS (ORDER BY id ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING)",
+    ).unwrap().remove(0);
+    let ticket = Expr::Value(Value::Placeholder("$9".into()).into());
+    assert_eq!(
+        instrument(&mut statement, &ticket, |name| matches!(
+            name,
+            "min" | "count"
+        )),
+        2
+    );
+    let sql = statement.to_string();
+    assert_eq!(sql.matches("nextval('calls')").count(), 1);
+    assert!(sql.contains("[list(nextval('calls')) OVER w]"));
+    assert!(sql.contains("list_count(__msduck_frame) < len(__msduck_frame)"));
+    assert!(sql.contains("list_aggregate(__msduck_frame, 'MIN')"));
+    assert!(sql.contains("COALESCE(list_extract"));
+    assert!(sql.contains("CAST(0 AS BIGINT)"));
+    assert!(sql.contains("COUNT(*) OVER w"));
+    assert!(sql.contains("ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING"));
+}
