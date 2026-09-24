@@ -1116,6 +1116,27 @@
       "dependencies": [],
       "issue": 108,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PIwMa"
+    },
+    {
+      "id": "client-test-sharding-v1",
+      "title": "Build an exhaustive client test sharding runner with measured speed and failure fidelity",
+      "state": "ready",
+      "authorization": "Direct owner requests to improve long-running tests, use linux.local and arrange disjoint work for parallel agents. Owner-run discovery on Node24 and Node26 found identical 404 unique top-level tests:391 tedious,9 compatibility,4 TLS. No test callbacks were executed during discovery. Existing file-level concurrency leaves391 tests serialized in one file. No external submissions consumed.",
+      "scope": [
+        "scripts/run-client-shards.mjs",
+        "scripts/lib/client-shards.mjs",
+        "tests/client-shards.test.mjs",
+        "docs/client-sharding.md"
+      ],
+      "acceptance": [
+        "Discover current top-level test names in an isolated process without executing their callbacks, fail closed on unsupported discovery constructs, and prove every (file,name) is assigned once with no omissions or duplicates. Verify pinned Node24 behavior, nested tests, escaped names and duplicate names across files.",
+        "Run unchanged client files with safe structured arguments and exact-name selection; preserve every shard log and propagate assertion failures, cancellations, crashes and discovery failures. Skipped or unexecuted tests cannot be counted as passes. Keep compile verification separate and identify the exact immutable executable/source revision used.",
+        "Benchmark against the unsharded suite on owner-controlled immutable executables, including a two-CPU configuration. Do not claim speedup from estimated duration balancing or enable CI changes before proving complete coverage and unchanged failure behavior. Respect the shared builder lock and existing test processes.",
+        "Keep partition logic deterministic over explicit test/duration inputs and process/build work in the runner. Do not edit package.json, existing tests, remote-build tooling or CI files under other active claims. Provide a tested opt-in runner and document later integration; default concurrency must be bounded."
+      ],
+      "dependencies": [],
+      "issue": 110,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PIzN3"
     }
   ]
 }
