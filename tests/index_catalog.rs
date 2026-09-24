@@ -212,6 +212,12 @@ fn catalog_rows(s: &Session, sql: &str) -> serde_json::Value {
                 (0..r.as_ref().column_count())
                     .map(|i| {
                         let value: Value = r.get(i)?;
+                        if matches!(
+                            value,
+                            Value::TinyInt(_) | Value::UTinyInt(_) | Value::Boolean(_)
+                        ) {
+                            eprintln!("catalog column {i}: {value:?}");
+                        }
                         Ok(match value {
                             Value::Null => serde_json::Value::Null,
                             Value::Boolean(v) => serde_json::json!(v),
@@ -259,6 +265,9 @@ fn supported_catalog_rows_match_captured_heap_index_and_column_snapshots() {
         } else {
             let (response, ok) = s.batch_response(sql, &Default::default(), false, None);
             assert!(ok, "{id}: {response:?}");
+        }
+        if id == "heaps" {
+            eprintln!("physical bool {:?}",s.db.query_row("SELECT typeof(false),typeof(is_unique),typeof(ignore_dup_key) FROM sys.indexes LIMIT 1",[],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?))));
         }
         for (query, key) in [("indexSql", "indexes"), ("columnSql", "columns")] {
             assert_eq!(
