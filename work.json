@@ -878,6 +878,24 @@
       "dependencies": [],
       "issue": 85,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PHou9"
+    },
+    {
+      "id": "checked-integer-native-v1",
+      "title": "Return checked integer vector outcomes without backend exceptions",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal; verified checked integer core at dd43019 matches 240 pinned reference cases. Recovery contract #83 requires nonthrowing vector adapters before SQL expression integration.",
+      "scope": [
+        "src/checked_integer.rs",
+        "tests/checked_integer.rs"
+      ],
+      "acceptance": [
+        "Implement bounded native INT/BIGINT arithmetic adapters with explicit value and diagnostic fields, special NULL handling and declared result widths.",
+        "Verify every captured core outcome through native overloads and prove expected errors leave prior writes and COMMIT usable.",
+        "Exercise multi-chunk filtered vectors, mixed success/error/NULL rows and volatile operands evaluated once. Root module/registration remain under original #26/#35 receipts; full SQL lowering is subsequent work."
+      ],
+      "dependencies": [],
+      "issue": 87,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PHpen"
     }
   ]
 }
