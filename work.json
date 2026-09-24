@@ -1238,6 +1238,23 @@
       "dependencies": [],
       "issue": 125,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJYmn"
+    },
+    {
+      "id": "catalog-operand-metadata-v1",
+      "title": "Use captured system catalog declarations in operand binding",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Object catalog CHAR(2) replay found DATALENGTH rejects a logically declared CHAR source because native operand acquisition ignores the captured system-view declarations already used by projection metadata. Same-worker query_catalog integration retains its existing claim.",
+      "scope": [
+        "src/aggregate_columns/catalog.rs"
+      ],
+      "acceptance": [
+        "Acquire known system-view operand declarations from the same captured field definitions used by result projection; keep backend I/O in this root adapter.",
+        "Keep unknown catalogs explicit and preserve user-table declaration acquisition.",
+        "Validate unmodified catalog LEN/DATALENGTH/binary-cast reference query and broader native/client checks."
+      ],
+      "dependencies": [],
+      "issue": 126,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJaCU"
     }
   ]
 }
