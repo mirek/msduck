@@ -1,14 +1,26 @@
 //! Persistent IDs for user tables and views, synchronized with transactional DDL.
+mod system_objects;
+
 use anyhow::Result;
 use duckdb::Connection;
 use sqlparser::ast::*;
 
-pub fn register(db: &Connection) -> duckdb::Result<()> {
+pub fn register(db: &Connection) -> Result<()> {
+    system_objects::register(db)?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS main.__msduck_objects(object_id INTEGER PRIMARY KEY, schema_id INTEGER NOT NULL, name VARCHAR NOT NULL, type_code VARCHAR NOT NULL, create_date TIMESTAMP NOT NULL, modify_date TIMESTAMP NOT NULL, UNIQUE(schema_id,name));
         CREATE TABLE IF NOT EXISTS main.__msduck_table_properties(object_id INTEGER PRIMARY KEY,lob_data_space_id INTEGER NOT NULL DEFAULT 0 CHECK(lob_data_space_id IN (0,1)));
         CREATE SEQUENCE IF NOT EXISTS main.__msduck_object_ids START 100000001 MAXVALUE 2147483647 NO CYCLE;
         CREATE OR REPLACE VIEW main.__msduck_live_objects AS SELECT s.schema_id,t.table_name AS name,CASE WHEN t.table_type='VIEW' THEN 'V' ELSE 'U' END AS type_code FROM information_schema.tables t JOIN main.__msduck_schemas s ON lower(s.name)=lower(t.table_schema) WHERE t.table_catalog=current_database() AND t.table_type IN ('BASE TABLE','VIEW') AND lower(t.table_schema) NOT IN ('main','sys','information_schema','temp');
-        CREATE OR REPLACE VIEW sys.objects AS SELECT name,object_id,CAST(NULL AS INTEGER) AS principal_id,schema_id,CAST(0 AS INTEGER) AS parent_object_id,rpad(type_code,2,' ') AS type,CASE WHEN type_code='U' THEN 'USER_TABLE' ELSE 'VIEW' END AS type_desc,create_date,modify_date,false AS is_ms_shipped,false AS is_published,false AS is_schema_published FROM main.__msduck_objects;
+        CREATE OR REPLACE VIEW sys.objects AS
+          SELECT name,object_id,principal_id,schema_id,parent_object_id,type,type_desc,create_date,modify_date,is_ms_shipped,is_published,is_schema_published
+          FROM main.__msduck_builtin_objects WHERE in_objects
+          UNION ALL
+          SELECT name,object_id,CAST(NULL AS INTEGER),schema_id,CAST(0 AS INTEGER),rpad(type_code,2,' '),CASE WHEN type_code='U' THEN 'USER_TABLE' ELSE 'VIEW' END,create_date,modify_date,false,false,false
+          FROM main.__msduck_objects;
+        CREATE OR REPLACE VIEW sys.system_objects AS
+          SELECT name,object_id,principal_id,schema_id,parent_object_id,type,type_desc,create_date,modify_date,is_ms_shipped,is_published,is_schema_published
+          FROM main.__msduck_builtin_objects WHERE in_system_objects;
+        CREATE OR REPLACE VIEW sys.all_objects AS SELECT * FROM sys.objects UNION ALL SELECT * FROM sys.system_objects;
         CREATE OR REPLACE MACRO main.__msduck_object_id(value,kind) AS map_extract_value((SELECT map(list(key),list(object_id)) FROM (SELECT lower(s.name)||chr(0)||lower(o.name)||chr(0)||k.kind AS key,o.object_id FROM main.__msduck_objects o JOIN main.__msduck_schemas s USING(schema_id) CROSS JOIN LATERAL (VALUES (''),(o.type_code)) k(kind))),__msduck_identity_key(CAST(value AS VARCHAR))||chr(0)||upper(rtrim(coalesce(CAST(kind AS VARCHAR),''))));
         CREATE OR REPLACE MACRO main.__msduck_object_name(value) AS map_extract_value((SELECT map(list(object_id),list(name)) FROM main.__msduck_objects),value);
         CREATE OR REPLACE MACRO main.__msduck_object_schema_name(value) AS map_extract_value((SELECT map(list(object_id),list(s.name)) FROM main.__msduck_objects o JOIN main.__msduck_schemas s USING(schema_id)),value)")?;
