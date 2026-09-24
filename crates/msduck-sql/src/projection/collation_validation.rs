@@ -88,6 +88,7 @@ struct Bindings {
     extrema: Vec<(usize, super::character_extrema::Input)>,
 }
 struct BinaryInput {
+    unicode: bool,
     target: DataType,
     width: i32,
     fixed: bool,
@@ -126,7 +127,27 @@ fn binary_input(catalog: &CatalogSnapshot, expr: &Expr, scope: &Scope) -> Option
         _ => return None,
     };
     let info = member_expression(catalog, source, &[], scope)?;
-    matches!(info.system_type_id, Some(231 | 239)).then(|| BinaryInput {
+    let unicode = match info.system_type_id? {
+        231 | 239 => true,
+        167 | 175 => {
+            let label = expression_collation(catalog, source, &[], scope)?.ok()?;
+            if !matches!(
+                label.name()?.to_ascii_lowercase().as_str(),
+                "sql_latin1_general_cp1_ci_as"
+                    | "latin1_general_100_ci_as"
+                    | "latin1_general_100_cs_as"
+                    | "latin1_general_100_ci_ai"
+                    | "latin1_general_100_cs_ai"
+                    | "latin1_general_100_bin2"
+            ) {
+                return None;
+            }
+            false
+        }
+        _ => return None,
+    };
+    Some(BinaryInput {
+        unicode,
         target: target.clone(),
         width,
         fixed,
@@ -506,7 +527,7 @@ pub fn annotate_unicode_case_inputs(
     Ok(())
 }
 
-/// Lower only statically bound Unicode-to-binary conversions with default style.
+/// Lower statically bound character-to-binary conversions with default style.
 /// Byte lengths may split a UTF-16 unit; fixed binary pads on the right.
 pub fn lower_unicode_binary_conversions(
     catalog: &CatalogSnapshot,
@@ -538,10 +559,11 @@ pub fn lower_unicode_binary_conversions(
                     unreachable!("planned binary conversion")
                 };
                 let value = crate::expr::binary_function(
-                    if input.fixed {
-                        "__msduck_unicode_binary"
-                    } else {
-                        "__msduck_unicode_varbinary"
+                    match (input.unicode, input.fixed) {
+                        (true, true) => "__msduck_unicode_binary",
+                        (true, false) => "__msduck_unicode_varbinary",
+                        (false, true) => "__msduck_ansi_binary",
+                        (false, false) => "__msduck_ansi_varbinary",
                     },
                     crate::expr::unary_function("__msduck_carrier_input", operand(*source.clone())),
                     crate::expr::number(input.width),
