@@ -184,7 +184,7 @@ fn serve_login(
     while let Some(message) = tds::read_message(&mut stream, login.packet_size)? {
         let response = if message.status & 2 != 0 {
             let mut out = vec![];
-            tds::done(&mut out, 0xfd, 0, 0, 0);
+            tds::done(&mut out, 0xfd, 2, 0, 0);
             Ok(out)
         } else if message.status & 0x18 != 0 {
             Err(anyhow::anyhow!("connection reset is not implemented"))
@@ -206,7 +206,7 @@ fn serve_login(
                         .and_then(|request| session.transaction_request(request)),
                     6 => {
                         let mut out = vec![];
-                        tds::done(&mut out, 0xfd, 0x20, 0, 0);
+                        tds::done(&mut out, 0xfd, 0x20, 253, 0);
                         Ok(out)
                     }
                     _ => Err(anyhow::anyhow!(

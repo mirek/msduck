@@ -73,8 +73,14 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-rust-1.95.0-full-${{ hashFiles('Cargo.lock', 'vendor/**') }}-${{ github.sha }}
-          restore-keys: ${{ runner.os }}-rust-1.95.0-full-${{ hashFiles('Cargo.lock', 'vendor/**') }}-
+          # Prefer identical vendored sources, then let Cargo invalidate changed
+          # inputs within the same dependency graph/toolchain. A vendor comment
+          # or Rust adapter edit should not discard every compiled dependency.
+          key: ${{ runner.os }}-rust-1.95.0-full-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('vendor/**') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-rust-1.95.0-full-${{ hashFiles('Cargo.lock') }}-${{ hashFiles('vendor/**') }}-
+            ${{ runner.os }}-rust-1.95.0-full-${{ hashFiles('Cargo.lock') }}-
+            ${{ runner.os }}-rust-1.95.0-full-${{ hashFiles('Cargo.lock', 'vendor/**') }}-
       - run: npm ci --no-audit --no-fund
       - name: Record revision
         run: |
