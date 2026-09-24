@@ -1,5 +1,108 @@
 {
   "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "server": {
+    "sets": [
+      {
+        "columns": [
+          {
+            "name": "version",
+            "type": "NVarChar",
+            "length": 256,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          },
+          {
+            "name": "level",
+            "type": "NVarChar",
+            "length": 256,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          },
+          {
+            "name": "edition",
+            "type": "NVarChar",
+            "length": 256,
+            "precision": null,
+            "scale": null,
+            "flags": 33,
+            "collation": {
+              "buffer": {
+                "kind": "missing"
+              },
+              "lcid": 1033,
+              "flags": 13,
+              "version": 0,
+              "sortId": 52,
+              "codepage": "CP1252"
+            }
+          }
+        ],
+        "rows": [
+          [
+            "17.0.4065.4",
+            "RTM",
+            "Enterprise Developer Edition (64-bit)"
+          ]
+        ]
+      },
+      {
+        "columns": [
+          {
+            "name": "compatibility_level",
+            "type": "TinyInt",
+            "length": null,
+            "precision": null,
+            "scale": null,
+            "flags": 8,
+            "collation": null
+          }
+        ],
+        "rows": [
+          [
+            170
+          ]
+        ]
+      }
+    ],
+    "done": [
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": true
+      },
+      {
+        "kind": "done",
+        "rowCount": 1,
+        "more": false
+      }
+    ],
+    "errors": [],
+    "info": [],
+    "returnStatus": null,
+    "rowCount": 2
+  },
   "cases": [
     {
       "declaration": "VARCHAR(1)",
@@ -2462,6 +2565,7139 @@
         "info": [],
         "returnStatus": null,
         "rowCount": 1
+      }
+    },
+    {
+      "id": "OFF-insert-uncaught",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); INSERT dbo.xact_target VALUES(2,'long'); SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs; IF @@TRANCOUNT>0 ROLLBACK",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                1,
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.xact_target', column 's'. Truncated value: 'l'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "OFF-insert-caught_rollback",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY INSERT dbo.xact_target VALUES(2,'long'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; ROLLBACK END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "OFF-insert-caught_commit",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY INSERT dbo.xact_target VALUES(2,'long'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; BEGIN TRY COMMIT; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS commit_error,XACT_STATE() AS xs; ROLLBACK; END CATCH END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ],
+                [
+                  1,
+                  "a"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 2,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 3
+        }
+      }
+    },
+    {
+      "id": "OFF-insert-caught_write",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY INSERT dbo.xact_target VALUES(2,'long'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; BEGIN TRY INSERT dbo.xact_target VALUES(3,'z'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS write_error,XACT_STATE() AS xs; END CATCH; ROLLBACK END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "OFF-insert-caught_leave",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY INSERT dbo.xact_target VALUES(2,'long'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs;  END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                1,
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1,
+                  1
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ],
+                [
+                  1,
+                  "a"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 2,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 3
+        }
+      }
+    },
+    {
+      "id": "OFF-update-uncaught",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); UPDATE dbo.xact_target SET s='long' WHERE id=0; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs; IF @@TRANCOUNT>0 ROLLBACK",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                1,
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.xact_target', column 's'. Truncated value: 'l'."
+          }
+        ],
+        "info": [
+          {
+            "number": 3621,
+            "state": 0,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "The statement has been terminated."
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 2
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "OFF-update-caught_rollback",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY UPDATE dbo.xact_target SET s='long' WHERE id=0; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; ROLLBACK END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "OFF-update-caught_commit",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY UPDATE dbo.xact_target SET s='long' WHERE id=0; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; BEGIN TRY COMMIT; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS commit_error,XACT_STATE() AS xs; ROLLBACK; END CATCH END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ],
+                [
+                  1,
+                  "a"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 2,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 3
+        }
+      }
+    },
+    {
+      "id": "OFF-update-caught_write",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY UPDATE dbo.xact_target SET s='long' WHERE id=0; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; BEGIN TRY INSERT dbo.xact_target VALUES(3,'z'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS write_error,XACT_STATE() AS xs; END CATCH; ROLLBACK END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "OFF-update-caught_leave",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY UPDATE dbo.xact_target SET s='long' WHERE id=0; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs;  END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                1,
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  1,
+                  1
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ],
+                [
+                  1,
+                  "a"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 2,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 3
+        }
+      }
+    },
+    {
+      "id": "ON-insert-uncaught",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); INSERT dbo.xact_target VALUES(2,'long'); SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs; IF @@TRANCOUNT>0 ROLLBACK",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.xact_target', column 's'. Truncated value: 'l'."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-insert-caught_rollback",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY INSERT dbo.xact_target VALUES(2,'long'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; ROLLBACK END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-insert-caught_commit",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY INSERT dbo.xact_target VALUES(2,'long'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; BEGIN TRY COMMIT; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS commit_error,XACT_STATE() AS xs; ROLLBACK; END CATCH END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "commit_error",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                3930,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-insert-caught_write",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY INSERT dbo.xact_target VALUES(2,'long'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; BEGIN TRY INSERT dbo.xact_target VALUES(3,'z'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS write_error,XACT_STATE() AS xs; END CATCH; ROLLBACK END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "write_error",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                3930,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-insert-caught_leave",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY INSERT dbo.xact_target VALUES(2,'long'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs;  END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                1,
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 3998,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Uncommittable transaction is detected at the end of the batch. The transaction is rolled back."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-update-uncaught",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); UPDATE dbo.xact_target SET s='long' WHERE id=0; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs; IF @@TRANCOUNT>0 ROLLBACK",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 2628,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "String or binary data would be truncated in table 'master.dbo.xact_target', column 's'. Truncated value: 'l'."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 1
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-update-caught_rollback",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY UPDATE dbo.xact_target SET s='long' WHERE id=0; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; ROLLBACK END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-update-caught_commit",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY UPDATE dbo.xact_target SET s='long' WHERE id=0; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; BEGIN TRY COMMIT; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS commit_error,XACT_STATE() AS xs; ROLLBACK; END CATCH END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "commit_error",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                3930,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-update-caught_write",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY UPDATE dbo.xact_target SET s='long' WHERE id=0; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; BEGIN TRY INSERT dbo.xact_target VALUES(3,'z'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS write_error,XACT_STATE() AS xs; END CATCH; ROLLBACK END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "write_error",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                3930,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-update-caught_leave",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY UPDATE dbo.xact_target SET s='long' WHERE id=0; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs;  END CATCH; SELECT 42 AS continued,@@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2628,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "continued",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                42,
+                1,
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [
+          {
+            "number": 3998,
+            "state": 1,
+            "class": 16,
+            "lineNumber": 1,
+            "message": "Uncommittable transaction is detected at the end of the batch. The transaction is rolled back."
+          }
+        ],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "OFF-raiserror",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY RAISERROR('application error',16,1); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; ROLLBACK; END CATCH; SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000,
+                1,
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "OFF-throw",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY THROW 50001,'application error',1; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; ROLLBACK; END CATCH; SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50001,
+                1,
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "OFF-constraint",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY INSERT dbo.xact_target VALUES(0,'y'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; ROLLBACK; END CATCH; SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2627,
+                1,
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "OFF-arithmetic",
+      "sql": "SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY SELECT 1/0 AS n; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; ROLLBACK; END CATCH; SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          },
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                8134,
+                1,
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-raiserror",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY RAISERROR('application error',16,1); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; ROLLBACK; END CATCH; SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-throw",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY THROW 50001,'application error',1; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; ROLLBACK; END CATCH; SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50001,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-constraint",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY INSERT dbo.xact_target VALUES(0,'y'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; ROLLBACK; END CATCH; SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                2627,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-arithmetic",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); BEGIN TRY SELECT 1/0 AS n; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; ROLLBACK; END CATCH; SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": []
+          },
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                8134,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                0,
+                0
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 0,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-raiserror-10-commit",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); SELECT XACT_STATE() AS before_error; BEGIN TRY RAISERROR('application error',10,1); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; END CATCH; BEGIN TRY COMMIT; SELECT 1 AS committed; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS commit_error,XACT_STATE() AS xs; ROLLBACK; END CATCH",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "before_error",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "committed",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [
+          {
+            "number": 50000,
+            "state": 1,
+            "class": 0,
+            "lineNumber": 1,
+            "message": "application error"
+          }
+        ],
+        "returnStatus": null,
+        "rowCount": 3
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ],
+                [
+                  1,
+                  "a"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 2,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 3
+        }
+      }
+    },
+    {
+      "id": "ON-raiserror-11-commit",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); SELECT XACT_STATE() AS before_error; BEGIN TRY RAISERROR('application error',11,1); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; END CATCH; BEGIN TRY COMMIT; SELECT 1 AS committed; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS commit_error,XACT_STATE() AS xs; ROLLBACK; END CATCH",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "before_error",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "commit_error",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                3930,
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
+      }
+    },
+    {
+      "id": "ON-raiserror-16-commit",
+      "sql": "SET XACT_ABORT ON; BEGIN TRAN; INSERT dbo.xact_target VALUES(1,'a'); SELECT XACT_STATE() AS before_error; BEGIN TRY RAISERROR('application error',16,1); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n,@@TRANCOUNT AS tc,XACT_STATE() AS xs; END CATCH; BEGIN TRY COMMIT; SELECT 1 AS committed; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS commit_error,XACT_STATE() AS xs; ROLLBACK; END CATCH",
+      "isolated": true,
+      "setup": "DROP TABLE IF EXISTS dbo.xact_target; CREATE TABLE dbo.xact_target(id INT PRIMARY KEY,s VARCHAR(1)); INSERT dbo.xact_target VALUES(0,'x')",
+      "result": {
+        "sets": [
+          {
+            "columns": [
+              {
+                "name": "before_error",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "n",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "tc",
+                "type": "Int",
+                "length": null,
+                "precision": null,
+                "scale": null,
+                "flags": 32,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                50000,
+                1,
+                -1
+              ]
+            ]
+          },
+          {
+            "columns": [
+              {
+                "name": "commit_error",
+                "type": "IntN",
+                "length": 4,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              },
+              {
+                "name": "xs",
+                "type": "IntN",
+                "length": 2,
+                "precision": null,
+                "scale": null,
+                "flags": 33,
+                "collation": null
+              }
+            ],
+            "rows": [
+              [
+                3930,
+                -1
+              ]
+            ]
+          }
+        ],
+        "done": [
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": 1,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": true
+          },
+          {
+            "kind": "done",
+            "rowCount": null,
+            "more": false
+          }
+        ],
+        "errors": [],
+        "info": [],
+        "returnStatus": null,
+        "rowCount": 4
+      },
+      "followup": {
+        "sql": "SELECT @@TRANCOUNT AS tc,XACT_STATE() AS xs; SELECT id,s FROM dbo.xact_target ORDER BY id",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "tc",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 32,
+                  "collation": null
+                },
+                {
+                  "name": "xs",
+                  "type": "IntN",
+                  "length": 2,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": null
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  0
+                ]
+              ]
+            },
+            {
+              "columns": [
+                {
+                  "name": "id",
+                  "type": "Int",
+                  "length": null,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 8,
+                  "collation": null
+                },
+                {
+                  "name": "s",
+                  "type": "VarChar",
+                  "length": 1,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 9,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  0,
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 2
+        }
       }
     }
   ]
