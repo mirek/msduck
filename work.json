@@ -1612,6 +1612,29 @@
       "dependencies": [],
       "issue": 171,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PKKZx"
+    },
+    {
+      "id": "all-objects-runtime-v1",
+      "title": "Implement SQL Server all_objects and system_objects catalog membership",
+      "state": "ready",
+      "authorization": "Direct owner goal to implement a fully functional SQL Server compatible Rust/DuckDB server. Owner-authored reference PR #168 at a58b270 captures the pinned SQL Server all_objects, objects and system_objects membership, descriptors and transactional behavior. This same root worker owns the original concat-integration-v1 claim for src/query_catalog.rs and tests/tedious.test.mjs result-metadata/client integration; the new claim owns only the disjoint files listed here.",
+      "scope": [
+        "src/object_catalog.rs",
+        "src/object_catalog/system_objects.rs",
+        "src/object_catalog/system_objects.json",
+        "scripts/build-system-object-seed.mjs",
+        "tests/all_objects.rs",
+        "docs/all-objects-runtime.md"
+      ],
+      "acceptance": [
+        "Derive a reproducible built-in object seed from both retained owner SQL Server captures. Keep explicit objects versus system_objects membership, identities, parentage, schema/name/type, flags and date provenance; reject unexplained cross-run differences. Do not fabricate rows or substitute a count-only cross-join source.",
+        "Expose sys.system_objects and sys.all_objects as real catalog views, preserving the disjoint union with sys.objects, user-object transactional maintenance, object ID stability, rollback and reopen behavior. Seed actual built-in rows rather than duplicating user objects.",
+        "Match the independently captured twelve-column result and declaration metadata for all three views, including Bit versus BitN and Int versus IntN differences. Shared query-catalog metadata wiring is made under the original same-worker concat-integration-v1 claim, after verify.",
+        "Add direct native and public client regressions for membership, identity/parent joins, metadata, transactional create/drop/rollback and absence of fabricated catalog rows. Run formatting, strict Clippy, workspace tests, full independent clients and diagnostic capture on an immutable Linux snapshot. State unsupported DDL kinds and catalog-locking gaps explicitly rather than claiming complete sys compatibility."
+      ],
+      "dependencies": [],
+      "issue": 173,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PKO-t"
     }
   ]
 }
