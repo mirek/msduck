@@ -19,9 +19,11 @@ are not published or exposed to pull-request jobs.
 
 The owner can request Codex review on approved PRs. Under the owner-only intake
 policy, do not enable all-PR automatic review unless intake can exclude unapproved
-external content before retrieval. Bot review output requires owner triage before
-another agent reads it. An automatic request is not a completed review. Repository
-review rules live in AGENTS.md. See [the contribution workflow](agent-work.md).
+external content before retrieval. Output from owner-initiated agents is readable
+after verifying its origin and owner-approved inputs. Third-party submissions,
+replies and unverified automation still require owner triage. An automatic request
+is not a completed review. Repository review rules live in AGENTS.md. See
+[the contribution workflow](agent-work.md).
 
 Use issues for actionable gaps with reference evidence and acceptance criteria;
 use the roadmap tracking issue to group larger work. The long-term scope remains
@@ -45,3 +47,21 @@ Server equivalence.
 [The checkpoint](integration-checkpoint.md) records the earlier consolidation,
 temporary gate and retained compatibility gaps. Owner-only intake and permanent
 claim protections remain unchanged.
+
+## Client verification in CI
+
+The full job builds the current checkout with the workspace all-target feature
+graph, then runs the complete standard client inventory with two workers through
+`scripts/run-client-shards.mjs`. No build runs concurrently with those clients.
+The runner requires every discovered test identity to execute exactly once and
+propagates assertion failures, process failures and incomplete runs. It retains
+skips separately from passes and checks source/executable hashes after execution.
+The fast job runs its failure, cancellation and coverage-accounting regressions.
+
+The existing verification artifact includes `artifacts/ci/client-shards/`: the
+plan, revision/hash provenance, per-job TAP/console/event logs and final summary.
+The local `npm test` command remains available for the serial baseline. The
+owner-run two-CPU benchmark passed all 408 tests in about 14.4 minutes after
+splitting the oversized BIT matrix without removing assertions. This measurement
+is not a guarantee of GitHub runner performance or a diagnosis of earlier CI
+failures. Both required checks remain enforced on main.
