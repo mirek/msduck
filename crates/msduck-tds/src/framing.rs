@@ -55,6 +55,13 @@ impl Decoder {
         })
     }
 
+    /// Maximum next read that cannot consume bytes from a following message.
+    /// Adapters may read less. This is always nonzero for an available decoder.
+    pub fn read_size(&self) -> Result<usize, Error> {
+        self.available()?;
+        Ok(self.body_remaining.unwrap_or(8 - self.header_used))
+    }
+
     /// Change negotiated packet size only between complete messages.
     pub fn set_packet_size(&mut self, packet_size: usize) -> Result<(), Error> {
         self.available()?;

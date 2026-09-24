@@ -163,3 +163,26 @@ fn captured_attention_packets_decode_at_every_boundary() {
     }
     assert_eq!(count, 48);
 }
+
+#[test]
+fn read_hint_never_crosses_message_boundary_for_any_short_read_size() {
+    let first = fragmented();
+    let bytes = [first.clone(), packet(6, 1, 1, &[])].concat();
+    for width in [1, 3, 8, 17, 504, 512, 4096] {
+        let mut decoder = Decoder::new(512, MAX_MESSAGE).unwrap();
+        let mut at = 0;
+        loop {
+            let hint = decoder.read_size().unwrap();
+            assert!(hint > 0);
+            let n = hint.min(width).min(bytes.len() - at);
+            let progress = decoder.feed(&bytes[at..at + n]).unwrap();
+            assert_eq!(progress.consumed, n);
+            at += n;
+            if progress.message.is_some() {
+                break;
+            }
+        }
+        assert_eq!(at, first.len());
+        assert_eq!(decoder.read_size().unwrap(), 8);
+    }
+}
