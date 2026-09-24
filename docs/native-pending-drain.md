@@ -51,3 +51,8 @@ all-targets build, and strict workspace all-targets Clippy passed on linux.local
 The workspace run exercised the probe again successfully. No server/client
 compatibility pass is inferred from this native-only evidence. The final change
 after that revision only adds this verification paragraph.
+
+A later workspace run exposed a synchronization failure: background work could
+remain active without updating processed-row progress. The probe now registers a
+volatile native marker that records actual callback execution before cancellation.
+No deadline or expected transaction outcome was relaxed. The marker is test-only.

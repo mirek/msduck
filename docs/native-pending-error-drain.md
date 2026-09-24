@@ -44,3 +44,9 @@ The workspace run repeated the gated background-error and transaction probes.
 The final commit only updates documentation. The original native archive remains
 unchanged. Server client tests were not rerun for this unused private entry point;
 production integration will require independent clients and reference comparisons.
+
+The read probes now use a native callback marker for execution synchronization.
+A workspace run showed that DuckDB's progress counter can remain unchanged while
+background tasks run. The new marker replaces that unreliable trigger; bounds and
+transaction expectations are unchanged. The stale-handle case now completes a
+small newer query to verify it was not interrupted, without relying on progress.

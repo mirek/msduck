@@ -60,6 +60,48 @@ fn register_failure(connection: &Connection<'_>, gate: std::sync::Arc<FailureGat
     }
 }
 
+unsafe extern "C" fn read_marker(
+    info: ffi::duckdb_function_info,
+    input: ffi::duckdb_data_chunk,
+    output: ffi::duckdb_vector,
+) {
+    let observed = unsafe {
+        &*(ffi::duckdb_scalar_function_get_extra_info(info) as *const std::sync::atomic::AtomicBool)
+    };
+    let len = unsafe { ffi::duckdb_data_chunk_get_size(input) } as usize;
+    let values = unsafe {
+        std::slice::from_raw_parts_mut(ffi::duckdb_vector_get_data(output) as *mut i64, len)
+    };
+    values.fill(1);
+    observed.store(true, std::sync::atomic::Ordering::Release);
+}
+unsafe extern "C" fn drop_read_marker(data: *mut std::ffi::c_void) {
+    drop(unsafe { std::sync::Arc::from_raw(data as *const std::sync::atomic::AtomicBool) });
+}
+fn register_read_marker(
+    connection: &Connection<'_>,
+    observed: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) {
+    unsafe {
+        let mut function = ffi::duckdb_create_scalar_function();
+        let mut ty = ffi::duckdb_create_logical_type(ffi::DUCKDB_TYPE_DUCKDB_TYPE_BIGINT);
+        ffi::duckdb_scalar_function_set_name(function, c"msduck_read_marker".as_ptr());
+        ffi::duckdb_scalar_function_add_parameter(function, ty);
+        ffi::duckdb_scalar_function_set_return_type(function, ty);
+        ffi::duckdb_scalar_function_set_volatile(function);
+        ffi::duckdb_scalar_function_set_extra_info(
+            function,
+            std::sync::Arc::into_raw(observed) as *mut _,
+            Some(drop_read_marker),
+        );
+        ffi::duckdb_scalar_function_set_function(function, Some(read_marker));
+        let status = ffi::duckdb_register_scalar_function(connection.0, function);
+        ffi::duckdb_destroy_scalar_function(&mut function);
+        ffi::duckdb_destroy_logical_type(&mut ty);
+        assert_eq!(status, 0);
+    }
+}
+
 struct Database(ffi::duckdb_database);
 impl Database {
     fn new() -> Self {
@@ -121,19 +163,25 @@ struct Pending<'a> {
     statement: ffi::duckdb_prepared_statement,
     result: ffi::duckdb_pending_result,
     _connection: &'a Connection<'a>,
+    observed: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
 }
 impl<'a> Pending<'a> {
     fn read(connection: &'a Connection<'a>) -> Self {
-        Self::sql(
+        let observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        register_read_marker(connection, observed.clone());
+        let mut pending = Self::sql(
             connection,
-            "SELECT SUM(CAST(a.i AS DOUBLE) * b.i) FROM range(1000000) a(i) CROSS JOIN range(1000000) b(i)",
-        )
+            "SELECT SUM(CAST(msduck_read_marker(a.i) AS DOUBLE) * b.i) FROM range(1000000) a(i) CROSS JOIN range(1000000) b(i)",
+        );
+        pending.observed = Some(observed);
+        pending
     }
     fn sql(connection: &'a Connection<'a>, sql: &str) -> Self {
         let mut pending = Self {
             statement: ptr::null_mut(),
             result: ptr::null_mut(),
             _connection: connection,
+            observed: None,
         };
         let sql = CString::new(sql).unwrap();
         unsafe {
@@ -152,10 +200,8 @@ impl<'a> Pending<'a> {
             calls += 1;
             let state = unsafe { ffi::duckdb_pending_execute_task(self.result) };
             match state {
-                ffi::duckdb_pending_state_DUCKDB_PENDING_RESULT_NOT_READY => worked = true,
+                ffi::duckdb_pending_state_DUCKDB_PENDING_RESULT_NOT_READY => {}
                 ffi::duckdb_pending_state_DUCKDB_PENDING_NO_TASKS_AVAILABLE => {
-                    let progress = unsafe { ffi::duckdb_query_progress(self._connection.0) };
-                    worked |= progress.rows_processed > 0;
                     std::thread::yield_now();
                 }
                 ffi::duckdb_pending_state_DUCKDB_PENDING_ERROR => {
@@ -170,6 +216,11 @@ impl<'a> Pending<'a> {
                     panic!("query completed before abandonment or unknown pending state: {other}")
                 }
             }
+            worked = self
+                .observed
+                .as_ref()
+                .unwrap()
+                .load(std::sync::atomic::Ordering::Acquire);
             assert!(
                 start.elapsed() < Duration::from_secs(10),
                 "pending task loop exceeded failure bound"
@@ -295,18 +346,22 @@ fn explicit_error_drain_preserves_prior_transaction_work() {
     connection.query("SET threads=1");
     eprintln!("stale result rejection");
     let stale = Pending::sql(&connection, "SELECT 1");
-    let current = Pending::read(&connection);
+    let current = Pending::sql(&connection, "SELECT 42");
     assert_eq!(
         unsafe { msduck_pending_cancel_read_and_drain(stale.result) },
         1
     );
     // Rejecting the stale result must leave the newer request executable.
-    current.execute_tasks();
+    let mut current_result = ResultSet(unsafe { std::mem::zeroed() });
     assert_eq!(
-        unsafe { msduck_pending_cancel_read_and_drain(current.result) },
+        unsafe { ffi::duckdb_execute_pending(current.result, &mut current_result.0) },
         0
     );
-    assert_eq!(connection.scalar("SELECT 42"), 42);
+    assert_eq!(
+        unsafe { ffi::duckdb_value_int64(&mut current_result.0, 0, 0) },
+        42
+    );
+    drop(current_result);
     drop(current);
     drop(stale);
 
