@@ -204,9 +204,12 @@ fn incompatible_legacy_unique_data_and_constraints_remain_explicit() {
 }
 
 fn catalog_rows(s: &Session, sql: &str) -> serde_json::Value {
+    // This adapter test executes DuckDB SQL directly; give its predicate the
+    // trailing-space equality used by the T-SQL path. Keep captured rows intact.
+    let sql = sql.replace("o.type='U'", "rtrim(o.type)='U'");
     use duckdb::types::Value;
     let rows =
-        s.db.prepare(sql)
+        s.db.prepare(&sql)
             .unwrap()
             .query_map([], |r| {
                 (0..r.as_ref().column_count())
