@@ -273,3 +273,70 @@ pub fn drop_index(db: &Connection, expected: &Index, owner: Transaction) -> Resu
         Ok(())
     })
 }
+
+/// Migrate ordinary unmanaged indexes into explicit logical/backend identities.
+/// The complete migration is atomic. Rebuild unique integer indexes with SQL
+/// Server NULL comparison; incompatible existing data aborts the migration.
+pub fn reconcile(db: &Connection, owner: Transaction) -> Result<()> {
+    transaction(db, owner, || {
+        sync(db)?;
+        let records=db.prepare("SELECT o.object_id,i.schema_name,i.index_name,i.sql FROM duckdb_indexes() i
+            JOIN sys.schemas s ON s.name=i.schema_name
+            JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=i.table_name AND o.type='U'
+            WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_index_catalog c WHERE c.backend_schema=i.schema_name AND c.backend_name=i.index_name)
+            ORDER BY o.object_id,i.index_oid")?.query_map([],|r|Ok((r.get::<_,i32>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?)))?.collect::<duckdb::Result<Vec<_>>>()?;
+        for (object_id, schema, name, sql) in records {
+            ensure!(
+                !name.starts_with("__msduck_index_"),
+                "unregistered private backend index requires explicit recovery"
+            );
+            let mut parsed =
+                sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::GenericDialect {}, &sql)?;
+            ensure!(
+                parsed.len() == 1,
+                "unmanaged index has an unexpected definition"
+            );
+            let sqlparser::ast::Statement::CreateIndex(ast) = parsed.remove(0) else {
+                bail!("unmanaged index definition is not CREATE INDEX")
+            };
+            let declared = parts(
+                ast.name
+                    .as_ref()
+                    .ok_or_else(|| anyhow::anyhow!("unnamed unmanaged index"))?,
+            )?;
+            ensure!(
+                declared == vec![name.as_str()],
+                "unmanaged index name differs from its definition"
+            );
+            create(db, object_id, &ast, Transaction::CallerOwned)?;
+            db.execute_batch(&format!("DROP INDEX {}.{}", quote(&schema), quote(&name)))?;
+        }
+        Ok(())
+    })
+}
+
+/// Only this entry point promises a complete ordinary-index snapshot. Until
+/// constraint indexes are modeled, their presence is an explicit error.
+pub fn acquire_complete(db: &Connection) -> Result<Vec<Index>> {
+    let unknown:i64=db.query_row("SELECT count(*) FROM duckdb_indexes() i
+        JOIN sys.schemas s ON s.name=i.schema_name
+        JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=i.table_name AND o.type='U'
+        WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_index_catalog c WHERE c.backend_schema=i.schema_name AND c.backend_name=i.index_name AND c.object_id=o.object_id)",[],|r|r.get(0))?;
+    ensure!(
+        unknown == 0,
+        "unmanaged index catalog is incomplete; reconcile before binding"
+    );
+    let constraints: i64 = db.query_row(
+        "SELECT count(*) FROM duckdb_constraints() c
+        JOIN sys.schemas s ON s.name=c.schema_name
+        JOIN sys.objects o ON o.schema_id=s.schema_id AND o.name=c.table_name AND o.type='U'
+        WHERE c.constraint_type IN ('PRIMARY KEY','UNIQUE')",
+        [],
+        |r| r.get(0),
+    )?;
+    ensure!(
+        constraints == 0,
+        "constraint-backed index catalog is not yet supported"
+    );
+    acquire(db)
+}

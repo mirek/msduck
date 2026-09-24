@@ -145,3 +145,60 @@ fn persistent_logical_identity_survives_database_reopen() {
     }
     std::fs::remove_file(path).unwrap();
 }
+
+#[test]
+fn unmanaged_indexes_migrate_atomically_before_complete_binding() {
+    let s = setup();
+    s.db.execute_batch(
+        "CREATE INDEX legacy_a ON dbo.a(id); CREATE UNIQUE INDEX legacy_b ON dbo.b(id)",
+    )
+    .unwrap();
+    assert!(index_catalog::acquire_complete(&s.db).is_err());
+    index_catalog::reconcile(&s.db, Transaction::Owned).unwrap();
+    let current = index_catalog::acquire_complete(&s.db).unwrap();
+    assert_eq!(current.len(), 2);
+    assert_eq!(
+        current.iter().map(|i| i.name.as_str()).collect::<Vec<_>>(),
+        vec!["legacy_a", "legacy_b"]
+    );
+    assert!(
+        current
+            .iter()
+            .all(|i| i.backend_name.starts_with("__msduck_index_"))
+    );
+    index_catalog::reconcile(&s.db, Transaction::Owned).unwrap();
+    assert_eq!(index_catalog::acquire_complete(&s.db).unwrap(), current);
+    s.db.execute_batch("INSERT INTO dbo.b VALUES(NULL,1)")
+        .unwrap();
+    assert!(
+        s.db.execute_batch("INSERT INTO dbo.b VALUES(NULL,2)")
+            .is_err()
+    );
+}
+#[test]
+fn incompatible_legacy_unique_data_and_constraints_remain_explicit() {
+    let mut s = setup();
+    s.db.execute_batch(
+        "INSERT INTO dbo.a VALUES(NULL,1),(NULL,2); CREATE UNIQUE INDEX legacy ON dbo.a(id)",
+    )
+    .unwrap();
+    assert!(index_catalog::reconcile(&s.db, Transaction::Owned).is_err());
+    assert!(acquire(&s.db).unwrap().is_empty());
+    let count: i64 =
+        s.db.query_row(
+            "SELECT count(*) FROM duckdb_indexes() WHERE index_name='legacy'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1);
+    s.db.execute_batch("DROP INDEX dbo.legacy").unwrap();
+    let (response, ok) = s.batch_response(
+        "CREATE TABLE dbo.guarded(id INT PRIMARY KEY)",
+        &Default::default(),
+        false,
+        None,
+    );
+    assert!(ok, "{response:?}");
+    assert!(index_catalog::acquire_complete(&s.db).is_err());
+}
