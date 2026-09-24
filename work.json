@@ -1458,6 +1458,24 @@
       "dependencies": [],
       "issue": 154,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJ6xw"
+    },
+    {
+      "id": "native-pending-drain-v1",
+      "title": "Probe interrupt-assisted pending read cleanup without transaction invalidation",
+      "state": "ready",
+      "authorization": "Direct owner full compatibility goal. First-party PR155 shows pending abandonment stalls parallel cleanup; PR153 proves explicit transactions must survive read cancellation with XACT_ABORT OFF. Test a worker-owned interrupt after task polling stops, followed by pending destruction and context cleanup.",
+      "scope": [
+        "tests/native_pending_drain.rs",
+        "docs/native-pending-drain.md"
+      ],
+      "acceptance": [
+        "Preserve prior writes, connection reuse and explicit commit/rollback across single and parallel pending read cancellation; use an interrupt only after stopping pending task polling and before cleanup.",
+        "Bound the native probe in a child process, retain genuine errors, verify cross-connection visibility and unfinished execution; keep the failed no-interrupt experiment separate.",
+        "Run focused, workspace, formatting and strict Clippy checks on Linux; document source rationale and remaining write cancellation, race and latency gaps without enabling production cancellation."
+      ],
+      "dependencies": [],
+      "issue": 156,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJ7-o"
     }
   ]
 }
