@@ -1347,6 +1347,25 @@
       "dependencies": [],
       "issue": 140,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PJw_l"
+    },
+    {
+      "id": "request-lifecycle-v1",
+      "title": "Implement deterministic non-MARS cancellation lifecycle",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal. Owner-authored Attention design and 24 independently recaptured SQL Server cases establish cancellation response ordering. Implement pure request identity and retirement logic; runtime integration remains separate.",
+      "scope": [
+        "crates/msduck-tds/src/request_lifecycle.rs",
+        "crates/msduck-tds/tests/request_lifecycle.rs",
+        "docs/request-lifecycle.md"
+      ],
+      "acceptance": [
+        "Implement explicit request identities, worker quiescence, cancellation latching and original-response/ACK completion ordering without I/O, native handles, timers or mutable globals. Existing original root-worker smp-codec-v1 owns protocol module export wiring.",
+        "Reject overlapping admission and invalid transitions; stale completion/cancellation cannot affect a successor. Cover queued/running/responding cancellation, both completion race orders, disconnect cleanup and checked identity exhaustion.",
+        "Test lifecycle against retained active Attention response boundary observations and exhaustive bounded event permutations. Keep uncaptured idle/repeated Attention policy explicit and separate. Run deterministic tests, formatting and strict Clippy on Linux; do not claim active runtime cancellation or enable MARS."
+      ],
+      "dependencies": [],
+      "issue": 142,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PJyJn"
     }
   ]
 }
