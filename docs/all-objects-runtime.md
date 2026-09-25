@@ -20,7 +20,7 @@ the complete union.
 Seeding this inventory increases fresh-server test startup cost on GitHub's
 two-worker runner. Its public client tests keep the same assertions but use
 fourfold connection, request, and test deadlines there; the original deadlines
-remain on other machines. The loader now builds one typed Arrow record batch
+remain on other machines. The candidate loader builds one typed Arrow record batch
 and appends it to the transaction-owned seed staging table instead of calling
 the DuckDB row appender 2,742 times. The final timestamp cast, source membership
 and committed public table remain the same.
@@ -34,6 +34,36 @@ copy the identical benchmark test into an isolated checkout of merged PR #174,
 run both trees on the same Linux host with the same `--cpus` and `--samples`,
 and compare the reported harness hashes. A synchronized source snapshot without
 `.git` can supply `--revision` explicitly.
+
+On `linux.local`, the merged #174 tree (`40259cc`, byte-identical to the
+successful PR head `68f5f22`) and candidate `810bd42` used the same benchmark
+harness (SHA-256 `075f080522861b11f41ea3c736ecbdf8142a4c1a299eb2f4fad8c899067f225d`),
+20 samples each, and CPU affinity `0,1`. Times are milliseconds:
+
+| Phase | #174 p50 / p95 | Arrow candidate p50 / p95 |
+| --- | ---: | ---: |
+| Fresh in-memory open | 489.7 / 505.6 | 482.6 / 495.6 |
+| Persistent reopen | 496.4 / 507.5 | 500.1 / 516.5 |
+| First query after fresh open | 3.64 / 3.73 | 3.64 / 6.03 |
+| First query after reopen | 4.12 / 5.29 | 4.11 / 4.81 |
+
+The fresh-open median fell 1.45%, while the reopen median rose 0.74%; this
+does not establish a material startup improvement. The #174 CI run
+`36075844399` spent 37 minutes 53 seconds in its two-worker independent-client
+step. The candidate's corresponding CI duration is needed before concluding
+whether the test-suite regression changed.
+
+A separate five-sample diagnostic run timed the candidate's entire built-in
+object registration at 39–43 ms on a fresh database and about 1.7 ms on
+reopen, against roughly 480–500 ms for complete `Server::open`. This locates
+most startup time outside the scoped seed loader. That run temporarily logged
+durations and was not used for the comparison table; the instrumentation was
+removed afterward. The remote runner once reported a 0.06-second build after
+source bytes changed but retained an older file modification time, so the
+candidate comparison used a targeted `cargo clean -p msduck` before compiling.
+Remote source synchronization needs an independent fingerprint-invalidation
+fix. Further startup work should profile the surrounding catalog and server
+registration phases once their active claims release those files.
 
 The three views have independent captured metadata. In particular,
 `sys.objects` returns nonnullable `Bit` flags, while the union and system view
