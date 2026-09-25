@@ -1728,7 +1728,7 @@
     {
       "id": "alter-named-default-reference-v1",
       "title": "Capture SQL Server named defaults on ALTER TABLE ADD",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server compatibility goal and request for disjoint agent work. Owner-authored PR #179 exact-head test at 849e5ac exposed a named ALTER ADD syntax gap; source review shows ddl_syntax.rs rejects named options and other workers own that validator. This first-party reference task consumes no external submission.",
       "scope": [
         "scripts/capture-alter-named-default.mjs",
@@ -1831,7 +1831,7 @@
     {
       "id": "for-xml-path-reference-v1",
       "title": "Capture SQL Server FOR XML PATH reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement a fully functional SQL Server-compatible Rust server backed by DuckDB, plus the owner request to organize disjoint work for parallel agents. The owner-copied reference/mssqlite/corpus.ts FOR XML PATH case and current compatibility baseline identify the gap. No external submission is approved.",
       "scope": [
         "scripts/capture-for-xml-path.mjs",
