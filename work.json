@@ -1867,6 +1867,27 @@
       "dependencies": [],
       "issue": 194,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PLcUN"
+    },
+    {
+      "id": "bulk-load-codec-v1",
+      "title": "Implement bounded incremental BulkLoadBCP codec",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement full SQL Server compatibility, inspect and reuse owner-authored mirek/mssqlite, and organize disjoint work for parallel agents. Local docs/tds-gap-inventory.md identifies bulk decoding as an independent protocol prerequisite; no external submission is approved.",
+      "scope": [
+        "crates/msduck-tds/src/bulk_load.rs",
+        "crates/msduck-tds/tests/bulk_load.rs",
+        "docs/bulk-load-codec.md"
+      ],
+      "acceptance": [
+        "Implement a typed incremental pure BulkLoadBCP decoder for TDS 7.2-7.4 COLMETADATA, ROW and final DONE, emitting complete rows on each push while retaining at most one unfinished token with a strict 16 MiB cap and bounded column count.",
+        "Decode the repository's supported scalar wire families including NULL and PLP character/binary values with lossless Unicode bytes; explicitly reject unsupported type info, encrypted metadata, NBCROW, malformed lengths, non-final DONE, trailing bytes and truncated EOM, with fatal state after errors.",
+        "Require DONE at EOM by default and expose an explicit opt-in row-boundary EOM mode for the documented FreeTDS convention; test every split offset of representative metadata, fixed/variable/PLP rows and DONE, multi-row fragmentation, bounds and malformed cases.",
+        "Use original Rust fixtures informed by the pinned owner-authored mssqlite boundary inventory and the copied TDS skill, cite the source and retain MIT attribution without copying upstream code or byte fixtures; run formatting, deterministic crate tests and strict Clippy on the exact revision.",
+        "Keep the codec isolated to its three files and path-import it in tests; do not edit shared exports, server transport, engine or CI, and do not claim INSERT BULK execution or atomicity."
+      ],
+      "dependencies": [],
+      "issue": 197,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PLpOA"
     }
   ]
 }
