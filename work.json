@@ -2034,7 +2034,7 @@
     {
       "id": "for-xml-wire-reference-v1",
       "title": "Capture raw TDS metadata and row framing for FOR XML PATH",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server-compatible Rust/DuckDB implementation goal and instruction to organize disjoint parallel-agent work. Owner-authored PR #195 captures tedious NText versus Xml descriptors, while the copied TDS skill describes NVARCHAR(MAX) for text mode; first-party raw wire evidence is needed before codec integration. No external submission is approved.",
       "scope": [
         "scripts/capture-for-xml-wire.mjs",
