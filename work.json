@@ -2219,6 +2219,25 @@
       "dependencies": [],
       "issue": 232,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PM-Vl"
+    },
+    {
+      "id": "string-agg-reference-v1",
+      "title": "Capture SQL Server STRING_AGG value, type and ordering semantics",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal and GitHub project coordination request. First-party source audit found STRING_AGG recognized as an aggregate but no retained SQL Server behavior fixture; no external submission is input.",
+      "scope": [
+        "scripts/capture-string-agg.mjs",
+        "reference/string-agg.json",
+        "docs/string-agg.md"
+      ],
+      "acceptance": [
+        "Capture exact SQL Server rows, result descriptors, errors and completion tokens for grouped and empty inputs, NULL values and separators, VARCHAR/NVARCHAR/MAX return widths, non-character inputs, WITHIN GROUP ordering and ties, overflow boundaries, unsupported DISTINCT/window forms, and prepared/bound paths.",
+        "Use a pinned SQL Server image and repeat the same capture in two fresh databases and an independent second container; retain raw differences and make the script refuse silent fixture overwrite.",
+        "Document observed deterministic value/type rules and the root integration boundary for a successor implementation. Do not edit parser, aggregate, engine or metadata files reserved by other tasks."
+      ],
+      "dependencies": [],
+      "issue": 236,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PNSQ_"
     }
   ]
 }
