@@ -1616,7 +1616,7 @@
     {
       "id": "all-objects-runtime-v1",
       "title": "Implement SQL Server all_objects and system_objects catalog membership",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner goal to implement a fully functional SQL Server compatible Rust/DuckDB server. Owner-authored reference PR #168 at a58b270 captures the pinned SQL Server all_objects, objects and system_objects membership, descriptors and transactional behavior. This same root worker owns the original concat-integration-v1 claim for src/query_catalog.rs and tests/tedious.test.mjs result-metadata/client integration; the new claim owns only the disjoint files listed here.",
       "scope": [
         "src/object_catalog.rs",
