@@ -75,11 +75,14 @@ stability for other DDL, databases, images, or server versions.
 
 ## Runtime boundary
 
-The current msduck catalog exposes `sys.objects`, `sys.system_objects`, and
-`sys.all_objects`, but has no `sys.columns`, `sys.system_columns`, or
-`sys.all_columns` view. A runtime implementation needs separate source
-membership, the full shipped inventory, transactional user-column changes, and
-per-view result descriptors and declaration metadata. It must account for the
+The current msduck catalog exposes `sys.objects`, `sys.system_objects`,
+`sys.all_objects`, and a user-column `sys.columns` view backed by transactional
+table/view metadata. Its `sys.columns` projection stops at `is_masked` and
+lacks the nine later fields in this pinned build. There is no
+`sys.system_columns` or `sys.all_columns` view. Runtime work needs separate
+source membership, the full shipped inventory, the missing `sys.columns`
+fields, and per-view result descriptors and declaration metadata. It must
+preserve transactional user-column changes and account for the
 166 resolvable column owners outside `all_objects` without altering that
 view's captured membership. The fixture does not establish permissions-based
 visibility, arbitrary DDL transitions, collation semantics, or execution of
