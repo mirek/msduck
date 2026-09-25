@@ -17,6 +17,12 @@ user rows. Reopening a database keeps the same built-in and user identities;
 the built-in table is seeded only when empty. Object identity/name lookups use
 the complete union.
 
+Seeding this inventory increases fresh-server test startup cost on GitHub's
+two-worker runner. Its public client tests keep the same assertions but use
+fourfold connection, request, and test deadlines there; the original deadlines
+remain on other machines. The measured CI latency warrants a separate startup
+optimization, rather than treating longer deadlines as a performance fix.
+
 The three views have independent captured metadata. In particular,
 `sys.objects` returns nonnullable `Bit` flags, while the union and system view
 declare nullable `BitN(1)` flags. The system view declares a nullable

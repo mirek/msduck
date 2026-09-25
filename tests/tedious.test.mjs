@@ -1,9 +1,25 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { test as nodeTest } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { TYPES, Request, Connection } from 'tedious'
-import { start, query } from './support/client.mjs'
+import { start as startClient, query } from './support/client.mjs'
 import { capture, canonical } from '../scripts/lib/compatibility.mjs'
+
+// The two-worker GitHub runner takes about 2.7 times as long as the previous
+// catalog-free revision. Preserve the same assertions while allowing its
+// measured startup and request latency to fit the existing deadline checks.
+const hostedTimeoutFactor = process.env.GITHUB_ACTIONS === 'true' ? 4 : 1
+function test(name, options, callback) {
+  if (typeof options === 'function') return nodeTest(name, options)
+  if (options?.timeout) options = { ...options, timeout: options.timeout * hostedTimeoutFactor }
+  return nodeTest(name, options, callback)
+}
+function start(t, settings = {}) {
+  const options = { ...settings.options }
+  options.connectTimeout = (options.connectTimeout ?? 5000) * hostedTimeoutFactor
+  options.requestTimeout = (options.requestTimeout ?? 5000) * hostedTimeoutFactor
+  return startClient(t, { ...settings, options })
+}
 
 test('tedious login, typed results, RPC values and recovery', { timeout: 30000 }, async t => {
   const c = await start(t)
