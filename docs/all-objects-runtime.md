@@ -20,8 +20,20 @@ the complete union.
 Seeding this inventory increases fresh-server test startup cost on GitHub's
 two-worker runner. Its public client tests keep the same assertions but use
 fourfold connection, request, and test deadlines there; the original deadlines
-remain on other machines. The measured CI latency warrants a separate startup
-optimization, rather than treating longer deadlines as a performance fix.
+remain on other machines. The loader now builds one typed Arrow record batch
+and appends it to the transaction-owned seed staging table instead of calling
+the DuckDB row appender 2,742 times. The final timestamp cast, source membership
+and committed public table remain the same.
+
+`scripts/bench-object-catalog-startup.mjs` runs the ignored benchmark in
+`tests/all_objects.rs` with affinity to exactly two specified Linux CPUs. It
+reports p50 and p95 separately for fresh in-memory `Server::open`, persistent
+reopen, and the first `sys.all_objects` count query after each open. The timing
+starts inside the test executable, after compilation. To compare revisions,
+copy the identical benchmark test into an isolated checkout of merged PR #174,
+run both trees on the same Linux host with the same `--cpus` and `--samples`,
+and compare the reported harness hashes. A synchronized source snapshot without
+`.git` can supply `--revision` explicitly.
 
 The three views have independent captured metadata. In particular,
 `sys.objects` returns nonnullable `Bit` flags, while the union and system view

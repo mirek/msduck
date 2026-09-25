@@ -12,15 +12,18 @@ const options = Object.fromEntries(process.argv.slice(2).reduce((pairs, value, i
   }
   return pairs
 }, []))
-assert(Object.keys(options).every(key => ['tree', 'cpus', 'samples', 'output'].includes(key)), 'Unknown option')
+assert(Object.keys(options).every(key => ['tree', 'cpus', 'samples', 'output', 'revision'].includes(key)), 'Unknown option')
 assert(/^\d+,\d+$/.test(options.cpus ?? '') && new Set(options.cpus.split(',')).size === 2,
   'Use --cpus with two distinct allowed Linux CPU IDs, e.g. --cpus 4,5')
 const samples = Number(options.samples ?? 20)
 assert(Number.isSafeInteger(samples) && samples >= 5 && samples <= 200, 'Use 5–200 samples')
 const tree = resolve(options.tree ?? '.')
 const harness = readFileSync(resolve(tree, 'tests/all_objects.rs'))
-const revision = execFileSync('git', ['rev-parse', 'HEAD'], {cwd: tree, encoding: 'utf8'}).trim()
-const dirty = execFileSync('git', ['status', '--porcelain'], {cwd: tree, encoding: 'utf8'}).trim().length > 0
+const loader = readFileSync(resolve(tree, 'src/object_catalog/system_objects.rs'))
+const revision = options.revision ?? execFileSync('git', ['rev-parse', 'HEAD'], {cwd: tree, encoding: 'utf8'}).trim()
+assert(/^[a-f0-9]{40}$/.test(revision), 'Expected a full source revision')
+const dirty = options.revision ? null
+  : execFileSync('git', ['status', '--porcelain'], {cwd: tree, encoding: 'utf8'}).trim().length > 0
 const command = ['-c', options.cpus, 'cargo', 'test', '--locked', '--test', 'all_objects',
   'benchmark_builtin_catalog_startup', '--', '--ignored', '--exact', '--nocapture', '--test-threads=1']
 const child = spawn('taskset', command, {
@@ -41,6 +44,7 @@ const report = {
   revision,
   dirty,
   harness_sha256: createHash('sha256').update(harness).digest('hex'),
+  loader_sha256: createHash('sha256').update(loader).digest('hex'),
   cpus: options.cpus,
   ...JSON.parse(match[1]),
 }
