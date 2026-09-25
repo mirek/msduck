@@ -2238,6 +2238,26 @@
       "dependencies": [],
       "issue": 236,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PNSQ_"
+    },
+    {
+      "id": "string-split-reference-v1",
+      "title": "Capture SQL Server STRING_SPLIT reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal and GitHub project coordination request. First-party source audit found no STRING_SPLIT implementation, tests or existing task; no external submission is input.",
+      "scope": [
+        "scripts/capture-string-split.mjs",
+        "reference/string-split.json",
+        "docs/string-split.md"
+      ],
+      "acceptance": [
+        "Capture exact SQL Server rows, result descriptors, errors and completion tokens for ordinary and prepared/RPC STRING_SPLIT calls, including NULL and empty inputs, repeated and edge separators, VARCHAR/NVARCHAR/MAX declarations, collations and invalid input types.",
+        "Probe enable_ordinal values and syntax, single-character separator constraints, and ordering without assuming SQL Server guarantees row order absent ORDER BY.",
+        "Use the pinned SQL Server 2025 image in two fresh databases and independently in a second container; compare all four raw captures, retain the fixture, and refuse silent overwrite.",
+        "Document observed deterministic value/type rules and the root integration boundary without editing claimed parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 239,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PNddn"
     }
   ]
 }
