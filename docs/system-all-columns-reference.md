@@ -68,8 +68,9 @@ fixture retains raw IDs. For comparison across fresh databases, `object_id`
 binds to the captured owner schema/name/type; nonzero owner-parent IDs bind
 to captured parent schema/name/type, while default and rule IDs bind to their
 resolved qualified names. All other row values,
-descriptors, errors, and completion records compare exactly. The four fresh
-databases happened to return identical raw observations, including IDs. No
+descriptors, errors, and completion records compare exactly. The two retained
+fresh databases have identical raw observations, including IDs; two more
+independent databases matched after the documented bindings. No
 clock-dependent field occurred in these captures; this does not establish
 stability for other DDL, databases, images, or server versions.
 
