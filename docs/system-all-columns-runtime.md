@@ -41,3 +41,20 @@ ready task; wire descriptor matching remains follow-up work. In particular,
 the captured `system_columns` Boolean descriptor flags differ from the
 nullable Boolean descriptors of the two other views even when their values
 are identical.
+
+A direct empty-result TDS probe of this implementation returned 43 columns
+and no errors for each of the three views, but all 43 descriptors differed
+from the pinned SQL Server capture in each view. For example, `object_id`
+arrived as nullable `IntN(4)` with flags `1` rather than non-null `Int` with
+flags `8`; `name` arrived as `NVarChar(65535)` with flags `1` rather than
+`NVarChar(256)` with flags `9` in `columns`/`all_columns` and `33` in
+`system_columns`. The probe establishes a metadata gap, not a value-row
+failure. The broad nullable/MAX output is consistent with result inference
+not applying the captured catalog declarations; that cause still needs
+verification in the result-metadata task.
+
+For wire values, a separate tedious probe read all 43 rows of
+`sys.all_columns` (`object_id = -103`) and all 15 rows for hidden owner
+`-1069989784`. Across their 43 value columns, the decoded rows had zero
+differences from the retained SQL Server snapshot and no errors. This spot
+check does not establish complete wire compatibility for all 12,803 rows.
