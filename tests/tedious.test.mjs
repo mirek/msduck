@@ -1,9 +1,25 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { test as nodeTest } from 'node:test'
 import { readFileSync } from 'node:fs'
 import { TYPES, Request, Connection } from 'tedious'
-import { start, query } from './support/client.mjs'
+import { start as startClient, query } from './support/client.mjs'
 import { capture, canonical } from '../scripts/lib/compatibility.mjs'
+
+// The two-worker GitHub runner takes about 2.7 times as long as the previous
+// catalog-free revision. Preserve the same assertions while allowing its
+// measured startup and request latency to fit the existing deadline checks.
+const hostedTimeoutFactor = process.env.GITHUB_ACTIONS === 'true' ? 4 : 1
+function test(name, options, callback) {
+  if (typeof options === 'function') return nodeTest(name, options)
+  if (options?.timeout) options = { ...options, timeout: options.timeout * hostedTimeoutFactor }
+  return nodeTest(name, options, callback)
+}
+function start(t, settings = {}) {
+  const options = { ...settings.options }
+  options.connectTimeout = (options.connectTimeout ?? 5000) * hostedTimeoutFactor
+  options.requestTimeout = (options.requestTimeout ?? 5000) * hostedTimeoutFactor
+  return startClient(t, { ...settings, options })
+}
 
 test('tedious login, typed results, RPC values and recovery', { timeout: 30000 }, async t => {
   const c = await start(t)
@@ -9256,6 +9272,52 @@ test('system object and schema projections retain captured descriptors across ca
     assert.deepEqual(result.sets[0].rows, sql.endsWith('AND 1=0') ? [] : [['dbo','catalog_join','ix']])
     assert.deepEqual(result.sets[0].columns.map(column => [column.type,column.length,column.flags]), [['NVarChar',256,8],['NVarChar',256,8],['NVarChar',256,9]])
   }
+})
+
+test('all_objects exposes captured built-ins and transactional user membership over TDS', { timeout: 30000 }, async t => {
+  const fixture = JSON.parse(readFileSync(new URL('../reference/all-objects.json', import.meta.url), 'utf8'))
+  const observations = new Map(fixture.runs[0].map(entry => [entry.name, entry]))
+  const c = await start(t)
+  for (const view of ['all_objects', 'objects', 'system_objects']) {
+    const observation = observations.get(`${view} descriptor`)
+    const actual = canonical(await capture(c, observation.sql))
+    assert.deepEqual(actual.errors, [], view)
+    assert.deepEqual(actual.sets[0].rows, [], view)
+    assert.deepEqual(actual.sets[0].columns, observation.result.sets[0].columns, view)
+  }
+
+  const full = observations.get('fresh full catalog')
+  const actual = canonical(await capture(c, full.sql))
+  assert.deepEqual(actual.errors, [])
+  const expectedRows = full.result.sets[0].rows
+  const actualRows = actual.sets[0].rows
+  assert.equal(actualRows.length, expectedRows.length)
+  const byId = new Map(actualRows.map(row => [row[1], row]))
+  assert.equal(byId.size, expectedRows.length)
+  for (const expected of expectedRows) {
+    const row = byId.get(expected[1])
+    assert.ok(row, `missing built-in object ${expected[0]}`)
+    const normalized = [...expected]
+    if (expected[0] === 'wpr_bucket_table') {
+      // SQL Server generates these two dates when its system catalog is created.
+      normalized[7] = row[7]
+      normalized[8] = row[8]
+    }
+    assert.deepEqual(row, normalized, `built-in object ${expected[0]}`)
+  }
+
+  await query(c, 'CREATE TABLE dbo.all_objects_wire(id INT)')
+  const membership = () => query(c, "SELECT o.object_id,u.object_id,s.object_id FROM sys.all_objects o LEFT JOIN sys.objects u ON u.object_id=o.object_id LEFT JOIN sys.system_objects s ON s.object_id=o.object_id WHERE o.name=N'all_objects_wire'")
+  const created = (await membership()).rows
+  assert.equal(created.length, 1)
+  assert.ok(created[0][0] > 0)
+  assert.deepEqual(created[0], [created[0][0], created[0][0], null])
+  await query(c, 'BEGIN TRAN; DROP TABLE dbo.all_objects_wire')
+  assert.deepEqual((await membership()).rows, [])
+  await query(c, 'ROLLBACK')
+  assert.deepEqual((await membership()).rows, created)
+  await query(c, 'DROP TABLE dbo.all_objects_wire')
+  assert.deepEqual((await membership()).rows, [])
 })
 
 

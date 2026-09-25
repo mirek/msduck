@@ -349,19 +349,55 @@ fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Fiel
             ("schema_id", 56, 56, 4, 10, 0, false, false),
             ("principal_id", 56, 56, 4, 10, 0, true, false),
         ],
-        "objects" => vec![
+        "objects" | "all_objects" | "system_objects" => vec![
             ("name", 231, 256, 256, 0, 0, false, false),
             ("object_id", 56, 56, 4, 10, 0, false, false),
-            ("principal_id", 56, 56, 4, 10, 0, true, false),
+            (
+                "principal_id",
+                56,
+                56,
+                4,
+                10,
+                0,
+                true,
+                view == "system_objects",
+            ),
             ("schema_id", 56, 56, 4, 10, 0, false, false),
-            ("parent_object_id", 56, 56, 4, 10, 0, false, false),
-            ("type", 175, 175, 2, 0, 0, true, true),
+            (
+                "parent_object_id",
+                56,
+                56,
+                4,
+                10,
+                0,
+                view == "system_objects",
+                view == "system_objects",
+            ),
+            (
+                "type",
+                175,
+                175,
+                2,
+                0,
+                0,
+                view != "system_objects",
+                view != "system_objects",
+            ),
             ("type_desc", 231, 231, 120, 0, 0, true, false),
             ("create_date", 61, 61, 8, 23, 3, false, false),
             ("modify_date", 61, 61, 8, 23, 3, false, false),
-            ("is_ms_shipped", 104, 104, 1, 1, 0, false, true),
-            ("is_published", 104, 104, 1, 1, 0, false, true),
-            ("is_schema_published", 104, 104, 1, 1, 0, false, true),
+            ("is_ms_shipped", 104, 104, 1, 1, 0, view != "objects", true),
+            ("is_published", 104, 104, 1, 1, 0, view != "objects", true),
+            (
+                "is_schema_published",
+                104,
+                104,
+                1,
+                1,
+                0,
+                view != "objects",
+                true,
+            ),
         ],
         "tables" => vec![
             ("lob_data_space_id", 56, 56, 4, 10, 0, false, true),
@@ -513,6 +549,66 @@ fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Fiel
         },
     ));
     Some(fields)
+}
+
+#[cfg(test)]
+mod all_object_metadata_tests {
+    use super::object_catalog_fields;
+    use msduck_core::result::Origin;
+
+    #[test]
+    fn all_object_view_declarations_match_both_server_captures() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../reference/all-objects.json")).unwrap();
+        for run in fixture["runs"].as_array().unwrap() {
+            let observations = run.as_array().unwrap();
+            for view in ["objects", "system_objects", "all_objects"] {
+                let name = format!("{view} declarations");
+                let captured = observations
+                    .iter()
+                    .find(|observation| observation["name"].as_str() == Some(name.as_str()))
+                    .unwrap();
+                let rows = captured["result"]["sets"][0]["rows"].as_array().unwrap();
+                let descriptor_name = format!("{view} descriptor");
+                let descriptor = observations
+                    .iter()
+                    .find(|observation| {
+                        observation["name"].as_str() == Some(descriptor_name.as_str())
+                    })
+                    .unwrap();
+                let wire_columns = descriptor["result"]["sets"][0]["columns"]
+                    .as_array()
+                    .unwrap();
+                let fields = object_catalog_fields(view, "SQL_Latin1_General_CP1_CI_AS").unwrap();
+                assert_eq!(fields.len(), rows.len(), "{view} field count");
+                assert_eq!(fields.len(), wire_columns.len(), "{view} wire field count");
+                for (index, (field, row)) in fields.iter().zip(rows).enumerate() {
+                    let values = row.as_array().unwrap();
+                    let info = field.info.as_ref().unwrap();
+                    assert_eq!(
+                        field.name,
+                        values[0].as_str().unwrap(),
+                        "{view} field {index}"
+                    );
+                    assert_eq!(values[1].as_u64(), Some((index + 1) as u64));
+                    assert_eq!(info.system_type_id.map(u64::from), values[2].as_u64());
+                    assert_eq!(info.user_type_id.map(i64::from), values[3].as_i64());
+                    assert_eq!(info.max_length.map(i64::from), values[4].as_i64());
+                    assert_eq!(info.precision.map(u64::from), values[5].as_u64());
+                    assert_eq!(info.scale.map(u64::from), values[6].as_u64());
+                    assert_eq!(info.collation_name.as_deref(), values[7].as_str());
+                    assert_eq!(field.properties.nullable, values[8].as_bool());
+                    let computed = wire_columns[index]["flags"].as_u64().unwrap() & 32 != 0;
+                    assert_eq!(
+                        matches!(field.properties.origin, Origin::Expression),
+                        computed,
+                        "{view} computed flag for {}",
+                        field.name
+                    );
+                }
+            }
+        }
+    }
 }
 
 fn snapshot_with_views<T: Visit>(
