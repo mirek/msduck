@@ -1965,6 +1965,28 @@
       "dependencies": [],
       "issue": 207,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PMGNH"
+    },
+    {
+      "id": "merge-top-reference-v1",
+      "title": "Capture SQL Server MERGE TOP candidate and mixed-action behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement a fully SQL Server-compatible Rust/DuckDB server and organize disjoint parallel-agent work. Owner-authored PR #196 captures only single-candidate TOP (0)/(1); owner-authored PR #201 identifies mixed-action TOP selection as unresolved. No external submission is approved.",
+      "scope": [
+        "scripts/capture-merge-top.mjs",
+        "reference/merge-top.json",
+        "docs/merge-top-reference.md"
+      ],
+      "acceptance": [
+        "Use the pinned SQL Server 2025 reference-container helper in fresh databases and preserve full TDS descriptors, rows, errors, information and DONE events, final target state and @@ROWCOUNT for MERGE TOP cases.",
+        "Cover mixed UPDATE/DELETE/INSERT/by-source arms with TOP (0), (1), (2) and a limit larger than eligible candidates; ON matches with no qualifying arm; alternative source orderings; and duplicate-source matches where TOP may include one or both candidates.",
+        "Probe TOP expression, percentage and error forms without assuming validity. Retain at least two raw runs, compare only justified stable invariants and preserve any observed action selection/order differences rather than sorting evidence away.",
+        "Document precise conclusions and remaining tie/concurrency uncertainty. Keep implementation reference-only in the three approved paths; run syntax checks and a fresh pinned recapture on the exact PR revision. Do not edit parser, core, engine, TDS or CI."
+      ],
+      "dependencies": [
+        "merge-execution-reference-v1"
+      ],
+      "issue": 209,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PMKhI"
     }
   ]
 }
