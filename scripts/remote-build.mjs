@@ -2,8 +2,17 @@
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 
+// A changed file must arrive with a new receiver mtime for Cargo's fingerprint
+// checks. Checksums avoid retransferring unchanged files when their mtimes differ.
+export const sourceSyncOptions = ['-azc', '--no-times', '--delete', '--exclude=/.git/',
+  '--exclude=/target/', '--exclude=/node_modules/', '--exclude=/artifacts/',
+  '--exclude=/.msduck/', '--exclude=.env', '--exclude=.env.*',
+  '--exclude=*.duckdb', '--exclude=*.duckdb.wal']
+
+async function main() {
 const root = fileURLToPath(new URL('../', import.meta.url))
 process.chdir(root)
 if (existsSync('.env')) process.loadEnvFile('.env')
@@ -56,6 +65,13 @@ mkdir -p "$root/source"
 printf '%s\\n' ${quote(marker)}
 IFS= read -r proceed
 cd "$root/source"
+if [ ! -f "$root/.msduck-content-sync-v1" ]; then
+  if [ -d target ]; then
+    echo 'Resetting previous timestamp-based Cargo cache once.'
+    cargo clean
+  fi
+  touch "$root/.msduck-content-sync-v1"
+fi
 if [ ${quote(action)} = test ] || [ ${quote(action)} = audit ] || [ ${quote(action)} = verify ]; then
   digest=$(sha256sum package-lock.json)
   if [ ! -d node_modules ] || [ ! -f "$root/npm-lock.sha256" ] || [ "$(cat "$root/npm-lock.sha256")" != "$digest" ]; then
@@ -88,8 +104,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
 try {
   if (!await Promise.race([ready, ended.then(() => false)])) throw new Error('Remote workspace initialization failed')
   console.log(`Syncing working tree to ${host}:${directory}/source (${jobs} build jobs)`)
-  await run('rsync', ['-az', '--delete', '--exclude=/.git/', '--exclude=/target/', '--exclude=/node_modules/',
-    '--exclude=/artifacts/', '--exclude=/.msduck/', '--exclude=.env', '--exclude=.env.*', '--exclude=*.duckdb', '--exclude=*.duckdb.wal',
+  await run('rsync', [...sourceSyncOptions,
     '-e', 'ssh -o BatchMode=yes -o ConnectTimeout=15', './', `${host}:${directory}/source/`])
   remote.stdin.end('\n')
   const status = await ended
@@ -107,3 +122,6 @@ try {
   await ended
   process.exitCode = 1
 }
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main()
