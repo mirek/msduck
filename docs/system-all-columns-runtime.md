@@ -25,10 +25,12 @@ The captured built-in values retain their exact IDs, flags, type IDs,
 collations, NULLs and source membership. User table/view columns still flow
 through the existing live catalog and DDL transaction path. Their new fields
 are NULL or false for currently supported ordinary columns. Explicitly named
-DEFAULT constraints on newly created columns receive a transactional object
-identity, parent link and `default_object_id`, including after reopen. The
-current DDL path does not retain SQL Server's generated names for unnamed
-DEFAULT constraints, so their `default_object_id` remains unknown. SQL Server
+DEFAULT constraints on columns in `CREATE TABLE` receive a transactional
+object identity, parent link and `default_object_id`, including after reopen.
+The SQL syntax validator currently rejects named DEFAULT constraints in
+`ALTER TABLE ... ADD COLUMN`; this catalog path does not claim that form.
+The current DDL path also does not retain SQL Server's generated names for
+unnamed DEFAULT constraints, so their `default_object_id` remains unknown. SQL Server
 computed-column syntax is rejected by the current parser before this catalog
 can record expression metadata; the user-column projection does not invent
 computed flags. Permission-filtered visibility and arbitrary
