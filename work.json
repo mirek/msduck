@@ -2200,7 +2200,7 @@
     {
       "id": "datepart-numeric-v1",
       "title": "Convert numeric DATEPART inputs with legacy datetime semantics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal. First-party exact-main probe found error 40515 for every tested noninteger numeric and BIT DATEPART argument while pinned SQL Server accepted them; no external submission is input.",
       "scope": [
         "src/datepart.rs",
