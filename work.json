@@ -2137,6 +2137,26 @@
       ],
       "issue": 223,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PMx5T"
+    },
+    {
+      "id": "char-byte-reference-v1",
+      "title": "Verify CHAR byte values and wire descriptors against SQL Server",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal and independent agent-work request. First-party reference and implementation audit; no external submission is input.",
+      "scope": [
+        "scripts/capture-char-byte.mjs",
+        "reference/char-byte.json",
+        "docs/char.md",
+        "src/character.rs"
+      ],
+      "acceptance": [
+        "Capture all 256 integer codes, raw VARBINARY results, textual values, ASCII/UNICODE roundtrips, complete descriptors and DONE tokens; include negative/over-255/NULL, fractional and text-conversion probes, empty results and prepared-style reuse. Use two fresh databases and independently recapture in a second pinned container without normalizing discrepancies.",
+        "Compare native CHAR values for all captured byte codes and NULL/range cases. Correct any verified discrepancy within src/character.rs, preserving vector bounds and one-time input evaluation. If exact public metadata or conversion errors require claimed shared files, retain evidence and identify a disjoint successor rather than changing those files.",
+        "Run formatting, strict Clippy, deterministic/native tests and exact-revision Linux workspace Rust checks. Keep engine/lib/server, existing client tests and copied upstream fixtures outside scope."
+      ],
+      "dependencies": [],
+      "issue": 225,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PM1Wi"
     }
   ]
 }
