@@ -62,6 +62,48 @@ impl VScalar for Character {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn all_bytes_match_sql_server_character_and_raw_values() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../reference/char-byte.json")).unwrap();
+        let reference = fixture["runs"][0][1]["result"]["sets"][0]["rows"]
+            .as_array()
+            .unwrap();
+        assert_eq!(reference.len(), 256);
+
+        let db = duckdb::Connection::open_in_memory().unwrap();
+        crate::scalar::register(&db).unwrap();
+        let mut statement = db
+            .prepare("SELECT n, __msduck_char(CAST(n AS INTEGER)) FROM range(256) r(n)")
+            .unwrap();
+        let rows = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, i32>(0)?, row.get::<_, String>(1)?))
+            })
+            .unwrap();
+        for row in rows {
+            let (code, value) = row.unwrap();
+            let captured = &reference[code as usize];
+            assert_eq!(captured[0].as_i64(), Some(i64::from(code)));
+            assert_eq!(value.chars().count(), 1, "code {code}");
+            assert_eq!(
+                value.chars().next().map(u32::from),
+                captured[4].as_u64().map(|n| n as u32),
+                "SQL Server UNICODE(CHAR({code}))"
+            );
+            assert_eq!(
+                msduck_core::encoding::encode_cp1252(&value).unwrap(),
+                [code as u8],
+                "code {code}"
+            );
+            assert_eq!(
+                captured[2]["value"].as_str(),
+                Some(format!("{code:02x}").as_str())
+            );
+            assert_eq!(captured[3].as_i64(), Some(i64::from(code)));
+        }
+    }
+
+    #[test]
     fn character_codes_and_nulls_across_chunks() {
         let db = duckdb::Connection::open_in_memory().unwrap();
         crate::scalar::register(&db).unwrap();
