@@ -1680,6 +1680,32 @@
       ],
       "issue": 176,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PKpIe"
+    },
+    {
+      "id": "system-all-columns-runtime-v1",
+      "title": "Expose captured SQL Server system and all column catalogs",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal and request for disjoint claimable agent work. Owner-authored PR #177 at 2abf7909fbf84ed97d3caf70c20c64a63b137a41 captures pinned SQL Server system-column rows and descriptors; no third-party content is input.",
+      "scope": [
+        "src/column_catalog.rs",
+        "src/column_catalog/system_columns.rs",
+        "src/column_catalog/system_columns.json",
+        "src/object_catalog.rs",
+        "src/columns.sql",
+        "scripts/build-system-column-seed.mjs",
+        "tests/system_all_columns.rs",
+        "docs/system-all-columns-runtime.md"
+      ],
+      "acceptance": [
+        "Start from owner-authored PR #177 revision 2abf7909fbf84ed97d3caf70c20c64a63b137a41 or a descendant containing it. Generate a reproducible compact seed from both retained raw runs, preserving all 43 values and exact IDs for 1,269 shipped columns and 11,534 system columns, including 2,306 rows on 166 resolvable owners absent from all_objects. Do not invent all_objects rows or normalize flags, type IDs, collation or NULLs.",
+        "Load the seed efficiently and transactionally on fresh and reopened databases. Add shipped rows to sys.columns, expose distinct sys.system_columns and value-level disjoint union sys.all_columns, extend dynamic user columns to 43 fields, and preserve existing DDL/rollback behavior. Keep startup usable on two-core CI.",
+        "Preserve captured OBJECT_NAME and OBJECT_SCHEMA_NAME resolution for column owners outside all_objects without changing all_objects membership or inferring reverse OBJECT_ID behavior not in the reference. Check membership and visible-owner identity against retained all_objects evidence.",
+        "Add focused Rust integration tests for complete baseline counts and values, source membership, 43-column shape, hidden owner naming, user table/view identity/default/computed/collation metadata, rollback, restart, and malformed seed rejection; validate generator reproducibility. Report TDS descriptor gaps explicitly because query_catalog.rs is under another ready claim.",
+        "Run formatting, strict Clippy, Rust workspace tests, independent clients, and local audit for the exact revision. Keep changes within scope and preserve raw SQL Server differences."
+      ],
+      "dependencies": [],
+      "issue": 178,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PKrOu"
     }
   ]
 }
