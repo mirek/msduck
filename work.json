@@ -2030,6 +2030,28 @@
       ],
       "issue": 212,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PMUsA"
+    },
+    {
+      "id": "for-xml-wire-reference-v1",
+      "title": "Capture raw TDS metadata and row framing for FOR XML PATH",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server-compatible Rust/DuckDB implementation goal and instruction to organize disjoint parallel-agent work. Owner-authored PR #195 captures tedious NText versus Xml descriptors, while the copied TDS skill describes NVARCHAR(MAX) for text mode; first-party raw wire evidence is needed before codec integration. No external submission is approved.",
+      "scope": [
+        "scripts/capture-for-xml-wire.mjs",
+        "reference/for-xml-wire.json",
+        "docs/for-xml-wire.md"
+      ],
+      "acceptance": [
+        "Use the pinned SQL Server 2025 container and fresh isolated sessions/databases. Capture post-login raw TDS packets for ordinary FOR XML PATH('row'), zero source rows, TYPE, named nested TYPE, a result larger than 8 KiB and the captured invalid attribute-order form. Preserve headers, ordered tokens, COLMETADATA TYPE_INFO bytes, row/value framing, errors and DONE events plus decoded tedious descriptors; exclude credentials and login payloads.",
+        "Reproduce in two fresh databases and an independent fresh container. Compare only stable token/type/descriptor/value invariants and retain raw packet/chunk differences. Determine whether text mode uses legacy NTEXT, NVARCHAR(MAX)/PLP or another wire form, distinguishing wire tokens from tedious's displayed type name.",
+        "Keep a reproducible generator that refuses to overwrite the fixture and writes failed raw captures under ignored artifacts. Document type IDs/byte offsets, collation/length/flags, XML TYPE_INFO and value framing, empty behavior and uncertainty for packet splits and larger streams.",
+        "Do not edit Rust crates, shared wire helpers, runtime server, existing fixtures, CI or copied skills. Run syntax checks and an exact-revision pinned recapture; XML TDS codec integration remains separate."
+      ],
+      "dependencies": [
+        "for-xml-path-reference-v1"
+      ],
+      "issue": 215,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PMcOs"
     }
   ]
 }
