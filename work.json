@@ -1710,7 +1710,7 @@
     {
       "id": "system-column-wire-metadata-plan-v1",
       "title": "Map system column catalog TDS descriptor differences",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server compatibility goal and request for disjoint parallel-agent tasks. Owner-authored PR #177 at 43d740e and PR #179 at 849e5ac plus an owner-run TDS probe establish 43 descriptor mismatches in each catalog view; no third-party content is input.",
       "scope": [
         "docs/system-column-wire-metadata-plan.md"
