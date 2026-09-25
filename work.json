@@ -1969,7 +1969,7 @@
     {
       "id": "merge-top-reference-v1",
       "title": "Capture SQL Server MERGE TOP candidate and mixed-action behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement a fully SQL Server-compatible Rust/DuckDB server and organize disjoint parallel-agent work. Owner-authored PR #196 captures only single-candidate TOP (0)/(1); owner-authored PR #201 identifies mixed-action TOP selection as unresolved. No external submission is approved.",
       "scope": [
         "scripts/capture-merge-top.mjs",
