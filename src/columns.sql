@@ -11,23 +11,42 @@ SELECT c.object_id,c.name,c.column_id,
     false AS is_replicated,false AS is_non_sql_subscribed,false AS is_merge_published,
     false AS is_dts_replicated,false AS is_xml_document,
     CAST(0 AS INTEGER) AS xml_collection_id,
-    CASE WHEN ic.column_default IS NULL OR c.is_identity THEN CAST(0 AS INTEGER) ELSE CAST(NULL AS INTEGER) END AS default_object_id,
+    coalesce(dc.object_id,CASE WHEN ic.column_default IS NULL OR c.is_identity THEN CAST(0 AS INTEGER) ELSE CAST(NULL AS INTEGER) END) AS default_object_id,
     CAST(0 AS INTEGER) AS rule_object_id,false AS is_sparse,false AS is_column_set,
     CAST(0 AS UTINYINT) AS generated_always_type,'NOT_APPLICABLE' AS generated_always_type_desc,
     CAST(NULL AS INTEGER) AS encryption_type,CAST(NULL AS VARCHAR) AS encryption_type_desc,
     CAST(NULL AS VARCHAR) AS encryption_algorithm_name,CAST(NULL AS INTEGER) AS column_encryption_key_id,
     CAST(NULL AS VARCHAR) AS column_encryption_key_database_name,
-    false AS is_hidden,false AS is_masked
+    false AS is_hidden,false AS is_masked,
+    CAST(NULL AS INTEGER) AS graph_type,CAST(NULL AS VARCHAR) AS graph_type_desc,
+    false AS is_data_deletion_filter_column,
+    CAST(NULL AS INTEGER) AS ledger_view_column_type,
+    CAST(NULL AS VARCHAR) AS ledger_view_column_type_desc,
+    false AS is_dropped_ledger_column,
+    CAST(NULL AS INTEGER) AS vector_dimensions,
+    CAST(NULL AS UTINYINT) AS vector_base_type,
+    CAST(NULL AS VARCHAR) AS vector_base_type_desc
 FROM main.__msduck_column_info c
 JOIN main.__msduck_objects o USING(object_id)
 JOIN main.__msduck_schemas s USING(schema_id)
 JOIN information_schema.columns ic ON ic.table_catalog=current_database() AND lower(ic.table_schema)=lower(s.name) AND lower(ic.table_name)=lower(o.name) AND lower(ic.column_name)=lower(c.name)
 LEFT JOIN main.__msduck_declared_columns d ON d.object_id=c.object_id AND d.column_id=c.column_id
+LEFT JOIN main.__msduck_default_constraints dc ON dc.parent_object_id=c.object_id AND dc.column_id=c.column_id
 LEFT JOIN sys.types t ON t.name=CASE ic.data_type
     WHEN 'INTEGER' THEN 'int' WHEN 'SMALLINT' THEN 'smallint' WHEN 'BIGINT' THEN 'bigint'
     WHEN 'UTINYINT' THEN 'tinyint' WHEN 'BOOLEAN' THEN 'bit' WHEN 'FLOAT' THEN 'real'
     WHEN 'DOUBLE' THEN 'float' WHEN 'DATE' THEN 'date' WHEN 'UUID' THEN 'uniqueidentifier'
-    ELSE NULL END;
+    ELSE NULL END
+UNION ALL
+SELECT * EXCLUDE(in_system_columns) FROM main.__msduck_builtin_columns
+WHERE NOT in_system_columns;
+
+CREATE OR REPLACE VIEW sys.system_columns AS
+SELECT * EXCLUDE(in_system_columns) FROM main.__msduck_builtin_columns
+WHERE in_system_columns;
+
+CREATE OR REPLACE VIEW sys.all_columns AS
+SELECT * FROM sys.columns UNION ALL SELECT * FROM sys.system_columns;
 
 -- Precision means declared character/binary length for those families, rather
 -- than the numeric-only precision field stored in sys.columns.
