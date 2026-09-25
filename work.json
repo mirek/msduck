@@ -1724,6 +1724,26 @@
       "dependencies": [],
       "issue": 180,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PKwHu"
+    },
+    {
+      "id": "alter-named-default-reference-v1",
+      "title": "Capture SQL Server named defaults on ALTER TABLE ADD",
+      "state": "ready",
+      "authorization": "Direct owner continuing SQL Server compatibility goal and request for disjoint agent work. Owner-authored PR #179 exact-head test at 849e5ac exposed a named ALTER ADD syntax gap; source review shows ddl_syntax.rs rejects named options and other workers own that validator. This first-party reference task consumes no external submission.",
+      "scope": [
+        "scripts/capture-alter-named-default.mjs",
+        "reference/alter-named-default.json",
+        "docs/alter-named-default-reference.md"
+      ],
+      "acceptance": [
+        "Use the pinned SQL Server image and isolated databases to capture complete TDS rows, descriptors, diagnostics and completion for named DEFAULT constraints on ALTER TABLE ADD of nullable and NOT NULL columns, with and without WITH VALUES, against empty and populated tables.",
+        "Capture existing-row values, future inserts, sys.columns.default_object_id, sys.default_constraints, sys.objects parent identity, duplicate constraint names, rollback and failed DDL atomicity. Do not infer SQL Server behavior from DuckDB or msduck.",
+        "Retain two fresh-database runs and independently verify the raw fixture, preserving stable and varying fields explicitly. Keep credentials out of outputs and clean up only task-owned containers/databases.",
+        "Document exact evidence and bounded implementation follow-up without editing the reserved SQL validator, table ALTER adapter or runtime catalog files."
+      ],
+      "dependencies": [],
+      "issue": 182,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PKy5t"
     }
   ]
 }
