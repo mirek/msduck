@@ -2177,6 +2177,25 @@
       "dependencies": [],
       "issue": 227,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PM4uO"
+    },
+    {
+      "id": "identity-scope-core-v1",
+      "title": "Model deterministic session and nested identity scopes",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal and request for disjoint parallel agent work. Owner-authored SQL Server identity retrieval fixture at fc953ef supplies the behavioral contract; no external submission is input.",
+      "scope": [
+        "crates/msduck-core/src/identity_scope.rs",
+        "crates/msduck-core/tests/identity_scope.rs"
+      ],
+      "acceptance": [
+        "Implement a pure scope stack with a persistent session-last identity and current-scope last identity; entering RPC, trigger or procedure scope starts an empty nested scope, and checked LIFO exit restores the caller scope while retaining the session-last value.",
+        "Publish only successful generated or explicit identity values. Failed and zero-row inserts do not publish; rollback does not rewind already-published session/scope values. Represent signed NUMERIC(38,0) values exactly and reject out-of-domain values without mutating state.",
+        "Bound nesting and reject invalid exits without corrupting state. Test retained fixture sequences for cross-batch, nested RPC/trigger/procedure, failure, rollback, explicit insert and BIGINT endpoint, plus independent edge vectors.",
+        "Keep the new module effect-free and test it through a path-based integration harness while core lib.rs remains reserved. Run core tests, formatting and strict Clippy; record that export and engine/TDS integration remain separate successor work."
+      ],
+      "dependencies": [],
+      "issue": 229,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PM6xT"
     }
   ]
 }
