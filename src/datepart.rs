@@ -48,7 +48,7 @@ fn preserve_exact_decimal_cast(value: &mut Expr) {
         // DuckDB first converts a long numeric literal through DOUBLE before
         // DECIMAL(38,38), losing digits that can cross a DATETIME half tick.
         // Its character-to-DECIMAL cast preserves the exact SQL token.
-        *expr = Box::new(Expr::Value(Value::SingleQuotedString(text).into()));
+        **expr = Expr::Value(Value::SingleQuotedString(text).into());
     }
 }
 
