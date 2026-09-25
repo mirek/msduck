@@ -2073,6 +2073,25 @@
       ],
       "issue": 216,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PMfFd"
+    },
+    {
+      "id": "read-cancellation-watchdog-v1",
+      "title": "Make read cancellation CI watchdog progress-aware",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility and CI-green instructions. Owner-controlled exact PR #214 CI log (actor/triggering actor 8561, same repo) shows fixed 90-second test watchdog killing a child after 23 successful cancellation cases; exact Linux workspace run passed. Predecessor implementation task is Done. No third-party content approved.",
+      "scope": [
+        "tests/read_cancellation.rs"
+      ],
+      "acceptance": [
+        "Replace fixed 90-second total-duration limit with a bounded no-progress watchdog reset only by confirmed completion of a cancellation case. Preserve all case variants, token-byte comparisons, session assertions and failure propagation.",
+        "Forward child progress to CI logs; include last completed case/count in a stall failure. Kill and reap a stalled child and reject nonzero child exit; do not simply extend total timeout or disable the test.",
+        "Do not edit engine, reference fixture, TDS code, CI workflow or unrelated tests. Run formatting, targeted linux.local test and exact-revision full Rust workspace checks; hosted CI needs its own new PR run."
+      ],
+      "dependencies": [
+        "engine-read-cancellation-v1"
+      ],
+      "issue": 218,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PMjWg"
     }
   ]
 }
