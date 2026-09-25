@@ -1789,7 +1789,7 @@
     {
       "id": "system-column-metadata-model-v1",
       "title": "Model captured system-column field metadata without query binding",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner goal to implement SQL Server compatibility and organize disjoint parallel agent work. Owner-authored pinned SQL Server reference/system-all-columns.json merged at 2a8d235 supplies all 129 descriptors; owner-authored PR #185 inventories the gap. No external submission approved.",
       "scope": [
         "src/system_column_metadata.rs",
