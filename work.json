@@ -1847,6 +1847,26 @@
       "dependencies": [],
       "issue": 193,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PLYkd"
+    },
+    {
+      "id": "merge-execution-reference-v1",
+      "title": "Capture SQL Server MERGE execution reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement a fully functional SQL Server-compatible Rust server backed by DuckDB and request to organize disjoint parallel-agent work. Current src/engine.rs explicitly rejects executable MERGE; owner-copied reference/mssqlite/corpus.ts covers only terminator validation. No external submission is approved.",
+      "scope": [
+        "scripts/capture-merge-execution.mjs",
+        "reference/merge-execution.json",
+        "docs/merge-execution-reference.md"
+      ],
+      "acceptance": [
+        "Capture two fresh databases on the pinned SQL Server 2025 image with complete TDS descriptors, rows, errors, and DONE-family tokens for MERGE results and failure cases; compare both runs for stable observations.",
+        "Cover matched UPDATE/DELETE, unmatched INSERT, NOT MATCHED BY SOURCE, conditional arms, CTE source, mixed actions, OUTPUT with $action, @@ROWCOUNT, duplicate-source-match errors, constraint failure, and transaction rollback/atomicity.",
+        "Include representative valid and invalid TOP and clause-order cases; document observed SQL Server behavior and unresolved implementation gaps without normalizing differences to the copied T-SQL skill or mssqlite corpus.",
+        "Keep the task reference-only in its three approved files; do not edit runtime lowering, parser validation, table adapters, TDS encoding, or another worker's claimed files."
+      ],
+      "dependencies": [],
+      "issue": 194,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PLcUN"
     }
   ]
 }
