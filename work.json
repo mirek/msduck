@@ -2141,7 +2141,7 @@
     {
       "id": "char-byte-reference-v1",
       "title": "Verify CHAR byte values and wire descriptors against SQL Server",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal and independent agent-work request. First-party reference and implementation audit; no external submission is input.",
       "scope": [
         "scripts/capture-char-byte.mjs",
