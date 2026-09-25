@@ -2114,6 +2114,29 @@
       ],
       "issue": 220,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PMmXw"
+    },
+    {
+      "id": "merge-top-percent-v1",
+      "title": "Capture and bind MERGE TOP percentage boundaries",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal and request for independent, exclusively claimable agent work. First-party successor to merged PR #222 and owner-captured MERGE TOP reference; no external submission is input.",
+      "scope": [
+        "scripts/capture-merge-top-percent.mjs",
+        "reference/merge-top-percent.json",
+        "docs/merge-top-percent.md",
+        "crates/msduck-sql/src/merge_top.rs",
+        "crates/msduck-sql/tests/merge_top.rs"
+      ],
+      "acceptance": [
+        "Capture percentage zero, small/fractional, 25/33.333/50/75/100, negative, NULL, over-100, declared variables, and eligible-candidate counts around rounding boundaries. Retain raw TDS rows, descriptors, errors and completions from two fresh databases and independently recapture in a second pinned container.",
+        "Extend the pure binder with explicit typed percentage inputs and checked arithmetic only for proven forms. Preserve source AST/type, one-time variable evaluation, unordered candidate selection and exact diagnostics; leave unknown types or rounding cases unsupported.",
+        "Compare stable count and diagnostic invariants against the new fixture without asserting action order. Run formatting, deterministic SQL tests and strict Clippy. Keep dialect, shared exports, root runtime and existing fixtures outside scope."
+      ],
+      "dependencies": [
+        "merge-top-binding-v1"
+      ],
+      "issue": 223,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PMx5T"
     }
   ]
 }
