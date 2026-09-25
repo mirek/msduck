@@ -1744,6 +1744,26 @@
       "dependencies": [],
       "issue": 182,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PKy5t"
+    },
+    {
+      "id": "remote-build-fingerprint-v1",
+      "title": "Make remote Cargo builds invalidate changed source reliably",
+      "state": "ready",
+      "authorization": "Direct owner offer of linux.local for builds with gitignored .env configuration and continuing full SQL Server compatibility goal. Owner-run catalog benchmark observed changed source SHA-256 but a 0.06-second remote Cargo build with no msduck recompile; a targeted clean rebuilt it. Root cause remains to be proven from first-party evidence.",
+      "scope": [
+        "scripts/remote-build.mjs",
+        "tests/remote-build.test.mjs",
+        "docs/remote-build.md"
+      ],
+      "acceptance": [
+        "Reproduce a changed-bytes/older-mtime source synchronization case in an isolated workspace and prove whether Cargo uses stale objects through a binary-behavior or compiler-invocation check. Keep observed facts distinct from the mtime hypothesis.",
+        "Ensure every changed Rust source byte invalidates the appropriate Cargo target without rebuilding unchanged bundled DuckDB/native dependencies on each sync. Preserve the workspace lock, one-snapshot execution, .env and credential exclusion, target cache, and separate audit artifacts.",
+        "Add a meaningful regression in tests/remote-build.test.mjs and verify an altered-source run and an unchanged-source rerun on linux.local under the runner lock. Record exact source hashes, revision, compiler evidence and elapsed times.",
+        "Document the verified cause, fix, performance tradeoff and limitations without claiming that a CI pass proves SQL Server equivalence."
+      ],
+      "dependencies": [],
+      "issue": 183,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PK0Ns"
     }
   ]
 }
