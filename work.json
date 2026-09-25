@@ -2223,7 +2223,7 @@
     {
       "id": "string-agg-reference-v1",
       "title": "Capture SQL Server STRING_AGG value, type and ordering semantics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal and GitHub project coordination request. First-party source audit found STRING_AGG recognized as an aggregate but no retained SQL Server behavior fixture; no external submission is input.",
       "scope": [
         "scripts/capture-string-agg.mjs",
