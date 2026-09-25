@@ -1748,7 +1748,7 @@
     {
       "id": "remote-build-fingerprint-v1",
       "title": "Make remote Cargo builds invalidate changed source reliably",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner offer of linux.local for builds with gitignored .env configuration and continuing full SQL Server compatibility goal. Owner-run catalog benchmark observed changed source SHA-256 but a 0.06-second remote Cargo build with no msduck recompile; a targeted clean rebuilt it. Root cause remains to be proven from first-party evidence.",
       "scope": [
         "scripts/remote-build.mjs",
@@ -1785,6 +1785,26 @@
       "parent": 176,
       "issue": 187,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PK31w"
+    },
+    {
+      "id": "system-column-metadata-model-v1",
+      "title": "Model captured system-column field metadata without query binding",
+      "state": "ready",
+      "authorization": "Direct owner goal to implement SQL Server compatibility and organize disjoint parallel agent work. Owner-authored pinned SQL Server reference/system-all-columns.json merged at 2a8d235 supplies all 129 descriptors; owner-authored PR #185 inventories the gap. No external submission approved.",
+      "scope": [
+        "src/system_column_metadata.rs",
+        "tests/system_column_metadata.rs"
+      ],
+      "acceptance": [
+        "Build a pure explicit field model for the 43 columns of sys.columns, sys.system_columns and sys.all_columns from the two retained SQL Server captures; preserve per-view type, width, nullability, origin and collation distinctions without backend or runtime-value inference.",
+        "Fixture-backed tests compare all 129 captured descriptor objects across both fresh runs, including names/order, TDS type/length/flags, precision/scale and collation; report any model representation gap rather than claiming wire compatibility.",
+        "Keep src/query_catalog.rs, src/result_types.rs, src/engine.rs, TDS encoding and client tests unchanged; integration waits for the active query_catalog claim to complete or explicit owner handoff.",
+        "Run formatting, strict workspace Clippy, focused model tests and workspace Rust tests at the exact head."
+      ],
+      "dependencies": [],
+      "parent": 180,
+      "issue": 189,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PK7qD"
     }
   ]
 }
