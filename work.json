@@ -1805,6 +1805,28 @@
       "parent": 180,
       "issue": 189,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PK7qD"
+    },
+    {
+      "id": "quotename-core-reference-v1",
+      "title": "Capture and model QUOTENAME UTF-16 behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement a fully SQL Server-compatible Rust/DuckDB server and organize disjoint first-party work. The repository T-SQL skill and Microsoft QUOTENAME documentation identify this missing built-in; no external user submission is input.",
+      "scope": [
+        "scripts/capture-quotename.mjs",
+        "reference/quotename.json",
+        "crates/msduck-core/src/quotename.rs",
+        "crates/msduck-core/tests/quotename.rs",
+        "docs/quotename.md"
+      ],
+      "acceptance": [
+        "Capture two fresh isolated SQL Server runs with full values, TDS descriptors, errors and completion tokens for default and all accepted delimiters, closing-character escapes, rejected/empty/multiple-character delimiters, NULLs, 128/129-character bounds, supplementary and isolated UTF-16 units, and empty projections; preserve raw differences and validate both runs.",
+        "Implement a bounded deterministic UTF-16 quoting helper with explicit inputs, checked output capacity and no backend/parser/session/environment/I/O dependency. Compare every captured value and add boundary and invalid-input regressions.",
+        "Do not edit core lib exports, runtime SQL binding, TDS encoding or client tests while those paths are claimed. Compile the new module through a dedicated integration-test include and document export/binding hooks and remaining runtime descriptor gaps without claiming execution compatibility.",
+        "Run formatting, deterministic core tests and strict core Clippy at the exact PR head; retain a reproducible first-party generator and raw fixture."
+      ],
+      "dependencies": [],
+      "issue": 191,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PLL3A"
     }
   ]
 }
