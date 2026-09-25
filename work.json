@@ -2118,7 +2118,7 @@
     {
       "id": "merge-top-percent-v1",
       "title": "Capture and bind MERGE TOP percentage boundaries",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal and request for independent, exclusively claimable agent work. First-party successor to merged PR #222 and owner-captured MERGE TOP reference; no external submission is input.",
       "scope": [
         "scripts/capture-merge-top-percent.mjs",
