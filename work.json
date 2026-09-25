@@ -1655,6 +1655,31 @@
       "dependencies": [],
       "issue": 175,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PKTXU"
+    },
+    {
+      "id": "built-in-catalog-startup-v1",
+      "title": "Reduce built-in catalog startup cost on two-core CI",
+      "state": "ready",
+      "authorization": "Direct owner goals to improve compile/test turnaround and complete the SQL Server-compatible Rust/DuckDB server. Merged PR #174 established correct captured catalog membership but increased median shared public-client duration 2.7 times on GitHub two-worker CI; run 36069792008 timed out 29 unrelated tests. PR #174 kept all assertions and scaled GitHub-only deadlines, but startup cost remains unresolved. This issue is owner-authored follow-up work, not external intake.",
+      "scope": [
+        "src/object_catalog/system_objects.rs",
+        "src/object_catalog/system_objects.json",
+        "scripts/build-system-object-seed.mjs",
+        "scripts/bench-object-catalog-startup.mjs",
+        "tests/all_objects.rs",
+        "docs/all-objects-runtime.md"
+      ],
+      "acceptance": [
+        "Build a reproducible benchmark for fresh in-memory and persistent-reopen Server::open plus first sys.all_objects query under a two-core CPU limit. Report p50/p95 and compare merged PR #174 tree with the new tree on the same machine; distinguish startup from catalog-query cost and avoid hiding regression behind higher test deadlines.",
+        "Reduce fresh-server startup latency materially while preserving all 2,742 captured built-in rows, disjoint objects/system_objects membership, dynamic wpr clock behavior, unique stable IDs, parent joins, transactional user rows, persistence, and twelve-column public TDS metadata. Do not trade startup cost for severe catalog-query regressions or fabricate unsupported DDL behavior.",
+        "Run formatting, strict all-target Clippy, the Rust workspace, the permanent native and public catalog regressions, full independent client shards with two workers under a two-core limit, and the diagnostic audit on an immutable Linux snapshot. Preserve the 325-case raw result and report elapsed client duration against PR #174 CI run 36075844399.",
+        "Document measured limits and remaining optimization opportunities. Keep this task inside the listed files; other workers own client-test harness and system-column reference scopes."
+      ],
+      "dependencies": [
+        "all-objects-runtime-v1"
+      ],
+      "issue": 176,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PKpIe"
     }
   ]
 }
