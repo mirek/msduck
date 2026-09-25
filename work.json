@@ -1907,6 +1907,25 @@
       "dependencies": [],
       "issue": 199,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PLvZt"
+    },
+    {
+      "id": "merge-action-core-v1",
+      "title": "Implement deterministic MERGE action selection core",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement full SQL Server compatibility and organize disjoint parallel work. Owner-authored PR #196 exact head ffeb20b86507fc15cabfec4059abc4a06a264fbd retains 46 SQL Server observations; owner-authored PR #201 exact head a677a0559693296643f8bb06b55d73a084b2a4ad documents deterministic/effect boundaries. No external submission is approved.",
+      "scope": [
+        "crates/msduck-core/src/merge_action.rs",
+        "crates/msduck-core/tests/merge_action.rs"
+      ],
+      "acceptance": [
+        "Model explicit typed pre-evaluated matched, source-only and target-only candidates with separate stable target/source identities, pre-write row images, ordered conditional arms and at most one selected INSERT/UPDATE/DELETE action per candidate; no database, parser, TDS, session or I/O dependency.",
+        "Reject the captured duplicate-source target update/delete case as structured error 8672 before effects; preserve equal-valued distinct identities and explicit candidate selection for TOP without inventing action order or re-evaluating expressions.",
+        "Path-import the module in tests without editing reserved msduck-core/src/lib.rs; compare matched UPDATE, unmatched INSERT, by-source DELETE, four mixed actions, CTE-shaped source candidates, TOP (0)/(1), duplicate matches and nonqualifying arms to first-party PR #196 counts and image requirements.",
+        "Run formatting, deterministic core tests and strict core Clippy on the exact PR revision; document binder, backend atomicity, OUTPUT and wire integration still needed. Do not claim runtime MERGE support."
+      ],
+      "dependencies": [],
+      "issue": 202,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PL8oX"
     }
   ]
 }
