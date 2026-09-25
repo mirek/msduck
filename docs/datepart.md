@@ -23,9 +23,8 @@ rows, and verifies one input evaluation per row. Tedious tests cover every
 keyword alias, scale rounding, range endpoints, week/year boundaries, prepared
 reuse after conversion errors, and typed empty results.
 
-Complete string formats and language behavior,
-fractional numeric date conversion, BIT inputs, and broader diagnostic
-fidelity remain unfinished.
+Complete string formats and language behavior and broader diagnostic fidelity
+remain unfinished.
 This is not complete DATEPART compatibility; live SQL Server comparison remains
 outstanding.
 
@@ -57,6 +56,34 @@ datetime inputs. Tests cover all four widths, NULL/empty metadata, source column
 range endpoints, overflow, prepared reuse and one evaluation per row.
 The upstream UDF routes DATEPART values through text conversion; this path keeps
 integer day-offset conversion explicit before extracting parts.
+
+Numeric DECIMAL/NUMERIC, FLOAT/REAL, MONEY/SMALLMONEY and BIT inputs now use
+SQL Server legacy `datetime` conversion before extracting parts. The reference
+fixture `reference/datepart-numeric.json` retains 54 observations from each of
+two fresh databases and a second independent container, including source
+columns, bound RPCs, typed and bare 38-digit half-tick boundaries, range
+errors, and NULLs. Its generator is `scripts/capture-datepart-numeric.mjs`.
+Exact decimal coefficients
+are rounded on the 1/300-second grid without floating-point conversion; FLOAT
+and REAL retain their source binary values. For bare fractional literals and
+explicit DECIMAL/NUMERIC casts of numeric tokens in DATEPART/DATENAME, lowering
+binds the token through a character-to-DECIMAL cast so DuckDB does not first
+round it through DOUBLE. Columns and RPCs retain their typed decimal storage.
+The native path keeps the grid tick
+through nanosecond extraction: one tick after midnight reports 3,333,333 ns,
+which a DATETIME2 100ns value cannot represent. Integer inputs keep their
+existing midnight-day behavior, and numeric `tzoffset` raises 9810 for legacy
+`datetime`.
+
+The independent client regression replays retained rows and keeps exact
+diagnostic differences explicit. All 54 observations match on rows and error
+number/class. Five native error cases still carry the `Invalid Input Error:`
+prefix and state 1 instead of SQL Server's state 2 (range overflow) or state 6
+(`tzoffset`); the shared engine diagnostic wrapper has another active claim.
+The follow-up is [issue #233](https://github.com/mirek/msduck/issues/233).
+Full descriptor parity also remains open: SQL Server's DATEPART columns in this
+fixture have `IntN` flags 33, while the current result-metadata path can emit
+different flags. Numeric conversion does not rewrite those shared paths.
 
 Typed DATETIMEOFFSET inputs at every scale use retained local calendar and clock
 fields, including when UTC falls on another day or year. tzoffset returns signed
