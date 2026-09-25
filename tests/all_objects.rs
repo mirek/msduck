@@ -181,3 +181,71 @@ fn built_in_and_user_catalog_ids_survive_reopen() {
     drop(server);
     std::fs::remove_file(path).unwrap();
 }
+
+/// Run through scripts/bench-object-catalog-startup.mjs so both trees use the
+/// same CPU affinity. Timing starts after the test executable has launched.
+#[test]
+#[ignore = "manual two-core startup benchmark"]
+fn benchmark_builtin_catalog_startup() {
+    use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+    let samples = std::env::var("MSDUCK_CATALOG_BENCH_SAMPLES")
+        .unwrap_or_else(|_| "20".to_owned())
+        .parse::<usize>()
+        .unwrap();
+    assert!((5..=200).contains(&samples));
+    let path = std::env::temp_dir().join(format!(
+        "msduck-catalog-bench-{}-{}.duckdb",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    {
+        let server = Server::open(path.to_str().unwrap()).unwrap();
+        let db = server.connection().unwrap();
+        assert_eq!(count(&db, "SELECT count(*) FROM sys.all_objects"), 2742);
+    }
+    let mut memory_open = Vec::with_capacity(samples);
+    let mut memory_query = Vec::with_capacity(samples);
+    let mut reopen = Vec::with_capacity(samples);
+    let mut reopen_query = Vec::with_capacity(samples);
+    for _ in 0..samples {
+        let start = Instant::now();
+        let server = Server::open(":memory:").unwrap();
+        memory_open.push(start.elapsed().as_secs_f64() * 1_000.0);
+        let db = server.connection().unwrap();
+        let start = Instant::now();
+        assert_eq!(count(&db, "SELECT count(*) FROM sys.all_objects"), 2742);
+        memory_query.push(start.elapsed().as_secs_f64() * 1_000.0);
+        drop(db);
+        drop(server);
+
+        let start = Instant::now();
+        let server = Server::open(path.to_str().unwrap()).unwrap();
+        reopen.push(start.elapsed().as_secs_f64() * 1_000.0);
+        let db = server.connection().unwrap();
+        let start = Instant::now();
+        assert_eq!(count(&db, "SELECT count(*) FROM sys.all_objects"), 2742);
+        reopen_query.push(start.elapsed().as_secs_f64() * 1_000.0);
+    }
+    std::fs::remove_file(path).unwrap();
+    let summary = |mut values: Vec<f64>| {
+        values.sort_by(f64::total_cmp);
+        serde_json::json!({
+            "p50_ms": values[values.len() / 2],
+            "p95_ms": values[(values.len() * 95).div_ceil(100) - 1],
+        })
+    };
+    println!(
+        "catalog_startup_benchmark={}",
+        serde_json::json!({
+            "samples": samples,
+            "memory_open": summary(memory_open),
+            "memory_first_query": summary(memory_query),
+            "persistent_reopen": summary(reopen),
+            "persistent_first_query": summary(reopen_query),
+        })
+    );
+}

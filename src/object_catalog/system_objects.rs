@@ -1,7 +1,15 @@
 //! Built-in object membership captured from the pinned SQL Server image.
 use anyhow::{Context, Result, ensure};
-use duckdb::Connection;
+use duckdb::{
+    Connection,
+    arrow::{
+        array::{ArrayRef, BooleanBuilder, Int32Builder, StringBuilder},
+        datatypes::{DataType, Field, Schema},
+        record_batch::RecordBatch,
+    },
+};
 use serde_json::Value;
+use std::sync::Arc;
 
 const SEED: &str = include_str!("system_objects.json");
 const COLUMNS: [&str; 15] = [
@@ -53,6 +61,7 @@ pub(super) fn register(db: &Connection) -> Result<()> {
         );
     }
     let rows = seed["rows"].as_array().context("seed rows missing")?;
+    ensure!(rows.len() == 2742, "built-in object seed count changed");
     let current_clock: String =
         db.query_row("SELECT CAST(current_timestamp AS VARCHAR)", [], |row| {
             row.get(0)
@@ -68,57 +77,7 @@ pub(super) fn register(db: &Connection) -> Result<()> {
     )?;
     let result: Result<()> = (|| {
         let mut appender = db.appender("__msduck_builtin_seed")?;
-        for values in rows {
-            let row = values.as_array().context("seed row is not an array")?;
-            ensure!(
-                row.len() == COLUMNS.len(),
-                "built-in object seed row width changed"
-            );
-            let string = |index: usize| -> Result<&str> {
-                row[index]
-                    .as_str()
-                    .context("built-in object seed string missing")
-            };
-            let integer = |index: usize| -> Result<i32> {
-                i32::try_from(
-                    row[index]
-                        .as_i64()
-                        .context("built-in object seed integer missing")?,
-                )
-                .context("built-in object seed integer out of range")
-            };
-            let boolean = |index: usize| -> Result<bool> {
-                row[index]
-                    .as_bool()
-                    .context("built-in object seed Boolean missing")
-            };
-            let date = |index: usize| -> Result<String> {
-                if boolean(14)? {
-                    return Ok(current_clock.clone());
-                }
-                Ok(string(index)?
-                    .replace('T', " ")
-                    .trim_end_matches('Z')
-                    .to_owned())
-            };
-            let principal_id = row[2].as_i64().map(i32::try_from).transpose()?;
-            appender.append_row(duckdb::params![
-                string(0)?,
-                integer(1)?,
-                principal_id,
-                integer(3)?,
-                integer(4)?,
-                string(5)?,
-                string(6)?,
-                date(7)?,
-                date(8)?,
-                boolean(9)?,
-                boolean(10)?,
-                boolean(11)?,
-                boolean(12)?,
-                boolean(13)?,
-            ])?;
-        }
+        appender.append_record_batch(seed_batch(rows, &current_clock)?)?;
         appender.flush()?;
         drop(appender);
         db.execute_batch(
@@ -137,4 +96,106 @@ pub(super) fn register(db: &Connection) -> Result<()> {
     }
     db.execute_batch("COMMIT")?;
     Ok(())
+}
+
+fn seed_batch(rows: &[Value], current_clock: &str) -> Result<RecordBatch> {
+    let mut names = StringBuilder::new();
+    let mut ids = Int32Builder::new();
+    let mut principal_ids = Int32Builder::new();
+    let mut schema_ids = Int32Builder::new();
+    let mut parent_ids = Int32Builder::new();
+    let mut types = StringBuilder::new();
+    let mut descriptions = StringBuilder::new();
+    let mut created = StringBuilder::new();
+    let mut modified = StringBuilder::new();
+    let mut shipped = BooleanBuilder::new();
+    let mut published = BooleanBuilder::new();
+    let mut schema_published = BooleanBuilder::new();
+    let mut in_objects = BooleanBuilder::new();
+    let mut in_system_objects = BooleanBuilder::new();
+    for values in rows {
+        let row = values.as_array().context("seed row is not an array")?;
+        ensure!(
+            row.len() == COLUMNS.len(),
+            "built-in object seed row width changed"
+        );
+        let string = |index: usize| -> Result<&str> {
+            row[index]
+                .as_str()
+                .context("built-in object seed string missing")
+        };
+        let integer = |index: usize| -> Result<i32> {
+            i32::try_from(
+                row[index]
+                    .as_i64()
+                    .context("built-in object seed integer missing")?,
+            )
+            .context("built-in object seed integer out of range")
+        };
+        let boolean = |index: usize| -> Result<bool> {
+            row[index]
+                .as_bool()
+                .context("built-in object seed Boolean missing")
+        };
+        let date = |index: usize| -> Result<String> {
+            if boolean(14)? {
+                return Ok(current_clock.to_owned());
+            }
+            Ok(string(index)?
+                .replace('T', " ")
+                .trim_end_matches('Z')
+                .to_owned())
+        };
+        names.append_value(string(0)?);
+        ids.append_value(integer(1)?);
+        if row[2].is_null() {
+            principal_ids.append_null();
+        } else {
+            principal_ids.append_value(integer(2)?);
+        }
+        schema_ids.append_value(integer(3)?);
+        parent_ids.append_value(integer(4)?);
+        types.append_value(string(5)?);
+        descriptions.append_value(string(6)?);
+        created.append_value(date(7)?);
+        modified.append_value(date(8)?);
+        shipped.append_value(boolean(9)?);
+        published.append_value(boolean(10)?);
+        schema_published.append_value(boolean(11)?);
+        in_objects.append_value(boolean(12)?);
+        in_system_objects.append_value(boolean(13)?);
+    }
+    let schema = Schema::new(vec![
+        Field::new("name", DataType::Utf8, false),
+        Field::new("object_id", DataType::Int32, false),
+        Field::new("principal_id", DataType::Int32, true),
+        Field::new("schema_id", DataType::Int32, false),
+        Field::new("parent_object_id", DataType::Int32, false),
+        Field::new("type", DataType::Utf8, false),
+        Field::new("type_desc", DataType::Utf8, false),
+        Field::new("create_date", DataType::Utf8, false),
+        Field::new("modify_date", DataType::Utf8, false),
+        Field::new("is_ms_shipped", DataType::Boolean, false),
+        Field::new("is_published", DataType::Boolean, false),
+        Field::new("is_schema_published", DataType::Boolean, false),
+        Field::new("in_objects", DataType::Boolean, false),
+        Field::new("in_system_objects", DataType::Boolean, false),
+    ]);
+    let columns: Vec<ArrayRef> = vec![
+        Arc::new(names.finish()),
+        Arc::new(ids.finish()),
+        Arc::new(principal_ids.finish()),
+        Arc::new(schema_ids.finish()),
+        Arc::new(parent_ids.finish()),
+        Arc::new(types.finish()),
+        Arc::new(descriptions.finish()),
+        Arc::new(created.finish()),
+        Arc::new(modified.finish()),
+        Arc::new(shipped.finish()),
+        Arc::new(published.finish()),
+        Arc::new(schema_published.finish()),
+        Arc::new(in_objects.finish()),
+        Arc::new(in_system_objects.finish()),
+    ];
+    Ok(RecordBatch::try_new(Arc::new(schema), columns)?)
 }
