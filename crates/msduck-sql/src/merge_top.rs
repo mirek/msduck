@@ -46,6 +46,18 @@ const NONINTEGER: BindError = BindError::Sql {
     class: 15,
     message: "The number of rows provided for a TOP or FETCH clauses row count parameter must be an integer.",
 };
+const INVALID_PERCENT: BindError = BindError::Sql {
+    number: 1014,
+    state: 1,
+    class: 15,
+    message: "A TOP or FETCH clause contains an invalid value.",
+};
+const PERCENT_RANGE: BindError = BindError::Sql {
+    number: 1031,
+    state: 1,
+    class: 15,
+    message: "Percent values must be between 0 and 100.",
+};
 
 /// Resolve variables against an explicit, already bound snapshot. Each leaf is
 /// visited once. Expressions outside the captured forms remain unsupported.
@@ -63,23 +75,71 @@ pub fn bind(
         }
         None => return Err(BindError::Unsupported("MERGE TOP without quantity")),
     };
-    let count = match &value {
-        BoundValue::Int(n) if *n < 0 => return Err(NEGATIVE),
-        BoundValue::Int(n) => *n as u64,
-        BoundValue::Decimal(n) if n == "1.5" && !top.percent => return Err(NONINTEGER),
-        BoundValue::Decimal(_) => {
-            return Err(BindError::Unsupported("uncaptured MERGE TOP decimal type"));
-        }
-        BoundValue::Null => return Err(NONINTEGER),
+    let amount = if top.percent {
+        TopAmount::PercentThousandths(percent_thousandths(&value)?)
+    } else {
+        let count = match &value {
+            BoundValue::Int(n) if *n < 0 => return Err(NEGATIVE),
+            BoundValue::Int(n) => *n as u64,
+            BoundValue::Decimal(n) if n == "1.5" => return Err(NONINTEGER),
+            BoundValue::Decimal(_) => {
+                return Err(BindError::Unsupported(
+                    "uncaptured MERGE TOP count decimal type",
+                ));
+            }
+            BoundValue::Null => return Err(NONINTEGER),
+        };
+        TopAmount::Rows(count)
     };
-    if top.percent && count != 50 {
-        return Err(BindError::Unsupported("uncaptured MERGE TOP percentage"));
-    }
     Ok(BoundTop {
         source: top,
         bound_value: value,
-        count,
+        amount,
     })
+}
+
+/// Captured percentage inputs are INT or fixed decimal with at most three
+/// fractional digits. The scaled representation avoids arithmetic overflow and
+/// preserves the explicit source type in `BoundTop::bound_value`.
+fn percent_thousandths(value: &BoundValue) -> Result<u32, BindError> {
+    match value {
+        BoundValue::Int(n) if !(0..=100).contains(n) => Err(PERCENT_RANGE),
+        BoundValue::Int(n) => Ok((*n as u32) * 1_000),
+        BoundValue::Null => Err(INVALID_PERCENT),
+        BoundValue::Decimal(source) => {
+            let (negative, source) = match source.strip_prefix('-') {
+                Some(rest) => (true, rest),
+                None => (false, source.as_str()),
+            };
+            let (whole, fraction) = source
+                .split_once('.')
+                .ok_or(BindError::Unsupported("uncaptured MERGE TOP decimal form"))?;
+            if whole.is_empty()
+                || fraction.is_empty()
+                || fraction.len() > 3
+                || !whole.bytes().all(|b| b.is_ascii_digit())
+                || !fraction.bytes().all(|b| b.is_ascii_digit())
+            {
+                return Err(BindError::Unsupported("uncaptured MERGE TOP decimal form"));
+            }
+            let whole: u32 = whole
+                .parse()
+                .map_err(|_| BindError::Unsupported("MERGE TOP percentage overflow"))?;
+            let part: u32 = fraction
+                .parse()
+                .map_err(|_| BindError::Unsupported("MERGE TOP percentage overflow"))?;
+            let scale = 10u32.pow((3 - fraction.len()) as u32);
+            let scaled = whole
+                .checked_mul(1_000)
+                .and_then(|n| part.checked_mul(scale).and_then(|part| n.checked_add(part)))
+                .ok_or(BindError::Unsupported("MERGE TOP percentage overflow"))?;
+            if negative || scaled > 100_000 {
+                Err(PERCENT_RANGE)
+            } else {
+                Ok(scaled)
+            }
+        }
+    }
 }
 
 fn evaluate(
@@ -108,6 +168,9 @@ fn evaluate(
                 .checked_neg()
                 .map(BoundValue::Int)
                 .ok_or(BindError::Unsupported("MERGE TOP integer overflow")),
+            BoundValue::Decimal(n) if !n.starts_with('-') => {
+                Ok(BoundValue::Decimal(format!("-{n}")))
+            }
             other => Ok(other),
         },
         Expr::UnaryOp {
@@ -138,7 +201,14 @@ pub struct BoundTop {
     pub source: Top,
     /// Retains the explicitly evaluated value and its type category.
     pub bound_value: BoundValue,
-    pub count: u64,
+    pub amount: TopAmount,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TopAmount {
+    Rows(u64),
+    /// Percentage in units of 0.001%, bounded to 0..=100_000.
+    PercentThousandths(u32),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -153,12 +223,16 @@ pub struct SelectionRequirement {
 
 impl BoundTop {
     pub fn selection(&self, eligible: u64) -> Result<SelectionRequirement, BindError> {
-        let limit = if self.source.percent {
-            // Only 50% is established by the retained capture. Ceil(n/2)
-            // avoids multiplication overflow even at u64::MAX.
-            eligible / 2 + eligible % 2
-        } else {
-            self.count.min(eligible)
+        let limit = match self.amount {
+            TopAmount::Rows(count) => count.min(eligible),
+            TopAmount::PercentThousandths(scaled) => {
+                let numerator = u128::from(eligible)
+                    .checked_mul(u128::from(scaled))
+                    .and_then(|n| n.checked_add(99_999))
+                    .ok_or(BindError::Unsupported("MERGE TOP percentage overflow"))?;
+                u64::try_from(numerator / 100_000)
+                    .map_err(|_| BindError::Unsupported("MERGE TOP percentage overflow"))?
+            }
         };
         Ok(SelectionRequirement {
             eligible,
