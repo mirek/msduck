@@ -1987,6 +1987,27 @@
       ],
       "issue": 209,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PMKhI"
+    },
+    {
+      "id": "merge-output-contract-v1",
+      "title": "Implement deterministic MERGE OUTPUT projection contract",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement a fully SQL Server-compatible Rust/DuckDB server and organize disjoint parallel-agent work. Owner-authored PR #196 captures MERGE OUTPUT rows/descriptors; pure action-selection core PR #206 has merged. No external submission is approved.",
+      "scope": [
+        "crates/msduck-sql/src/merge_output.rs",
+        "crates/msduck-sql/tests/merge_output.rs"
+      ],
+      "acceptance": [
+        "Path-import a deterministic projection module that takes explicit logical declarations, selected action kind, pre-write target image, post-conversion inserted image and any source values; model $action, inserted/deleted projection and OUTPUT INTO assignment without database, parser, TDS or session I/O.",
+        "Preserve NULL and unavailable-image behavior, declared widths and collations even for empty results; do not infer metadata from runtime values or evaluate an expression twice. Keep direct OUTPUT requirements separate from the later read of an OUTPUT INTO sink.",
+        "Compare projected rows and logical descriptors with the owner-authored 46-case MERGE fixture for matched UPDATE, unmatched INSERT, by-source DELETE and four mixed actions; cover nonqualifying/empty results, NULL images, ordered expressions and storage-converted inserted values.",
+        "Document the export/integration hook and remaining backend atomicity, sink write, session/DONE and TDS work. Run formatting, deterministic SQL-crate tests and strict SQL-crate Clippy on the exact PR revision. Do not edit shared exports, parser/dialect, root engine, TDS, CI or existing fixtures and do not claim runtime MERGE support."
+      ],
+      "dependencies": [
+        "merge-action-core-v1"
+      ],
+      "issue": 210,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PMNBz"
     }
   ]
 }
