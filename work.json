@@ -2092,6 +2092,28 @@
       ],
       "issue": 218,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PMjWg"
+    },
+    {
+      "id": "for-xml-tds-codec-v1",
+      "title": "Encode captured FOR XML NTEXT and XML TDS tokens",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility and disjoint parallel-agent work instructions. Owner-authored PR #217 merged the pinned two-container, four-database raw TDS capture proving NTEXT 0x63 and XML 0xF1 with PLP. No third-party content approved.",
+      "scope": [
+        "crates/msduck-tds/src/for_xml.rs",
+        "crates/msduck-tds/tests/for_xml.rs"
+      ],
+      "acceptance": [
+        "Path-import a pure token encoder with explicit collation, mode, logical name/flags, raw UTF-16 units, caller-chosen ROW chunk boundaries, pointer/timestamp and source completion count. Keep catalog, session, clocks, I/O and shared export outside this module.",
+        "Emit captured NTEXT COLMETADATA (0x63, max length 0x7ffffffe, collation and table part), NTEXT ROW pointer/timestamp and 32-bit byte length, and XML f1 00 metadata/PLP chunks. Handle zero rows and direct/nested TYPE; preserve DONE count independently of ROW-token count.",
+        "Compare exact emitted token bytes for ordinary, empty, direct TYPE, nested TYPE and large text against reference/for-xml-wire.json using explicit captured pointer/timestamp/chunk inputs. Reject overflow, invalid chunk boundaries and unsupported shapes before partial output. ERROR 6852 encoding stays with caller.",
+        "Run formatting, deterministic TDS tests and strict Clippy. Document export/root integration hooks in PR; do not edit shared TDS lib, SQL serializer, dialect, root runtime, CI or existing fixture and do not claim runtime FOR XML support."
+      ],
+      "dependencies": [
+        "for-xml-path-core-v1",
+        "for-xml-wire-reference-v1"
+      ],
+      "issue": 220,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PMmXw"
     }
   ]
 }
