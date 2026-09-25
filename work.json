@@ -2052,6 +2052,27 @@
       ],
       "issue": 215,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PMcOs"
+    },
+    {
+      "id": "merge-top-binding-v1",
+      "title": "Bind deterministic MERGE TOP limits from captured SQL Server behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility and parallel-agent work instructions. Owner-authored PR #213 merged the 73-case twice-captured, independently recaptured reference. No third-party content approved.",
+      "scope": [
+        "crates/msduck-sql/src/merge_top.rs",
+        "crates/msduck-sql/tests/merge_top.rs"
+      ],
+      "acceptance": [
+        "Path-import a pure lossless MERGE TOP count/PERCENT representation and typed evaluation using explicit bound inputs. Preserve source expression/type for captured parenthesized literal, arithmetic and variable forms; avoid catalog/session/backend I/O and repeated evaluation.",
+        "Match captured TOP (0), positive counts, 50 PERCENT, negative 127/state 1/class 15 and NULL/fractional 1060/state 1/class 15 using checked arithmetic. Leave unproven types, expression forms and percentage boundaries explicitly unsupported.",
+        "Return a limit/selection requirement for an explicit eligible candidate count. Do not invent candidate ordering or equate the limit with affected row count; account for nonqualifying matched candidates and duplicate-match 8672/direct OUTPUT caveats without performing writes.",
+        "Compare proven values, diagnostics and invariant counts with reference/merge-top.json; run formatting, SQL-crate tests and strict Clippy. Document export/dialect/runtime hooks in PR without editing shared exports, dialect, root runtime or existing fixture."
+      ],
+      "dependencies": [
+        "merge-top-reference-v1"
+      ],
+      "issue": 216,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PMfFd"
     }
   ]
 }
