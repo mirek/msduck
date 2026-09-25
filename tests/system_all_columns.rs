@@ -110,7 +110,7 @@ fn user_columns_join_all_columns_transactionally_and_survive_reopen() {
             .unwrap()
             .as_nanos(),
     ));
-    let (id, name_id, default_id) = {
+    let (id, name_id, default_id, extra_default_id) = {
         let server = Server::open(path.to_str().unwrap()).unwrap();
         let mut session = Session::new(server.connection().unwrap()).unwrap();
         run(
@@ -160,6 +160,10 @@ fn user_columns_join_all_columns_transactionally_and_survive_reopen() {
         );
         run(
             &mut session,
+            "ALTER TABLE dbo.persisted_columns ADD extra INT CONSTRAINT df_persisted_extra DEFAULT 7",
+        );
+        run(
+            &mut session,
             "CREATE VIEW dbo.persisted_view AS SELECT id,label FROM dbo.persisted_columns",
         );
         let id: i32 = session
@@ -186,6 +190,16 @@ fn user_columns_join_all_columns_transactionally_and_survive_reopen() {
                 |row| row.get(0),
             )
             .unwrap();
+        let extra_default_id: i32 = session
+            .db
+            .query_row(
+                "SELECT default_object_id FROM sys.columns WHERE object_id=? AND name='extra'",
+                [id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(extra_default_id > 0);
+        assert_ne!(extra_default_id, default_id);
         assert_eq!(
             session
                 .db
@@ -206,14 +220,14 @@ fn user_columns_join_all_columns_transactionally_and_survive_reopen() {
                 &session.db,
                 "SELECT count(*) FROM sys.columns WHERE object_id=__msduck_object_id('persisted_columns',NULL)"
             ),
-            2
+            3
         );
         assert_eq!(
             count(
                 &session.db,
                 "SELECT count(*) FROM sys.all_columns WHERE object_id IN (__msduck_object_id('persisted_columns',NULL),__msduck_object_id('persisted_view',NULL))"
             ),
-            4
+            5
         );
         assert_eq!(
             count(
@@ -240,11 +254,11 @@ fn user_columns_join_all_columns_transactionally_and_survive_reopen() {
                 .unwrap(),
             "Latin1_General_100_CI_AS"
         );
-        (id, name_id, default_id)
+        (id, name_id, default_id, extra_default_id)
     };
     let server = Server::open(path.to_str().unwrap()).unwrap();
     let db = server.connection().unwrap();
-    assert_eq!(count(&db, "SELECT count(*) FROM sys.all_columns"), 12807);
+    assert_eq!(count(&db, "SELECT count(*) FROM sys.all_columns"), 12808);
     assert_eq!(count(&db, "SELECT count(*) FROM sys.system_columns"), 11534);
     assert_eq!(
         db.query_row(
@@ -264,6 +278,15 @@ fn user_columns_join_all_columns_transactionally_and_survive_reopen() {
         .unwrap(),
         default_id
     );
+    assert_eq!(
+        db.query_row(
+            "SELECT default_object_id FROM sys.all_columns WHERE object_id=? AND name='extra'",
+            [id],
+            |row| row.get::<_, i32>(0),
+        )
+        .unwrap(),
+        extra_default_id
+    );
     drop(db);
     let mut session = Session::new(server.connection().unwrap()).unwrap();
     run(
@@ -274,6 +297,13 @@ fn user_columns_join_all_columns_transactionally_and_survive_reopen() {
         count(
             &session.db,
             "SELECT count(*) FROM sys.objects WHERE name='df_persisted_label'"
+        ),
+        0
+    );
+    assert_eq!(
+        count(
+            &session.db,
+            "SELECT count(*) FROM sys.objects WHERE name='df_persisted_extra'"
         ),
         0
     );
