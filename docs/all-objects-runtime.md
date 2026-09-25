@@ -67,6 +67,22 @@ Remote source synchronization needs an independent fingerprint-invalidation
 fix. Further startup work should profile the surrounding catalog and server
 registration phases once their active claims release those files.
 
+A later read-only GDB entry-timestamp profile of the **merged baseline Rust
+sources** (`2a8d235`, executable SHA-256
+`5271d076a12f8e5a96927e109bbe3d2fbb15b9aaf16809d37ca14deb1c30de47`)
+ran three warmed fresh opens on `linux.local` under the shared runner lock. The
+`src/server.rs`, `src/scalar.rs`, and `src/object_catalog.rs` SHA-256 hashes
+matched local main. From one phase entry to the next, scalar registration took
+155–158 ms, schema registration 14–15 ms, object catalog registration
+168–170 ms, and declared-column registration 33–35 ms. Within the object
+stage, the interval from `system_objects::register` entry to
+`column_catalog::register` entry was 62–64 ms; the interval from
+`column_catalog::sync` entry to `type_catalog::register` entry was 70–72 ms.
+These breakpoints bracket work rather than measure exclusive function time;
+GDB overhead, warm caches and unrestricted CPUs make the figures directional,
+not a substitute for the controlled two-core comparison. They show that the
+row appender replacement alone cannot address the dominant startup costs.
+
 The three views have independent captured metadata. In particular,
 `sys.objects` returns nonnullable `Bit` flags, while the union and system view
 declare nullable `BitN(1)` flags. The system view declares a nullable
