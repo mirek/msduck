@@ -2196,6 +2196,29 @@
       "dependencies": [],
       "issue": 229,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PM6xT"
+    },
+    {
+      "id": "datepart-numeric-v1",
+      "title": "Convert numeric DATEPART inputs with legacy datetime semantics",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal. First-party exact-main probe found error 40515 for every tested noninteger numeric and BIT DATEPART argument while pinned SQL Server accepted them; no external submission is input.",
+      "scope": [
+        "src/datepart.rs",
+        "scripts/capture-datepart-numeric.mjs",
+        "reference/datepart-numeric.json",
+        "docs/datepart.md",
+        "tests/datepart_numeric.test.mjs",
+        "package.json"
+      ],
+      "acceptance": [
+        "Capture DECIMAL/NUMERIC, FLOAT/REAL, MONEY/SMALLMONEY, BIT and integer controls across positive/negative fractions, subsecond rounding, range endpoints, NULLs, source columns and bound RPCs; retain rows, descriptors, errors and DONE tokens. Verify two fresh databases and an independent second container.",
+        "Implement checked, source-aware numeric-to-legacy-datetime conversion within src/datepart.rs for DATEPART/DATENAME, preserving all 1/300-second behavior proved by the fixture and avoiding float conversion for exact decimal inputs.",
+        "Preserve integer behavior, DATEFIRST, source-type 9810 diagnostics, vector NULLs and one evaluation per input; add native and independent client fixture-backed regressions.",
+        "Run formatting, strict Clippy, full Linux workspace Rust and client tests, and diagnostic audit for semantic changes. If exact parity needs claimed shared files, preserve the raw gap and publish a disjoint successor after owner handoff."
+      ],
+      "dependencies": [],
+      "issue": 232,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PM-Vl"
     }
   ]
 }
