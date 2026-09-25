@@ -1639,7 +1639,7 @@
     {
       "id": "system-all-columns-reference-v1",
       "title": "Capture SQL Server built-in all_columns inventory and metadata",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner goal to implement a fully functional SQL Server compatible Rust/DuckDB server and make disjoint work claimable by parallel agents. Owner-captured all_objects evidence in task #163 shows that the runtime lacks system-column catalog rows. Capture SQL Server behavior independently before implementing those rows; no external issue or comment is input.",
       "scope": [
         "scripts/capture-system-all-columns.mjs",
