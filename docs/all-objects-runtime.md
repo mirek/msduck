@@ -54,6 +54,10 @@ step. Candidate run `36087838555` spent 37 minutes 28 seconds in the same step
 (2026-09-25 03:12:13–03:49:41 UTC), only 25 seconds less. This does not
 materially improve the test-suite regression either; the Arrow candidate is
 not suitable to merge as the claimed startup fix.
+Exact-code-head CI run `36087838555` at `3ddd42c` passed formatting,
+strict Clippy, workspace Rust tests and independent clients, then recorded
+325 diagnostic audit cases. The audit's successful capture does not establish
+SQL Server equivalence. The performance acceptance criterion still fails.
 
 A separate five-sample diagnostic run timed the candidate's entire built-in
 object registration at 39–43 ms on a fresh database and about 1.7 ms on
