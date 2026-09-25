@@ -1,6 +1,6 @@
 //! DATEPART extraction from exact temporal values with session DATEFIRST.
 use duckdb::{
-    core::{DataChunkHandle, Inserter, LogicalTypeId as Id},
+    core::{DataChunkHandle, FlatVector, Inserter, LogicalTypeId as Id},
     vscalar::{ScalarFunctionSignature, VScalar},
     vtab::arrow::WritableVector,
 };
@@ -68,6 +68,212 @@ fn extract(value: crate::datetime2::DateTime2, part: usize, first: i64) -> i32 {
         _ => unreachable!(),
     };
     result as i32
+}
+
+// Numeric SQL values are converted to legacy DATETIME's 1/300-second grid.
+// Keep the grid position: DATETIME2's 100ns representation cannot reproduce
+// DATEPART(nanosecond) for a legacy value (one grid tick is 3,333,333 ns).
+const LEGACY_TICKS_PER_DAY: i64 = 86_400 * 300;
+const DATE_TICKS_PER_DAY: i64 = 864_000_000_000;
+
+fn checked_legacy_ticks(ticks: i128) -> Result<i64, &'static str> {
+    let base = crate::scalar::date_days(1900, 1, 1)?;
+    let first =
+        i128::from(crate::scalar::date_days(1753, 1, 1)? - base) * i128::from(LEGACY_TICKS_PER_DAY);
+    let last = i128::from(crate::scalar::date_days(9999, 12, 31)? - base + 1)
+        * i128::from(LEGACY_TICKS_PER_DAY);
+    if !(first..last).contains(&ticks) {
+        return Err(crate::calendar_parts::OVERFLOW);
+    }
+    i64::try_from(ticks).map_err(|_| crate::calendar_parts::OVERFLOW)
+}
+
+fn exact_numeric_ticks(coefficient: i128, scale: u8) -> Result<i64, &'static str> {
+    if scale > 38 {
+        return Err(crate::calendar_parts::OVERFLOW);
+    }
+    let denominator = 10_i128.pow(u32::from(scale));
+    let magnitude = coefficient.unsigned_abs();
+    let whole = magnitude / denominator as u128;
+    let fraction = magnitude % denominator as u128;
+    if whole > 3_000_000 {
+        return Err(crate::calendar_parts::OVERFLOW);
+    }
+    // Thirty decimal places are enough to decide rounding at the 1/300s
+    // boundary without overflowing i128. Retain discarded digits to resolve
+    // the exact half-grid case rather than converting DECIMAL through f64.
+    let dropped = scale.saturating_sub(30);
+    let divisor = 10_u128.pow(u32::from(dropped));
+    let reduced = fraction / divisor;
+    let tail = fraction % divisor;
+    let reduced_denominator = 10_i128.pow(u32::from(scale.min(30)));
+    let numerator = (reduced as i128) * i128::from(LEGACY_TICKS_PER_DAY);
+    let quotient = numerator / reduced_denominator;
+    let remainder = numerator % reduced_denominator;
+    let full_denominator = reduced_denominator * divisor as i128;
+    let residual = remainder * divisor as i128 + tail as i128 * i128::from(LEGACY_TICKS_PER_DAY);
+    let rounded = quotient
+        + residual / full_denominator
+        + i128::from(residual % full_denominator >= (full_denominator + 1) / 2);
+    let magnitude_ticks = (whole as i128)
+        .checked_mul(i128::from(LEGACY_TICKS_PER_DAY))
+        .and_then(|n| n.checked_add(rounded))
+        .ok_or(crate::calendar_parts::OVERFLOW)?;
+    checked_legacy_ticks(if coefficient < 0 {
+        -magnitude_ticks
+    } else {
+        magnitude_ticks
+    })
+}
+
+fn floating_numeric_ticks(value: f64) -> Result<i64, &'static str> {
+    // Bound before multiplication so the rounded integer is representable.
+    if !value.is_finite() || !(-54_000.0..=3_000_000.0).contains(&value) {
+        return Err(crate::calendar_parts::OVERFLOW);
+    }
+    checked_legacy_ticks((value * LEGACY_TICKS_PER_DAY as f64).round() as i128)
+}
+
+fn numeric_ticks(source: &FlatVector<'_>, row: usize, len: usize) -> Result<i64, &'static str> {
+    let logical = source.logical_type();
+    macro_rules! read {
+        ($ty:ty) => {
+            unsafe { source.as_slice_with_len::<$ty>(len)[row] }
+        };
+    }
+    match logical.id() {
+        Id::Boolean => exact_numeric_ticks(i128::from(read!(u8)), 0),
+        Id::Tinyint => exact_numeric_ticks(i128::from(read!(i8)), 0),
+        Id::UTinyint => exact_numeric_ticks(i128::from(read!(u8)), 0),
+        Id::Smallint => exact_numeric_ticks(i128::from(read!(i16)), 0),
+        Id::USmallint => exact_numeric_ticks(i128::from(read!(u16)), 0),
+        Id::Integer => exact_numeric_ticks(i128::from(read!(i32)), 0),
+        Id::UInteger => exact_numeric_ticks(i128::from(read!(u32)), 0),
+        Id::Bigint => exact_numeric_ticks(i128::from(read!(i64)), 0),
+        Id::UBigint => exact_numeric_ticks(i128::from(read!(u64)), 0),
+        Id::Float => floating_numeric_ticks(f64::from(read!(f32))),
+        Id::Double => floating_numeric_ticks(read!(f64)),
+        Id::Decimal => {
+            let coefficient = match logical.decimal_width() {
+                1..=4 => i128::from(read!(i16)),
+                5..=9 => i128::from(read!(i32)),
+                10..=18 => i128::from(read!(i64)),
+                19..=38 => {
+                    let v = read!(duckdb::ffi::duckdb_hugeint);
+                    (i128::from(v.upper) << 64) | i128::from(v.lower)
+                }
+                _ => return Err(crate::calendar_parts::OVERFLOW),
+            };
+            exact_numeric_ticks(coefficient, logical.decimal_scale())
+        }
+        _ => Err("DATEPART requires numeric input"),
+    }
+}
+
+fn numeric_datetime(ticks: i64) -> Result<crate::datetime2::DateTime2, &'static str> {
+    let base = crate::datetime2::DateTime2::from_parts(crate::datetime2::Parts {
+        year: 1900,
+        month: 1,
+        day: 1,
+        hour: 0,
+        minute: 0,
+        second: 0,
+        fraction: 0,
+    })
+    .map_err(|_| crate::calendar_parts::OVERFLOW)?;
+    let days = ticks.div_euclid(LEGACY_TICKS_PER_DAY);
+    let time = ticks.rem_euclid(LEGACY_TICKS_PER_DAY);
+    let precise = base.ticks() + days * DATE_TICKS_PER_DAY + (time * 10_000_000 + 150) / 300;
+    crate::datetime2::DateTime2::from_ticks(precise).map_err(|_| crate::calendar_parts::OVERFLOW)
+}
+
+struct NumericPart<const P: usize>;
+impl<const P: usize> VScalar for NumericPart<P> {
+    type State = ();
+    fn invoke(
+        _: &(),
+        input: &mut DataChunkHandle,
+        output: &mut dyn WritableVector,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let len = input.len();
+        let source = input.flat_vector(0);
+        let first = if P == 5 || P == 6 {
+            Some(input.flat_vector(1))
+        } else {
+            None
+        };
+        let mut result = output.flat_vector();
+        for row in 0..len {
+            if source.row_is_null(row as u64) {
+                result.set_null(row);
+                continue;
+            }
+            let first = match &first {
+                Some(v) if !v.row_is_null(row as u64) => {
+                    i64::from(unsafe { v.as_slice_with_len::<i32>(len)[row] })
+                }
+                Some(_) => return Err("DATEFIRST must be between 1 and 7".into()),
+                None => 7,
+            };
+            if !(1..=7).contains(&first) {
+                return Err("DATEFIRST must be between 1 and 7".into());
+            }
+            let ticks = numeric_ticks(&source, row, len)?;
+            let value = numeric_datetime(ticks)?;
+            let part = if P == 12 {
+                ((ticks.rem_euclid(300) * 1_000_000_000) / 300) as i32
+            } else {
+                extract(value, P, first)
+            };
+            unsafe {
+                result.as_mut_slice_with_len::<i32>(len)[row] = part;
+            }
+        }
+        Ok(())
+    }
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        vec![ScalarFunctionSignature::exact(
+            if P == 5 || P == 6 {
+                vec![Id::Any.into(), Id::Integer.into()]
+            } else {
+                vec![Id::Any.into()]
+            },
+            Id::Integer.into(),
+        )]
+    }
+}
+
+struct NumericDate;
+impl VScalar for NumericDate {
+    type State = ();
+    fn invoke(
+        _: &(),
+        input: &mut DataChunkHandle,
+        output: &mut dyn WritableVector,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let len = input.len();
+        let source = input.flat_vector(0);
+        let mut result = output.flat_vector();
+        for row in 0..len {
+            if source.row_is_null(row as u64) {
+                result.set_null(row);
+                continue;
+            }
+            let ticks = numeric_ticks(&source, row, len)?;
+            let unix_day = i64::from(crate::scalar::date_days(1900, 1, 1)?)
+                + ticks.div_euclid(LEGACY_TICKS_PER_DAY);
+            unsafe {
+                result.as_mut_slice_with_len::<i32>(len)[row] = i32::try_from(unix_day)?;
+            }
+        }
+        Ok(())
+    }
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        vec![ScalarFunctionSignature::exact(
+            vec![Id::Any.into()],
+            Id::Date.into(),
+        )]
+    }
 }
 struct Part<const P: usize, const NAME: bool = false>;
 impl<const P: usize, const NAME: bool> VScalar for Part<P, NAME> {
@@ -178,6 +384,11 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
     let benchmark_start = std::time::Instant::now();
     macro_rules! register { ($($n:literal),*) => { $(db.register_scalar_function::<Part<$n>>(concat!("__msduck_datepart_",stringify!($n)))?;)* }; }
     register!(0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14);
+    macro_rules! numeric { ($($n:literal),*) => { $(db.register_scalar_function::<NumericPart<$n>>(concat!("__msduck_numeric_datepart_", stringify!($n)))?;)* }; }
+    numeric!(0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 14);
+    db.register_scalar_function::<NumericPart<5>>("__msduck_numeric_datepart_5_raw")?;
+    db.register_scalar_function::<NumericPart<6>>("__msduck_numeric_datepart_6_raw")?;
+    db.register_scalar_function::<NumericDate>("__msduck_numeric_date")?;
     db.register_scalar_function::<Part<13, true>>("__msduck_datename_offset")?;
     let offset_types = (0..=7)
         .map(|s| format!("'{}'", crate::datetimeoffset_cast::storage_type(s)))
@@ -189,7 +400,10 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
     let mut definitions = String::new();
     for p in [5, 6] {
         definitions.push_str(&format!("CREATE OR REPLACE MACRO main.__msduck_datepart_{p}(value) AS __msduck_datepart_{p}_raw(value, CAST(coalesce(getvariable('__msduck_datefirst'),7) AS INTEGER));\n"));
+        definitions.push_str(&format!("CREATE OR REPLACE MACRO main.__msduck_numeric_datepart_{p}(value) AS __msduck_numeric_datepart_{p}_raw(value, CAST(coalesce(getvariable('__msduck_datefirst'),7) AS INTEGER));\n"));
     }
+    let numeric_type =
+        "typeof(value) IN ('BOOLEAN','FLOAT','DOUBLE') OR typeof(value) LIKE 'DECIMAL%'";
     for (part, name) in [
         "year",
         "quarter",
@@ -243,7 +457,20 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
             } else {
                 format!("__msduck_{function}_{part}")
             };
-            definitions.push_str(&format!("CREATE OR REPLACE MACRO main.__msduck_{function}_dispatch_{part}(value) AS CASE WHEN typeof(value) IN ({offset_types}) THEN {offset_function}(__msduck_datetimeoffset_cast_7(value)) ELSE __msduck_{function}_{part}({input}) END;\n"));
+            let numeric_result = if part == 13 {
+                format!(
+                    "error('The datepart tzoffset is not supported by date function {function} for data type datetime.')"
+                )
+            } else if function == "datename" && part == 2 {
+                "monthname(__msduck_numeric_date(value))".to_string()
+            } else if function == "datename" && part == 6 {
+                "dayname(__msduck_numeric_date(value))".to_string()
+            } else if function == "datename" {
+                format!("CAST(__msduck_numeric_datepart_{part}(value) AS VARCHAR)")
+            } else {
+                format!("__msduck_numeric_datepart_{part}(value)")
+            };
+            definitions.push_str(&format!("CREATE OR REPLACE MACRO main.__msduck_{function}_dispatch_{part}(value) AS CASE WHEN typeof(value) IN ({offset_types}) THEN {offset_function}(__msduck_datetimeoffset_cast_7(value)) WHEN ({numeric_type}) THEN {numeric_result} ELSE __msduck_{function}_{part}({input}) END;\n"));
         }
     }
     db.execute_batch(&definitions)?;
@@ -291,6 +518,100 @@ pub fn setting(statement: &Statement) -> Result<Option<Expr>, String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn numeric_grid_matches_retained_sql_server_boundaries() {
+        let db = duckdb::Connection::open_in_memory().unwrap();
+        crate::scalar::register(&db).unwrap();
+        for (sql, expected) in [
+            (
+                "SELECT __msduck_datepart_dispatch_7(CAST(0.5 AS DECIMAL(10,4)))",
+                12,
+            ),
+            (
+                "SELECT __msduck_datepart_dispatch_7(CAST(-0.5 AS DECIMAL(10,4)))",
+                12,
+            ),
+            (
+                "SELECT __msduck_datepart_dispatch_12(CAST(0.0000000192 AS DECIMAL(20,10)))",
+                0,
+            ),
+            (
+                "SELECT __msduck_datepart_dispatch_12(CAST(0.0000000194 AS DECIMAL(20,10)))",
+                3_333_333,
+            ),
+            (
+                "SELECT __msduck_datepart_dispatch_12(CAST(-0.0000000386 AS DECIMAL(20,10)))",
+                996_666_666,
+            ),
+            (
+                "SELECT __msduck_datepart_dispatch_10(CAST(0.0001 AS DECIMAL(19,4)))",
+                640,
+            ),
+            (
+                "SELECT __msduck_datepart_dispatch_0(CAST(-53690 AS DECIMAL(12,4)))",
+                1753,
+            ),
+            (
+                "SELECT __msduck_datepart_dispatch_0(CAST(2958463 AS DECIMAL(12,4)))",
+                9999,
+            ),
+            (
+                "SELECT __msduck_datepart_dispatch_4(CAST(TRUE AS BOOLEAN))",
+                2,
+            ),
+        ] {
+            let actual: i32 = db.query_row(sql, [], |r| r.get(0)).unwrap();
+            assert_eq!(actual, expected, "{sql}");
+        }
+        for value in ["-53691", "2958464"] {
+            let result: duckdb::Result<i32> = db.query_row(
+                &format!("SELECT __msduck_datepart_dispatch_0(CAST({value} AS DECIMAL(12,4)))"),
+                [],
+                |r| r.get(0),
+            );
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains(crate::calendar_parts::OVERFLOW)
+            );
+        }
+    }
+
+    #[test]
+    fn numeric_vectors_preserve_nulls_datefirst_and_single_evaluation() {
+        let db = duckdb::Connection::open_in_memory().unwrap();
+        crate::scalar::register(&db).unwrap();
+        let wrong: i64 = db.query_row("SELECT count(*) FROM range(6000) r(i) WHERE __msduck_datepart_dispatch_12(CASE WHEN i%17=0 THEN NULL ELSE CAST(0.0000000386 AS DECIMAL(20,10)) END) IS DISTINCT FROM CASE WHEN i%17=0 THEN NULL ELSE 3333333 END", [], |r| r.get(0)).unwrap();
+        assert_eq!(wrong, 0);
+        let sunday_first: i32 = db
+            .query_row(
+                "SELECT __msduck_datepart_dispatch_6(CAST(0.5 AS DECIMAL(10,4)))",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(sunday_first, 2);
+        db.execute_batch("SET VARIABLE __msduck_datefirst = 1")
+            .unwrap();
+        let monday_first: i32 = db
+            .query_row(
+                "SELECT __msduck_datepart_dispatch_6(CAST(0.5 AS DECIMAL(10,4)))",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(monday_first, 1);
+        db.execute_batch("CREATE SEQUENCE numeric_datepart_calls START 1")
+            .unwrap();
+        let rows: i64 = db.query_row("SELECT count(__msduck_datepart_dispatch_0(CAST(nextval('numeric_datepart_calls')%10 AS DECIMAL(20,12)))) FROM range(6000)", [], |r| r.get(0)).unwrap();
+        assert_eq!(rows, 6000);
+        let calls: i64 = db
+            .query_row("SELECT currval('numeric_datepart_calls')", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(calls, 6000);
+    }
+
     #[test]
     #[ignore = "repeatable local startup benchmark; use scripts/bench-datepart-startup.mjs"]
     fn startup_benchmark() {
