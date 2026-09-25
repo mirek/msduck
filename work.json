@@ -1871,7 +1871,7 @@
     {
       "id": "bulk-load-codec-v1",
       "title": "Implement bounded incremental BulkLoadBCP codec",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement full SQL Server compatibility, inspect and reuse owner-authored mirek/mssqlite, and organize disjoint work for parallel agents. Local docs/tds-gap-inventory.md identifies bulk decoding as an independent protocol prerequisite; no external submission is approved.",
       "scope": [
         "crates/msduck-tds/src/bulk_load.rs",
@@ -1892,7 +1892,7 @@
     {
       "id": "merge-execution-plan-v1",
       "title": "Plan deterministic MERGE execution and atomic effect boundaries",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement full SQL Server compatibility and organize disjoint parallel work. Owner-authored PR #196 head 3b0f204 and owner-run CI 36118900585 provide verified first-party MERGE execution evidence; no external submission is approved.",
       "scope": [
         "docs/merge-execution-plan.md"
@@ -1911,7 +1911,7 @@
     {
       "id": "merge-action-core-v1",
       "title": "Implement deterministic MERGE action selection core",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement full SQL Server compatibility and organize disjoint parallel work. Owner-authored PR #196 exact head ffeb20b86507fc15cabfec4059abc4a06a264fbd retains 46 SQL Server observations; owner-authored PR #201 exact head a677a0559693296643f8bb06b55d73a084b2a4ad documents deterministic/effect boundaries. No external submission is approved.",
       "scope": [
         "crates/msduck-core/src/merge_action.rs",
@@ -1930,7 +1930,7 @@
     {
       "id": "merge-duckdb-atomicity-probe-v1",
       "title": "Probe pinned DuckDB MERGE atomicity and result behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement full SQL Server compatibility and organize disjoint parallel work. Owner-authored PR #196 exact head ffeb20b86507fc15cabfec4059abc4a06a264fbd provides SQL Server reference, and PR #201 exact head a677a0559693296643f8bb06b55d73a084b2a4ad identifies backend atomicity as the runtime gate. No external submission is approved.",
       "scope": [
         "tests/merge_duckdb_atomicity.rs",
@@ -1949,7 +1949,7 @@
     {
       "id": "merge-transaction-reference-v1",
       "title": "Capture SQL Server MERGE failures inside explicit transactions",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement a fully SQL Server-compatible Rust/DuckDB server and organize disjoint agent work. Owner-authored PR #196 supplies MERGE execution ground truth, and owner-authored PR #204 observes divergent DuckDB ambient-transaction failure semantics. No external submission is approved.",
       "scope": [
         "scripts/capture-merge-transaction.mjs",
