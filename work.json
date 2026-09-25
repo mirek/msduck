@@ -1659,7 +1659,7 @@
     {
       "id": "built-in-catalog-startup-v1",
       "title": "Reduce built-in catalog startup cost on two-core CI",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner goals to improve compile/test turnaround and complete the SQL Server-compatible Rust/DuckDB server. Merged PR #174 established correct captured catalog membership but increased median shared public-client duration 2.7 times on GitHub two-worker CI; run 36069792008 timed out 29 unrelated tests. PR #174 kept all assertions and scaled GitHub-only deadlines, but startup cost remains unresolved. This issue is owner-authored follow-up work, not external intake.",
       "scope": [
         "src/object_catalog/system_objects.rs",
