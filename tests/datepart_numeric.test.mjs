@@ -22,7 +22,8 @@ test('numeric DATEPART replays retained SQL Server values and diagnostics', {tim
       } catch (error) {
         const wanted = expected.errors[0]
         const actual = {number:error.number,state:error.state,class:error.class,message:error.message}
-        if (!isDeepStrictEqual(actual, {number:wanted.number,state:wanted.state,class:wanted.class,message:wanted.message})) differences.push({name:item.name,expectedError:wanted,actualError:actual})
+        const expectedError = {number:wanted.number,state:wanted.state,class:wanted.class,message:wanted.message}
+        if (!isDeepStrictEqual(actual, expectedError)) differences.push({name:item.name,expectedError,actualError:actual})
       }
       continue
     }

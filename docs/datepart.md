@@ -59,19 +59,24 @@ integer day-offset conversion explicit before extracting parts.
 
 Numeric DECIMAL/NUMERIC, FLOAT/REAL, MONEY/SMALLMONEY and BIT inputs now use
 SQL Server legacy `datetime` conversion before extracting parts. The reference
-fixture `reference/datepart-numeric.json` retains 50 observations from each of
+fixture `reference/datepart-numeric.json` retains 54 observations from each of
 two fresh databases and a second independent container, including source
-columns, bound RPCs, fractional boundaries, range errors, and NULLs. Its
-generator is `scripts/capture-datepart-numeric.mjs`. Exact decimal coefficients
+columns, bound RPCs, typed and bare 38-digit half-tick boundaries, range
+errors, and NULLs. Its generator is `scripts/capture-datepart-numeric.mjs`.
+Exact decimal coefficients
 are rounded on the 1/300-second grid without floating-point conversion; FLOAT
-and REAL retain their source binary values. The native path keeps the grid tick
+and REAL retain their source binary values. For bare fractional literals and
+explicit DECIMAL/NUMERIC casts of numeric tokens in DATEPART/DATENAME, lowering
+binds the token through a character-to-DECIMAL cast so DuckDB does not first
+round it through DOUBLE. Columns and RPCs retain their typed decimal storage.
+The native path keeps the grid tick
 through nanosecond extraction: one tick after midnight reports 3,333,333 ns,
 which a DATETIME2 100ns value cannot represent. Integer inputs keep their
 existing midnight-day behavior, and numeric `tzoffset` raises 9810 for legacy
 `datetime`.
 
 The independent client regression replays retained rows and keeps exact
-diagnostic differences explicit. All 50 observations match on rows and error
+diagnostic differences explicit. All 54 observations match on rows and error
 number/class. Five native error cases still carry the `Invalid Input Error:`
 prefix and state 1 instead of SQL Server's state 2 (range overflow) or state 6
 (`tzoffset`); the shared engine diagnostic wrapper has another active claim.

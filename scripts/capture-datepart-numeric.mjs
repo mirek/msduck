@@ -35,6 +35,10 @@ const expressions = [
   ['big decimal day', 'CAST(1721425.5 AS DECIMAL(10,1))'],
   ['half tick below', 'CAST(0.0000000192 AS DECIMAL(20,10))'],
   ['half tick above', 'CAST(0.0000000194 AS DECIMAL(20,10))'],
+  ['scale38 below half tick', 'CAST(0.00000001929012345679012345679012345678 AS DECIMAL(38,38))'],
+  ['scale38 above half tick', 'CAST(0.00000001929012345679012345679012345680 AS DECIMAL(38,38))'],
+  ['bare scale38 below half tick', '0.00000001929012345679012345679012345678'],
+  ['bare scale38 above half tick', '0.00000001929012345679012345679012345680'],
   ['one tick', 'CAST(0.0000000386 AS DECIMAL(20,10))'],
   ['negative one tick', 'CAST(-0.0000000386 AS DECIMAL(20,10))'],
   ['float tiny', 'CAST(0.0000000386 AS FLOAT)'],
@@ -106,6 +110,10 @@ function validate(run) {
   assert.deepEqual(get('decimal negative half').sets[0].rows.slice(0,1).map(row => row.slice(0,3)), [[1899,31,12]])
   assert.deepEqual(get('bit one').sets[0].rows.slice(0,1).map(row => row.slice(0,3)), [[1900,2,0]])
   assert.deepEqual(get('decimal null').sets[0].rows, [Array(8).fill(null)])
+  assert.equal(get('scale38 below half tick').sets[0].rows[0][7],0)
+  assert.equal(get('scale38 above half tick').sets[0].rows[0][7],3333333)
+  assert.equal(get('bare scale38 below half tick').sets[0].rows[0][7],0)
+  assert.equal(get('bare scale38 above half tick').sets[0].rows[0][7],3333333)
   for (const name of ['decimal column','float column','real column','money column','bit column']) assert.equal(get(name).sets[0].rows.length,4)
   for (const item of run) assert(item.result.done.length > 0, `${item.name}: no completion`)
 }

@@ -8,13 +8,85 @@ use sqlparser::ast::*;
 
 pub use msduck_sql::expression_metadata::datepart::named_args;
 
+fn decimal_literal_text(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Value(value) => match &value.value {
+            Value::Number(text, _)
+                if text.bytes().any(|b| b.is_ascii_digit())
+                    && text.bytes().filter(|&b| b == b'.').count() <= 1
+                    && text.bytes().all(|b| b.is_ascii_digit() || b == b'.') =>
+            {
+                Some(text.clone())
+            }
+            _ => None,
+        },
+        Expr::UnaryOp {
+            op: UnaryOperator::Plus,
+            expr,
+        } => decimal_literal_text(expr),
+        Expr::UnaryOp {
+            op: UnaryOperator::Minus,
+            expr,
+        } => decimal_literal_text(expr).map(|text| format!("-{text}")),
+        Expr::Nested(expr) => decimal_literal_text(expr),
+        _ => None,
+    }
+}
+
+fn preserve_exact_decimal_cast(value: &mut Expr) {
+    if let Expr::Nested(inner) | Expr::UnaryOp { expr: inner, .. } = value {
+        preserve_exact_decimal_cast(inner);
+    } else if let Expr::Cast {
+        expr, data_type, ..
+    } = value
+        && matches!(
+            data_type,
+            DataType::Decimal(_) | DataType::Numeric(_) | DataType::Dec(_)
+        )
+        && let Some(text) = decimal_literal_text(expr)
+    {
+        // DuckDB first converts a long numeric literal through DOUBLE before
+        // DECIMAL(38,38), losing digits that can cross a DATETIME half tick.
+        // Its character-to-DECIMAL cast preserves the exact SQL token.
+        *expr = Box::new(Expr::Value(Value::SingleQuotedString(text).into()));
+    }
+}
+
+fn preserve_bare_decimal_literal(value: &mut Expr) {
+    let Some(text) = decimal_literal_text(value) else {
+        return;
+    };
+    let unsigned = text.strip_prefix('-').unwrap_or(&text);
+    let Some((whole, fraction)) = unsigned.split_once('.') else {
+        return; // An integer literal retains the legacy integer-day route.
+    };
+    let integer_digits = whole.trim_start_matches('0').len();
+    let scale = fraction.len();
+    let precision = integer_digits + scale;
+    if scale == 0 || scale > 38 || precision > 38 {
+        return;
+    }
+    *value = Expr::Cast {
+        kind: CastKind::Cast,
+        expr: Box::new(Expr::Value(Value::SingleQuotedString(text).into())),
+        data_type: DataType::Decimal(ExactNumberInfo::PrecisionAndScale(
+            precision.max(1) as u64,
+            scale as i64,
+        )),
+        format: None,
+    };
+}
+
 pub fn lower(expr: &mut Expr) -> Result<(), String> {
     if let Expr::Function(f) = expr {
         for name in ["datepart", "datename"] {
             if let Some((part, value)) = named_args(f, name)? {
+                let mut value = value.clone();
+                preserve_exact_decimal_cast(&mut value);
+                preserve_bare_decimal_literal(&mut value);
                 *expr = crate::engine::unary_function(
                     &format!("__msduck_{name}_dispatch_{part}"),
-                    value.clone(),
+                    value,
                 );
                 break;
             }
@@ -537,6 +609,14 @@ mod tests {
             ),
             (
                 "SELECT __msduck_datepart_dispatch_12(CAST(0.0000000194 AS DECIMAL(20,10)))",
+                3_333_333,
+            ),
+            (
+                "SELECT __msduck_datepart_dispatch_12(CAST('0.00000001929012345679012345679012345678' AS DECIMAL(38,38)))",
+                0,
+            ),
+            (
+                "SELECT __msduck_datepart_dispatch_12(CAST('0.00000001929012345679012345679012345680' AS DECIMAL(38,38)))",
                 3_333_333,
             ),
             (
