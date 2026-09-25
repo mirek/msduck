@@ -1706,6 +1706,24 @@
       "dependencies": [],
       "issue": 178,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PKrOu"
+    },
+    {
+      "id": "system-column-wire-metadata-plan-v1",
+      "title": "Map system column catalog TDS descriptor differences",
+      "state": "ready",
+      "authorization": "Direct owner continuing SQL Server compatibility goal and request for disjoint parallel-agent tasks. Owner-authored PR #177 at 43d740e and PR #179 at 849e5ac plus an owner-run TDS probe establish 43 descriptor mismatches in each catalog view; no third-party content is input.",
+      "scope": [
+        "docs/system-column-wire-metadata-plan.md"
+      ],
+      "acceptance": [
+        "Start from owner-authored PR #177 revision 43d740e2b0f16bdac1661a4bd275b50859b4e527 and PR #179 revision 849e5acf79b4bb936cfd8d91a3d6accd20f28ed9 or descendants. Use retained reference/system-all-columns.json and local source only; do not fetch third-party issues, reviews or logs.",
+        "Inventory exact TDS type, length, precision, scale, collation and flags for all 43 fields in sys.columns, sys.system_columns and sys.all_columns, including empty results. Compare with current owner-probed descriptors and preserve differences between the three views.",
+        "Trace logical result metadata through query_catalog, result inference and TDS encoding. Separate observed behavior and source-proven causes from hypotheses; do not equate value-level equality with wire metadata compatibility.",
+        "Propose bounded non-overlapping implementation tasks with exact scopes and differential tests for empty, filtered and nonempty results. Documentation only: edit docs/system-column-wire-metadata-plan.md, do not change code, tests or reference data."
+      ],
+      "dependencies": [],
+      "issue": 180,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PKwHu"
     }
   ]
 }
