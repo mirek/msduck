@@ -1,15 +1,25 @@
 //! Stable table column IDs, with live identity and nullability properties.
+mod system_columns;
+
 use duckdb::Connection;
 use sqlparser::ast::*;
 
-pub fn register(db: &Connection) -> duckdb::Result<()> {
+pub fn register(db: &Connection) -> anyhow::Result<()> {
     db.execute_batch("CREATE TABLE IF NOT EXISTS main.__msduck_columns(object_id INTEGER NOT NULL,column_id INTEGER NOT NULL,name VARCHAR NOT NULL,PRIMARY KEY(object_id,column_id));
         CREATE TABLE IF NOT EXISTS main.__msduck_declared_columns(object_id INTEGER NOT NULL,column_id INTEGER NOT NULL,system_type_id UTINYINT,user_type_id INTEGER,max_length SMALLINT,precision UTINYINT,scale UTINYINT,collation_name VARCHAR,PRIMARY KEY(object_id,column_id));
         CREATE TABLE IF NOT EXISTS main.__msduck_column_counters(object_id INTEGER PRIMARY KEY,max_column_id INTEGER NOT NULL);
         CREATE OR REPLACE VIEW main.__msduck_live_columns AS SELECT o.object_id,o.type_code,c.column_name AS name,CAST(c.ordinal_position AS INTEGER) AS ordinal,c.is_nullable='YES' AS is_nullable,__msduck_identity_sequence(c.column_default) IS NOT NULL AS is_identity FROM information_schema.columns c JOIN main.__msduck_schemas s ON lower(s.name)=lower(c.table_schema) JOIN main.__msduck_objects o ON o.schema_id=s.schema_id AND lower(o.name)=lower(c.table_name) WHERE c.table_catalog=current_database();
         CREATE OR REPLACE VIEW main.__msduck_column_info AS SELECT l.object_id,l.name,CASE WHEN l.type_code='V' THEN l.ordinal ELSE d.column_id END AS column_id,l.is_nullable,l.is_identity FROM main.__msduck_live_columns l LEFT JOIN main.__msduck_columns d ON d.object_id=l.object_id AND lower(d.name)=lower(l.name) WHERE l.type_code='V' OR d.column_id IS NOT NULL;
-        CREATE OR REPLACE MACRO main.__msduck_col_name(obj,col) AS map_extract_value((SELECT map(list(CAST(object_id AS VARCHAR)||chr(0)||CAST(column_id AS VARCHAR)),list(name)) FROM main.__msduck_column_info),CAST(obj AS VARCHAR)||chr(0)||CAST(col AS VARCHAR));
-")
+")?;
+    system_columns::register(db)?;
+    db.execute_batch(
+        "CREATE OR REPLACE MACRO main.__msduck_col_name(obj,col) AS map_extract_value(
+        (SELECT map(list(CAST(object_id AS VARCHAR)||chr(0)||CAST(column_id AS VARCHAR)),list(name))
+         FROM (SELECT object_id,column_id,name FROM main.__msduck_column_info
+               UNION ALL SELECT object_id,column_id,name FROM main.__msduck_builtin_columns)),
+        CAST(obj AS VARCHAR)||chr(0)||CAST(col AS VARCHAR));",
+    )?;
+    Ok(())
 }
 
 pub fn sync(db: &Connection) -> duckdb::Result<()> {
@@ -18,7 +28,8 @@ pub fn sync(db: &Connection) -> duckdb::Result<()> {
         INSERT INTO main.__msduck_column_counters SELECT object_id,0 FROM main.__msduck_objects o WHERE type_code='U' AND NOT EXISTS(SELECT 1 FROM main.__msduck_column_counters d WHERE d.object_id=o.object_id);
         INSERT INTO main.__msduck_columns SELECT l.object_id,CAST(d.max_column_id+row_number() OVER(PARTITION BY l.object_id ORDER BY l.ordinal) AS INTEGER),l.name FROM main.__msduck_live_columns l JOIN main.__msduck_column_counters d USING(object_id) WHERE l.type_code='U' AND NOT EXISTS(SELECT 1 FROM main.__msduck_columns c WHERE c.object_id=l.object_id AND lower(c.name)=lower(l.name));
         UPDATE main.__msduck_column_counters d SET max_column_id=c.maximum FROM (SELECT object_id,max(column_id) AS maximum FROM main.__msduck_columns GROUP BY object_id) c WHERE c.object_id=d.object_id AND c.maximum>d.max_column_id;
-        DELETE FROM main.__msduck_declared_columns d WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_column_info c WHERE c.object_id=d.object_id AND c.column_id=d.column_id)")
+        DELETE FROM main.__msduck_declared_columns d WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_column_info c WHERE c.object_id=d.object_id AND c.column_id=d.column_id);
+        DELETE FROM main.__msduck_default_constraints d WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_column_info c WHERE c.object_id=d.parent_object_id AND c.column_id=d.column_id)")
 }
 
 pub fn lower(expr: &mut Expr) -> Result<(), String> {
