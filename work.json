@@ -2096,7 +2096,7 @@
     {
       "id": "for-xml-tds-codec-v1",
       "title": "Encode captured FOR XML NTEXT and XML TDS tokens",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility and disjoint parallel-agent work instructions. Owner-authored PR #217 merged the pinned two-container, four-database raw TDS capture proving NTEXT 0x63 and XML 0xF1 with PLP. No third-party content approved.",
       "scope": [
         "crates/msduck-tds/src/for_xml.rs",
