@@ -174,6 +174,8 @@ impl<const P: usize, const NAME: bool> VScalar for Part<P, NAME> {
     }
 }
 pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
+    #[cfg(test)]
+    let benchmark_start = std::time::Instant::now();
     macro_rules! register { ($($n:literal),*) => { $(db.register_scalar_function::<Part<$n>>(concat!("__msduck_datepart_",stringify!($n)))?;)* }; }
     register!(0, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14);
     db.register_scalar_function::<Part<13, true>>("__msduck_datename_offset")?;
@@ -183,8 +185,10 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
         .join(",");
     db.register_scalar_function::<Part<5>>("__msduck_datepart_5_raw")?;
     db.register_scalar_function::<Part<6>>("__msduck_datepart_6_raw")?;
+    // Keep the dependent macro definitions in their original order.
+    let mut definitions = String::new();
     for p in [5, 6] {
-        db.execute_batch(&format!("CREATE OR REPLACE MACRO main.__msduck_datepart_{p}(value) AS __msduck_datepart_{p}_raw(value, CAST(coalesce(getvariable('__msduck_datefirst'),7) AS INTEGER))"))?;
+        definitions.push_str(&format!("CREATE OR REPLACE MACRO main.__msduck_datepart_{p}(value) AS __msduck_datepart_{p}_raw(value, CAST(coalesce(getvariable('__msduck_datefirst'),7) AS INTEGER));\n"));
     }
     for (part, name) in [
         "year",
@@ -217,30 +221,38 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
         // typeof is resolved during binding; only conversion evaluates value.
         // Check before converting: a TIME value must not gain valid calendar
         // fields just because conversion supplies the 1900 base date.
+        let result = match part {
+            2 => "monthname(__msduck_datetime2_date(value))".to_string(),
+            6 => "dayname(__msduck_datetime2_date(value))".to_string(),
+            _ => format!("CAST(__msduck_datepart_{part}(value) AS VARCHAR)"),
+        };
+        definitions.push_str(&format!(
+            "CREATE OR REPLACE MACRO main.__msduck_datename_{part}(value) AS {result};\n"
+        ));
         for function in ["datepart", "datename"] {
             let unsupported = if function == "datename" && part == 13 {
                 "WHEN FALSE THEN 'unused'"
             } else {
                 unsupported
             };
-            db.execute_batch(&format!("CREATE OR REPLACE MACRO main.__msduck_{function}_input_{part}(value) AS CASE WHEN (CASE {unsupported} ELSE NULL END) IS NOT NULL THEN error('The datepart {name} is not supported by date function {function} for data type ' || (CASE {unsupported} ELSE NULL END) || '.') WHEN typeof(value) IN ('TINYINT','UTINYINT','SMALLINT','INTEGER','BIGINT') THEN __msduck_datetime2_cast_7(__msduck_integer_date(CAST(CAST(value AS VARCHAR) AS BIGINT))) ELSE __msduck_datetime2_cast_7(value) END"))?;
-        }
-        let result = match part {
-            2 => "monthname(__msduck_datetime2_date(value))".to_string(),
-            6 => "dayname(__msduck_datetime2_date(value))".to_string(),
-            _ => format!("CAST(__msduck_datepart_{part}(value) AS VARCHAR)"),
-        };
-        db.execute_batch(&format!(
-            "CREATE OR REPLACE MACRO main.__msduck_datename_{part}(value) AS {result}"
-        ))?;
-        for function in ["datepart", "datename"] {
+            let input = format!(
+                "CASE WHEN (CASE {unsupported} ELSE NULL END) IS NOT NULL THEN error('The datepart {name} is not supported by date function {function} for data type ' || (CASE {unsupported} ELSE NULL END) || '.') WHEN typeof(value) IN ('TINYINT','UTINYINT','SMALLINT','INTEGER','BIGINT') THEN __msduck_datetime2_cast_7(__msduck_integer_date(CAST(CAST(value AS VARCHAR) AS BIGINT))) ELSE __msduck_datetime2_cast_7(value) END"
+            );
             let offset_function = if function == "datename" && part == 13 {
                 "__msduck_datename_offset".to_string()
             } else {
                 format!("__msduck_{function}_{part}")
             };
-            db.execute_batch(&format!("CREATE OR REPLACE MACRO main.__msduck_{function}_dispatch_{part}(value) AS CASE WHEN typeof(value) IN ({offset_types}) THEN {offset_function}(__msduck_datetimeoffset_cast_7(value)) ELSE __msduck_{function}_{part}(__msduck_{function}_input_{part}(value)) END"))?;
+            definitions.push_str(&format!("CREATE OR REPLACE MACRO main.__msduck_{function}_dispatch_{part}(value) AS CASE WHEN typeof(value) IN ({offset_types}) THEN {offset_function}(__msduck_datetimeoffset_cast_7(value)) ELSE __msduck_{function}_{part}({input}) END;\n"));
         }
+    }
+    db.execute_batch(&definitions)?;
+    #[cfg(test)]
+    if std::env::var_os("MSDUCK_DATEPART_BENCH").is_some() {
+        println!(
+            "MSDUCK_DATEPART_MS {:.6}",
+            benchmark_start.elapsed().as_secs_f64() * 1000.0
+        );
     }
     Ok(())
 }
@@ -280,6 +292,20 @@ pub fn setting(statement: &Statement) -> Result<Option<Expr>, String> {
 #[cfg(test)]
 mod tests {
     #[test]
+    #[ignore = "repeatable local startup benchmark; use scripts/bench-datepart-startup.mjs"]
+    fn startup_benchmark() {
+        for _ in 0..20 {
+            let start = std::time::Instant::now();
+            let server = crate::server::Server::open(":memory:").unwrap();
+            println!(
+                "MSDUCK_SERVER_MS {:.6}",
+                start.elapsed().as_secs_f64() * 1000.0
+            );
+            drop(server);
+        }
+    }
+
+    #[test]
     fn offset_local_fields_nulls_and_single_evaluation_across_chunks() {
         let db = duckdb::Connection::open_in_memory().unwrap();
         crate::scalar::register(&db).unwrap();
@@ -313,15 +339,15 @@ mod tests {
         assert_eq!(wrong, 0);
         db.execute_batch("CREATE SEQUENCE datepart_calls START 1")
             .unwrap();
-        let rows: i64 = db.query_row("SELECT count(__msduck_datepart_9(__msduck_datepart_input_9(printf('2026-01-01T00:00:%02d',nextval('datepart_calls')%60)))) FROM range(6000)", [], |r| r.get(0)).unwrap();
+        let rows: i64 = db.query_row("SELECT count(__msduck_datepart_dispatch_9(printf('2026-01-01T00:00:%02d',nextval('datepart_calls')%60))) FROM range(6000)", [], |r| r.get(0)).unwrap();
         assert_eq!(rows, 6000);
         db.execute_batch("CREATE SEQUENCE integer_datepart_calls START 1")
             .unwrap();
-        let integer_rows: i64 = db.query_row("SELECT count(__msduck_datepart_0(__msduck_datepart_input_0(nextval('integer_datepart_calls')%100))) FROM range(6000)", [], |r| r.get(0)).unwrap();
+        let integer_rows: i64 = db.query_row("SELECT count(__msduck_datepart_dispatch_0(nextval('integer_datepart_calls')%100)) FROM range(6000)", [], |r| r.get(0)).unwrap();
         assert_eq!(integer_rows, 6000);
         db.execute_batch("CREATE SEQUENCE datename_calls START 1")
             .unwrap();
-        let names: i64 = db.query_row("SELECT count(__msduck_datename_2(__msduck_datename_input_2(printf('2026-%02d-01',nextval('datename_calls')%12+1)))) FROM range(6000)", [], |r| r.get(0)).unwrap();
+        let names: i64 = db.query_row("SELECT count(__msduck_datename_dispatch_2(printf('2026-%02d-01',nextval('datename_calls')%12+1))) FROM range(6000)", [], |r| r.get(0)).unwrap();
         assert_eq!(names, 6000);
         assert_eq!(
             db.query_row("SELECT currval('datename_calls')", [], |r| r
