@@ -1926,6 +1926,25 @@
       "dependencies": [],
       "issue": 202,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PL8oX"
+    },
+    {
+      "id": "merge-duckdb-atomicity-probe-v1",
+      "title": "Probe pinned DuckDB MERGE atomicity and result behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement full SQL Server compatibility and organize disjoint parallel work. Owner-authored PR #196 exact head ffeb20b86507fc15cabfec4059abc4a06a264fbd provides SQL Server reference, and PR #201 exact head a677a0559693296643f8bb06b55d73a084b2a4ad identifies backend atomicity as the runtime gate. No external submission is approved.",
+      "scope": [
+        "tests/merge_duckdb_atomicity.rs",
+        "docs/merge-duckdb-atomicity.md"
+      ],
+      "acceptance": [
+        "Probe native MERGE INTO on the exact bundled DuckDB dependency pinned by Cargo.lock, in isolated databases: matched UPDATE, unmatched INSERT, by-source DELETE, mixed conditional actions, duplicate source matches, CHECK and unique failures, RETURNING merge_action, self-reference, row identity/image and rollback.",
+        "Within an explicit transaction, retain a prior successful write, induce a failing MERGE, then observe whether only MERGE rolls back, whether the transaction remains usable and whether the prior write can commit; compare the first-party SQL Server PR #196 8672/547 and rollback boundaries without asserting equivalence where results differ.",
+        "Write deterministic observational tests and document raw backend results, exact version, discrepancies and safe/unsafe native primitives; no production edits or relaxation of the existing MERGE rejection.",
+        "Run formatting, cargo test --test merge_duckdb_atomicity --locked and strict Clippy on the exact PR revision; state remaining adapter, OUTPUT, diagnostics and wire work."
+      ],
+      "dependencies": [],
+      "issue": 203,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PL9Ff"
     }
   ]
 }
