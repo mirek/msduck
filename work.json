@@ -1851,7 +1851,7 @@
     {
       "id": "merge-execution-reference-v1",
       "title": "Capture SQL Server MERGE execution reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement a fully functional SQL Server-compatible Rust server backed by DuckDB and request to organize disjoint parallel-agent work. Current src/engine.rs explicitly rejects executable MERGE; owner-copied reference/mssqlite/corpus.ts covers only terminator validation. No external submission is approved.",
       "scope": [
         "scripts/capture-merge-execution.mjs",
