@@ -1991,7 +1991,7 @@
     {
       "id": "merge-output-contract-v1",
       "title": "Implement deterministic MERGE OUTPUT projection contract",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement a fully SQL Server-compatible Rust/DuckDB server and organize disjoint parallel-agent work. Owner-authored PR #196 captures MERGE OUTPUT rows/descriptors; pure action-selection core PR #206 has merged. No external submission is approved.",
       "scope": [
         "crates/msduck-sql/src/merge_output.rs",
