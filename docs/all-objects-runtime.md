@@ -50,8 +50,10 @@ harness (SHA-256 `075f080522861b11f41ea3c736ecbdf8142a4c1a299eb2f4fad8c899067f22
 The fresh-open median fell 1.45%, while the reopen median rose 0.74%; this
 does not establish a material startup improvement. The #174 CI run
 `36075844399` spent 37 minutes 53 seconds in its two-worker independent-client
-step. The candidate's corresponding CI duration is needed before concluding
-whether the test-suite regression changed.
+step. Candidate run `36087838555` spent 37 minutes 28 seconds in the same step
+(2026-09-25 03:12:13–03:49:41 UTC), only 25 seconds less. This does not
+materially improve the test-suite regression either; the Arrow candidate is
+not suitable to merge as the claimed startup fix.
 
 A separate five-sample diagnostic run timed the candidate's entire built-in
 object registration at 39–43 ms on a fresh database and about 1.7 ms on
