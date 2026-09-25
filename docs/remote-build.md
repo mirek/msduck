@@ -51,6 +51,26 @@ subdirectory. `.git`, `.env` files, `.msduck/` credentials, database files, loca
 and artifacts are excluded. Remote target and dependency caches survive syncs.
 `npm ci` runs when the package lock changes or dependencies are absent.
 
+Source sync compares file content (`rsync --checksum`) and does not preserve
+source mtimes on the receiver. A changed file therefore receives a fresh Linux
+mtime for Cargo's fingerprint check, while unchanged files and their cached
+build artifacts remain untouched. The previous timestamp-preserving sync could
+copy changed bytes with an older mtime, leaving Cargo to reuse a stale binary.
+On the first run after this sync change, the runner performs a one-time
+`cargo clean` in an existing remote target and records a marker outside the
+source tree. This cold rebuild clears artifacts that may already have been
+compiled from stale bytes; later unchanged-source runs reuse the target.
+The marker and reset are protected by the same workspace lock as synchronization.
+
+`node --test tests/remote-build.test.mjs` exercises a same-size source change
+with an old mtime in a small offline Cargo crate. It checks that the changed
+binary rebuilds, an unchanged rerun leaves the binary untouched, and private
+`.env` and `.msduck` files stay excluded. On `linux.local`, the test passed and
+the runner's first migrated workspace build completed in 1m 31s of Cargo time;
+an unchanged second invocation finished in 0.05s of Cargo time (0.77s wall
+clock). These are build-cache checks, not full workspace or compatibility test
+results for the current revision.
+
 Remote audit captures are copied to
 `artifacts/remote/<host>/compatibility/`, leaving local captures intact. Compare
 raw values, metadata, errors and completion events before treating results from
