@@ -10,10 +10,14 @@ use msduck::{
 };
 use std::{
     collections::HashMap,
+    io::{BufRead, BufReader},
+    process::Stdio,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
+        mpsc,
     },
+    thread,
     time::{Duration, Instant},
 };
 struct Marker;
@@ -78,20 +82,58 @@ fn cancelled_computations_match_reference_completion_and_preserve_session_work()
                 "--nocapture",
             ])
             .env(CHILD, "1")
+            .stderr(Stdio::piped())
             .spawn()
             .unwrap();
-        let deadline = Instant::now() + Duration::from_secs(90);
+        let stderr = child.stderr.take().unwrap();
+        let (progress_tx, progress_rx) = mpsc::channel();
+        let forwarder = thread::spawn(move || {
+            for line in BufReader::new(stderr).lines() {
+                let line = line.unwrap();
+                eprintln!("{line}");
+                if line.starts_with("matched engine read cancellation ") {
+                    let _ = progress_tx.send(line);
+                }
+            }
+        });
+        let expected_cases = serde_json::from_str::<serde_json::Value>(include_str!(
+            "../reference/attention-compute.json"
+        ))
+        .unwrap()["results"]
+            .as_array()
+            .unwrap()
+            .len();
+        let mut completed = 0;
+        let mut last_case = String::from("none");
+        let mut last_progress = Instant::now();
         loop {
+            while let Ok(case) = progress_rx.try_recv() {
+                completed += 1;
+                last_case = case;
+                last_progress = Instant::now();
+            }
             if let Some(status) = child.try_wait().unwrap() {
-                assert!(status.success());
+                forwarder.join().unwrap();
+                while let Ok(case) = progress_rx.try_recv() {
+                    completed += 1;
+                    last_case = case;
+                }
+                assert!(
+                    status.success(),
+                    "engine read cancellation child failed after {completed}/{expected_cases} cases; last: {last_case}"
+                );
+                assert_eq!(completed, expected_cases, "missing case progress");
                 return;
             }
-            if Instant::now() >= deadline {
-                child.kill().unwrap();
+            if last_progress.elapsed() >= Duration::from_secs(60) {
+                let _ = child.kill();
                 child.wait().unwrap();
-                panic!("engine read cancellation probe exceeded 90 seconds")
+                forwarder.join().unwrap();
+                panic!(
+                    "engine read cancellation probe stalled for 60 seconds after {completed}/{expected_cases} cases; last: {last_case}"
+                )
             }
-            std::thread::sleep(Duration::from_millis(20));
+            thread::sleep(Duration::from_millis(20));
         }
     }
     let fixture: serde_json::Value =
