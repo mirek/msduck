@@ -300,3 +300,25 @@ fn invalid_plp_and_numeric_payloads_fail_before_eom() {
     let mut decoder = Decoder::new(EomMode::RequireDone);
     assert_eq!(decoder.push(&wire, false).err(), Some(Error::Malformed));
 }
+
+#[test]
+fn legacy_ntext_max_metadata_keeps_isolated_utf16_units() {
+    let mut type_info = vec![0x63];
+    type_info.extend(u32::MAX.to_le_bytes());
+    type_info.extend([9, 4, 0xd0, 0, 0x34]);
+    let mut column = Vec::new();
+    column.extend(0u32.to_le_bytes());
+    column.extend(1u16.to_le_bytes());
+    column.extend(type_info);
+    column.extend([1, 1, 0, b't', 0]); // table-name part
+    column.extend([1, b'n', 0]);
+    let mut wire = metadata(&[column]);
+    wire.extend([0xd1, 1, 0x42]); // text pointer
+    wire.extend([0; 8]); // timestamp
+    wire.extend(2u32.to_le_bytes());
+    wire.extend([0x00, 0xd8]); // isolated high surrogate
+    wire.extend(done());
+    let mut decoder = Decoder::new(EomMode::RequireDone);
+    let chunk = decoder.push(&wire, true).unwrap();
+    assert_eq!(chunk.rows[0][0].bytes, Some(vec![0x00, 0xd8]));
+}

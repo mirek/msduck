@@ -402,9 +402,6 @@ fn read_type_info(c: &mut Cursor<'_>) -> ReadResult<TypeInfo> {
         0x22 | 0x23 | 0x63 => {
             let max = c.u32()? as usize;
             let unicode = id == 0x63;
-            if unicode && !max.is_multiple_of(2) {
-                return Err(invalid(Error::Malformed));
-            }
             if id != 0x22 {
                 collation = Some(c.take(5)?.try_into().expect("five bytes"));
             }
