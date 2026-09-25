@@ -2077,7 +2077,7 @@
     {
       "id": "read-cancellation-watchdog-v1",
       "title": "Make read cancellation CI watchdog progress-aware",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility and CI-green instructions. Owner-controlled exact PR #214 CI log (actor/triggering actor 8561, same repo) shows fixed 90-second test watchdog killing a child after 23 successful cancellation cases; exact Linux workspace run passed. Predecessor implementation task is Done. No third-party content approved.",
       "scope": [
         "tests/read_cancellation.rs"
