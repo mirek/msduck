@@ -1764,6 +1764,27 @@
       "dependencies": [],
       "issue": 183,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PK0Ns"
+    },
+    {
+      "id": "datepart-registration-startup-v1",
+      "title": "Reduce DATEPART/DATENAME registration startup cost",
+      "state": "ready",
+      "authorization": "Direct owner goal to improve compile/test turnaround while implementing the SQL Server-compatible Rust/DuckDB server. Owner-run three-sample read-only GDB profile of merged main 2a8d235 found 94–96 ms in datepart::register, within a 158–162 ms scalar registration phase. PR #181 built-in-object Arrow candidate did not materially improve the two-core client duration. No external content consumed.",
+      "scope": [
+        "src/datepart.rs",
+        "scripts/bench-datepart-startup.mjs",
+        "docs/datepart-startup.md"
+      ],
+      "acceptance": [
+        "Add an ignored repeatable internal benchmark for datepart::register and complete fresh Server::open, plus a two-core runner reporting p50/p95. Compare merged-main baseline and candidate with identical harness, host and toolchain; keep GDB entry timestamps as directional evidence only.",
+        "Materially reduce DATEPART/DATENAME registration and full fresh-server startup without dropping dispatch variants or changing datepart diagnostics, DATEFIRST, typed TIME/DATE handling, NULL metadata, or SQL Server-observed behavior.",
+        "Run formatting, strict workspace Clippy, workspace Rust tests, focused DATEPART/DATENAME client regressions, full independent client shards and diagnostic audit on an immutable head; compare client duration with #174 and #181 CI and retain raw measurements.",
+        "If the candidate does not meet performance and compatibility criteria, keep it draft and record the result without merging it as an optimization."
+      ],
+      "dependencies": [],
+      "parent": 176,
+      "issue": 187,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PK31w"
     }
   ]
 }
