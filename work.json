@@ -1827,6 +1827,26 @@
       "dependencies": [],
       "issue": 191,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PLL3A"
+    },
+    {
+      "id": "for-xml-path-reference-v1",
+      "title": "Capture SQL Server FOR XML PATH reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement a fully functional SQL Server-compatible Rust server backed by DuckDB, plus the owner request to organize disjoint work for parallel agents. The owner-copied reference/mssqlite/corpus.ts FOR XML PATH case and current compatibility baseline identify the gap. No external submission is approved.",
+      "scope": [
+        "scripts/capture-for-xml-path.mjs",
+        "reference/for-xml-path.json",
+        "docs/for-xml-path-reference.md"
+      ],
+      "acceptance": [
+        "Capture two fresh SQL Server 2025 database runs with the pinned image, retaining complete TDS column descriptors, rows, errors, and DONE-family tokens rather than reducing the result to an XML string.",
+        "Cover PATH row names including empty PATH, attribute/element/unnamed aliases, XML escaping, NULL and zero-row behavior, ordering, TYPE and ROOT variants, and representative invalid forms; distinguish unsupported syntax from observed SQL Server behavior.",
+        "Document exact observations and known implementation gaps, compare both fresh runs for stability, and retain the mssqlite corpus case without normalizing its stated NText versus NVarChar difference.",
+        "Keep the task reference-only in its three approved files; do not modify runtime lowering, core XML serialization, TDS encoding, or another worker's claimed files."
+      ],
+      "dependencies": [],
+      "issue": 193,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PLYkd"
     }
   ]
 }
