@@ -13,12 +13,29 @@ markers, including prepared, all-NULL and empty results.
 
 Microsoft's [CHAR reference](https://learn.microsoft.com/en-us/sql/t-sql/functions/char-transact-sql?view=sql-server-ver17)
 specifies char(1). This differs from the inspected mssqlite inference's varchar(1)
-descriptor; the implementation follows Microsoft's declared type, with live TDS
-differential verification still required.
+descriptor. The pinned SQL Server capture in `reference/char-byte.json` confirms
+`Char` with a one-byte value length for all 256 byte codes, boundary values,
+empty results and bound `INT` RPC calls. It records complete columns, rows,
+errors and DONE tokens from two fresh databases and matches an independent
+second-container recapture. The RPC gives `doneInProc` and `doneProc` tokens;
+ordinary batches give `done`.
+
+Every integer code 0 through 255 round-trips as the identical raw byte through
+`CONVERT(VARBINARY(1), CHAR(n))` and `ASCII(CHAR(n))`. The native scalar test
+compares all 256 outputs against captured `UNICODE(CHAR(n))` and raw bytes.
+Tedious displays undefined Windows-1252 bytes `81`, `8d`, `8f`, `90` and `9d`
+as U+FFFD, while SQL Server reports their original byte through `ASCII` and
+their corresponding C1 code point through `UNICODE`. The native string retains
+those C1 code points so the TDS writer can reproduce the original bytes; the
+client's replacement display is a decoding artifact. The capture also confirms
+negative/over-255/NULL return NULL, fractions truncate on integer conversion,
+empty text converts to code zero, invalid text reports 245, and INT overflow
+reports 8115.
 
 Tests cover ASCII, extended Windows-1252 characters, controls, range limits,
 NULLs, prepared reuse after errors, defaults, columns, result metadata and nested
-expressions. A native test covers every byte and invalid codes across 6,000 rows.
+expressions. Native tests cover every byte against the retained reference and
+invalid codes across 6,000 rows.
 
 Other code pages, full implicit conversion (including binary inputs), stored
 object/wildcard/general set-operation descriptor propagation and exact diagnostic parity
