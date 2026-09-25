@@ -1809,7 +1809,7 @@
     {
       "id": "quotename-core-reference-v1",
       "title": "Capture and model QUOTENAME UTF-16 behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement a fully SQL Server-compatible Rust/DuckDB server and organize disjoint first-party work. The repository T-SQL skill and Microsoft QUOTENAME documentation identify this missing built-in; no external user submission is input.",
       "scope": [
         "scripts/capture-quotename.mjs",
