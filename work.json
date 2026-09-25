@@ -2012,7 +2012,7 @@
     {
       "id": "for-xml-path-core-v1",
       "title": "Implement deterministic FOR XML PATH row serialization",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server-compatible Rust/DuckDB implementation goal and instruction to organize disjoint parallel-agent work. Owner-authored PR #195 merged the 21-case twice-captured and independently reproduced SQL Server FOR XML PATH reference. No external submission is approved.",
       "scope": [
         "crates/msduck-sql/src/for_xml_path.rs",
