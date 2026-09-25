@@ -1521,7 +1521,7 @@
     {
       "id": "engine-read-cancellation-v1",
       "title": "Integrate typed active-read cancellation into session batch execution",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. PR161 exposes owned cancellable reads and SQL Server computation captures establish completion/transaction behavior. Add an opt-in session path before responsive transport integration. Original root concat-integration-v1 owns engine/lib integration and smp-codec-v1 owns TDS exports.",
       "scope": [
         "src/read_cancellation.rs",
