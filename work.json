@@ -2181,7 +2181,7 @@
     {
       "id": "identity-scope-core-v1",
       "title": "Model deterministic session and nested identity scopes",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal and request for disjoint parallel agent work. Owner-authored SQL Server identity retrieval fixture at fc953ef supplies the behavioral contract; no external submission is input.",
       "scope": [
         "crates/msduck-core/src/identity_scope.rs",
