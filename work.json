@@ -2157,6 +2157,26 @@
       "dependencies": [],
       "issue": 225,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PM1Wi"
+    },
+    {
+      "id": "identity-retrieval-reference-v1",
+      "title": "Capture SQL Server identity retrieval scope and session semantics",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal and independent agent-work request. First-party reference work grounded in Microsoft Learn and owner-controlled mirek/mssqlite; no external submission is input.",
+      "scope": [
+        "scripts/capture-identity-retrieval.mjs",
+        "reference/identity-retrieval.json",
+        "docs/identity-retrieval.md"
+      ],
+      "acceptance": [
+        "Capture SCOPE_IDENTITY(), @@IDENTITY and IDENT_CURRENT with exact rows, descriptors, errors and DONE tokens, including initial NULLs, batch and RPC scope, second-session isolation, failed insert and rollback gaps, truncation and trigger effects.",
+        "Use the pinned SQL Server image in two fresh databases, assert raw captures match, then independently recapture in a second container against the retained fixture. Do not normalize client or SQL Server differences.",
+        "Record exact decimal metadata and representative BIGINT identity values; document observed semantics, mssqlite comparison and bounded successor integration paths without editing claimed engine/session/server files.",
+        "Run generator syntax/validation and inspect retained observations; capture failures should be documented instead of being disguised as parity."
+      ],
+      "dependencies": [],
+      "issue": 227,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PM4uO"
     }
   ]
 }
