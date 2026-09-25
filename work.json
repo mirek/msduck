@@ -1945,6 +1945,26 @@
       "dependencies": [],
       "issue": 203,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PL9Ff"
+    },
+    {
+      "id": "merge-transaction-reference-v1",
+      "title": "Capture SQL Server MERGE failures inside explicit transactions",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement a fully SQL Server-compatible Rust/DuckDB server and organize disjoint agent work. Owner-authored PR #196 supplies MERGE execution ground truth, and owner-authored PR #204 observes divergent DuckDB ambient-transaction failure semantics. No external submission is approved.",
+      "scope": [
+        "scripts/capture-merge-transaction.mjs",
+        "reference/merge-transaction.json",
+        "docs/merge-transaction-reference.md"
+      ],
+      "acceptance": [
+        "Use the pinned SQL Server 2025 container to capture two fresh databases with complete TDS descriptors, rows, errors, information and DONE-family events for MERGE failures inside explicit transactions.",
+        "For XACT_ABORT OFF and ON, retain a prior successful write, induce MERGE CHECK 547 and duplicate-target 8672 errors, then observe XACT_STATE, @@TRANCOUNT, prior/target rows, subsequent write viability, COMMIT/ROLLBACK and final rows after reconnect.",
+        "Capture a failing MERGE with OUTPUT INTO to establish target and sink atomicity; distinguish ordinary request boundaries from TRY/CATCH where tested.",
+        "Assert stable observations after binding only generated database names; preserve raw runs, exact image/version and unresolved concurrency questions. Keep the work reference-only in the three approved files and run syntax checks and a fresh pinned recapture on the exact PR revision."
+      ],
+      "dependencies": [],
+      "issue": 207,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PMGNH"
     }
   ]
 }
