@@ -2161,7 +2161,7 @@
     {
       "id": "identity-retrieval-reference-v1",
       "title": "Capture SQL Server identity retrieval scope and session semantics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal and independent agent-work request. First-party reference work grounded in Microsoft Learn and owner-controlled mirek/mssqlite; no external submission is input.",
       "scope": [
         "scripts/capture-identity-retrieval.mjs",
