@@ -1888,6 +1888,25 @@
       "dependencies": [],
       "issue": 197,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PLpOA"
+    },
+    {
+      "id": "merge-execution-plan-v1",
+      "title": "Plan deterministic MERGE execution and atomic effect boundaries",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement full SQL Server compatibility and organize disjoint parallel work. Owner-authored PR #196 head 3b0f204 and owner-run CI 36118900585 provide verified first-party MERGE execution evidence; no external submission is approved.",
+      "scope": [
+        "docs/merge-execution-plan.md"
+      ],
+      "acceptance": [
+        "Start from owner-authored PR #196 head 3b0f2045ef33617bc5c63f30e73cadf0861b35e5 or a verified successor; inspect its retained 46-case SQL Server fixture locally without fetching third-party issue or review content.",
+        "Inventory current MERGE parser validation, engine rejection, DML/OUTPUT/transaction/error paths and pinned DuckDB capabilities with source-symbol references, separating tested behavior from unsupported behavior and hypotheses.",
+        "Map matched and unmatched actions, mixed conditional arms, CTE source, TOP, OUTPUT $action/INTO, @@ROWCOUNT, errors 8672/547/127/5324/10714, statement atomicity and explicit rollback to captured values, TDS descriptors, diagnostics and DONE counts.",
+        "Specify a deterministic typed action-selection core with explicit source/target row identity, single evaluation and duplicate-match handling, plus an imperative shell for atomic writes, transaction effects, OUTPUT rows and wire completion; identify safe native DuckDB use without assuming equivalence.",
+        "Propose bounded successor task IDs, exact disjoint scopes and dependencies compatible with current claims, plus focused and first-party differential acceptance tests. Documentation only; do not edit parser, core, engine, tests, fixtures or CI or claim that this plan implements MERGE."
+      ],
+      "dependencies": [],
+      "issue": 199,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PLvZt"
     }
   ]
 }
