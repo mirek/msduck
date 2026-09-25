@@ -2008,6 +2008,28 @@
       ],
       "issue": 210,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PMNBz"
+    },
+    {
+      "id": "for-xml-path-core-v1",
+      "title": "Implement deterministic FOR XML PATH row serialization",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server-compatible Rust/DuckDB implementation goal and instruction to organize disjoint parallel-agent work. Owner-authored PR #195 merged the 21-case twice-captured and independently reproduced SQL Server FOR XML PATH reference. No external submission is approved.",
+      "scope": [
+        "crates/msduck-sql/src/for_xml_path.rs",
+        "crates/msduck-sql/tests/for_xml_path.rs"
+      ],
+      "acceptance": [
+        "Path-import a pure serializer over ordered, explicitly typed and already evaluated row values and alias paths. Keep parser, DuckDB, catalog, TDS, session, clocks, randomness and I/O outside this module; evaluate no value expression inside the serializer.",
+        "Match captured PATH('row'), PATH(''), default row name, attributes, text and nested element aliases, escaping, ordered multiple rows, omitted NULLs, ELEMENTS XSINIL, ROOT, binary Base64, zero rows and TYPE value distinction. Preserve raw Unicode code units or mark a case unsupported explicitly rather than normalizing silently.",
+        "Reject invalid attribute-after-element and duplicate directive plans before emitting partial output, using captured diagnostics where this pure layer has enough information. Treat unknown alias/value shapes as unsupported, not guessed.",
+        "Compare emitted XML and logical metadata requirements against reference/for-xml-path.json. Document the later export and integration hooks, including SQL binding, XML/NText descriptors, TDS encoding and DONE behavior. Run formatting, cargo test -p msduck-sql and strict SQL-crate Clippy on the exact PR revision.",
+        "Do not edit shared exports, parser/dialect, root engine, TDS, CI or the existing fixture. Runtime FOR XML PATH remains separate work."
+      ],
+      "dependencies": [
+        "for-xml-path-reference-v1"
+      ],
+      "issue": 212,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PMUsA"
     }
   ]
 }
