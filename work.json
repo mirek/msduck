@@ -2056,7 +2056,7 @@
     {
       "id": "merge-top-binding-v1",
       "title": "Bind deterministic MERGE TOP limits from captured SQL Server behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility and parallel-agent work instructions. Owner-authored PR #213 merged the 73-case twice-captured, independently recaptured reference. No third-party content approved.",
       "scope": [
         "crates/msduck-sql/src/merge_top.rs",
