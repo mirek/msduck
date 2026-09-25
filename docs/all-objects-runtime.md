@@ -82,6 +82,10 @@ These breakpoints bracket work rather than measure exclusive function time;
 GDB overhead, warm caches and unrestricted CPUs make the figures directional,
 not a substitute for the controlled two-core comparison. They show that the
 row appender replacement alone cannot address the dominant startup costs.
+Three more samples split the latter interval: `column_catalog::sync` to
+`object_catalog::sync_lob` took 64–66 ms, while `sync_lob` to the next phase
+took 7–8 ms. Column synchronization is another candidate after the active
+system-column runtime claim releases `src/column_catalog.rs`.
 In a separate three-sample run with only four breakpoints, the interval from
 `datepart::register` to the following `dateadd::register` was 94, 94, and
 96 ms, versus 158–162 ms for the whole scalar-registration stage. Source
