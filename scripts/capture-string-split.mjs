@@ -50,6 +50,7 @@ const cases = [
   ['ordinal two', "SELECT value,ordinal FROM STRING_SPLIT('a,b',',',2) ORDER BY ordinal"],
   ['ordinal negative', "SELECT value,ordinal FROM STRING_SPLIT('a,b',',',-1) ORDER BY ordinal"],
   ['ordinal null', "SELECT value,ordinal FROM STRING_SPLIT('a,b',',',NULL) ORDER BY ordinal"],
+  ['ordinal null value only', "SELECT value FROM STRING_SPLIT('a,b',',',NULL) ORDER BY value"],
   ['ordinal cast constant', "SELECT value,ordinal FROM STRING_SPLIT('a,b',',',CAST(1 AS BIT)) ORDER BY ordinal"],
   ['ordinal variable', "DECLARE @ordinal BIT=1; SELECT value,ordinal FROM STRING_SPLIT('a,b',',',@ordinal) ORDER BY ordinal"],
   ['ordinal decimal', "SELECT value,ordinal FROM STRING_SPLIT('a,b',',',1.0) ORDER BY ordinal"],
@@ -115,6 +116,7 @@ function validate(run) {
   assert.deepEqual(get('empty input').sets[0].rows, [['']])
   assert.deepEqual(get('null ansi input').sets[0].rows, [])
   assert.deepEqual(get('ordinal one ordered').sets[0].rows, [['b', '1'], ['a', '2'], ['b', '3']])
+  assert.deepEqual(get('ordinal null value only').sets[0].rows, [['a'], ['b']])
   assert.deepEqual(get('bound ansi').sets[0].rows, [['a', '1'], ['b', '2']])
   for (const record of run) assert(record.result.done.length > 0, `${record.name}: no completion`)
 }

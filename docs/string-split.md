@@ -1,6 +1,6 @@
 # STRING_SPLIT reference contract
 
-`reference/string-split.json` retains 48 SQL Server programs per run. The
+`reference/string-split.json` retains 49 SQL Server programs per run. The
 generator repeated every program in two fresh databases in each of two
 independent containers, all using the pinned SQL Server 2025 image digest
 `86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a`.
@@ -21,7 +21,7 @@ Observed value and declaration behavior:
 | Empty, NULL, two-character or supplementary separator | Error 214, state 11, after the `value` result descriptor and before any row. The bound NULL separator has the same error and RPC completion tokens. |
 | `VARCHAR`/`NVARCHAR` source | The `value` column follows the source family and declared capacity, including MAX (TDS length 65535). A `VARCHAR` source with an `NVARCHAR` separator produces an `NVARCHAR` result. |
 | Third argument `0` / `1` | `0` returns only `value`; `1` adds a non-null `BIGINT` `ordinal` column counting from 1. Tedious exposes these BIGINT values as strings. An empty input still has an ordinal-1 empty token. |
-| Invalid third argument | Constants `2` and `-1` raise 4199; a variable or RPC parameter raises 8748; a decimal raises 8116. A NULL constant does not expose the `ordinal` column, so selecting it raises 207. |
+| Invalid third argument | Constants `2` and `-1` raise 4199; a variable or RPC parameter raises 8748; a decimal raises 8116. A NULL constant behaves like disabled ordinal: the value-only query returns `a` and `b`, while selecting the absent `ordinal` column raises 207. |
 | Invalid source/separator type | Integer or binary source and integer separator raise 8116 before result metadata. Missing or excess arguments raise 313 and 8144. |
 | Table column and `APPLY` | The fixture retains source-derived widths and nullability, including `OUTER APPLY`'s null-extended row and the ordered ordinal values. |
 
