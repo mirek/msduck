@@ -1684,7 +1684,7 @@
     {
       "id": "system-all-columns-runtime-v1",
       "title": "Expose captured SQL Server system and all column catalogs",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal and request for disjoint claimable agent work. Owner-authored PR #177 at 2abf7909fbf84ed97d3caf70c20c64a63b137a41 captures pinned SQL Server system-column rows and descriptors; no third-party content is input.",
       "scope": [
         "src/column_catalog.rs",
