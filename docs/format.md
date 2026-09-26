@@ -20,8 +20,10 @@ The four raw captures matched exactly. They retain:
 - RPC return statuses.
 
 scripts/capture-format.mjs regenerates an artifact and checks it against the
-retained fixture. It refuses to overwrite an existing fixture before any
-container starts.
+retained fixture. Before any container starts, it refuses to overwrite an
+existing fixture. It also refuses an artifact path that resolves to the fixture:
+through relative segments, symlinked directories, a not-yet-existing fixture
+or a hard link, and in every mode, including `--one-database`.
 
 Every rule below is exactly what the fixture shows. None is a claim about
 untested inputs, and msduck does not implement FORMAT yet. Non-ASCII
