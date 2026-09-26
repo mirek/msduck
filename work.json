@@ -3553,6 +3553,25 @@
       "dependencies": [],
       "issue": 362,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPWFM"
+    },
+    {
+      "id": "string-escape-prepared-null-assertion-v1",
+      "title": "Correct prepared STRING_ESCAPE typed NULL format expectation",
+      "state": "backlog",
+      "authorization": "Direct owner continuing SQL Server compatibility goal and explicit integration-session request to preserve pinned SQL Server 2025 typed-NULL format behavior while tests/tedious.test.mjs remains reserved by another task. First-party follow-up to #362; no external submission is input.",
+      "scope": [
+        "tests/tedious.test.mjs"
+      ],
+      "acceptance": [
+        "After select-into-fixture-replay-v1 and string-escape-format-v1 are done, replace the stale prepared typed-NULL STRING_ESCAPE expectation with exact SQL Server 8116/state 8/message assertion, preserving recovery and existing non-NULL/NULL-source cases.",
+        "Run relevant prepared client test and full serial independent client suite at the exact PR revision; report unrelated failures. Open a focused owner PR and leave merge to the integrator."
+      ],
+      "dependencies": [
+        "select-into-fixture-replay-v1",
+        "string-escape-format-v1"
+      ],
+      "issue": 364,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPWks"
     }
   ]
 }
