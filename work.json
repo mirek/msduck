@@ -3530,6 +3530,29 @@
       "dependencies": [],
       "issue": 360,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPVH0"
+    },
+    {
+      "id": "string-escape-format-v1",
+      "title": "Match SQL Server STRING_ESCAPE format padding and NULL diagnostics",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement a fully functional SQL Server compatible Rust/DuckDB server, and explicit owner integration-session authorization after first-party pinned SQL Server 2025 matrix capture. No external submission is input.",
+      "scope": [
+        "crates/msduck-core/src/json_escape.rs",
+        "src/string_escape.rs",
+        "scripts/capture-string-escape-format.mjs",
+        "reference/string-escape-format.json",
+        "tests/string_escape_format.test.mjs",
+        "docs/string-escape.md"
+      ],
+      "acceptance": [
+        "Preserve a reproducible pinned SQL Server capture and raw fixture for literal, typed character, RPC format, NULL precedence, exact result descriptor/error and DONE-family behavior; two isolated captures must agree.",
+        "Accept only trailing U+0020 padding after case-insensitive json in UTF-8 and UTF-16. Validate format before source NULL propagation and match typed NULL format 8116/state 8 while retaining literal untyped NULL 8116/state 1.",
+        "Add deterministic and public Tedious fixture-backed regressions without editing tests/tedious.test.mjs or shared client inventory. Preserve single evaluation and bounded native access.",
+        "Run formatting, workspace Rust tests, strict Clippy, standalone and standard independent clients, and diagnostic audit at the exact PR revision; record baseline failures and raw differences. Open a focused owner PR and leave merge to the integrator."
+      ],
+      "dependencies": [],
+      "issue": 362,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPWFM"
     }
   ]
 }
