@@ -3,8 +3,9 @@
 // completions for ordinary batches, sp_executesql RPC and a prepared handle,
 // including per-character tables and database compatibility-level variants.
 import assert from 'node:assert/strict'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { basename, dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Request, TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
@@ -300,6 +301,19 @@ function validate(run) {
   }
 }
 
+// Resolves symlinks in the existing part of a path, so an alias of the
+// fixture (or of its directory) compares equal even before the file exists.
+// Local copy of refuseFixtureOutput from PR #312, which is not yet on main.
+async function canonicalPath(path) {
+  const absolute = resolve(path instanceof URL ? fileURLToPath(path) : path)
+  try { return await realpath(absolute) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return resolve(await canonicalPath(dirname(absolute)), basename(absolute))
+  }
+}
+// The scratch output is written unconditionally; it must never alias the
+// retained fixture. Checked before any container starts.
+if (await canonicalPath(output) === await canonicalPath(fixture)) throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(fixture))
 if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(resolve(output, '..'), { recursive: true })
 const containers = []

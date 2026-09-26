@@ -144,8 +144,8 @@ further messages. The captured sequence did not re-enable those indexes.
 | Case | Captured behavior |
 | --- | --- |
 | Result descriptor | IntN length 4, flags 33. SELECT INTO creates a nullable `int`. `describe_first_result_set` reports `int`. |
-| Values | Range 0-4. Every observed pair with equal SOUNDEX codes returned 4, for example (`Green`, `Greene`), (`Robert`, `Rupert`) and (`''`, `'1abc'`). A result of 4 does **not** imply equal codes. `DIFFERENCE('BABAB','BABAC')` (B110 against B120) is 4. |
-| Compatibility level | Every DIFFERENCE value in the per-level probes was identical at levels 100 through 170. The full code matrix, captured at levels 100 and 170, was also identical. At level 170, `DIFFERENCE('BHB','BAB')`, `('SHC','SAC')`, `('Bb','Bab')` and `('Pfister','Pister')` all return 4, even though the SOUNDEX codes differ (B000/B100, S000/S200, B000/B100). DIFFERENCE is therefore not a function of the level-170 SOUNDEX output. The results are consistent with the level-100 (legacy) codes. Across the 172 source words compared against `Robert`, DIFFERENCE was 4 exactly when the legacy code was R163. |
+| Values | Range 0-4. Every pair in the word matrix with equal level-170 SOUNDEX codes returned 4, for example (`Green`, `Greene`), (`Robert`, `Rupert`) and (`''`, `'1abc'`). That does not hold for every input: `DIFFERENCE('Pfister','Pister')` is 3 (see the next row). A result of 4 does **not** imply equal codes. `DIFFERENCE('BABAB','BABAC')` (B110 against B120) is 4. |
+| Compatibility level | Every DIFFERENCE value in the per-level probes was identical at levels 100 through 170. The full code matrix, captured at levels 100 and 170, was also identical. At level 170, `DIFFERENCE('BHB','BAB')`, `('SHC','SAC')` and `('Bb','Bab')` all return 4, even though the SOUNDEX codes differ (B000/B100, S000/S200, B000/B100). `DIFFERENCE('Pfister','Pister')` returns **3** at every level. At levels 110-170, `Pfister` encodes to P236. `SOUNDEX('Pister')` was not captured; the rules above give P236 at every level. So the level-170 codes appear equal, but the score is below 4. At level 100, `Pfister` is P123. DIFFERENCE is therefore not a function of the level-170 SOUNDEX output. The results are consistent with the level-100 (legacy) codes. Across the 172 source words compared against `Robert`, DIFFERENCE was 4 exactly when the legacy code was R163. |
 | Asymmetry | 76 of the 256 captured ordered word pairs differ from the reversed pair. For example, `DIFFERENCE('A','')` is 0 but `DIFFERENCE('','A')` is 3. `('BABAB','BABABAB')` is 3 and the reverse is 4. |
 | Letterless codes | When the second argument has code `0000` and the first has a letter, the result was 0 in every capture (`('A','1')`, `('Lee','')`, `('Robert',' ')`). With `0000` first, the result depends on the zeros in the second code: 3 for `L000` and `A000`, 2 for `R150`, `S530` and `G650`, and 0 for `R163`, `A226` and `T522`. Two letterless codes return 4 (`('','')`, `('',' ')` and `('1','2')`). |
 | NULL | NULL if either argument is NULL, whether typed, untyped or an RPC or prepared parameter. Untyped `NULL` is accepted in either position. |
@@ -153,8 +153,9 @@ further messages. The captured sequence did not re-enable those indexes.
 | Collation | Explicit conflicting collations raise 468, state 9, class 16 ("... in the difference operation."). |
 | Argument count | One or three arguments: error 174, state 1, class 15 ("The difference function requires 2 argument(s)."). |
 
-The fixture retains a 32x32 code matrix. Its first letters are B or P, with
-17 digit patterns built from vowel-separated consonants, and it was captured
+The fixture retains a 34x34 code matrix (1,156 rows). Its 34 words have
+first letter B or P, with 17 digit patterns built from vowel-separated
+consonants, and it was captured
 at levels 170 and 100. The fixture also retains a 16x16 word matrix with
 both SOUNDEX codes. After removing the first-letter contribution, the matrix
 values were identical for B/B and B/P pairs, except for six rotations such as
@@ -185,8 +186,10 @@ retained matrix is the acceptance data for any future model.
 ## Not captured
 
 - Non-default server or database collations. Only expression and column
-  collations varied. The letter set under other code pages (1250, 1251,
-  1254, 932, UTF-8 and others) was sampled, not enumerated.
+  collations varied. Only single probes were captured for code pages other
+  than 1252: 1251 (`Cyrillic_General_CI_AS`), 1254 (`Turkish_CI_AS`) and
+  UTF-8 (`Latin1_General_100_CI_AS_SC_UTF8`). Their letter sets were not
+  enumerated. No other code page, including 1250 and 932, was captured.
 - Supplementary-character (`_SC`) and UTF-8 behavior beyond the single probes
   above.
 - SOUNDEX and DIFFERENCE over a CHAR column with more than 40 characters, and
