@@ -2973,6 +2973,82 @@
       "dependencies": [],
       "issue": 309,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POntX"
+    },
+    {
+      "id": "format-reference-v1",
+      "title": "Capture SQL Server FORMAT reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party source audit found no implementation, tests, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-format.mjs",
+        "reference/format.json",
+        "docs/format.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, descriptors, errors and completion tokens for ordinary and prepared/RPC FORMAT over integer, decimal, money, float and date/time/datetimeoffset inputs with standard and custom .NET format strings, a bounded set of cultures (invariant, en-US, de-DE, fr-FR, ja-JP, ar-SA), NULL/invalid format/culture handling and result type/length.",
+        "Follow docs/reference-captures.md conventions where present (shared bounded comparison and prepared helpers in scripts/lib/reference.mjs, unique statement text for plan-dependent sequences, labelled containers, memory limits); use the pinned SQL Server 2025 image in two fresh databases in each of two containers and retain the fixture only when all four captures match.",
+        "Document observed deterministic rules, uncaptured gaps and proposed deterministic-core and root successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 313,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POob3"
+    },
+    {
+      "id": "parse-try-parse-reference-v1",
+      "title": "Capture SQL Server PARSE and TRY_PARSE reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party source audit found no implementation, tests, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-parse-try-parse.mjs",
+        "reference/parse-try-parse.json",
+        "docs/parse-try-parse.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, descriptors, errors and completion tokens for ordinary and prepared/RPC PARSE and TRY_PARSE into numeric, money and date/time targets across a bounded set of cultures, whitespace, signs, currency and grouping symbols, invalid strings (errors vs NULL) and invalid target types.",
+        "Follow docs/reference-captures.md conventions where present (shared bounded comparison and prepared helpers in scripts/lib/reference.mjs, unique statement text for plan-dependent sequences, labelled containers, memory limits); use the pinned SQL Server 2025 image in two fresh databases in each of two containers and retain the fixture only when all four captures match.",
+        "Document observed deterministic rules, uncaptured gaps and proposed deterministic-core and root successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 314,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POob-"
+    },
+    {
+      "id": "compress-decompress-reference-v1",
+      "title": "Capture SQL Server COMPRESS and DECOMPRESS reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party source audit found no implementation, tests, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-compress-decompress.mjs",
+        "reference/compress-decompress.json",
+        "docs/compress-decompress.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, descriptors, errors and completion tokens for ordinary and prepared/RPC COMPRESS and DECOMPRESS: exact GZIP bytes for VARCHAR/NVARCHAR/VARBINARY and MAX inputs, empty and NULL inputs, round trips with CAST back to character types, invalid compressed input and large inputs.",
+        "Follow docs/reference-captures.md conventions where present (shared bounded comparison and prepared helpers in scripts/lib/reference.mjs, unique statement text for plan-dependent sequences, labelled containers, memory limits); use the pinned SQL Server 2025 image in two fresh databases in each of two containers and retain the fixture only when all four captures match.",
+        "Document observed deterministic rules, uncaptured gaps and proposed deterministic-core and root successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 315,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POocK"
+    },
+    {
+      "id": "session-context-reference-v1",
+      "title": "Capture SQL Server SESSION_CONTEXT and sp_set_session_context reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party source audit found no implementation, tests, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-session-context.mjs",
+        "reference/session-context.json",
+        "docs/session-context.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, descriptors, errors and completion tokens for SESSION_CONTEXT and sp_set_session_context: key/value types and sql_variant results, read_only keys, overwrite, NULL values, key/value size limits, scope across batches, RPC and prepared calls on one connection, and isolation between connections and after connection reset.",
+        "Follow docs/reference-captures.md conventions where present (shared bounded comparison and prepared helpers in scripts/lib/reference.mjs, unique statement text for plan-dependent sequences, labelled containers, memory limits); use the pinned SQL Server 2025 image in two fresh databases in each of two containers and retain the fixture only when all four captures match.",
+        "Document observed deterministic rules, uncaptured gaps and proposed deterministic-core and root successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 316,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POocc"
     }
   ]
 }
