@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {spawnSync} from 'node:child_process'
-import {mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync, existsSync} from 'node:fs'
+import {mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync, existsSync, lstatSync, symlinkSync} from 'node:fs'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 import {sourceSyncOptions} from '../scripts/remote-build.mjs'
@@ -53,6 +53,49 @@ test('older-mtime source edits rebuild while unchanged source reuses Cargo targe
     assert.doesNotMatch(cargo().stderr, /Compiling remote_fingerprint_probe/)
     assert.equal(statSync(executable).mtimeMs, executableMtime)
     assert.equal(run(executable, [], destination).stdout.trim(), 'NEW')
+  } finally {
+    rmSync(temporary, {recursive: true, force: true})
+  }
+})
+
+test('root cache and private symlinks never replace receiver directories', () => {
+  const temporary = mkdtempSync(join(tmpdir(), 'msduck-remote-links-'))
+  try {
+    const source = join(temporary, 'source')
+    const destination = join(temporary, 'destination')
+    mkdirSync(source)
+    mkdirSync(destination)
+    const excluded = ['target', 'node_modules', 'artifacts', '.git', '.msduck']
+    for (const name of excluded) {
+      const localCache = join(temporary, `local-${name}`)
+      mkdirSync(localCache)
+      writeFileSync(join(localCache, 'private'), `local ${name}\n`)
+      symlinkSync(localCache, join(source, name))
+      mkdirSync(join(destination, name))
+      writeFileSync(join(destination, name, 'receiver-cache'), `receiver ${name}\n`)
+    }
+    writeFileSync(join(source, '.env'), 'SECRET=excluded\n')
+    writeFileSync(join(source, 'source.txt'), 'first\n')
+    writeFileSync(join(destination, 'removed.txt'), 'stale\n')
+    const sync = () => run('rsync', [...sourceSyncOptions, `${source}/`, `${destination}/`], temporary)
+
+    sync()
+    assert.equal(readFileSync(join(destination, 'source.txt'), 'utf8'), 'first\n')
+    assert(!existsSync(join(destination, 'removed.txt')))
+    assert(!existsSync(join(destination, '.env')))
+    for (const name of excluded) {
+      assert(lstatSync(join(destination, name)).isDirectory(), `${name} receiver cache was replaced`)
+      assert.equal(readFileSync(join(destination, name, 'receiver-cache'), 'utf8'), `receiver ${name}\n`)
+      assert(!existsSync(join(destination, name, 'private')), `${name} local target was copied`)
+    }
+
+    writeFileSync(join(source, 'source.txt'), 'second\n')
+    sync()
+    assert.equal(readFileSync(join(destination, 'source.txt'), 'utf8'), 'second\n')
+    for (const name of excluded) {
+      assert(lstatSync(join(destination, name)).isDirectory(), `${name} receiver cache was replaced on repeat sync`)
+      assert(existsSync(join(destination, name, 'receiver-cache')))
+    }
   } finally {
     rmSync(temporary, {recursive: true, force: true})
   }

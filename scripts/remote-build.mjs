@@ -7,9 +7,9 @@ import { createInterface } from 'node:readline'
 
 // A changed file must arrive with a new receiver mtime for Cargo's fingerprint
 // checks. Checksums avoid retransferring unchanged files when their mtimes differ.
-export const sourceSyncOptions = ['-azc', '--no-times', '--delete', '--exclude=/.git/',
-  '--exclude=/target/', '--exclude=/node_modules/', '--exclude=/artifacts/',
-  '--exclude=/.msduck/', '--exclude=.env', '--exclude=.env.*',
+export const sourceSyncOptions = ['-azc', '--no-times', '--delete', '--exclude=/.git',
+  '--exclude=/target', '--exclude=/node_modules', '--exclude=/artifacts',
+  '--exclude=/.msduck', '--exclude=.env', '--exclude=.env.*',
   '--exclude=*.duckdb', '--exclude=*.duckdb.wal']
 
 async function main() {
