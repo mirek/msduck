@@ -72,6 +72,16 @@ pub fn take(statement: &mut Statement) -> Result<Option<String>> {
 }
 
 pub fn definition(db: &Connection, target: &str, source: &str, values: &[Value]) -> Result<String> {
+    definition_with_fields(db, target, source, values, None)
+}
+
+fn definition_with_fields(
+    db: &Connection,
+    target: &str,
+    source: &str,
+    values: &[Value],
+    fields: Option<&[crate::query_catalog::Field]>,
+) -> Result<String> {
     let mut describe = db.prepare(&format!("DESCRIBE {source}"))?;
     let columns = describe
         .query_map(duckdb::params_from_iter(values.iter()), |row| {
@@ -82,9 +92,19 @@ pub fn definition(db: &Connection, target: &str, source: &str, values: &[Value])
             ))
         })?
         .collect::<duckdb::Result<Vec<_>>>()?;
+    // The logical binder sees declarations before backend lowering. Its fields
+    // are safe to apply only when they align with the physical DESCRIBE result;
+    // an unresolved property then falls back to backend nullability.
+    let aligned = fields.filter(|fields| {
+        fields.len() == columns.len()
+            && fields
+                .iter()
+                .zip(&columns)
+                .all(|(field, (name, _, _))| field.name.eq_ignore_ascii_case(name))
+    });
     let mut seen = HashSet::new();
     let mut definitions = Vec::new();
-    for (name, kind, nullable) in columns {
+    for (index, (name, kind, nullable)) in columns.into_iter().enumerate() {
         ensure!(
             !name.is_empty(),
             "SELECT INTO expressions require column names"
@@ -93,10 +113,13 @@ pub fn definition(db: &Connection, target: &str, source: &str, values: &[Value])
             seen.insert(name.to_lowercase()),
             "SELECT INTO column names must be unique"
         );
+        let not_null = aligned
+            .and_then(|fields| fields[index].properties.nullable)
+            .map_or(nullable == "NO", |nullable| !nullable);
         definitions.push(format!(
             "{} {kind}{}",
             Ident::with_quote('"', name),
-            if nullable == "NO" { " NOT NULL" } else { "" }
+            if not_null { " NOT NULL" } else { "" }
         ));
     }
     Ok(format!("CREATE TABLE {target} ({})", definitions.join(",")))
@@ -110,7 +133,7 @@ pub fn execute(
     autocommit: bool,
     columns: Option<&[crate::query_catalog::Field]>,
 ) -> Result<u64> {
-    let ddl = definition(db, target, source, values)?;
+    let ddl = definition_with_fields(db, target, source, values, columns)?;
     if autocommit {
         db.execute_batch("BEGIN TRANSACTION")?;
     }
@@ -134,4 +157,51 @@ pub fn execute(
         &format!("INSERT INTO {target} {source}"),
         duckdb::params_from_iter(values.iter()),
     )? as u64)
+}
+
+#[cfg(test)]
+mod nullability_tests {
+    use super::*;
+    use msduck_core::result::Properties;
+
+    fn field(name: &str, nullable: Option<bool>) -> crate::query_catalog::Field {
+        crate::query_catalog::Field {
+            name: name.into(),
+            info: None,
+            collation: None,
+            json_fragment: false,
+            properties: Properties {
+                nullable,
+                ..Properties::default()
+            },
+        }
+    }
+
+    #[test]
+    fn unresolved_or_misaligned_fields_leave_backend_nullability_unchanged() {
+        let db = Connection::open_in_memory().unwrap();
+        let source = "SELECT 1 AS id,CAST(NULL AS INT) AS n";
+        let backend = definition(&db, "dest", source, &[]).unwrap();
+        let known = definition_with_fields(
+            &db,
+            "dest",
+            source,
+            &[],
+            Some(&[field("ID", Some(false)), field("n", Some(true))]),
+        )
+        .unwrap();
+        assert!(known.contains("\"id\" INTEGER NOT NULL"));
+        assert!(known.contains("\"n\" INTEGER"));
+        assert!(!known.contains("\"n\" INTEGER NOT NULL"));
+        for fields in [
+            vec![field("id", Some(false))],
+            vec![field("other", Some(false)), field("n", Some(false))],
+            vec![field("id", None), field("n", None)],
+        ] {
+            assert_eq!(
+                definition_with_fields(&db, "dest", source, &[], Some(&fields)).unwrap(),
+                backend
+            );
+        }
+    }
 }

@@ -8925,13 +8925,7 @@ test('materialized UTF16 assignments preserve raw units and OUTPUT reference str
     assert.deepEqual(canonical(await capture(c, entry.query)), entry.reference, entry.query)
     assert.deepEqual(JSON.parse(JSON.stringify(tokens)), entry.tokens, entry.query)
     const after = canonical(await capture(c, entry.readback))
-    // Preserve the independently observed SELECT INTO literal nullability gap;
-    // every other field, row, error and completion event must match unchanged.
-    assert.deepEqual(differences(after, entry.after), [
-      { path: '/sets/0/columns/0/type', local: 'IntN', reference: 'Int' },
-      { path: '/sets/0/columns/0/length', local: 4, reference: null },
-      { path: '/sets/0/columns/0/flags', local: 9, reference: 8 },
-    ])
+    assert.deepEqual(differences(after, entry.after), [], entry.query)
     await query(c, 'DROP TABLE typed_stage')
   }
 })
