@@ -3419,6 +3419,29 @@
       "dependencies": [],
       "issue": 353,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPLZa"
+    },
+    {
+      "id": "replicate-float-client-inventory-v1",
+      "title": "Include REPLICATE float client regression in serial and full CI inventories",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement the full SQL Server compatible Rust/DuckDB server and organize disjoint parallel work. First-party follow-up to owner task #353 and owner-controlled client inventory work; no external submission is input.",
+      "scope": [
+        "package.json",
+        ".github/workflows/ci.yml",
+        "docs/github-workflow.md"
+      ],
+      "acceptance": [
+        "After dependencies are marked done in the protected registry, add tests/replicate_float.test.mjs to the serial npm test script and the owner-controlled full CI shard invocation. Preserve two workers, exact revision and artifacts, the fast PR gate, owner-only guards and diagnostic audit.",
+        "Verify six-file shard discovery and every test identity exactly once; run serial client tests and the full shard plan at a specific revision. Report exact results without claiming SQL Server equivalence.",
+        "Update CI documentation for the additional regression, open a focused owner PR, and leave merge to the owner or designated integrator."
+      ],
+      "dependencies": [
+        "prepared-capture-helper-v1",
+        "ci-client-inventory-v1",
+        "replicate-float-format-v1"
+      ],
+      "issue": 354,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPNaJ"
     }
   ]
 }
