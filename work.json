@@ -2951,6 +2951,28 @@
       "dependencies": [],
       "issue": 307,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POnUJ"
+    },
+    {
+      "id": "prepared-capture-helper-v1",
+      "title": "Add a shared prepared-statement capture helper and verify affected fixtures",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development with parallel agents and shared coordination. First-party evidence: owner-run worker finding in PR #308 and inspection of merged fixtures; no external submission is input.",
+      "scope": [
+        "scripts/lib/reference.mjs",
+        "scripts/capture-hashbytes-checksum.mjs",
+        "scripts/capture-charindex-patindex.mjs",
+        "tests/reference-prepared.test.mjs",
+        "package.json",
+        "docs/reference-captures.md"
+      ],
+      "acceptance": [
+        "Add a shared helper in scripts/lib/reference.mjs for sp_prepare/sp_execute/sp_unprepare captures that waits on tedious prepared/error events, records only errors raised during each execution, and bounds rows/messages per execution; add deterministic tests with a fake connection covering a failing execution followed by successful and failing ones, and wire them into npm test.",
+        "Convert the HASHBYTES and CHARINDEX/PATINDEX capture scripts to the helper without changing captured SQL; run their check modes against the retained fixtures (bounded, watchdog) and report whether each fixture still matches. If a retained fixture differs, do not overwrite it: stop, record the exact differing records in the PR and docs, and leave fixture correction to an owner decision.",
+        "Document capture conventions for future scripts in docs/reference-captures.md: shared bounded comparison helpers, prepared helper, unique statement text for plan-dependent sequences, container ownership labels, memory limits and per-task temp directories."
+      ],
+      "dependencies": [],
+      "issue": 309,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POntX"
     }
   ]
 }
