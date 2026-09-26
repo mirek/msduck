@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // First-party post-login TVP RPC request evidence. Never tap LOGIN7 or TLS records.
 import assert from 'node:assert/strict'
-import {mkdir,readFile,writeFile} from 'node:fs/promises'
-import {dirname,resolve} from 'node:path'
+import {lstat,mkdir,readFile,realpath,stat,writeFile} from 'node:fs/promises'
+import {basename,dirname,resolve} from 'node:path'
+import {fileURLToPath} from 'node:url'
 import {isDeepStrictEqual} from 'node:util'
 import {Request,TYPES} from 'tedious'
 import {withReferenceContainer} from './lib/reference-container.mjs'
@@ -16,6 +17,34 @@ const positional=args.filter(arg=>arg!=='--write-fixture')
 if(positional.length>1)throw Error('expected at most one output path')
 const output=resolve(positional[0]??'artifacts/compatibility/tvp-wire/capture.json')
 const MAX_CAPTURE=512*1024
+
+async function canonicalTarget(path){
+ let current=path,missing=[]
+ while(true){
+  try{return resolve(await realpath(current),...missing.reverse())}
+  catch(error){if(error.code!=='ENOENT')throw error}
+  const parent=dirname(current)
+  if(parent===current)throw Error('cannot resolve capture output path')
+  missing.push(basename(current));current=parent
+ }
+}
+async function assertSeparateOutput(){
+ // Refuse symlink components, including a dangling final symlink. A default
+ // diagnostic output has no reason to follow an alias into the retained tree.
+ for(let part=output;;part=dirname(part)){
+  let info
+  try{info=await lstat(part)}catch(error){if(error.code!=='ENOENT')throw error}
+  assert.ok(!info?.isSymbolicLink(),'capture output path contains a symlink')
+  if(dirname(part)===part)break
+ }
+ const retained=fileURLToPath(fixture)
+ assert.notEqual(await canonicalTarget(output),await canonicalTarget(retained),'capture output aliases retained TVP fixture')
+ let outputFile,retainedFile
+ try{outputFile=await stat(output)}catch(error){if(error.code!=='ENOENT')throw error}
+ try{retainedFile=await stat(retained)}catch(error){if(error.code!=='ENOENT')throw error}
+ assert.ok(!outputFile||!retainedFile||outputFile.dev!==retainedFile.dev||outputFile.ino!==retainedFile.ino,
+  'capture output hard-links retained TVP fixture')
+}
 
 class Reader {
  constructor(bytes){this.bytes=bytes;this.at=0}
@@ -153,6 +182,7 @@ const runContainer=()=>withReferenceContainer(async(config,container)=>({
  image:container.image,
  runs:[await isolatedReference(config,observe),await isolatedReference(config,observe)]
 }))
+await assertSeparateOutput()
 if(writeFixture)await refuseExistingFixture(fixture)
 await mkdir(dirname(output),{recursive:true})
 const first=await runContainer(),second=await runContainer()

@@ -39,6 +39,10 @@ On a Docker host with the pinned image and Node dependencies, run the generator
 without flags to compare a fresh capture with the retained fixture. It writes a
 separate diagnostic capture under `artifacts/compatibility/tvp-wire/`. The
 `--write-fixture` mode creates a missing fixture and refuses to overwrite one.
+Before starting a container, the generator also rejects a positional output
+that resolves to the retained fixture, including symlinked path components and
+hard links. An offline CLI check rejected all four alias forms while the
+fixture's SHA-256 remained unchanged.
 The original run used `linux.local`; a replay after adding explicit acceptance
 assertions matched the retained fixture. The parser intentionally supports only
 the captured INT/NVARCHAR/VARBINARY column shape. Other TVP types, order/unique
