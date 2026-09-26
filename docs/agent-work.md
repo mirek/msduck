@@ -80,16 +80,46 @@ The owner can create a replacement owner-authored issue for display; the registr
 remains authoritative and workers do not fetch issue bodies even then.
 
 To publish a revision, verify that every added task is covered by a direct owner
-instruction or a manually approved external-content snapshot. The owner or an
-agent acting under that authorization briefly disables ruleset 23899192, updates
-only `agent-control:work.json`, then immediately reenables the rule (also on
-failure). Preserve existing tasks and use a fast-forward update from the revision
-read; a concurrent publication requires reloading and revalidating the queue. Workers refuse operations while protection is
-inactive. Review the new JSON and its scopes/dependencies before publication;
-ready scopes must not overlap. Do not change an active task's description or
-reuse an ID: verification will reject a changed digest. Add a successor only
-after the original worker stops. Claim ruleset 23899191 stays enabled throughout.
-Never import every project item into the registry or enable automatic intake.
+instruction or a manually approved external-content snapshot. Write a change file
+and publish it with the helper; never toggle rulesets or push `agent-control` by hand:
+
+```json
+{
+  "message": "Publish STRING_SPLIT runtime task",
+  "authorization": "Originating owner instruction and first-party evidence",
+  "add": [{ "id": "new-task-v1", "title": "...", "state": "ready",
+            "authorization": "...", "scope": ["exact/path"], "acceptance": ["..."],
+            "dependencies": [], "issue": 123 }],
+  "states": { "merged-task-v1": "done" }
+}
+```
+
+```sh
+node scripts/agent-work.mjs publish change.json --dry-run
+node scripts/agent-work.mjs publish change.json
+```
+
+A change can only add tasks and set the state of existing tasks. Other fields of
+existing tasks are immutable because receipts bind the task digest. IDs must be
+new and must not already have a claim tag. The helper validates the complete
+registry, including non-overlapping ready scopes and dependencies, then creates
+a commit whose parent is the revision it validated. It disables ruleset 23899192
+only around a non-forced (fast-forward) ref update and always re-enables it.
+When a concurrent publisher wins the race, it reloads, reapplies and revalidates
+the declarative change. A duplicate ID then fails instead of overwriting. Workers
+wait for a short time while another publisher has protection inactive, and no
+registry content is read until protection is active again. If a publisher is
+interrupted and protection stays inactive, run `node scripts/agent-work.mjs protect`.
+This is idempotent and safe while other publishers run. Claim ruleset 23899191
+is never modified. `projectItem` is optional. Omit it when the credential lacks
+the `project` scope; board updates are skipped for such tasks.
+
+After a task's PR merges, publish its `done` state promptly. Stale `ready` tasks
+keep their files reserved against new ready scopes and block dependent tasks.
+Use `list --available` to see ready, unclaimed tasks with completed dependencies.
+The full `list` looks up every claim tag in one request.
+Add a successor only after the original worker stops. Never import every project
+item into the registry or enable automatic intake.
 
 A worker updates Claim/Review/Blocked board fields using the helper. The owner
 marks completion in the registry and board after the PR merges and acceptance

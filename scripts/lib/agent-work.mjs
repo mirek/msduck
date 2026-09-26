@@ -78,11 +78,20 @@ export async function verify({ api, registry, id, receipt }) {
   return task;
 }
 
+function checkRuleset(actual, expected) {
+  if (!(['active', 'disabled'].includes(actual.enforcement) && actual.target === expected.target && actual.bypass_actors?.length === 0 && actual.conditions?.ref_name?.include?.includes(expected.pattern) && actual.conditions.ref_name.exclude.length === 0 && ['update','deletion'].every(type => actual.rules.some(r => r.type === type)))) throw Error('Coordination protection changed; stop and ask the owner');
+}
 export async function loadRegistry(api, rules) {
   if (rules.length !== 2 || !rules.some(r => r.target === 'tag' && r.pattern === 'refs/tags/agent-claims/**') || !rules.some(r => r.target === 'branch' && r.pattern === 'refs/heads/agent-control')) throw Error('Missing coordination protection configuration');
   for (const expected of rules) {
     const actual = await api(`repos/${repository}/rulesets/${expected.id}`);
-    if (!(actual.enforcement === 'active' && actual.target === expected.target && actual.bypass_actors?.length === 0 && actual.conditions?.ref_name?.include?.includes(expected.pattern) && actual.conditions.ref_name.exclude.length === 0 && ['update','deletion'].every(type => actual.rules.some(r => r.type === type)))) throw Error('Coordination protection changed; stop and ask the owner');
+    checkRuleset(actual, expected);
+    if (actual.enforcement !== 'active') {
+      // Publishers disable only the registry rule, briefly. Callers may retry;
+      // registry content is never read while protection is inactive.
+      if (expected.target === 'branch') throw Object.assign(Error('Registry publication in progress (protection inactive); retry shortly, or run `node scripts/agent-work.mjs protect` if it persists'), { code: 'PROTECTION_INACTIVE' });
+      throw Error('Coordination protection changed; stop and ask the owner');
+    }
   }
   const ref = await api(`repos/${repository}/git/ref/heads/agent-control`);
   const revision = ref.object.sha;
@@ -91,4 +100,89 @@ export async function loadRegistry(api, rules) {
   if (file.encoding !== 'base64') throw Error('Unsupported registry representation');
   const registry = validateRegistry(JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')));
   return { registry, revision };
+}
+
+// Claim tags for every task in one request instead of one lookup per task.
+export async function claimedIds(api) {
+  const refs = await api(`repos/${repository}/git/matching-refs/tags/agent-claims/`);
+  if (!Array.isArray(refs)) throw Error('Unexpected claim listing');
+  return new Set(refs.map(r => r.ref.slice(refFor('').length)));
+}
+export function availableTasks(registry, claimed) {
+  const done = new Set(registry.tasks.filter(t => t.state === 'done').map(t => t.id));
+  return registry.tasks.filter(t => t.state === 'ready' && !claimed.has(t.id) && (t.dependencies ?? []).every(id => done.has(id)));
+}
+
+const states = ['ready', 'backlog', 'blocked', 'review', 'done'];
+// A publication adds new tasks and changes states of existing tasks. Existing
+// task definitions are otherwise immutable, because receipts bind their digest,
+// and IDs are never removed or reused (claim tags are permanent).
+export function applyChange(registry, change, claimed) {
+  const next = structuredClone(registry);
+  const known = new Set(next.tasks.map(t => t.id));
+  for (const [id, state] of Object.entries(change.states ?? {})) {
+    const task = next.tasks.find(t => t.id === id);
+    if (!task) throw Error(`Unknown task ${id}`);
+    if (!states.includes(state)) throw Error(`Invalid state for ${id}`);
+    task.state = state;
+  }
+  for (const task of change.add ?? []) {
+    taskId(task.id);
+    if (known.has(task.id) || claimed.has(task.id)) throw Error(`Task ID ${task.id} already exists or was claimed; choose a new ID`);
+    if (typeof task.authorization !== 'string' || task.authorization.length < 20) throw Error(`Task ${task.id} needs an authorization record`);
+    known.add(task.id);
+    next.tasks.push(task);
+  }
+  validateRegistry(next);
+  return next;
+}
+
+// Publishes by fast-forwarding agent-control from the revision it validated.
+// Concurrent publishers race on the ref update; the loser reloads and reapplies.
+// The registry rule is disabled only around the update and always re-enabled.
+export async function publish({ api, rules, change, message, attempts = 6, sleep = ms => new Promise(r => setTimeout(r, ms)), log = () => {} }) {
+  const rule = rules.find(r => r.target === 'branch');
+  for (let attempt = 1; attempt <= attempts; ++attempt) {
+    let loaded;
+    try { loaded = await loadRegistry(api, rules); }
+    catch (error) {
+      if (error.code !== 'PROTECTION_INACTIVE') throw error;
+      log('registry protection inactive; waiting for concurrent publication');
+      await sleep(2000 * attempt);
+      continue;
+    }
+    const { registry, revision } = loaded;
+    const next = applyChange(registry, change, await claimedIds(api));
+    const content = JSON.stringify(next, null, 2) + '\n';
+    const base = await api(`repos/${repository}/git/commits/${revision}`);
+    const blob = await api(`repos/${repository}/git/blobs`, { content, encoding: 'utf-8' });
+    const tree = await api(`repos/${repository}/git/trees`, { base_tree: base.tree.sha, tree: [{ path: 'work.json', mode: '100644', type: 'blob', sha: blob.sha }] });
+    const commit = await api(`repos/${repository}/git/commits`, { message, tree: tree.sha, parents: [revision] });
+    let updated = false;
+    try {
+      await api(`repos/${repository}/rulesets/${rule.id}`, { enforcement: 'disabled' }, false, 'PUT');
+      try { await api(`repos/${repository}/git/refs/heads/agent-control`, { sha: commit.sha, force: false }, false, 'PATCH'); updated = true; }
+      catch { /* Not a fast-forward, re-protected by another publisher, or lost response; read back below. */ }
+    } finally {
+      await restoreProtection(api, rule);
+    }
+    const current = await api(`repos/${repository}/git/ref/heads/agent-control`);
+    if (current.object.sha === commit.sha) return { revision: commit.sha, registry: next, previous: revision };
+    if (updated) throw Error('Registry ref changed after publication; inspect agent-control history');
+    log(`publication attempt ${attempt} lost a race; reloading`);
+    await sleep(1000 * attempt + Math.floor(Math.random() * 1000));
+  }
+  throw Error('Registry publication did not succeed; retry later');
+}
+export async function restoreProtection(api, rule) {
+  for (let i = 0; i < 5; ++i) {
+    try {
+      await api(`repos/${repository}/rulesets/${rule.id}`, { enforcement: 'active' }, false, 'PUT');
+      const actual = await api(`repos/${repository}/rulesets/${rule.id}`);
+      checkRuleset(actual, rule);
+      if (actual.enforcement === 'active') return;
+    } catch { // Retry; never surface remote error payloads.
+    }
+  }
+  throw Error('Registry protection could not be restored; run `node scripts/agent-work.mjs protect` now');
 }

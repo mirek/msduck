@@ -3,13 +3,13 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { acquire, verify, loadRegistry, taskId, refFor, repository } from './lib/agent-work.mjs';
+import { acquire, verify, loadRegistry, taskId, repository, claimedIds, availableTasks, applyChange, publish, restoreProtection } from './lib/agent-work.mjs';
 
 // Only typed Git/ref/registry endpoints and project mutations are used. Never
 // fetch issue/comment/review bodies, project items, notifications or search hits.
-function api(path, data, missing = false) {
+function api(path, data, missing = false, method = data ? 'POST' : 'GET') {
   try {
-    const output = execFileSync('gh', ['api', '--hostname', 'github.com', path, '--method', data ? 'POST' : 'GET', ...(data ? ['--input', '-'] : [])], {
+    const output = execFileSync('gh', ['api', '--hostname', 'github.com', path, '--method', method, ...(data ? ['--input', '-'] : [])], {
       input: data ? JSON.stringify(data) : undefined, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 2 * 1024 * 1024,
     });
     const result = JSON.parse(output);
@@ -21,9 +21,19 @@ function api(path, data, missing = false) {
     throw Error('GitHub API unavailable or denied; stop and check authentication/protection');
   }
 }
+const rules = () => JSON.parse(readFileSync(new URL('../.github/agent-control.json', import.meta.url)));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function load() {
-  const rules = JSON.parse(readFileSync(new URL('../.github/agent-control.json', import.meta.url)));
-  return loadRegistry(api, rules);
+  // A concurrent publication briefly disables registry protection. Wait for it
+  // instead of failing; nothing is read until protection is active again.
+  for (let attempt = 1; ; ++attempt) {
+    try { return await loadRegistry(api, rules()); }
+    catch (error) {
+      if (error.code !== 'PROTECTION_INACTIVE' || attempt >= 8) throw error;
+      console.error('Registry publication in progress; retrying');
+      await sleep(2000 * attempt);
+    }
+  }
 }
 function receiptPath(id) {
   taskId(id);
@@ -34,20 +44,42 @@ function receiptPath(id) {
 }
 function board(registry, task, state) {
   const p = registry.project;
+  if (!task.projectItem) return;
   const status = state === 'done' ? 'done' : 'progress';
   for (const [field, option] of [[p.readinessField, p.options[state]], [p.statusField, p.statuses[status]]]) {
     api('graphql', { query: 'mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$o}}){projectV2Item{id}}}', variables: { p:p.id, i:task.projectItem, f:field, o:option } });
   }
 }
+const usage = 'Usage: node scripts/agent-work.mjs list [--available] | claim ID | verify ID | status ID claimed|review|blocked | publish CHANGE.json [--dry-run] | protect';
 async function main() {
   const [command, id, state] = process.argv.slice(2);
-  if (!['list','claim','verify','status'].includes(command) || (command !== 'list' && !id) || (command === 'status' && !['claimed','review','blocked'].includes(state))) throw Error('Usage: node scripts/agent-work.mjs list | claim ID | verify ID | status ID claimed|review|blocked');
+  if (command === 'protect') {
+    // Idempotent recovery after an interrupted publication.
+    await restoreProtection(api, rules().find(r => r.target === 'branch'));
+    console.log(JSON.stringify({ protected: true }));
+    return;
+  }
+  if (command === 'publish') {
+    if (!id || (state !== undefined && state !== '--dry-run')) throw Error(usage);
+    const change = JSON.parse(readFileSync(id, 'utf8'));
+    if (typeof change.message !== 'string' || typeof change.authorization !== 'string' || change.authorization.length < 20) throw Error('Change needs a commit message and an authorization record');
+    const message = `${change.message}\n\nAuthorization: ${change.authorization}`;
+    if (state === '--dry-run') {
+      const { registry, revision } = await load();
+      const next = applyChange(registry, change, await claimedIds(api));
+      console.log(JSON.stringify({ valid: true, registry: revision, tasks: next.tasks.length, added: (change.add ?? []).map(t => t.id), states: change.states ?? {} }));
+      return;
+    }
+    const result = await publish({ api, rules: rules(), change, message, log: m => console.error(m) });
+    console.log(JSON.stringify({ published: true, registry: result.revision, previous: result.previous, added: (change.add ?? []).map(t => t.id), states: change.states ?? {} }));
+    return;
+  }
+  if (!['list','claim','verify','status'].includes(command) || (command === 'list' ? ![undefined, '--available'].includes(id) : !id) || (command === 'status' && !['claimed','review','blocked'].includes(state))) throw Error(usage);
   const { registry, revision } = await load();
   if (command === 'list') {
-    for (const task of registry.tasks) {
-      const claim = api(`repos/${repository}/git/ref/${refFor(task.id).slice(5)}`, undefined, true);
-      console.log(JSON.stringify({ ...task, claim: claim ? 'claimed' : 'unclaimed', registry: revision }));
-    }
+    const claimed = await claimedIds(api);
+    const tasks = id === '--available' ? availableTasks(registry, claimed) : registry.tasks;
+    for (const task of tasks) console.log(JSON.stringify({ ...task, claim: claimed.has(task.id) ? 'claimed' : 'unclaimed', registry: revision }));
     return;
   }
   let task;
