@@ -2525,7 +2525,7 @@
     {
       "id": "bounded-capture-compare-v1",
       "title": "Bound whole-capture comparisons in reference capture scripts",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instructions of 2026-09-26 to run parallel agents on shared hosts and keep PR flow healthy. First-party evidence: kernel OOM log on this host and owner-run worker root-cause analysis in PR #265; no external submission is input.",
       "scope": [
         "scripts/lib/reference.mjs",
