@@ -17,8 +17,8 @@ maximum DATA sequence number: a SYN WNDW of 4 permits outgoing DATA 1–4, then
 blocks DATA 5 until an ACK or DATA carries a later peer window. This follows the
 [MC-SMP header](https://learn.microsoft.com/en-us/openspecs/windows_protocols/mc-smp/4ada62f7-33c2-45bb-980c-f566f5a6c11a)
 and [ACK example](https://learn.microsoft.com/en-us/openspecs/windows_protocols/mc-smp/e1138e43-ba11-4c44-9173-09fb765890c2).
-The copied upstream TDS skill describes an exclusive window; that note must not
-be used for this state machine.
+This inclusive bound follows MC-SMP directly and does not depend on copied
+implementation notes.
 
 Logical counters are `u64` while wire sequences are their low 32 bits. This
 accepts DATA `u32::MAX` followed by 0. Incoming peer-window deltas use serial
