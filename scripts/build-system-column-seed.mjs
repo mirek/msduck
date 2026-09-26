@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict'
+import {assertSameCapture} from './lib/reference.mjs'
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs'
 
 const capture = JSON.parse(readFileSync(new URL('../reference/system-all-columns.json', import.meta.url), 'utf8'))
@@ -76,7 +77,7 @@ function inventory(run) {
 }
 const first = inventory(capture.runs[0])
 const second = inventory(capture.runs[1])
-assert.deepEqual(first, second, 'Retained fresh-database inventories differ')
+assertSameCapture(first, second, 'Retained fresh-database inventories differ')
 const seed = {source_image: capture.image, columns: [...expected, 'in_system_columns'],
  rows: first.rows, hidden_owners: first.hidden_owners}
 mkdirSync(new URL('../src/column_catalog/', import.meta.url), {recursive: true})
