@@ -3295,6 +3295,28 @@
       "dependencies": [],
       "issue": 341,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PO8Ak"
+    },
+    {
+      "id": "bulk-load-codec-reference-v1",
+      "title": "Replay captured BulkLoad requests through deterministic decoder",
+      "state": "ready",
+      "authorization": "Direct owner instruction of 2026-09-26 to publish this dependent first-party BulkLoad codec replay task under the continuing full SQL Server compatibility goal; no external submission is input.",
+      "scope": [
+        "crates/msduck-tds/src/bulk_load.rs",
+        "crates/msduck-tds/tests/bulk_load_reference.rs",
+        "docs/bulk-load-codec.md"
+      ],
+      "acceptance": [
+        "After bulk-load-wire-reference-v1 is merged and marked done, replay its retained type-7 request bytes through the pure decoder with exact packet fragmentation and EOM, including successful NULL, Unicode/binary and multirow cases.",
+        "Assert exact captured metadata and values and explicit rejection of the SQL Server-rejected DONE-only zero-row stream (error 4804); preserve decoder bounds and raw fixture differences.",
+        "Keep root server I/O, target binding, transactions and execution out of scope; do not edit lib.rs or root integration files.",
+        "Run deterministic TDS tests, formatting and strict Clippy; report exact fixture and test revisions in a focused PR after exclusive claim."
+      ],
+      "dependencies": [
+        "bulk-load-wire-reference-v1"
+      ],
+      "issue": 344,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PO9F_"
     }
   ]
 }
