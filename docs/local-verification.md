@@ -73,8 +73,9 @@ Differences from CI:
 
 The command prints the values it chose and why. The inputs are
 `os.availableParallelism()`, total memory, currently available memory
-(`os.freemem()`, which is `MemAvailable` on Linux) and `process.availableMemory()`,
-which reflects container or cgroup limits where Node can see them. On macOS,
+(`os.freemem()`, which is `MemAvailable` on Linux) and
+`process.constrainedMemory()`, which reports a container or cgroup limit where
+Node can see one. On macOS,
 `os.freemem()` leaves out reclaimable cache, so the command uses the larger of
 free memory and 60% of total memory.
 

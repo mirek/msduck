@@ -89,8 +89,12 @@ function readWorkflow() {
 
 function checkToolchain(toolchain) {
   const install = `rustup toolchain install ${toolchain} --profile minimal --component rustfmt --component clippy`
-  const installed = quiet('rustup', ['toolchain', 'list'])
-  if (installed === null) return { ok: false, message: `rustup is not available. Install rustup, then run:\n  ${install}` }
+  let installed
+  try { installed = execFileSync('rustup', ['toolchain', 'list'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }
+  catch (error) {
+    const reason = error.code === 'ENOENT' ? 'rustup was not found on PATH' : `rustup toolchain list failed: ${String(error.stderr ?? error.message).trim()}`
+    return { ok: false, message: `${reason}. Fix rustup, then make sure the CI-pinned toolchain is installed:\n  ${install}` }
+  }
   if (!installed.split('\n').some(line => line.split(/\s/)[0] === toolchain || line.startsWith(`${toolchain}-`))) {
     return { ok: false, message: `The CI-pinned Rust toolchain ${toolchain} is not installed. Run:\n  ${install}` }
   }
@@ -102,7 +106,7 @@ function checkToolchain(toolchain) {
 
 // Parallelism from explicit host inputs. Linux freemem() reports MemAvailable;
 // macOS reports only free pages (reclaimable cache excluded), so a fraction of
-// total memory is the better estimate there. process.availableMemory() honours
+// total memory is the better estimate there. process.constrainedMemory() reports
 // cgroup/container limits where Node can see them.
 function plan({ cpuCount, total, free, constrained, os, full, cargoJobs, clientJobs }) {
   const limit = constrained > 0 ? Math.min(constrained, total) : total
@@ -211,6 +215,7 @@ function markdown(summary) {
     '',
     `- Revision: \`${revision.head}\`${revision.dirtyAtStart ? ' **with uncommitted changes (does not represent this commit)**' : ''}`,
     `- Represents commit: ${summary.representsCommit ? 'yes' : '**no**'}${summary.problems.length ? ` (${summary.problems.join('; ')})` : ''}`,
+    ...(revision.dirtyFiles.length ? [`- Uncommitted: ${revision.dirtyFiles.slice(0, 20).map(f => `\`${f.trim()}\``).join(', ')}${revision.dirtyFiles.length > 20 ? `, and ${revision.dirtyFiles.length - 20} more` : ''}`] : []),
     `- Toolchain: ${toolchain.rustc ?? 'unknown rustc'} (CI pin ${toolchain.pinned}); ${toolchain.cargo ?? 'unknown cargo'}; node ${toolchain.node}${toolchain.npm ? `; npm ${toolchain.npm}` : ''}`,
     `- Host: ${host.platform}/${host.arch}, ${host.cpuModel}, ${host.availableParallelism} CPUs, ${host.totalMemoryGiB} GiB RAM`,
     `- Parallelism: cargo ${parallelism.cargo.jobs} (${parallelism.cargo.reason})${parallelism.client ? `; client shards ${parallelism.client.jobs} (${parallelism.client.reason})` : ''}`,
@@ -249,10 +254,10 @@ async function main() {
   const host = {
     platform: platform(), arch: arch(), release: release(), cpuModel: cpus()[0]?.model?.trim() ?? 'unknown CPU',
     availableParallelism: availableParallelism(), totalMemoryGiB: +(totalmem() / GiB).toFixed(1), freeMemoryGiB: +(freemem() / GiB).toFixed(1),
-    constrainedMemoryGiB: process.availableMemory ? +(process.availableMemory() / GiB).toFixed(1) : null,
+    memoryLimitGiB: process.constrainedMemory?.() > 0 && process.constrainedMemory() < totalmem() ? +(process.constrainedMemory() / GiB).toFixed(1) : null,
   }
   const parallelism = plan({
-    cpuCount: availableParallelism(), total: totalmem(), free: freemem(), constrained: process.availableMemory?.() ?? 0,
+    cpuCount: availableParallelism(), total: totalmem(), free: freemem(), constrained: process.constrainedMemory?.() ?? 0,
     os: platform(), full: options.full, cargoJobs: options.cargoJobs, clientJobs: options.clientJobs,
   })
 
@@ -308,7 +313,8 @@ async function main() {
     if (record.status === 'passed' && r.tests?.failed) record.status = 'failed'
     console.log(`${record.status} in ${duration(r.durationMs)}${r.tests ? ` (${describeTests(r.tests)})` : ''}`)
     if (record.status !== 'passed') {
-      record.tail = r.text.trimEnd().split('\n').slice(-40).join('\n')
+      // Tools such as rustfmt colour diffs regardless of CARGO_TERM_COLOR.
+      record.tail = r.text.replace(/\x1b(?:\[[0-9;?]*[A-Za-z]|\([A-Z0-9])/g, '').trimEnd().split('\n').slice(-40).join('\n')
       console.log(`--- last lines of ${record.log} ---\n${record.tail}\n--- end ---`)
       if (!options.keepGoing) stop = true
     }
