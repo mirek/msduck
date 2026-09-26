@@ -71,6 +71,17 @@ Several local resources are already safe to share:
 - Reference containers publish random host ports.
 - Pre-pull the pinned reference image once, so workers do not race to download it.
 
+Shared machine state needs discipline:
+
+- Keep temporary files inside the worktree (the ignored `artifacts/`) or in a
+  directory named after the task. Workers on one host often share a scratch or
+  temp directory.
+- Remove only reference containers whose names you recorded, or that carry your
+  `msduck.owner` label. Never remove one by guessing from its start time.
+- Never pass whole captures or fixtures to `node:assert`. A failing assertion on
+  Node 24 inspects the entire object and has exhausted host memory. Use bounded
+  comparisons that report the first differing record.
+
 Budget memory per worker and leave headroom for the OS. Each compiling worker
 needs several GB, dominated by the bundled DuckDB C++ build. Each SQL Server
 reference container needs about 2 GB. When memory is short:
