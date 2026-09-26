@@ -234,8 +234,10 @@ test('capture output may not alias the retained fixture, including via symlinks'
     await writeFile(fixture, '{}\n')
     await symlink(fixture, join(root, 'link.json'))
     await symlink(join(root, 'reference'), join(root, 'refdir'))
+    const { link } = await import('node:fs/promises')
+    await link(fixture, join(root, 'hard.json'))
     const refused = /refusing to write capture output over retained fixture/
-    for (const output of [fixture, join(root, 'reference', '.', 'x.json'), join(root, 'link.json'), join(root, 'refdir', 'x.json'), relative(process.cwd(), fixture)])
+    for (const output of [fixture, join(root, 'reference', '.', 'x.json'), join(root, 'link.json'), join(root, 'refdir', 'x.json'), relative(process.cwd(), fixture), join(root, 'hard.json')])
       await assert.rejects(refuseFixtureOutput(output, fixture), refused, output)
     await assert.rejects(refuseFixtureOutput(join(root, 'refdir', 'y.json'), pathToFileURL(join(root, 'reference', 'y.json'))), refused)
     await refuseFixtureOutput(join(root, 'artifacts', 'capture.json'), fixture)

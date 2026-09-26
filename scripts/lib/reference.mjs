@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { access, realpath, writeFile } from 'node:fs/promises'
+import { access, realpath, stat, writeFile } from 'node:fs/promises'
 import { dirname, basename, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
@@ -104,7 +104,12 @@ async function canonicalPath(path) {
 // unconditional write would replace the ground truth and then compare the
 // capture with itself. Call before any container starts.
 export async function refuseFixtureOutput(output, fixture) {
-  if (await canonicalPath(output) === await canonicalPath(fixture)) throw new Error('refusing to write capture output over retained fixture ' + displayPath(fixture))
+  const refuse = () => { throw new Error('refusing to write capture output over retained fixture ' + displayPath(fixture)) }
+  if (await canonicalPath(output) === await canonicalPath(fixture)) refuse()
+  // Hard links share an inode but not a path.
+  const identity = async path => { try { const s = await stat(path); return `${s.dev}:${s.ino}` } catch (error) { if (error.code === 'ENOENT') return null; throw error } }
+  const target = await identity(fixture)
+  if (target !== null && target === await identity(output)) refuse()
 }
 
 // Writes a new fixture in the retained compact JSON format; never overwrites.
