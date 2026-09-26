@@ -3275,6 +3275,26 @@
       "dependencies": [],
       "issue": 338,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PO6he"
+    },
+    {
+      "id": "bulk-load-wire-reference-v1",
+      "title": "Capture first-party SQL Server BulkLoad wire requests and responses",
+      "state": "ready",
+      "authorization": "Direct owner instruction of 2026-09-26 to continue full SQL Server compatibility work and explicitly publish this first-party BulkLoad wire capture task; no external submission is input.",
+      "scope": [
+        "scripts/capture-bulk-load-wire.mjs",
+        "reference/bulk-load-wire.json",
+        "docs/bulk-load-wire.md"
+      ],
+      "acceptance": [
+        "Use pinned owner-run SQL Server 2025 on linux.local and capture bounded decrypted post-login outgoing INSERT BULK SQL Batch (0x01), BulkLoad (0x07), and corresponding server responses (0x04) for zero-row, NULL, Unicode/binary and multirow calls; retain exact raw bytes, packet boundaries, typed callback/readback observations, errors and DONE-only empty-row behavior.",
+        "Run at least two fresh independent reference databases, preferably two fresh containers, preserve any raw replication differences, and verify exact fixture replay. Reject diagnostic-output aliases and refuse retained-fixture overwrites before writes or container launch.",
+        "Keep credentials and login/setup traffic out of fixture; document bounds, observed differences and unknowns. Do not implement server BulkLoad integration or edit existing helpers or codec.",
+        "Use an exclusive claim and isolated worktree, push a focused draft PR and mark reviewable after Node syntax, replay, overwrite-protection and diff checks."
+      ],
+      "dependencies": [],
+      "issue": 341,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PO8Ak"
     }
   ]
 }
