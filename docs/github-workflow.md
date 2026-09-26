@@ -5,13 +5,26 @@ checkpoints and open draft PRs early; mark ready when the change and evidence ar
 reviewable. Link the issue, describe remaining differences, and let CI finish
 before merging. Automatic review does not mean automatic merge.
 
-CI runs on PRs, pushes to main, and manual dispatch. The deterministic-crate job
-checks formatting, Clippy and pure tests without DuckDB. The full job checks
-workspace Clippy, Rust integration tests, independent Node clients and a raw
-compatibility audit. Stale runs are canceled on a newer push. Both jobs use a
-pinned Rust toolchain; full verification uses Node 24. Dependency/build caches
-reduce repeated DuckDB compilation. Logs, revision identity and raw captures
+The required PR check, **Deterministic crates**, checks formatting,
+coordination scripts, strict Clippy and tests for the three deterministic crates
+without DuckDB. It is intentionally short. The **Workspace and clients** job
+runs on pushes to main, owner manual dispatch, `verify-*` tags and the weekly
+schedule, rather than on every PR. It checks strict workspace Clippy, Rust
+integration tests, independent Node clients and a raw compatibility audit.
+Stale runs on the same ref are canceled on a newer push. Both jobs use a pinned
+Rust toolchain; full verification uses Node 24. Dependency/build caches reduce
+repeated DuckDB compilation. Full-run logs, revision identity and raw captures
 are retained for 14 days. The audit is diagnostic, not an equivalence gate.
+
+For a PR that changes Rust or behavior, the worker still runs the full relevant
+`AGENTS.md` checks locally or on the isolated Linux builder and reports the
+exact tested revision, results and any unrelated baseline failures. The
+integrator reviews that evidence and may start the full CI job on the PR branch
+with `gh workflow run ci.yml --ref work/TASK-ID`; the run records its actual
+checkout SHA in `artifacts/ci/revision.txt`. A manual run on an earlier SHA does
+not verify a later push. A `verify-*` tag pins a revision for a repeatable full
+run. The weekly and main-branch runs catch broader regressions; a green fast
+check alone does not establish SQL Server compatibility.
 
 GitHub-hosted Linux runners are the initial CI environment. The optional SSH
 builder remains available for development; its local configuration and credentials
@@ -37,9 +50,11 @@ the owner-approved registry and claim through `scripts/agent-work.mjs`.
 See [exclusive claims and owner-only intake](agent-work.md).
 
 The temporary merge exception for the owner-requested integration checkpoint
-(#93) ended on 2026-09-24. Both **Deterministic crates** and **Workspace and
-clients** are required again, with strict up-to-date checking. The complete
-[CI run on main](https://github.com/mirek/msduck/actions/runs/35973323293)
+(#93) ended on 2026-09-24. The full job was then required on every PR, but its
+native compilation and client/audit work made ordinary PRs wait more than an
+hour. The current required check is **Deterministic crates**, with strict
+up-to-date checking; full verification remains a separate owner-controlled run.
+The complete [CI run on main](https://github.com/mirek/msduck/actions/runs/35973323293)
 passed at `6016b8605189b347e81fe48f3f17bee1f127314f`, including Rust tests,
 independent clients and diagnostic capture. Passing capture is not full SQL
 Server equivalence.
@@ -64,4 +79,5 @@ The local `npm test` command remains available for the serial baseline. The
 owner-run two-CPU benchmark passed all 408 tests in about 14.4 minutes after
 splitting the oversized BIT matrix without removing assertions. This measurement
 is not a guarantee of GitHub runner performance or a diagnosis of earlier CI
-failures. Both required checks remain enforced on main.
+failures. It is why client verification remains available on demand and runs
+after each main push and weekly, while the short PR gate stays responsive.
