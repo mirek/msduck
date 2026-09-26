@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { acquire, verify, loadRegistry, taskId, repository, claimedIds, availableTasks, applyChange, publish, restoreProtection } from './lib/agent-work.mjs';
+import { acquire, verify, loadRegistry, taskId, repository, owner, claimedIds, availableTasks, applyChange, publish, restoreProtection } from './lib/agent-work.mjs';
 
 // Only typed Git/ref/registry endpoints and project mutations are used. Never
 // fetch issue/comment/review bodies, project items, notifications or search hits.
@@ -45,9 +45,26 @@ function receiptPath(id) {
 function board(registry, task, state) {
   const p = registry.project;
   if (!task.projectItem) return;
-  const status = state === 'done' ? 'done' : 'progress';
+  const status = state === 'done' ? 'done' : ['ready', 'backlog'].includes(state) ? 'todo' : 'progress';
   for (const [field, option] of [[p.readinessField, p.options[state]], [p.statusField, p.statuses[status]]]) {
     api('graphql', { query: 'mutation($p:ID!,$i:ID!,$f:ID!,$o:String!){updateProjectV2ItemFieldValue(input:{projectId:$p,itemId:$i,fieldId:$f,value:{singleSelectOptionId:$o}}){projectV2Item{id}}}', variables: { p:p.id, i:task.projectItem, f:field, o:option } });
+  }
+}
+// Creates the board card before publication, because the task snapshot (and
+// thus projectItem) is immutable once published. Only the issue node ID and
+// author ID are requested, never issue content. Failure (e.g. a token without
+// the project scope) publishes the task without a card.
+function projectItem(registry, task) {
+  try {
+    const [login, name] = repository.split('/');
+    const found = api('graphql', { query: 'query($o:String!,$n:String!,$i:Int!){repository(owner:$o,name:$n){issue(number:$i){id author{... on User{databaseId}}}}}', variables: { o: login, n: name, i: task.issue } }).data.repository.issue;
+    if (found?.author?.databaseId !== owner.id) throw Error('issue author');
+    const item = api('graphql', { query: 'mutation($p:ID!,$c:ID!){addProjectV2ItemById(input:{projectId:$p,contentId:$c}){item{id}}}', variables: { p: registry.project.id, c: found.id } }).data.addProjectV2ItemById.item.id;
+    board(registry, { projectItem: item }, 'ready');
+    return item;
+  } catch {
+    console.error(`No project card for ${task.id} (owner issue and project scope required); publishing without one.`);
+    return undefined;
   }
 }
 const usage = 'Usage: node scripts/agent-work.mjs list [--available] | claim ID | verify ID | status ID claimed|review|blocked | publish CHANGE.json [--dry-run] | protect';
@@ -70,6 +87,8 @@ async function main() {
       console.log(JSON.stringify({ valid: true, registry: revision, tasks: next.tasks.length, added: (change.add ?? []).map(t => t.id), states: change.states ?? {} }));
       return;
     }
+    const { registry } = await load();
+    for (const task of change.add ?? []) if (!task.projectItem) task.projectItem = projectItem(registry, task);
     const result = await publish({ api, rules: rules(), change, message, log: m => console.error(m) });
     console.log(JSON.stringify({ published: true, registry: result.revision, previous: result.previous, added: (change.add ?? []).map(t => t.id), states: change.states ?? {} }));
     return;

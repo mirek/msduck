@@ -111,8 +111,11 @@ wait for a short time while another publisher has protection inactive, and no
 registry content is read until protection is active again. If a publisher is
 interrupted and protection stays inactive, run `node scripts/agent-work.mjs protect`.
 This is idempotent and safe while other publishers run. Claim ruleset 23899191
-is never modified. `projectItem` is optional. Omit it when the credential lacks
-the `project` scope; board updates are skipped for such tasks.
+is never modified. For each added task without `projectItem`, `publish` adds its
+owner-authored issue to the project (requesting only the issue node ID and author
+ID) and records the card before publication, because the snapshot is immutable
+afterwards. Without the `project` token scope (`gh auth refresh -s project`) it
+warns and publishes without a card; board updates are then skipped for that task.
 
 After a task's PR merges, publish its `done` state promptly. Stale `ready` tasks
 keep their files reserved against new ready scopes and block dependent tasks.
