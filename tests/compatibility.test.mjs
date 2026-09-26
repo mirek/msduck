@@ -106,7 +106,11 @@ test('reference container cleans up startup and workload failures', async () => 
       docker:async args=>{calls.push(args);if(args[0]===failure)throw new Error(`${failure} failed`);if(args[0]==='port')return '127.0.0.1:15433';if(args[0]==='inspect')return failure==='readiness'?'false':'true';return ''},
       connect:async()=>({close(){}}),delay:async()=>{}
     }))
-    assert.deepEqual(calls.at(-1),['rm','--force',calls[0][4]])
+    // Startup exits are retried with fresh names; every started container is removed.
+    const names=calls.filter(c=>c[0]==='run').map(c=>c[4])
+    assert.equal(names.length, failure==='readiness'?3:1)
+    for(const name of names) assert(calls.some(c=>c[0]==='rm'&&c[2]===name))
+    assert.equal(calls.at(-1)[0],'rm')
   }
 })
 
@@ -134,6 +138,33 @@ test('reference container labels its owner and tolerates auto-removal races', as
     assert.equal(polls.length, remaining<0?1:Math.min(remaining+1,30))
     assert(slept<=30)
   }
+})
+
+test('reference container retries transient startup exits but never the workload', async () => {
+  const {withReferenceContainer}=await import('../scripts/lib/reference-container.mjs')
+  const fake=(plan)=>{const calls=[];let starts=0;return {calls,docker:async args=>{calls.push(args)
+    if(args[0]==='run')starts++
+    if(args[0]==='port')return '127.0.0.1:15433'
+    if(args[0]==='inspect'){const step=plan[starts-1]??'up';if(step==='gone')throw new Error('No such object');return step==='exited'?'false':'true'}
+    return ''}}}
+  // Transient exits, then success: the workload sees the attempt count and runs once.
+  let runs=0;const ok=fake(['exited','gone'])
+  assert.equal(await withReferenceContainer(async(config,meta)=>{runs++;assert.equal(meta.startupAttempts,3);return 5},{docker:ok.docker,connect:async()=>({close(){}}),delay:async()=>{}}),5)
+  assert.equal(runs,1)
+  const names=ok.calls.filter(c=>c[0]==='run').map(c=>c[4])
+  assert.equal(new Set(names).size,3)
+  for(const name of names) assert(ok.calls.some(c=>c[0]==='rm'&&c[2]===name))
+  // Persistent startup failure reports every attempt.
+  const bad=fake(['exited','exited','gone'])
+  await assert.rejects(withReferenceContainer(async()=>assert.fail('work must not run'),{docker:bad.docker,connect:async()=>({close(){}}),delay:async()=>{}}),
+    /after 3 startup attempts: .*exited.*exited.*disappeared/)
+  // Workload failures are not retried.
+  const once=fake([]);let calls=0
+  await assert.rejects(withReferenceContainer(async()=>{calls++;throw new Error('work failed')},{docker:once.docker,connect:async()=>({close(){}}),delay:async()=>{}}),/work failed/)
+  assert.equal(calls,1); assert.equal(once.calls.filter(c=>c[0]==='run').length,1)
+  // Non-transient startup failures (e.g. an invalid binding) are not retried.
+  const bind=[];await assert.rejects(withReferenceContainer(async()=>1,{docker:async a=>{bind.push(a);if(a[0]==='port')return '0.0.0.0:1';return 'true'},connect:async()=>({close(){}}),delay:async()=>{}}),/valid loopback port/)
+  assert.equal(bind.filter(c=>c[0]==='run').length,1)
 })
 
 test('reference container cleans up after invalid bindings timeout and cancellation', async () => {
