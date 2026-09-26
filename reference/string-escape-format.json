@@ -1,0 +1,2645 @@
+{
+  "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+  "runs": [
+    [
+      {
+        "name": "json",
+        "sql": "SELECT STRING_ESCAPE(N'x','json') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json trailing space",
+        "sql": "SELECT STRING_ESCAPE(N'x','json ') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json two spaces",
+        "sql": "SELECT STRING_ESCAPE(N'x','json  ') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "JSON mixed case spaces",
+        "sql": "SELECT STRING_ESCAPE(N'x',N'JsOn  ') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json char8",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST('json' AS CHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json nchar8",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST(N'json' AS NCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json varchar8",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST('json' AS VARCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json nvarchar8",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST(N'json' AS NVARCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json leading space",
+        "sql": "SELECT STRING_ESCAPE(N'x',' json') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "json trailing tab",
+        "sql": "SELECT STRING_ESCAPE(N'x','json'+CHAR(9)) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "json trailing newline",
+        "sql": "SELECT STRING_ESCAPE(N'x','json'+CHAR(10)) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "json trailing NBSP",
+        "sql": "SELECT STRING_ESCAPE(N'x',N'json'+NCHAR(160)) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "json suffix x",
+        "sql": "SELECT STRING_ESCAPE(N'x','jsonx') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "literal NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',NULL) AS escaped",
+        "result": {
+          "sets": [],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of string_escape function."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "typed varchar NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST(NULL AS VARCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "typed nvarchar NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST(NULL AS NVARCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "typed char NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST(NULL AS CHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "typed nchar NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST(NULL AS NCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "NULL source invalid",
+        "sql": "SELECT STRING_ESCAPE(CAST(NULL AS NVARCHAR(8)),'xml') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "NULL source padded",
+        "sql": "SELECT STRING_ESCAPE(CAST(NULL AS NVARCHAR(8)),'json ') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  null
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "NULL source typed NULL",
+        "sql": "SELECT STRING_ESCAPE(CAST(NULL AS NVARCHAR(8)),CAST(NULL AS NVARCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "empty source invalid",
+        "sql": "SELECT STRING_ESCAPE(N'','xml') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "RPC nvarchar NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',@f) AS escaped",
+        "parameter": {
+          "type": "NVarChar",
+          "value": null
+        },
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": {
+            "kind": "missing"
+          },
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "RPC varchar NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',@f) AS escaped",
+        "parameter": {
+          "type": "VarChar",
+          "value": null
+        },
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": {
+            "kind": "missing"
+          },
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "RPC nvarchar padded",
+        "sql": "SELECT STRING_ESCAPE(N'x',@f) AS escaped",
+        "parameter": {
+          "type": "NVarChar",
+          "value": "json "
+        },
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": 0,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "RPC varchar padded",
+        "sql": "SELECT STRING_ESCAPE(N'x',@f) AS escaped",
+        "parameter": {
+          "type": "VarChar",
+          "value": "json "
+        },
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": 0,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "RPC nvarchar leading",
+        "sql": "SELECT STRING_ESCAPE(N'x',@f) AS escaped",
+        "parameter": {
+          "type": "NVarChar",
+          "value": " json"
+        },
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": {
+            "kind": "missing"
+          },
+          "rowCount": 0
+        }
+      }
+    ],
+    [
+      {
+        "name": "json",
+        "sql": "SELECT STRING_ESCAPE(N'x','json') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json trailing space",
+        "sql": "SELECT STRING_ESCAPE(N'x','json ') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json two spaces",
+        "sql": "SELECT STRING_ESCAPE(N'x','json  ') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "JSON mixed case spaces",
+        "sql": "SELECT STRING_ESCAPE(N'x',N'JsOn  ') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json char8",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST('json' AS CHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json nchar8",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST(N'json' AS NCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json varchar8",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST('json' AS VARCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json nvarchar8",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST(N'json' AS NVARCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "json leading space",
+        "sql": "SELECT STRING_ESCAPE(N'x',' json') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "json trailing tab",
+        "sql": "SELECT STRING_ESCAPE(N'x','json'+CHAR(9)) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "json trailing newline",
+        "sql": "SELECT STRING_ESCAPE(N'x','json'+CHAR(10)) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "json trailing NBSP",
+        "sql": "SELECT STRING_ESCAPE(N'x',N'json'+NCHAR(160)) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "json suffix x",
+        "sql": "SELECT STRING_ESCAPE(N'x','jsonx') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "literal NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',NULL) AS escaped",
+        "result": {
+          "sets": [],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of string_escape function."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "typed varchar NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST(NULL AS VARCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "typed nvarchar NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST(NULL AS NVARCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "typed char NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST(NULL AS CHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "typed nchar NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',CAST(NULL AS NCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "NULL source invalid",
+        "sql": "SELECT STRING_ESCAPE(CAST(NULL AS NVARCHAR(8)),'xml') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "NULL source padded",
+        "sql": "SELECT STRING_ESCAPE(CAST(NULL AS NVARCHAR(8)),'json ') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  null
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": 1,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "NULL source typed NULL",
+        "sql": "SELECT STRING_ESCAPE(CAST(NULL AS NVARCHAR(8)),CAST(NULL AS NVARCHAR(8))) AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "empty source invalid",
+        "sql": "SELECT STRING_ESCAPE(N'','xml') AS escaped",
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "done",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": null,
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "RPC nvarchar NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',@f) AS escaped",
+        "parameter": {
+          "type": "NVarChar",
+          "value": null
+        },
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": {
+            "kind": "missing"
+          },
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "RPC varchar NULL",
+        "sql": "SELECT STRING_ESCAPE(N'x',@f) AS escaped",
+        "parameter": {
+          "type": "VarChar",
+          "value": null
+        },
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 8116,
+              "state": 8,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function."
+            }
+          ],
+          "info": [],
+          "returnStatus": {
+            "kind": "missing"
+          },
+          "rowCount": 0
+        }
+      },
+      {
+        "name": "RPC nvarchar padded",
+        "sql": "SELECT STRING_ESCAPE(N'x',@f) AS escaped",
+        "parameter": {
+          "type": "NVarChar",
+          "value": "json "
+        },
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": 0,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "RPC varchar padded",
+        "sql": "SELECT STRING_ESCAPE(N'x',@f) AS escaped",
+        "parameter": {
+          "type": "VarChar",
+          "value": "json "
+        },
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": [
+                [
+                  "x"
+                ]
+              ]
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneInProc",
+              "rowCount": 1,
+              "more": true
+            },
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [],
+          "info": [],
+          "returnStatus": 0,
+          "rowCount": 1
+        }
+      },
+      {
+        "name": "RPC nvarchar leading",
+        "sql": "SELECT STRING_ESCAPE(N'x',@f) AS escaped",
+        "parameter": {
+          "type": "NVarChar",
+          "value": " json"
+        },
+        "result": {
+          "sets": [
+            {
+              "columns": [
+                {
+                  "name": "escaped",
+                  "type": "NVarChar",
+                  "length": 65535,
+                  "precision": null,
+                  "scale": null,
+                  "flags": 33,
+                  "collation": {
+                    "buffer": {
+                      "kind": "missing"
+                    },
+                    "lcid": 1033,
+                    "flags": 13,
+                    "version": 0,
+                    "sortId": 52,
+                    "codepage": "CP1252"
+                  }
+                }
+              ],
+              "rows": []
+            }
+          ],
+          "done": [
+            {
+              "kind": "doneProc",
+              "rowCount": null,
+              "more": false
+            }
+          ],
+          "errors": [
+            {
+              "number": 13622,
+              "state": 1,
+              "class": 16,
+              "lineNumber": 1,
+              "message": "An invalid value was specified for argument 2."
+            }
+          ],
+          "info": [],
+          "returnStatus": {
+            "kind": "missing"
+          },
+          "rowCount": 0
+        }
+      }
+    ]
+  ]
+}
