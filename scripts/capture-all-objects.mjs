@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import {mkdir, readFile, writeFile} from 'node:fs/promises'
 import {resolve} from 'node:path'
 import {withReferenceContainer} from './lib/reference-container.mjs'
-import {connect, isolatedReference} from './lib/reference.mjs'
+import {connect, isolatedReference, assertSameCapture} from './lib/reference.mjs'
 import {capture, canonical} from './lib/compatibility.mjs'
 
 const views = ['all_objects', 'objects', 'system_objects']
@@ -112,7 +112,7 @@ function validate(run) {
   }
  }
  const rolledBack = rows('rollback owner objects')
- assert.deepEqual(rolledBack, rows('created objects'), 'Rollback did not restore the complete captured catalog rows')
+ assertSameCapture(rolledBack, rows('created objects'), 'Rollback did not restore the complete captured catalog rows')
 }
 function compare(left, right, description) {
  const a = bound(left), b = bound(right)
