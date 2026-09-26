@@ -3121,6 +3121,26 @@
       "dependencies": [],
       "issue": 326,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POxLI"
+    },
+    {
+      "id": "select-into-nullability-v1",
+      "title": "Preserve logical nullability in SELECT INTO columns",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement a fully functional SQL Server compatible Rust/DuckDB server. First-party owner-captured reference/unicode-materialized-storage.json and local client difference; no external submission is input.",
+      "scope": [
+        "src/select_into.rs",
+        "tests/select_into_nullability.rs",
+        "docs/select-into.md"
+      ],
+      "acceptance": [
+        "Use aligned, resolved logical Field.properties.nullable when creating SELECT INTO columns. Fall back to DuckDB DESCRIBE for unknown or misaligned metadata; never fabricate NOT NULL.",
+        "Preserve names/types, duplicate-name validation, two-phase create/insert semantics, explicit transaction rollback and prepared preflight without editing src/engine.rs or any claimed metadata file.",
+        "Add focused native regressions for literal, stored nullable/non-null, outer join, CAST(NULL), empty source, failed population/rollback and resulting descriptors where feasible. Compare the exact retained reference gap without changing tests/tedious.test.mjs.",
+        "Run formatting, deterministic tests, workspace Rust tests, strict Clippy, independent clients and diagnostic audit as applicable; report exact revision, unrelated failures and remaining SQL Server gaps. Open focused draft PR, mark ready when reviewable; do not merge."
+      ],
+      "dependencies": [],
+      "issue": 328,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PO0VM"
     }
   ]
 }
