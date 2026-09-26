@@ -259,6 +259,23 @@ impl Collation {
 }
 
 const SPACE: u32 = 0x20;
+/// Longest captured find or pattern, in stored bytes.
+const CAPTURED_FIND_BYTES: usize = 8000;
+
+/// Whether a find or pattern may exceed the captured 8000 bytes. Unicode
+/// text is two bytes per UTF-16 unit. Non-Unicode text is measured as UTF-8,
+/// an upper bound for both the Latin1 code page and `_UTF8` collations, so
+/// values near the limit may be reported unsupported conservatively.
+fn overlong(kind: ArgType, operand: Operand<'_>) -> bool {
+    let bytes = match operand {
+        Operand::Binary(bytes) => bytes.len(),
+        Operand::Text(units) if kind.is_unicode() => units.len().saturating_mul(2),
+        Operand::Text(units) => char::decode_utf16(units.iter().copied())
+            .map(|decoded| decoded.map_or(3, char::len_utf8))
+            .sum(),
+    };
+    bytes > CAPTURED_FIND_BYTES
+}
 const CAPTURED_SUPPLEMENTARY: u32 = 0x1F600;
 
 fn unsupported_type(position: usize) -> Rejection {
@@ -404,6 +421,9 @@ impl Charindex {
         start: StartArgument,
         collation: Collation,
     ) -> Evaluation {
+        if find.is_some_and(|find| overlong(self.find, find)) {
+            return Evaluation::Unsupported("a find value beyond 8000 bytes was not captured");
+        }
         let start = match (self.start, start) {
             (None, StartArgument::Omitted) => None,
             (Some(_), StartArgument::Null) => return Evaluation::Value(None),
@@ -595,6 +615,9 @@ impl Patindex {
         search: Option<&[u16]>,
         collation: Collation,
     ) -> Evaluation {
+        if pattern.is_some_and(|pattern| overlong(self.pattern, Operand::Text(pattern))) {
+            return Evaluation::Unsupported("a pattern beyond 8000 bytes was not captured");
+        }
         let (Some(pattern), Some(search)) = (pattern, search) else {
             return Evaluation::Value(None);
         };

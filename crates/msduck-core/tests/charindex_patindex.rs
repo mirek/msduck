@@ -915,10 +915,51 @@ fn uncaptured_forms_stay_explicitly_unsupported() {
         &[VarChar, VarCharMax, Decimal],
         vec![s("a"), s("a"), V::Dec(2, 0)],
     ));
+    // Find values and patterns beyond 8000 bytes.
+    unsupported(ci(
+        &[VarCharMax, VarCharMax],
+        vec![repeated("a", 8001, ""), repeated("a", 9000, "")],
+    ));
+    unsupported(ci(
+        &[NVarCharMax, NVarCharMax],
+        vec![repeated("a", 4001, ""), repeated("a", 9000, "")],
+    ));
+    unsupported(ci(
+        &[VarBinary, VarBinaryMax],
+        vec![V::Bytes(vec![0x61; 8001]), V::Bytes(vec![0x61; 9000])],
+    ));
+    unsupported(pi(
+        &[VarCharMax, VarCharMax],
+        vec![repeated("%", 8001, ""), s("a")],
+    ));
+    unsupported(pi(
+        &[VarCharMax, VarCharMax],
+        vec![repeated("\u{e9}", 4001, ""), s("a")],
+    ));
     // Uncaptured argument types and mixed binary/character operands.
     unsupported(ci_types(&[VarChar, VarChar, ArgType::Other]));
     unsupported(ci_types(&[VarChar, VarBinary]));
     unsupported(ci_types(&[Int, Xml]));
     unsupported(ci_types(&[NChar, VarChar]));
     unsupported(ci_types(&[VarChar, Binary]));
+}
+
+#[test]
+fn find_and_pattern_at_the_captured_length_limit_still_evaluate() {
+    let find = ci(
+        &[VarCharMax, VarCharMax],
+        vec![repeated("a", 8000, ""), repeated("a", 9000, "")],
+    );
+    assert_eq!(
+        run(&find),
+        Ours::Evaluated(ResultType::BigInt, Evaluation::Value(Some(1)))
+    );
+    let pattern = pi(
+        &[NVarChar, NVarCharMax],
+        vec![repeated("%", 4000, ""), s("a")],
+    );
+    assert_eq!(
+        run(&pattern),
+        Ours::Evaluated(ResultType::BigInt, Evaluation::Value(Some(1)))
+    );
 }

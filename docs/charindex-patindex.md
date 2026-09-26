@@ -233,6 +233,11 @@ The core also reports these uncaptured orders as unsupported:
 
 - An overflowing start together with a NULL or empty operand.
 - A DECIMAL start with a MAX search.
+- A CHARINDEX find value or PATINDEX pattern beyond 8000 stored bytes.
+  NVARCHAR text counts two bytes per UTF-16 unit, binary counts its bytes,
+  and non-Unicode text counts its UTF-8 length. UTF-8 is an upper bound for
+  the Latin1 code page, so a value near the limit may be reported
+  unsupported conservatively.
 
 PATINDEX follows these rules:
 
