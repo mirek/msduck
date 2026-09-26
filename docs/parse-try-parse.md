@@ -148,10 +148,33 @@ under any other server time zone.
 | sp_executesql PARSE failure | Column descriptor, error, DONEINPROC without a count, and return status equal to the error number (9819 or 9818). |
 | INT parameter as input | Error 8116 with no metadata, a DONEPROC only, and return status 8116. |
 | VARCHAR text and culture parameters, NVARCHAR(MAX) text | Accepted. The culture may be a parameter. |
-| sp_prepare | Returns the column descriptor and a DONEINPROC with count 0. Its return status was 8116 when the session's previous RPC had failed with 8116, and 0 otherwise. |
+| sp_prepare | Returns the column descriptor and a DONEINPROC with count 0. The RETURNSTATUS token that arrives in the sp_prepare response carries 8116 for the first sequence (after the failed `rpc parse int parameter`) and 0 for the other two (see below). |
 | sp_execute failure | Error, DONEINPROC without a count, return status -6. The next execution on the same handle succeeds with no error. |
 | TRY_PARSE prepared | Unparseable text and DECIMAL overflow give NULL with return status 0. An unknown 'xx-XX' culture parses. |
 | NULL culture parameter | Error 9818 in every protocol. |
+
+### Return status provenance
+
+tedious stores a RETURNSTATUS token value on the connection and reports it
+with the next doneProc event, so a status can outlive the request that
+received it. The script therefore ignores the doneProc argument. It clears
+the connection value when each request (and each prepare, execute and
+unprepare phase) starts, and records only RETURNSTATUS tokens that arrive
+while that request is outstanding. A request without one records null, as
+ordinary batches do. Recapturing with this rule reproduced the retained
+fixture exactly, including the sp_prepare status of 8116.
+
+A separate diagnostic probe (not retained) against the same image showed
+that the 8116 is sent by SQL Server itself. On one connection, each
+sp_prepare RETURNSTATUS token carried the session's most recent error number:
+
+- 0 in a fresh session, and after a successful RPC or batch.
+- 8116, 9819 or 8134 after an RPC or batch that failed with that error.
+- 8116 again from a second, successful sp_prepare, so a successful
+  sp_prepare did not reset it.
+
+The retained fixture proves only the three captured sequences. The general
+rule is an observation from the probe.
 
 ## Uncaptured gaps
 
@@ -194,7 +217,8 @@ under any other server time zone.
    TRY_PARSE through the core rule in DuckDB execution. It would pass the
    session language as the default culture, supply the clock and time zone
    explicitly, and emit the exact error tokens, DONE tokens and RPC/prepared
-   return statuses (error number for sp_executesql, -6 for sp_execute). It
+   return statuses (error number for sp_executesql, -6 for sp_execute, and the
+   session's last error number for sp_prepare). It
    would compare batch, sp_executesql and prepared paths against
    reference/parse-try-parse.json. Unsupported cultures and inputs should stay
    explicit errors rather than guesses.

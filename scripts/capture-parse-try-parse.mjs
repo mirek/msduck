@@ -276,6 +276,41 @@ const preparedCases = [
 ]
 for (const entry of preparedCases) entry[1] += ` /*${entry[0]}*/`
 
+// Return status per request. tedious keeps the RETURNSTATUS token value on
+// the connection (procReturnStatusValue) and reports it with the next
+// doneProc event, so a value can outlive the request that received it. The
+// tracker clears that value when each request starts and records only
+// RETURNSTATUS tokens that arrive while the request is outstanding; a
+// request that receives none records null. The doneProc argument is never
+// used.
+function trackReturnStatus(connection) {
+  let value
+  let seen = null
+  Object.defineProperty(connection, 'procReturnStatusValue', {
+    configurable: true,
+    get: () => value,
+    set: next => { value = next; if (next !== undefined && seen) seen.push(next) },
+  })
+  return {
+    begin() { value = undefined; seen = [] },
+    end() {
+      const statuses = seen ?? []
+      seen = null
+      value = undefined
+      return statuses.length ? statuses.at(-1) : null
+    },
+  }
+}
+
+async function tracked(tracker, run) {
+  tracker.begin()
+  let status = null
+  let result
+  try { result = await run() } finally { status = tracker.end() }
+  result.returnStatus = status
+  return result
+}
+
 function rpc(connection, sql, parameters) {
   const transport = {
     on: (...args) => connection.on(...args),
@@ -298,7 +333,7 @@ const PREPARED_LIMITS = Object.freeze({ rows: 10000, messages: 200 })
 const messageFields = m => ({ number: m.number, state: m.state, class: m.class, lineNumber: m.lineNumber, message: m.message })
 const columnFields = c => ({ name: c.colName, type: c.type.name, length: c.dataLength ?? null, precision: c.precision ?? null, scale: c.scale ?? null, flags: c.flags, collation: canonical(c.collation ?? null) })
 
-async function capturePrepared(connection, sql, declarations, valueSets) {
+async function capturePrepared(connection, tracker, sql, declarations, valueSets) {
   const limits = PREPARED_LIMITS
   let result
   let complete = () => {}
@@ -326,19 +361,20 @@ async function capturePrepared(connection, sql, declarations, valueSets) {
     if (result.done.length >= limits.messages) overflow('messages')
     else result.done.push({ kind, rowCount: rowCount ?? null, more })
   })
-  request.on('doneProc', (_count, _more, status) => { if (result) result.returnStatus = status })
   const phase = start => new Promise(resolve => {
     result = fresh()
     complete = (error, rowCount) => {
       complete = () => {}
       const finished = result
       result = undefined
+      finished.returnStatus = tracker.end()
       finished.rowCount = rowCount
       if (error && !reported.has(error) && !finished.errors.length) finished.errors.push({ message: error.message, number: error.number ?? null })
       if (error) reported.add(error)
       resolve(finished)
     }
     request.error = undefined
+    tracker.begin()
     start()
   })
   connection.on('errorMessage', onError)
@@ -368,19 +404,20 @@ const describeOptions = options => options ? { options: { ...options, ...(option
 
 async function observe(connection) {
   const records = []
-  for (const [name, sql] of [...setup, ...cases]) records.push({ name, sql, result: canonical(await capture(connection, sql)) })
+  const tracker = trackReturnStatus(connection)
+  for (const [name, sql] of [...setup, ...cases]) records.push({ name, sql, result: canonical(await tracked(tracker, () => capture(connection, sql))) })
   for (const [name, sql, parameters] of rpcCases) records.push({
     name, sql, protocol: 'sp_executesql',
     parameters: parameters.map(([parameter, type, value, options]) => ({ name: parameter, type: type.name, value, ...describeOptions(options) })),
-    result: canonical(await rpc(connection, sql, parameters)),
+    result: canonical(await tracked(tracker, () => rpc(connection, sql, parameters))),
   })
   for (const [name, sql, declarations, valueSets] of preparedCases) records.push({
     name, sql, protocol: 'sp_prepare/sp_execute/sp_unprepare',
     parameters: declarations.map(([parameter, type, options]) => ({ name: parameter, type: type.name, ...describeOptions(options) })),
-    ...canonical(await capturePrepared(connection, sql, declarations, valueSets)),
+    ...canonical(await capturePrepared(connection, tracker, sql, declarations, valueSets)),
   })
   const reuse = 'SELECT @@TRANCOUNT AS transaction_count, @@LANGUAGE AS language, 1 AS reusable /*reuse*/'
-  records.push({ name: 'reuse', sql: reuse, result: canonical(await capture(connection, reuse)) })
+  records.push({ name: 'reuse', sql: reuse, result: canonical(await tracked(tracker, () => capture(connection, reuse))) })
   return records
 }
 
@@ -414,6 +451,11 @@ function validate(run) {
   assert.equal(prepared.executions[2].result.errors.length, 0, 'no stale prepared error')
   assert.equal(prepared.executions.at(-1).result.errors.length, 0, 'no stale prepared error')
   assert.equal(get('reuse').result.sets[0].rows[0][0], 0)
+  // Return statuses come only from RETURNSTATUS tokens of the same request.
+  assert.equal(get('rpc parse nvarchar').result.returnStatus, 0)
+  assert.equal(get('rpc parse invalid').result.returnStatus, 9819)
+  assert.equal(get('parse int basic').result.returnStatus, null)
+  assert.equal(prepared.executions[1].result.returnStatus, -6)
 }
 
 if (writeFixture) await refuseExistingFixture(fixture)
