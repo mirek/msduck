@@ -2379,6 +2379,78 @@
       "dependencies": [],
       "issue": 250,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POSGg"
+    },
+    {
+      "id": "charindex-patindex-reference-v1",
+      "title": "Capture SQL Server CHARINDEX and PATINDEX reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing implementation goal and 2026-09-26 owner request to utilize this host with parallel independent agents. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-charindex-patindex.mjs",
+        "reference/charindex-patindex.json",
+        "docs/charindex-patindex.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, result descriptors, errors and completion tokens for ordinary and prepared/RPC CHARINDEX and PATINDEX: NULL/empty inputs, start positions (0, negative, beyond length, BIGINT), VARCHAR/NVARCHAR/MAX (INT vs BIGINT results), trailing spaces, case/accent-sensitive and BIN2 collations, surrogate pairs, PATINDEX wildcards/ranges/escapes and invalid argument types.",
+        "Use the pinned SQL Server 2025 image in two fresh databases and independently in a second container; compare all four raw captures, retain the fixture, and refuse silent overwrite (follow scripts/capture-string-agg.mjs and scripts/lib/reference*.mjs).",
+        "Document observed deterministic value/type/error rules and the proposed deterministic-core and root-integration successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 252
+    },
+    {
+      "id": "concat-ws-translate-reference-v1",
+      "title": "Capture SQL Server CONCAT_WS and TRANSLATE reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing implementation goal and 2026-09-26 owner request to utilize this host with parallel independent agents. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-concat-ws-translate.mjs",
+        "reference/concat-ws-translate.json",
+        "docs/concat-ws-translate.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, result descriptors, errors and completion tokens for ordinary and prepared/RPC CONCAT_WS and TRANSLATE: NULL separators and arguments, argument count limits, mixed VARCHAR/NVARCHAR/MAX/numeric/date arguments and result widths, TRANSLATE length-mismatch errors, collation and surrogate handling.",
+        "Use the pinned SQL Server 2025 image in two fresh databases and independently in a second container; compare all four raw captures, retain the fixture, and refuse silent overwrite (follow scripts/capture-string-agg.mjs and scripts/lib/reference*.mjs).",
+        "Document observed deterministic value/type/error rules and the proposed deterministic-core and root-integration successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 253
+    },
+    {
+      "id": "greatest-least-reference-v1",
+      "title": "Capture SQL Server GREATEST and LEAST reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing implementation goal and 2026-09-26 owner request to utilize this host with parallel independent agents. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-greatest-least.mjs",
+        "reference/greatest-least.json",
+        "docs/greatest-least.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, result descriptors, errors and completion tokens for ordinary and prepared/RPC GREATEST and LEAST: NULL handling, argument count limits, type precedence across integer/decimal/float/money/character/date types, result precision/scale/length and nullability, collation conflicts and unsupported types (text, xml, binary, variant).",
+        "Use the pinned SQL Server 2025 image in two fresh databases and independently in a second container; compare all four raw captures, retain the fixture, and refuse silent overwrite (follow scripts/capture-string-agg.mjs and scripts/lib/reference*.mjs).",
+        "Document observed deterministic value/type/error rules and the proposed deterministic-core and root-integration successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 254
+    },
+    {
+      "id": "datetrunc-bucket-reference-v1",
+      "title": "Capture SQL Server DATETRUNC and DATE_BUCKET reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing implementation goal and 2026-09-26 owner request to utilize this host with parallel independent agents. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-datetrunc-bucket.mjs",
+        "reference/datetrunc-bucket.json",
+        "docs/datetrunc-bucket.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, result descriptors, errors and completion tokens for ordinary and prepared/RPC DATETRUNC and DATE_BUCKET: every datepart, all date/time input types and scales (result type follows input), string literal inputs, week/iso_week and DATEFIRST effects, DATE_BUCKET widths/origins/negative values, NULLs and invalid dateparts.",
+        "Use the pinned SQL Server 2025 image in two fresh databases and independently in a second container; compare all four raw captures, retain the fixture, and refuse silent overwrite (follow scripts/capture-string-agg.mjs and scripts/lib/reference*.mjs).",
+        "Document observed deterministic value/type/error rules and the proposed deterministic-core and root-integration successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 255
     }
   ]
 }
