@@ -6,6 +6,7 @@ pub mod attention_completion;
 pub mod collation;
 pub mod framing;
 pub mod request_lifecycle;
+pub mod return_value;
 pub mod smp;
 
 pub const MAX_MESSAGE: usize = 16 * 1024 * 1024;
@@ -1073,14 +1074,27 @@ mod transaction_tests {
 
 /// RETURNVALUE for the integer OUTPUT handle returned by preparation RPCs.
 pub fn return_handle(out: &mut Vec<u8>, name: &str, value: i32) {
-    out.push(0xac);
-    out.extend(0u16.to_le_bytes());
-    btext(out, name.trim_start_matches('@'));
-    out.push(1);
-    out.extend(0u32.to_le_bytes());
-    out.extend(1u16.to_le_bytes());
-    out.extend([0x26, 4, 4]);
-    out.extend(value.to_le_bytes());
+    use return_value::{Declaration, Parameter, Status, Value};
+    let units: Vec<_> = name
+        .trim_start_matches('@')
+        .encode_utf16()
+        .take(128)
+        .collect();
+    let mut token = Vec::new();
+    return_value::encode(
+        &mut token,
+        &Parameter {
+            ordinal: 0,
+            name: &units,
+            status: Status::Output,
+            user_type: 0,
+            flags: 1,
+            declaration: Declaration::Int(4),
+            value: Value::Int(i64::from(value)),
+        },
+    )
+    .expect("prepared handle has a valid INT RETURNVALUE representation");
+    out.extend(token);
 }
 
 /// SQL Server advertises full coefficient capacity for result decimals.
