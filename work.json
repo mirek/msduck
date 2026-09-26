@@ -2451,6 +2451,42 @@
       ],
       "dependencies": [],
       "issue": 255
+    },
+    {
+      "id": "json-constructors-reference-v1",
+      "title": "Capture SQL Server JSON_OBJECT, JSON_ARRAY and JSON_MODIFY reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing implementation goal and 2026-09-26 owner request to utilize this host with parallel independent agents. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-json-constructors.mjs",
+        "reference/json-constructors.json",
+        "docs/json-constructors.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, result descriptors, errors and completion tokens for ordinary and prepared/RPC JSON_OBJECT, JSON_ARRAY and JSON_MODIFY: NULL ON NULL/ABSENT ON NULL, key/value typing and escaping of every scalar family, nested constructors and JSON_QUERY inputs, duplicate keys, result type/width, JSON_MODIFY append/strict/lax paths, deletion via NULL and invalid path/JSON errors.",
+        "Use the pinned SQL Server 2025 image in two fresh databases and independently in a second container; compare all four raw captures, retain the fixture, and refuse silent overwrite (follow scripts/capture-string-agg.mjs and scripts/lib/reference*.mjs).",
+        "Document observed deterministic value/type/error rules and the proposed deterministic-core and root-integration successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 256
+    },
+    {
+      "id": "hashbytes-checksum-reference-v1",
+      "title": "Capture SQL Server HASHBYTES, CHECKSUM and BINARY_CHECKSUM reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing implementation goal and 2026-09-26 owner request to utilize this host with parallel independent agents. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-hashbytes-checksum.mjs",
+        "reference/hashbytes-checksum.json",
+        "docs/hashbytes-checksum.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, result descriptors, errors and completion tokens for ordinary and prepared/RPC HASHBYTES (every algorithm name, VARCHAR vs NVARCHAR encoding, MAX and >8000-byte inputs, NULL, invalid algorithm), CHECKSUM and BINARY_CHECKSUM (multiple arguments, *, collation/case effects, NULLs, trailing spaces, numeric/date/character families and noncomparable types).",
+        "Use the pinned SQL Server 2025 image in two fresh databases and independently in a second container; compare all four raw captures, retain the fixture, and refuse silent overwrite (follow scripts/capture-string-agg.mjs and scripts/lib/reference*.mjs).",
+        "Document observed deterministic value/type/error rules and the proposed deterministic-core and root-integration successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 257
     }
   ]
 }
