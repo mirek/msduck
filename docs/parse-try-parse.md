@@ -42,7 +42,10 @@ node --max-old-space-size=2048 scripts/capture-parse-try-parse.mjs artifacts/par
 
 The capture peaked at about 120 MB RSS. `--one-database` runs a diagnostic
 capture in a single database and skips validation and the fixture comparison.
-`--write-fixture` writes a new fixture only when none exists.
+`--write-fixture` writes a new fixture only when none exists. Before any
+container starts, the script refuses an output path that resolves to the
+retained fixture, including through a symlinked directory and when the
+fixture does not exist yet.
 
 These rules describe only what the fixture shows. They say nothing about
 inputs that were not tested, and msduck does not implement PARSE or
@@ -131,7 +134,7 @@ before the failing row are sent before the error. This holds for PARSE with
 | DATETIME2(n) | Rounds to the scale: '.1235' at scale 3 is .124, '.5' at scale 0 moves to the next second, and eight fraction digits round to seven. |
 | TIME(0) '23:59:59.6' | 23:59:59 (truncated rather than rolled over). Rounding at other times was not captured. |
 | '25:00:00' | Rejected |
-| Time-only string as DATETIME2 | The server's current date (the fixture keeps only the comparison with CAST(SYSUTCDATETIME() AS DATE), which was 1) plus the time. |
+| Time-only string as DATETIME2 | The server's current UTC date plus the time. The value is parsed once into a variable, between two reads of CAST(SYSUTCDATETIME() AS DATE). The fixture keeps only whether its date equals either read (1 in all captures) and its TIME part (03:04:05), so a run that crosses midnight still gives 1. The DATETIME2 descriptor for this form is not retained; other DATETIME2 cases show it. |
 | Offset in DATETIME2 input | '2024-01-02T03:04:05+05:30' is converted to 2024-01-01 21:34:05. 'Z' is kept as 03:04:05. |
 | DATETIMEOFFSET | '+05:30' is kept (text 2024-01-02 03:04:05.0000000 +05:30). 'Z' gives +00:00. A missing offset gives +00:00. '+15:00' is rejected. |
 | 12-hour clock | '1/2/2024 3:04:05 PM' and '3:04 PM' under en-US |

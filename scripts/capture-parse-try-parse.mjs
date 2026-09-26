@@ -7,8 +7,9 @@
 // docs/parse-try-parse.md). Whole captures are only compared with the bounded
 // helpers from scripts/lib/reference.mjs, never with node:assert.
 import assert from 'node:assert/strict'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { basename, dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Request, TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
@@ -164,9 +165,11 @@ both('datetime2 max round overflow', "N'9999-12-31T23:59:59.99999999'", 'DATETIM
 both('datetime2 pm en-US', "N'1/2/2024 3:04:05 PM'", 'DATETIME2', "'en-US'")
 both('datetime2 offset converted', "N'2024-01-02T03:04:05+05:30'", 'DATETIME2')
 both('datetime2 zulu', "N'2024-01-02T03:04:05Z'", 'DATETIME2')
-// A time-only string takes the server's current date; only the comparison
-// with the current UTC date (container TZ=UTC) and the time part are retained.
-for (const fn of ['PARSE', 'TRY_PARSE']) cases.push([`${fn.toLowerCase()} datetime2 time only`, `SELECT CASE WHEN CAST(${fn}(N'03:04:05' AS DATETIME2) AS DATE)=CAST(SYSUTCDATETIME() AS DATE) THEN 1 ELSE 0 END AS is_current_date, CAST(${fn}(N'03:04:05' AS DATETIME2) AS TIME) AS time_part`])
+// A time-only string takes the server's current date. The parsed value is
+// evaluated once, between two reads of the UTC date (container TZ=UTC), and
+// only whether its date equals one of those reads is retained, so a run that
+// crosses UTC midnight still records 1. The time part is retained exactly.
+for (const fn of ['PARSE', 'TRY_PARSE']) cases.push([`${fn.toLowerCase()} datetime2 time only`, `DECLARE @before DATE=CAST(SYSUTCDATETIME() AS DATE); DECLARE @parsed DATETIME2=${fn}(N'03:04:05' AS DATETIME2); DECLARE @after DATE=CAST(SYSUTCDATETIME() AS DATE); SELECT CASE WHEN CAST(@parsed AS DATE) IN (@before,@after) THEN 1 ELSE 0 END AS is_current_date, CAST(@parsed AS TIME) AS time_part`])
 both('time', "N'03:04:05.1234567'", 'TIME')
 both('time pm', "N'3:04 PM'", 'TIME', "'en-US'")
 both('time scale 0 rounding', "N'23:59:59.6'", 'TIME(0)')
@@ -458,6 +461,22 @@ function validate(run) {
   assert.equal(prepared.executions[1].result.returnStatus, -6)
 }
 
+// Local copy of refuseFixtureOutput from the owner-authored PR #312 (not yet
+// on main): the scratch output must never alias the retained fixture, even
+// through symlinked directories or before either file exists.
+async function canonicalPath(path) {
+  const absolute = resolve(path instanceof URL ? fileURLToPath(path) : path)
+  try { return await realpath(absolute) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return resolve(await canonicalPath(dirname(absolute)), basename(absolute))
+  }
+}
+async function refuseFixtureOutput(outputPath, fixturePath) {
+  if (await canonicalPath(outputPath) === await canonicalPath(fixturePath)) throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(fixturePath))
+}
+
+// Both checks run before any container starts.
+await refuseFixtureOutput(output, fixture)
 if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(resolve(output, '..'), { recursive: true })
 const containers = []
