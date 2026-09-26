@@ -3377,6 +3377,25 @@
       "dependencies": [],
       "issue": 349,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPEbm"
+    },
+    {
+      "id": "tls-handshake-deadline-v1",
+      "title": "Bound PRELOGIN TLS handshake by an absolute deadline",
+      "state": "ready",
+      "authorization": "Direct owner instruction to implement a disjoint owner-derived absolute TLS handshake deadline toward the continuing SQL Server compatible Rust server goal. No external submission is input.",
+      "scope": [
+        "src/tls.rs",
+        "tests/tls_handshake_deadline.rs",
+        "docs/tls.md"
+      ],
+      "acceptance": [
+        "Keep public tls::accept API and TLS 1.2 unchanged. Bound all PRELOGIN-wrapped TLS handshake reads and writes by one monotonic overall deadline, including trickle traffic, and restore ordinary socket timeouts on success.",
+        "Use a short injected deadline in a real loopback trickle regression and run existing successful TLS/login client coverage.",
+        "Run required formatting, strict workspace Clippy, workspace Rust tests, independent clients and diagnostic audit; report exact revisions and preexisting failures without normalizing them. Open a focused owner PR and do not merge."
+      ],
+      "dependencies": [],
+      "issue": 350,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPFE9"
     }
   ]
 }
