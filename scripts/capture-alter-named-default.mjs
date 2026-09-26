@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdir, readFile, writeFile} from 'node:fs/promises'
 import {resolve} from 'node:path'
 import {withReferenceContainer} from './lib/reference-container.mjs'
-import {isolatedReference} from './lib/reference.mjs'
+import {isolatedReference, assertSameCapture} from './lib/reference.mjs'
 import {capture, canonical} from './lib/compatibility.mjs'
 
 const output = resolve(process.argv[2] ?? 'artifacts/compatibility/alter-named-default-reference')
@@ -187,7 +187,7 @@ await withReferenceContainer(async (config, container) => {
     }))
   }
   const validation = runs.map(validate)
-  assert.deepEqual(bound(runs[0]), bound(runs[1]), 'fresh database runs differ beyond allocated object IDs')
+  assertSameCapture(bound(runs[0]), bound(runs[1]), 'fresh database runs differ beyond allocated object IDs')
   const actual = {image: container.image,
     comparisonBindings: 'Raw observations remain untouched. Cross-run comparison replaces only catalog table/default object IDs by scenario table and constraint name; all descriptors, rows, diagnostics and completions otherwise compare exactly.',
     validation, runs}
@@ -198,7 +198,7 @@ await withReferenceContainer(async (config, container) => {
     assert.equal(actual.image, retained.image)
     assert.equal(actual.comparisonBindings, retained.comparisonBindings)
     for (const run of actual.runs) for (const previous of retained.runs) {
-      assert.deepEqual(bound(run), bound(previous), 'independent capture differs')
+      assertSameCapture(bound(run), bound(previous), 'independent capture differs')
     }
   }
   await writeFile(resolve(output, 'alter-named-default.json'), JSON.stringify(actual) + '\n')

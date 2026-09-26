@@ -6,7 +6,7 @@ import { resolve } from 'node:path'
 import { Request, TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
-import { isolatedReference } from './lib/reference.mjs'
+import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 
 const fixture = new URL('../reference/offset-functions.json', import.meta.url)
 const args = process.argv.slice(2)
@@ -232,6 +232,7 @@ function validate(run) {
   assert.equal(get('attach empty source').sets[0].columns[0].type, 'DateTimeOffset')
 }
 
+if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(resolve(output, '..'), { recursive: true })
 const containers = []
 for (let containerIndex = 0; containerIndex < 2; containerIndex++) {
@@ -242,19 +243,18 @@ for (let containerIndex = 0; containerIndex < 2; containerIndex++) {
       validate(run)
       runs.push(run)
     }
-    assert.deepEqual(runs[0], runs[1], 'offset-function observations differ across fresh databases')
+    assertSameCapture(runs[0], runs[1], 'offset-function observations differ across fresh databases')
     containers.push({ image: container.image, runs })
   })
 }
-assert.deepEqual(containers[0].runs[0], containers[1].runs[0], 'offset-function observations differ across containers')
+assertSameCapture(containers[0].runs[0], containers[1].runs[0], 'offset-function observations differ across containers')
 const actual = { containers }
 await writeFile(output, JSON.stringify(actual) + '\n')
 let retained
 try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
 catch (error) { if (error.code !== 'ENOENT') throw error }
-if (retained) assert.deepEqual(actual, retained, 'offset-function observations differ from retained fixture')
+if (retained) assertSameCapture(actual, retained, 'offset-function observations differ from retained fixture')
 if (writeFixture) {
-  if (retained) throw new Error('refusing to overwrite retained fixture')
-  await writeFile(fixture, JSON.stringify(actual) + '\n')
+  await writeNewFixture(fixture, actual)
 }
 console.log(`Captured ${containers[0].runs[0].records.length} offset-function programs and ${containers[0].runs[0].prepared.length} prepared programs in four fresh databases across two containers${retained ? ' and matched retained fixture' : ''}`)

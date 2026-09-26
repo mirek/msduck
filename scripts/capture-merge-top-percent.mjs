@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { withReferenceContainer } from './lib/reference-container.mjs'
-import { isolatedReference } from './lib/reference.mjs'
+import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/merge-top-percent.json', import.meta.url)
@@ -90,6 +90,7 @@ async function observe(connection) {
   return run
 }
 
+if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(resolve(output, '..'), { recursive: true })
 await withReferenceContainer(async (config, container) => {
   const runs = []
@@ -98,18 +99,17 @@ await withReferenceContainer(async (config, container) => {
   }
   const actual = { image: container.image, runs }
   const summaries = runs.map(summary)
-  assert.deepEqual(summaries[0], summaries[1], 'percentage counts and diagnostics differ across fresh databases')
+  assertSameCapture(summaries[0], summaries[1], 'percentage counts and diagnostics differ across fresh databases')
   await writeFile(output, JSON.stringify(actual) + '\n')
   let retained
   try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
   catch (error) { if (error.code !== 'ENOENT') throw error }
   if (retained) {
     assert.equal(actual.image, retained.image)
-    assert.deepEqual(summaries, retained.runs.map(summary), 'percentage invariants differ from retained fixture')
+    assertSameCapture(summaries, retained.runs.map(summary), 'percentage invariants differ from retained fixture')
   }
   if (writeFixture) {
-    assert.equal(retained, undefined, 'refusing to overwrite retained fixture')
-    await writeFile(fixture, JSON.stringify(actual) + '\n')
+    await writeNewFixture(fixture, actual)
   }
   console.log(`Captured ${runs[0].length} raw MERGE TOP PERCENT observations in two fresh databases${retained ? ' and matched retained invariants' : ''}`)
 })
