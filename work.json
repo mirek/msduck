@@ -2563,6 +2563,28 @@
       ],
       "dependencies": [],
       "issue": 267
+    },
+    {
+      "id": "offset-zone-coercion-v1",
+      "title": "Match captured SWITCHOFFSET and TODATETIMEOFFSET zone coercion",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal. First-party SQL Server offset-function fixture from owner-run PR #258 supplies observed behavior; no external submission is input.",
+      "scope": [
+        "src/switchoffset.rs",
+        "tests/tedious.test.mjs",
+        "docs/offset-zone-coercion.md"
+      ],
+      "acceptance": [
+        "Establish current-server differences against retained reference/offset-functions.json for text, integer, DECIMAL/NUMERIC, FLOAT/REAL and MONEY offset inputs; preserve raw rows, descriptors, diagnostics and DONE differences.",
+        "Implement bounded, source-type-aware zone conversion in the existing native adapter. Reject whitespace/malformed text as captured; preserve NULL precedence, signed range checks, UTC/local overflow, declared scale and single evaluation. Never infer ambiguous declarations from runtime values.",
+        "Add focused native and independent tedious regressions for accepted/rejected zone types, direct/prepared calls and source columns. Preserve error 9812/9813 names, states and typed metadata; publish a disjoint successor if exact error/completion shape needs files outside scope.",
+        "Run formatting, strict Clippy, workspace Rust tests, independent clients and diagnostic audit at an exact revision. Keep raw SQL Server fixture unchanged and coordinate remote build lock/shared ports."
+      ],
+      "dependencies": [
+        "offset-functions-reference-v1"
+      ],
+      "issue": 270,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POUoN"
     }
   ]
 }
