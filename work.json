@@ -3594,6 +3594,28 @@
       ],
       "issue": 365,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPYDX"
+    },
+    {
+      "id": "string-agg-core-v1",
+      "title": "Move STRING_AGG accumulation into msduck-core",
+      "state": "backlog",
+      "authorization": "Direct owner goal of 2026-09-26 (continue development with parallel agents); owner-enabled Codex review finding on owner PR #247 verified against AGENTS.md crate boundaries. No external submission is input.",
+      "scope": [
+        "crates/msduck-core/src/string_agg.rs",
+        "crates/msduck-core/tests/string_agg_accumulation.rs",
+        "crates/msduck-sql/src/string_agg.rs",
+        "crates/msduck-sql/tests/string_agg.rs"
+      ],
+      "acceptance": [
+        "Move the STRING_AGG Accumulator (NULL elimination, NULL-separator concatenation, byte accounting, 9829 states) into a self-contained msduck-core module tested by #[path] include against reference/string-agg.json, leaving parsed-call validation and declaration/separator rules in msduck-sql.",
+        "Keep behavior identical (all existing fixture assertions pass), do not register in lib.rs files reserved by other tasks, and run fmt/strict clippy (CI toolchain) and both crates tests.",
+        "Becomes ready only after string-agg-rules-v1 is done, because its msduck-sql files are held by that task until then."
+      ],
+      "dependencies": [
+        "string-agg-rules-v1"
+      ],
+      "issue": 367,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPYfN"
     }
   ]
 }
