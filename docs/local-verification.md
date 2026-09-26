@@ -31,11 +31,14 @@ Options:
 | `--allow-dirty` | Run on a tree with uncommitted or untracked changes. The result is marked as not representing a commit. |
 | `--verbose` | Stream every step's output to the terminal as well as the log. |
 
-The command requires Node.js 24 and the Rust toolchain pinned by
-`RUSTUP_TOOLCHAIN` in `.github/workflows/ci.yml`, with `rustfmt` and `clippy`.
-It reads the pin from the workflow and runs every step with that toolchain. If
-the toolchain or a component is missing, it prints the exact `rustup toolchain
-install ...` command and exits nonzero; it never installs anything itself.
+The command requires the Rust toolchain pinned by `RUSTUP_TOOLCHAIN` in
+`.github/workflows/ci.yml`, with `rustfmt` and `clippy`, and the Node.js version
+pinned by the workflow's `setup-node` `node-version` (currently 24). It reads
+both pins from the workflow and runs every step with that Rust toolchain. If the
+toolchain or a component is missing, it prints the exact `rustup toolchain
+install ...` command and exits nonzero. If the Node running the script, or the
+`node` on `PATH` that the step commands and npm use, does not match the pinned
+version, it names both and exits nonzero. It never installs anything itself.
 
 ## What each mode covers
 
@@ -130,7 +133,8 @@ gitignored:
   summary.
 - `summary.json` records the revision, the dirty state and the start and end
   tree fingerprints, the CI setup steps not run locally, toolchain versions
-  (pinned, `rustc`, `cargo`, `node`, `npm`), the host, the chosen parallelism
+  (Rust and Node pins, `rustc`, `cargo`, `node` for the script and on `PATH`,
+  `npm`), the host, the chosen parallelism
   with its reasons, and each step's command, status, exit code, duration and
   parsed test counts.
 - `summary.md` is the PR-ready summary. It is also printed at the end.

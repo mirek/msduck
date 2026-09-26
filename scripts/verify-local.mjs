@@ -134,7 +134,13 @@ function readWorkflow() {
     else commands.push(step.run)
   }
   if (!commands.length) throw Error('No run steps found in the CI fast job')
-  return { toolchain, fastCommands: commands, ciSetup: { actions: setup, substituted } }
+  // Every setup-node step in the workflow (fast and full jobs) must agree on one
+  // plain version pin such as '24', '24.x' or '24.13.0'.
+  const pins = [...text.matchAll(/^\s+node-version:\s*['"]?([^'"\s#]+)['"]?\s*(?:#.*)?$/gm)].map(m => m[1])
+  if (!pins.length) throw unsupported('no setup-node node-version pin')
+  if (new Set(pins).size !== 1) throw unsupported(`conflicting node-version pins ${[...new Set(pins)].join(', ')}`)
+  if (!/^\d+(?:\.x|\.\d+\.\d+)?$/.test(pins[0])) throw unsupported(`node-version "${pins[0]}" is not a plain major or exact version`)
+  return { toolchain, node: pins[0], fastCommands: commands, ciSetup: { actions: setup, substituted } }
 }
 
 function checkToolchain(toolchain) {
@@ -152,6 +158,18 @@ function checkToolchain(toolchain) {
   const missing = ['rustfmt', 'clippy'].filter(name => !components.split('\n').some(line => line.startsWith(`${name}-`) || line === name))
   if (missing.length) return { ok: false, message: `Toolchain ${toolchain} lacks ${missing.join(', ')}. Run:\n  ${install}` }
   return { ok: true }
+}
+
+// Both the Node running this script and the `node` on PATH that the step
+// commands (and npm) resolve must match the CI setup-node pin.
+function checkNode(pin, env) {
+  const matches = version => pin.includes('.') && !pin.endsWith('.x')
+    ? version === `v${pin}` : version?.match(/^v(\d+)\./)?.[1] === pin.replace(/\.x$/, '')
+  const child = quiet('node', ['--version'], env)
+  const childPath = quiet('bash', ['-c', 'command -v node'], env)
+  const found = [`this script: ${process.version} (${process.execPath})`, `node on PATH: ${child ?? 'not found'}${childPath ? ` (${childPath})` : ''}`]
+  if (matches(process.version) && matches(child)) return { ok: true, child }
+  return { ok: false, message: `CI pins Node ${pin} (setup-node node-version in .github/workflows/ci.yml), but found\n  ${found.join('\n  ')}\nInstall Node ${pin} and put it first on PATH (for example with your Node version manager), then rerun.` }
 }
 
 // Parallelism from explicit host inputs. Linux freemem() reports MemAvailable;
@@ -311,7 +329,7 @@ function markdown(summary) {
     `- Revision: \`${revision.head}\`${revision.dirtyAtStart ? ' **with uncommitted changes (does not represent this commit)**' : ''}`,
     `- Represents commit: ${summary.representsCommit ? 'yes' : '**no**'}${summary.problems.length ? ` (${summary.problems.join('; ')})` : ''}`,
     ...(revision.dirtyFiles.length ? [`- Uncommitted: ${revision.dirtyFiles.slice(0, 20).map(f => `\`${f.trim()}\``).join(', ')}${revision.dirtyFiles.length > 20 ? `, and ${revision.dirtyFiles.length - 20} more` : ''}`] : []),
-    `- Toolchain: ${toolchain.rustc ?? 'unknown rustc'} (CI pin ${toolchain.pinned}); ${toolchain.cargo ?? 'unknown cargo'}; node ${toolchain.node}${toolchain.npm ? `; npm ${toolchain.npm}` : ''}`,
+    `- Toolchain: ${toolchain.rustc ?? 'unknown rustc'} (CI pin ${toolchain.pinned}); ${toolchain.cargo ?? 'unknown cargo'}; node ${toolchain.node} (CI pin ${toolchain.nodePinned})${toolchain.npm ? `; npm ${toolchain.npm}` : ''}`,
     `- Host: ${host.platform}/${host.arch}, ${host.cpuModel}, ${host.availableParallelism} CPUs, ${host.totalMemoryGiB} GiB RAM`,
     `- Parallelism: cargo ${parallelism.cargo.jobs} (${parallelism.cargo.reason})${parallelism.client ? `; client shards ${parallelism.client.jobs} (${parallelism.client.reason})` : ''}`,
     `- CI setup not run locally: ${[...summary.ciSetup.substituted, ...summary.ciSetup.actions.map(a => a.replace(/@[0-9a-f]{40}/, ''))].join('; ')}`,
@@ -333,9 +351,11 @@ function markdown(summary) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2))
-  const { toolchain, fastCommands, ciSetup } = readWorkflow()
+  const { toolchain, node: nodePin, fastCommands, ciSetup } = readWorkflow()
   const toolcheck = checkToolchain(toolchain)
   if (!toolcheck.ok) { console.error(toolcheck.message); return 1 }
+  const nodecheck = checkNode(nodePin, process.env)
+  if (!nodecheck.ok) { console.error(nodecheck.message); return 1 }
 
   const head = git('rev-parse', 'HEAD')
   const status = git('status', '--porcelain', '--untracked-files=normal')
@@ -363,7 +383,7 @@ async function main() {
   delete env.NODE_TEST_CONTEXT
   const versions = {
     pinned: toolchain, rustc: quiet('rustc', ['--version'], env), cargo: quiet('cargo', ['--version'], env),
-    node: process.version, npm: options.full ? quiet('npm', ['--version'], env) : null,
+    node: process.version, nodeOnPath: nodecheck.child, nodePinned: nodePin, npm: options.full ? quiet('npm', ['--version'], env) : null,
   }
 
   const mode = options.full ? (options.audit ? 'full+audit' : 'full') : 'fast'
@@ -387,7 +407,7 @@ async function main() {
   }
 
   console.log(`Local verification (${mode}) of ${head}${dirty ? ' WITH UNCOMMITTED CHANGES' : ''}`)
-  console.log(`Toolchain: ${versions.rustc} (CI pin ${toolchain}), node ${versions.node}`)
+  console.log(`Toolchain: ${versions.rustc} (CI pin ${toolchain}), node ${versions.node} (CI pin ${nodePin})`)
   console.log(`Host: ${host.platform}/${host.arch} ${host.cpuModel}; ${parallelism.basis}`)
   console.log(`Cargo jobs: ${parallelism.cargo.jobs} (${parallelism.cargo.reason})`)
   console.log(`CI setup not run locally: ${[...ciSetup.substituted, ...ciSetup.actions].join('; ')}`)
