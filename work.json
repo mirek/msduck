@@ -3442,6 +3442,26 @@
       ],
       "issue": 354,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPNaJ"
+    },
+    {
+      "id": "float-character-reference-v1",
+      "title": "Capture SQL Server FLOAT/REAL character conversions",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement the fully functional SQL Server compatible Rust/DuckDB server, and explicit direction to organize parallel first-party work. Successor evidence task identified from owner-controlled PR #355; no external submission is input.",
+      "scope": [
+        "scripts/capture-float-character.mjs",
+        "reference/float-character.json",
+        "docs/float-character-reference.md"
+      ],
+      "acceptance": [
+        "Use the pinned SQL Server reference image in isolated fresh databases twice; retain complete raw rows, column descriptors, errors and DONE-family events with deterministic replay validation and reproducible capture script.",
+        "Probe REAL/FLOAT values including signs, negative zero, six-significant-digit rounding, fixed/scientific thresholds and NULL through CAST, CONVERT, TRY_CAST and TRY_CONVERT to VARCHAR/CHAR/NVARCHAR/NCHAR; cover omitted, short, bounded and MAX widths where accepted, styles 0/1/2/3 and invalid styles.",
+        "Include typed table columns and RPC parameters; document observed formatting, padding/truncation, overflow, metadata and unsupported probe shapes, distinguishing this evidence from msduck implementation or compatibility completion.",
+        "Keep production files and existing fixtures untouched; verify two fresh captures agree, preserve the exact tested revision, and publish a focused owner PR for owner/integrator review."
+      ],
+      "dependencies": [],
+      "issue": 356,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPQL7"
     }
   ]
 }
