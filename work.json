@@ -2589,7 +2589,7 @@
     {
       "id": "ci-periodic-full-v1",
       "title": "Move full CI from main pushes to periodic and explicit runs",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner request to keep PR/merge cycles fast and run the long full suite on tags, manual dispatch or periodically; owner-only first-party workflow change.",
       "scope": [
         ".github/workflows/ci.yml",
