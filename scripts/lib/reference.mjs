@@ -38,6 +38,16 @@ export async function command(connection, sql) {
   return result
 }
 
+// tedious derives a bound DATETIMEOFFSET parameter's offset (and Date values
+// generally) from the client process time zone, so a capture taken on a
+// Europe/Warsaw host differs from one taken on a UTC host. Call this at the top
+// of a capture script, before creating connections or Date values. Node applies
+// a runtime assignment to process.env.TZ to subsequent Date operations.
+export function useUtcTimeZone(env = process.env) {
+  env.TZ = 'UTC'
+  if (env === process.env && new Date(0).getTimezoneOffset() !== 0) throw new Error('could not switch the process time zone to UTC')
+}
+
 export async function isolatedReference(config, work, operations = { connect, command }) {
   const admin = await operations.connect(config)
   const name = `msduck_audit_${randomUUID().replaceAll('-','')}`

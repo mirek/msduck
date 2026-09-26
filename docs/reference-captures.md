@@ -83,6 +83,29 @@ prepared cases reuse `SELECT CHARINDEX(@find,@search,@start) AS value` from the
 `sp_executesql` cases); changing their SQL requires a new fixture and an owner
 decision.
 
+## Deterministic captures
+
+- Time zone: tedious takes a bound DATETIMEOFFSET parameter's offset, and
+  client-side Date conversion generally, from the client process time zone. A
+  Europe/Warsaw host recorded +01:00/+02:00 where a UTC host records +00:00, so
+  the fixture depended on the capturing host. Call `useUtcTimeZone()` from
+  `scripts/lib/reference.mjs` (or set `process.env.TZ = 'UTC'`) at the top of
+  every capture script, before creating connections or Date values. Keep the
+  reference container at `TZ=UTC`, as `withReferenceContainer` does. No merged
+  fixture binds DATETIMEOFFSET parameters as of this convention.
+- Clock: never read the clock in captured cases (`SYSDATETIME()`,
+  `GETDATE()`, `SYSUTCDATETIME()`, `CURRENT_TIMESTAMP`, `SYSDATETIMEOFFSET()`,
+  `NEWID()` and similar). Use literal values; if clock behavior itself is under
+  test, record only derived properties such as type descriptors or row counts.
+- Constraint names: name constraints explicitly (`CONSTRAINT pk_t PRIMARY KEY`,
+  `CONSTRAINT df_t_c DEFAULT ...`). System-generated names contain per-database
+  suffixes, so error messages and catalog rows differ between the fresh
+  databases and containers a capture compares.
+- Loops: avoid server-side `WHILE` loops in captured batches. Each iteration
+  emits its own DONE token, which bloats captures and ties them to the
+  iteration count; build set-based data with `VALUES`, `REPLICATE` or a
+  bounded numbers table instead.
+
 ## Containers
 
 `withReferenceContainer` starts a uniquely named container with

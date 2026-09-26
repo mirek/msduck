@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import test from 'node:test'
 import { TYPES } from 'tedious'
-import { capturePrepared } from '../scripts/lib/reference.mjs'
+import { capturePrepared, useUtcTimeZone } from '../scripts/lib/reference.mjs'
 
 // A fake connection that replays scripted server responses to real tedious
 // Request objects, reproducing tedious' bookkeeping: prepare() sets
@@ -150,4 +150,22 @@ test('rows and messages are bounded per execution and overflow is counted', asyn
   assert.equal(first.rowCount, 25)
   assert.equal(second.truncated, undefined)
   assert.deepEqual(second.sets[0].rows, [[1]])
+})
+
+test('useUtcTimeZone pins client-side Date handling to UTC', () => {
+  const saved = process.env.TZ
+  try {
+    process.env.TZ = 'Europe/Warsaw'
+    assert.equal(new Date('2024-07-01T00:00:00Z').getTimezoneOffset(), -120)
+    useUtcTimeZone()
+    assert.equal(process.env.TZ, 'UTC')
+    assert.equal(new Date('2024-07-01T00:00:00Z').getTimezoneOffset(), 0)
+    assert.equal(new Date('2024-01-01T00:00:00Z').getTimezoneOffset(), 0)
+    const env = { TZ: 'America/New_York' }
+    useUtcTimeZone(env)
+    assert.deepEqual(env, { TZ: 'UTC' })
+  } finally {
+    if (saved === undefined) delete process.env.TZ
+    else process.env.TZ = saved
+  }
 })
