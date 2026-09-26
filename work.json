@@ -2473,7 +2473,7 @@
     {
       "id": "hashbytes-checksum-reference-v1",
       "title": "Capture SQL Server HASHBYTES, CHECKSUM and BINARY_CHECKSUM reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing implementation goal and 2026-09-26 owner request to utilize this host with parallel independent agents. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
       "scope": [
         "scripts/capture-hashbytes-checksum.mjs",
