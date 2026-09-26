@@ -137,7 +137,7 @@ further messages. The captured sequence did not re-enable those indexes.
 | Implicit conversion | INT 123, DECIMAL 1.5, DATE and UNIQUEIDENTIFIER convert to their string forms, which start with a digit, so the result is `0000`. VARBINARY 0x526F62657274 converts byte-wise to `Robert` (R163). An INT RPC parameter returned `0000`. |
 | Rejected types | TEXT, NTEXT, XML and SQL_VARIANT: error 8116, state 1, class 16 ("Argument data type text is invalid for argument 1 of soundex function."), before metadata. The batch then ends with DONE(null). |
 | Argument count | Zero or two arguments: error 174, state 1, class 15 ("The soundex function requires 1 argument(s)."). |
-| Determinism | `COLUMNPROPERTY` IsDeterministic=1 and IsPrecise=1 for persisted `SOUNDEX(v)` and `DIFFERENCE(v,'Robert')` computed columns. Both accept an index. |
+| Determinism | `COLUMNPROPERTY` IsDeterministic=1 and IsPrecise=1 for persisted `SOUNDEX(v)` and `DIFFERENCE(v,'Robert')` computed columns. Both persisted columns were created and populated without error. `CREATE INDEX` on the SOUNDEX column `s` succeeded. No index was attempted on the DIFFERENCE column `d`, so index support for it is not captured. |
 
 ## DIFFERENCE
 
@@ -196,6 +196,7 @@ retained matrix is the acceptance data for any future model.
   over CLR, spatial or hierarchyid inputs.
 - Output parameters, TVPs and bulk copy, and use inside indexed views,
   constraints and partition functions.
+- An index on a persisted DIFFERENCE computed column.
 - Recovery after a level change (rebuilding the disabled indexes), and the
   plan-cache behavior across level changes.
 - The exact DIFFERENCE algorithm (see above), and whether DIFFERENCE uses
