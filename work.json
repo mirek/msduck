@@ -2682,6 +2682,123 @@
       "dependencies": [],
       "issue": 284,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POkYm"
+    },
+    {
+      "id": "charindex-patindex-core-v1",
+      "title": "Add deterministic CHARINDEX and PATINDEX rules",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. Deterministic successor proposed by the first-party reference document; evidence is the retained first-party fixture. No external submission is input.",
+      "scope": [
+        "crates/msduck-core/src/charindex.rs",
+        "crates/msduck-core/tests/charindex_patindex.rs",
+        "docs/charindex-patindex.md"
+      ],
+      "acceptance": [
+        "Implement from reference/charindex-patindex.json: INT vs BIGINT result selection, per-position argument admissibility errors (8116, 257, 189, 174), start normalization and 8115 overflow rule, NULL/empty results, VARCHAR/NVARCHAR PATINDEX trailing-space asymmetry, and a PATINDEX pattern matcher for the captured wildcard/bracket rules over an explicit collation input (BIN2 code-unit comparison and SC vs non-SC counting; unmodelled case/accent/expansion collations explicitly unsupported). Append an implementation section to the doc.",
+        "Keep the module unregistered in lib.rs (lib.rs files are reserved elsewhere): its integration test includes it with #[path = \"../src/<module>.rs\"] like crates/msduck-sql/tests/merge_top.rs, so the module may use only std and external crates (msduck_core:: from msduck-sql, never crate::). Registration and runtime wiring are separate successors.",
+        "No DuckDB, I/O, clocks or effects; unsupported/uncaptured cases return explicit unsupported results rather than guesses; tests replay every applicable fixture case across all retained runs; cargo fmt, strict clippy (CI-pinned toolchain) and tests pass for the owning crate."
+      ],
+      "dependencies": [],
+      "issue": 286,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POlNo"
+    },
+    {
+      "id": "json-constructors-core-v1",
+      "title": "Add deterministic JSON_OBJECT, JSON_ARRAY and JSON_MODIFY rules",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. Deterministic successor proposed by the first-party reference document; evidence is the retained first-party fixture. No external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/json_constructor.rs",
+        "crates/msduck-sql/tests/json_constructors.rs",
+        "docs/json-constructors.md"
+      ],
+      "acceptance": [
+        "Implement from reference/json-constructors.json: scalar-family JSON text formatting (integers, BIT, decimal/money scale, float/real scientific forms, date/time, base64 binary, padded character types), string escaping (reuse msduck_core::json_escape where it matches), NULL ON NULL/ABSENT ON NULL with differing defaults, duplicate keys, JSON-vs-string embedding by source kind, and the JSON_MODIFY path grammar with lax/strict/append insert/replace/delete semantics and captured error numbers/states. Append an implementation section to the doc.",
+        "Keep the module unregistered in lib.rs (lib.rs files are reserved elsewhere): its integration test includes it with #[path = \"../src/<module>.rs\"] like crates/msduck-sql/tests/merge_top.rs, so the module may use only std and external crates (msduck_core:: from msduck-sql, never crate::). Registration and runtime wiring are separate successors.",
+        "No DuckDB, I/O, clocks or effects; unsupported/uncaptured cases return explicit unsupported results rather than guesses; tests replay every applicable fixture case across all retained runs; cargo fmt, strict clippy (CI-pinned toolchain) and tests pass for the owning crate."
+      ],
+      "dependencies": [],
+      "issue": 287,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POlNz"
+    },
+    {
+      "id": "hashbytes-core-v1",
+      "title": "Add deterministic HASHBYTES rules and digests",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. Deterministic successor proposed by the first-party reference document; evidence is the retained first-party fixture. No external submission is input.",
+      "scope": [
+        "crates/msduck-core/src/hashbytes.rs",
+        "crates/msduck-core/tests/hashbytes.rs",
+        "docs/hashbytes-checksum.md"
+      ],
+      "acceptance": [
+        "Implement from reference/hashbytes-checksum.json without new dependencies: algorithm-name resolution (case, trailing space, NULL for leading space/unknown/MD2), MD4/MD5/SHA1/SHA2_256/SHA2_512 digests over exact input bytes (verified against fixture rows and standard test vectors), the VARBINARY(8000) declaration and argument-family errors. CHECKSUM/BINARY_CHECKSUM only if an implementation reproduces every fixture row exactly; otherwise document them as unsupported. Append an implementation section to the doc.",
+        "Keep the module unregistered in lib.rs (lib.rs files are reserved elsewhere): its integration test includes it with #[path = \"../src/<module>.rs\"] like crates/msduck-sql/tests/merge_top.rs, so the module may use only std and external crates (msduck_core:: from msduck-sql, never crate::). Registration and runtime wiring are separate successors.",
+        "No DuckDB, I/O, clocks or effects; unsupported/uncaptured cases return explicit unsupported results rather than guesses; tests replay every applicable fixture case across all retained runs; cargo fmt, strict clippy (CI-pinned toolchain) and tests pass for the owning crate."
+      ],
+      "dependencies": [],
+      "issue": 288,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POlN9"
+    },
+    {
+      "id": "greatest-least-core-v1",
+      "title": "Add deterministic GREATEST and LEAST type and value rules",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. Deterministic successor proposed by the first-party reference document; evidence is the retained first-party fixture. No external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/greatest_least.rs",
+        "crates/msduck-sql/tests/greatest_least.rs"
+      ],
+      "acceptance": [
+        "Implement from reference/greatest-least.json: result type selection by precedence (decimal precision/scale capping, literal digit counting, money/real/string/date interactions and 206/245/8114 errors), nullability rules, argument count 189 and unsupported-type 8116, NULL skipping and first-tie selection over already-typed comparable values.",
+        "Keep the module unregistered in lib.rs (lib.rs files are reserved elsewhere): its integration test includes it with #[path = \"../src/<module>.rs\"] like crates/msduck-sql/tests/merge_top.rs, so the module may use only std and external crates (msduck_core:: from msduck-sql, never crate::). Registration and runtime wiring are separate successors.",
+        "No DuckDB, I/O, clocks or effects; unsupported/uncaptured cases return explicit unsupported results rather than guesses; tests replay every applicable fixture case across all retained runs; cargo fmt, strict clippy (CI-pinned toolchain) and tests pass for the owning crate."
+      ],
+      "dependencies": [
+        "greatest-least-reference-v1"
+      ],
+      "issue": 289,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POlOO"
+    },
+    {
+      "id": "concat-ws-translate-core-v1",
+      "title": "Add deterministic CONCAT_WS and TRANSLATE rules",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. Deterministic successor proposed by the first-party reference document; evidence is the retained first-party fixture. No external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/concat_ws.rs",
+        "crates/msduck-sql/tests/concat_ws_translate.rs"
+      ],
+      "acceptance": [
+        "Implement from reference/concat-ws-translate.json: CONCAT_WS arity (189), NULL skipping, empty-string result, width summation and 8000-byte bounded truncation, MAX and NVARCHAR promotion, 257/468/451 errors; TRANSLATE result declarations, NULL propagation, first-mapping-wins translation, 9828 length mismatch states and UTF-16 vs SC counting.",
+        "Keep the module unregistered in lib.rs (lib.rs files are reserved elsewhere): its integration test includes it with #[path = \"../src/<module>.rs\"] like crates/msduck-sql/tests/merge_top.rs, so the module may use only std and external crates (msduck_core:: from msduck-sql, never crate::). Registration and runtime wiring are separate successors.",
+        "No DuckDB, I/O, clocks or effects; unsupported/uncaptured cases return explicit unsupported results rather than guesses; tests replay every applicable fixture case across all retained runs; cargo fmt, strict clippy (CI-pinned toolchain) and tests pass for the owning crate."
+      ],
+      "dependencies": [
+        "concat-ws-translate-reference-v1"
+      ],
+      "issue": 290,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POlOf"
+    },
+    {
+      "id": "datetrunc-bucket-core-v1",
+      "title": "Add deterministic DATETRUNC and DATE_BUCKET rules",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. Deterministic successor proposed by the first-party reference document; evidence is the retained first-party fixture. No external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/datetrunc.rs",
+        "crates/msduck-sql/tests/datetrunc_bucket.rs"
+      ],
+      "acceptance": [
+        "Implement from reference/datetrunc-bucket.json: result type/scale rules, datepart admissibility with 9810 states, DATEFIRST-dependent week truncation, datetimeoffset local truncation vs UTC bucketing, bucket floor arithmetic with month-end origin clamping, width 9834, NULL origin defaulting and 9835/9837 range errors, over explicit tick/day inputs.",
+        "Keep the module unregistered in lib.rs (lib.rs files are reserved elsewhere): its integration test includes it with #[path = \"../src/<module>.rs\"] like crates/msduck-sql/tests/merge_top.rs, so the module may use only std and external crates (msduck_core:: from msduck-sql, never crate::). Registration and runtime wiring are separate successors.",
+        "No DuckDB, I/O, clocks or effects; unsupported/uncaptured cases return explicit unsupported results rather than guesses; tests replay every applicable fixture case across all retained runs; cargo fmt, strict clippy (CI-pinned toolchain) and tests pass for the owning crate."
+      ],
+      "dependencies": [
+        "datetrunc-bucket-reference-v1"
+      ],
+      "issue": 291,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POlOv"
     }
   ]
 }
