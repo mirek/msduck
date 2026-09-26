@@ -56,6 +56,19 @@ pub fn expression_with(
         }
         Expr::Function(f) => {
             let name = f.name.to_string().to_ascii_uppercase();
+            if let Some(arguments) = fromparts_arguments(f) {
+                // SQL Server marks a FROMPARTS projection computed. Only
+                // syntactically proven numeric literals (including constant
+                // bitwise expressions) omit fNullable. Casts, arithmetic and
+                // bound values retain it even when their runtime value is
+                // known or their declared input is NOT NULL.
+                return Properties::expression(!arguments.iter().all(|argument| match argument {
+                    FunctionArg::Unnamed(FunctionArgExpr::Expr(value)) => {
+                        literal_integer_argument(value)
+                    }
+                    _ => false,
+                }));
+            }
             if f.over.is_some()
                 || matches!(
                     name.as_str(),
@@ -147,6 +160,67 @@ pub fn expression_with(
             },
         },
         _ => Properties::default(),
+    }
+}
+
+/// Recognize only the public constructors and their validated lowered forms.
+/// The lowered names omit the compile-time scale argument.
+pub(crate) fn fromparts_arguments(f: &Function) -> Option<&[FunctionArg]> {
+    let name = f.name.to_string().to_ascii_lowercase();
+    let expected = match name.as_str() {
+        "timefromparts" => 5,
+        "datetime2fromparts" => 8,
+        "datetimeoffsetfromparts" => 10,
+        _ if lowered_scale(&name, "__msduck_timefromparts_").is_some() => 4,
+        _ if lowered_scale(&name, "__msduck_datetime2fromparts_").is_some() => 7,
+        _ if lowered_scale(&name, "__msduck_datetimeoffsetfromparts_").is_some() => 9,
+        _ => return None,
+    };
+    let FunctionArguments::List(args) = &f.args else {
+        return None;
+    };
+    if args.args.len() != expected
+        || args.duplicate_treatment.is_some()
+        || !args.clauses.is_empty()
+        || !matches!(f.parameters, FunctionArguments::None)
+        || f.over.is_some()
+        || f.filter.is_some()
+        || f.null_treatment.is_some()
+        || !f.within_group.is_empty()
+        || !args
+            .args
+            .iter()
+            .all(|arg| matches!(arg, FunctionArg::Unnamed(FunctionArgExpr::Expr(_))))
+    {
+        return None;
+    }
+    Some(&args.args)
+}
+
+fn lowered_scale(name: &str, prefix: &str) -> Option<u8> {
+    name.strip_prefix(prefix)?
+        .parse::<u8>()
+        .ok()
+        .filter(|scale| *scale <= 7)
+}
+
+// This is a metadata proof, not expression evaluation. SQL Server's captured
+// constant bitwise operands are non-nullable, while constant arithmetic and
+// CAST operands remain nullable in FROMPARTS descriptors.
+fn literal_integer_argument(expr: &Expr) -> bool {
+    match expr {
+        Expr::Value(value) => matches!(value.value, Value::Number(_, false)),
+        Expr::Nested(inner)
+        | Expr::UnaryOp {
+            op: UnaryOperator::Plus | UnaryOperator::Minus,
+            expr: inner,
+        } => literal_integer_argument(inner),
+        Expr::BinaryOp {
+            left,
+            op: BinaryOperator::BitwiseAnd | BinaryOperator::BitwiseOr | BinaryOperator::BitwiseXor,
+            right,
+        } => literal_integer_argument(left) && literal_integer_argument(right),
+        _ => false,
     }
 }
 
