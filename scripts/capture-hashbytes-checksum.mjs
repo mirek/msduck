@@ -7,10 +7,10 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
-import { Request, TYPES } from 'tedious'
+import { TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
-import { isolatedReference } from './lib/reference.mjs'
+import { capturePrepared, isolatedReference } from './lib/reference.mjs'
 
 const fixture = new URL('../reference/hashbytes-checksum.json', import.meta.url)
 const args = process.argv.slice(2)
@@ -166,54 +166,12 @@ function rpc(connection, sql, parameters) {
   return capture(transport, sql)
 }
 
-// One prepared handle is reused for every value set, then released.
+// One prepared handle is reused for every value set, then released. The shared
+// helper attributes only errors raised during each execution; the retained
+// shape keeps prepare.rowCount as canonical 'missing'.
 async function prepared(connection, sql, declarations, valueSets) {
-  let result
-  let complete = () => {}
-  const fresh = () => ({ sets: [], done: [], errors: [], info: [], returnStatus: null })
-  const fields = e => ({ number: e.number, state: e.state, class: e.class, lineNumber: e.lineNumber, message: e.message })
-  const onError = e => result?.errors.push(fields(e))
-  const onInfo = e => result?.info.push(fields(e))
-  const request = new Request(sql, (error, rowCount) => complete(error, rowCount))
-  for (const [name, type, options] of declarations) request.addParameter(name, type, undefined, options)
-  request.on('columnMetadata', columns => result?.sets.push({ columns: columns.map(c => ({ name: c.colName, type: c.type.name, length: c.dataLength ?? null, precision: c.precision ?? null, scale: c.scale ?? null, flags: c.flags, collation: canonical(c.collation ?? null) })), rows: [] }))
-  request.on('row', row => result?.sets.at(-1).rows.push(row.map(c => c.value)))
-  for (const kind of ['done', 'doneInProc', 'doneProc']) request.on(kind, (rowCount, more) => result?.done.push({ kind, rowCount: rowCount ?? null, more }))
-  request.on('doneProc', (_count, _more, status) => { if (result) result.returnStatus = status })
-  connection.on('errorMessage', onError)
-  connection.on('infoMessage', onInfo)
-  const phase = start => new Promise(done => {
-    result = fresh()
-    complete = (error, rowCount) => {
-      result.rowCount = rowCount
-      if (error && !result.errors.length) result.errors.push({ message: error.message, number: error.number ?? null })
-      const finished = result
-      result = undefined
-      done(canonical(finished))
-    }
-    start()
-  })
-  // tedious reports sp_prepare completion through 'prepared'/'error' events
-  // instead of the request callback.
-  const onPrepared = () => complete(undefined, undefined)
-  const onPrepareError = error => complete(error, undefined)
-  try {
-    const prepare = await phase(() => {
-      request.once('prepared', onPrepared)
-      request.once('error', onPrepareError)
-      connection.prepare(request)
-    })
-    request.off('prepared', onPrepared)
-    request.off('error', onPrepareError)
-    if (request.handle === undefined) return { prepare, executions: [], unprepare: null }
-    const executions = []
-    for (const values of valueSets) executions.push({ values, result: await phase(() => connection.execute(request, values)) })
-    const unprepare = await phase(() => connection.unprepare(request))
-    return { prepare, executions, unprepare }
-  } finally {
-    connection.off('errorMessage', onError)
-    connection.off('infoMessage', onInfo)
-  }
+  const { prepare, executions, unprepare } = await capturePrepared(connection, sql, declarations, valueSets)
+  return canonical({ prepare, executions, unprepare })
 }
 
 const long = 'a'.repeat(9000)
