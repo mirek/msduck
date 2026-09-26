@@ -11,14 +11,17 @@ text, information messages and DONE events. Each record also has a `tokens`
 array: every token the tedious request handler received, in wire order.
 DONE, DONEINPROC and DONEPROC entries carry the raw 16-bit status word,
 current command and 64-bit count field. ERROR/INFO entries carry number,
-state, class, line, procedure name and text, and RETURNSTATUS/RETURNVALUE
-tokens are kept per procedure. The ERROR token's server name is not recorded.
+state, class, line, procedure name and text. RETURNSTATUS tokens are kept
+per procedure. RETURNVALUE tokens keep the parameter ordinal, the raw name
+and status byte, the declared type metadata, the decoded value and the
+token's raw bytes. The ERROR token's server name is not recorded.
 It names the container host, not SQL behavior. Most projections are also described
 through sys.dm_exec_describe_first_result_set, which records the declared
 type name, precision, scale, nullability and collation.
 scripts/capture-greatest-least.mjs regenerates an artifact and checks the
 retained fixture. Before starting a container, it refuses an existing fixture
-with `--write-fixture` and any output path that resolves to the fixture.
+with `--write-fixture`. It also refuses any output path that resolves to the
+fixture, by realpath or by the same device and inode for a hard link.
 
 msduck does not implement these rules yet. This document records SQL Server
 behavior only.
@@ -160,7 +163,9 @@ nullable.
   call's (decoded values and token fields, not raw bytes).
 - **sp_prepare/sp_execute:** a prepared `@a int,@b decimal(6,2),@c
   varchar(8)` statement returns decimal(12,2) on each execution.
-  - Preparation returns the RETURNVALUE `handle` = 1 in every database.
+  - In every database, preparation returns RETURNVALUE ordinal 0 named
+    `@handle`, status byte 1 (output parameter), declared IntN length 4,
+    value 1.
   - An execution with a conversion failure sends COLMETADATA, ERROR 8114,
     then DONEPROC with status 2. There is no DONEINPROC and no RETURNSTATUS.
   - The next execution of the same handle succeeds.

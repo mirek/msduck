@@ -2,7 +2,7 @@
 // Retain SQL Server GREATEST/LEAST rows, descriptors, diagnostics and completions.
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -42,6 +42,30 @@ for (const name of ['doneParser', 'doneInProcParser', 'doneProcParser']) {
     return result
   }
 }
+// tedious drops the RETURNVALUE status byte and the '@' of the parameter
+// name. Peek at the raw header before decoding and keep the declared metadata.
+const StreamParser = require('tedious/lib/token/stream-parser.js')
+const originalReturnParser = StreamParser.prototype.readReturnValueToken
+assert.equal(typeof originalReturnParser, 'function', 'returnvalue parser')
+StreamParser.prototype.readReturnValueToken = async function () {
+  const parser = this
+  const buffer = parser.buffer, offset = parser.position
+  const nameLength = buffer.length >= offset + 3 ? buffer.readUInt8(offset + 2) : -1
+  if (nameLength < 0 || buffer.length < offset + 4 + nameLength * 2) throw new Error('RETURNVALUE header split across chunks; extend the capture explicitly')
+  const raw = {
+    ordinal: buffer.readUInt16LE(offset),
+    name: buffer.toString('utf16le', offset + 3, offset + 3 + nameLength * 2),
+    status: buffer.readUInt8(offset + 3 + nameLength * 2),
+  }
+  const token = await originalReturnParser.call(parser)
+  if (parser.buffer === buffer) raw.hex = buffer.subarray(offset, parser.position).toString('hex')
+  token.raw = raw
+  return token
+}
+const metadata = value => ({
+  type: value.type.name, userType: value.userType, flags: value.flags, dataLength: value.dataLength ?? null,
+  precision: value.precision ?? null, scale: value.scale ?? null, collation: value.collation ?? null,
+})
 const taps = new WeakMap()
 const message = token => ({ number: token.number, state: token.state, class: token.class, lineNumber: token.lineNumber, procName: token.procName, message: token.message })
 const done = token => ({ status: token.raw.status, command: token.raw.command, count: token.raw.count })
@@ -52,7 +76,7 @@ for (const [method, describe] of Object.entries({
   onErrorMessage: message,
   onInfoMessage: message,
   onReturnStatus: token => ({ value: token.value }),
-  onReturnValue: token => ({ paramName: token.paramName, value: token.value }),
+  onReturnValue: token => ({ paramOrdinal: token.paramOrdinal, paramName: token.paramName, raw: token.raw, metadata: metadata(token.metadata), value: token.value }),
   onDone: done,
   onDoneInProc: done,
   onDoneProc: done,
@@ -85,7 +109,15 @@ async function canonicalPath(path) {
     return resolve(await canonicalPath(parent), basename(absolute))
   }
 }
-if (await canonicalPath(output) === await canonicalPath(fixture)) {
+// A hard link has a different path but the same device and inode.
+async function sameFile(left, right) {
+  if (await canonicalPath(left) === await canonicalPath(right)) return true
+  let a, b
+  try { [a, b] = await Promise.all([stat(left), stat(right)]) }
+  catch (error) { if (error.code === 'ENOENT') return false; throw error }
+  return a.dev === b.dev && a.ino === b.ino
+}
+if (await sameFile(output, fixture)) {
   throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(fixture))
 }
 
@@ -440,6 +472,8 @@ function validate(run) {
   ]) assert.deepEqual(order(get(name)), tokens, name)
   const preparedRun = run.find(record => record.name === 'prepared int decimal varchar').result
   assert.deepEqual(preparedRun.preparation.errors, [])
+  const handle = preparedRun.preparation.tokens.find(token => token.token === 'RETURNVALUE')
+  assert.deepEqual([handle?.raw.name, handle?.raw.status, handle?.metadata.type, handle?.metadata.dataLength, handle?.value], ['@handle', 1, 'IntN', 4, 1])
   assert.deepEqual(preparedRun.executions.map(execution => execution.result.errors[0]?.number ?? null), [null, null, null, 8114, null])
   assert.deepEqual(order(preparedRun.executions[3].result), ['COLMETADATA', 'ERROR:8114', 'DONEPROC:2'])
   for (const record of run) {
