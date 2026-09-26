@@ -209,7 +209,9 @@ fn lowered_scale(name: &str, prefix: &str) -> Option<u8> {
 // CAST operands remain nullable in FROMPARTS descriptors.
 fn literal_integer_argument(expr: &Expr) -> bool {
     match expr {
-        Expr::Value(value) => matches!(value.value, Value::Number(_, false)),
+        Expr::Value(value) => {
+            matches!(&value.value, Value::Number(digits, false) if digits.bytes().all(|byte| byte.is_ascii_digit()))
+        }
         Expr::Nested(inner)
         | Expr::UnaryOp {
             op: UnaryOperator::Plus | UnaryOperator::Minus,

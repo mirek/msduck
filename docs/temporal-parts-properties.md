@@ -12,13 +12,22 @@ also have flags 32. These are observations from the retained probes, not a
 general rule for every SQL Server expression.
 
 The SQL crate now marks valid public and lowered FROMPARTS calls as computed.
-It omits nullable only when every argument is syntactically a numeric literal,
+It omits nullable only when every argument is syntactically an integer literal,
 possibly under parentheses, unary sign or constant bitwise operators. Other
 arguments remain nullable without inspecting runtime values, even when a
-parameter happens to carry a non-NULL value. The projection rule preserves the
+parameter happens to carry a non-NULL value. Decimal and scientific lexical
+literals remain nullable until they have their own reference probes. The
+projection rule preserves the
 constructor's computed flag while retaining the existing rule that removes it
 for ordinary temporal casts. The TDS encoder already converts these logical
 properties to flags; no wire or native-vector change is needed.
+
+The root engine binds result fields from the public query before its translator
+lowers FROMPARTS and removes the scale argument. The lowered-name property rule
+supports direct metadata inference of those internal forms; it does not carry
+the removed scale's provenance. The public CAST-scale descriptor therefore
+depends on the pre-lowering result-field path and must be checked with #359's
+scale-parser change in an end-to-end replay.
 
 The deterministic test checks 27 exact retained descriptors across the three
 families, including CAST scale metadata, plus lowered function names and an

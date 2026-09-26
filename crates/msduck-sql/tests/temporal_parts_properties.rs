@@ -96,3 +96,11 @@ fn ordinary_temporal_cast_still_omits_computed_flag() {
     let field = projected("SELECT CAST('12:34' AS TIME) AS value");
     assert_eq!(field.properties.origin, Origin::Derived);
 }
+
+#[test]
+fn uncaptured_decimal_and_scientific_literals_are_not_proven_nonnullable() {
+    for literal in ["1.0", "1e0"] {
+        let sql = format!("SELECT TIMEFROMPARTS(1,2,3,0,{literal})");
+        assert_eq!(property_flags(&projected(&sql)), 33, "{sql}");
+    }
+}
