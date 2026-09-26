@@ -5,7 +5,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { TYPES } from 'tedious'
 import { withReferenceContainer } from './lib/reference-container.mjs'
-import { isolatedReference } from './lib/reference.mjs'
+import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/datepart-numeric.json', import.meta.url)
@@ -118,6 +118,7 @@ function validate(run) {
   for (const item of run) assert(item.result.done.length > 0, `${item.name}: no completion`)
 }
 
+if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(resolve(output, '..'), {recursive:true})
 await withReferenceContainer(async (config, container) => {
   const runs=[]
@@ -126,13 +127,13 @@ await withReferenceContainer(async (config, container) => {
     validate(run)
     runs.push(run)
   }
-  assert.deepEqual(runs[0],runs[1],'numeric DATEPART observations differ across fresh databases')
+  assertSameCapture(runs[0],runs[1],'numeric DATEPART observations differ across fresh databases')
   const actual={image:container.image,runs}
   await writeFile(output,JSON.stringify(actual)+'\n')
   let retained
   try {retained=JSON.parse(await readFile(fixture,'utf8'))}
   catch(error){if(error.code!=='ENOENT')throw error}
-  if(retained)assert.deepEqual(actual,retained,'numeric DATEPART observations differ from retained fixture')
-  if(writeFixture){assert.equal(retained,undefined,'refusing to overwrite retained fixture');await writeFile(fixture,JSON.stringify(actual)+'\n')}
+  if(retained)assertSameCapture(actual,retained,'numeric DATEPART observations differ from retained fixture')
+  if(writeFixture)await writeNewFixture(fixture,actual)
   console.log(`Captured ${runs[0].length} numeric DATEPART observations twice${retained?' and matched retained fixture':''}`)
 })
