@@ -3218,6 +3218,63 @@
       ],
       "issue": 335,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PO6Gc"
+    },
+    {
+      "id": "savepoint-reference-v1",
+      "title": "Capture SQL Server savepoint and nested transaction reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party ROADMAP.md and docs/transaction-manager.md list this area as open; no external submission is input.",
+      "scope": [
+        "scripts/capture-savepoint.mjs",
+        "reference/savepoint.json",
+        "docs/savepoint.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, errors, @@TRANCOUNT/XACT_STATE and completion tokens for SAVE TRANSACTION, ROLLBACK TRANSACTION savepoint, nested BEGIN/COMMIT, duplicate and unknown savepoint names, name length/case, savepoints after errors and in XACT_ABORT/uncommittable states, inside procedures, TRY/CATCH and RPC calls, and effects on table data and identity values.",
+        "Follow docs/reference-captures.md conventions (bounded comparison and prepared helpers, per-request return status, unique statement text, explicit constraint names, UTC, labelled containers, memory limits); use the pinned SQL Server 2025 image in two fresh databases in each of two containers and retain the fixture only when all four captures match.",
+        "Document observed rules, uncaptured gaps and proposed deterministic-core and root successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 336,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PO6hG"
+    },
+    {
+      "id": "cursor-reference-v1",
+      "title": "Capture SQL Server T-SQL cursor reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party ROADMAP.md and docs/transaction-manager.md list this area as open; no external submission is input.",
+      "scope": [
+        "scripts/capture-cursor.mjs",
+        "reference/cursor.json",
+        "docs/cursor.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, errors, @@FETCH_STATUS/@@CURSOR_ROWS and completion tokens for DECLARE CURSOR (LOCAL/GLOBAL, FORWARD_ONLY/SCROLL, STATIC/KEYSET/DYNAMIC/FAST_FORWARD, READ_ONLY/FOR UPDATE), OPEN/FETCH variants (NEXT/PRIOR/FIRST/LAST/ABSOLUTE/RELATIVE INTO variables), CLOSE/DEALLOCATE lifecycle errors, WHERE CURRENT OF updates/deletes, cursor variables, scope across batches and procedures, and visibility of concurrent modifications for each cursor type.",
+        "Follow docs/reference-captures.md conventions (bounded comparison and prepared helpers, per-request return status, unique statement text, explicit constraint names, UTC, labelled containers, memory limits); use the pinned SQL Server 2025 image in two fresh databases in each of two containers and retain the fixture only when all four captures match.",
+        "Document observed rules, uncaptured gaps and proposed deterministic-core and root successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 337,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PO6hU"
+    },
+    {
+      "id": "pivot-unpivot-reference-v1",
+      "title": "Capture SQL Server PIVOT and UNPIVOT reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party ROADMAP.md and docs/transaction-manager.md list this area as open; no external submission is input.",
+      "scope": [
+        "scripts/capture-pivot-unpivot.mjs",
+        "reference/pivot-unpivot.json",
+        "docs/pivot-unpivot.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, result descriptors, errors and completion tokens for PIVOT with each aggregate, implicit grouping columns, NULL and missing pivot values, type/width/nullability of pivoted columns, quoted/bracketed and duplicate column identifiers, and UNPIVOT NULL elimination, column type compatibility errors, derived tables, CTEs, joins and prepared/RPC use.",
+        "Follow docs/reference-captures.md conventions (bounded comparison and prepared helpers, per-request return status, unique statement text, explicit constraint names, UTC, labelled containers, memory limits); use the pinned SQL Server 2025 image in two fresh databases in each of two containers and retain the fixture only when all four captures match.",
+        "Document observed rules, uncaptured gaps and proposed deterministic-core and root successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 338,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PO6he"
     }
   ]
 }
