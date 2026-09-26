@@ -256,3 +256,15 @@ test('a server error beyond the message bound is counted, never replaced by the 
   assert.deepEqual(run.errors, [])
   assert.equal(run.truncated.messages, 1)
 })
+
+test('a prepare whose server error was truncated still counts as failed', async () => {
+  const connection = new FakeConnection({
+    prepare: { handle: 1, info: [5701, 5703], errors: [8180] },
+    executions: [{ rows: [[1]], columns: ['x'] }],
+  })
+  const result = await capturePrepared(connection, 'select 1', declarations, [{ find: 'b', start: 1 }], { limits: { messages: 2 } })
+  assert.equal(result.prepared, false)
+  assert.equal(result.skipped, 'prepare failed')
+  assert.equal(result.prepare.truncated.messages, 1)
+  assert.deepEqual(connection.calls.map(c => c.kind), ['prepare'])
+})

@@ -237,6 +237,9 @@ export async function capturePrepared(connection, sql, declarations, valueSets, 
   // Server errors that arrive after the message bound are still errors: the
   // callback fallback below must never stand in for a truncated diagnostic.
   let serverError = false
+  // Whether the last completed phase saw a server error, even one dropped by
+  // the message bound; kept out of the recorded result so fixtures don't change.
+  let phaseFailed = false
   const message = list => token => {
     if (!result) return
     if (list === 'errors') serverError = true
@@ -268,6 +271,7 @@ export async function capturePrepared(connection, sql, declarations, valueSets, 
       const finished = result
       result = undefined
       finished.rowCount = rowCount
+      phaseFailed = serverError || Boolean(error)
       if (error && !reported.has(error) && !serverError) {
         if (finished.errors.length + finished.info.length >= limits.messages) { result = finished; overflow('messages'); result = undefined }
         else finished.errors.push({ message: error.message, number: error.number ?? null })
@@ -291,7 +295,7 @@ export async function capturePrepared(connection, sql, declarations, valueSets, 
     })
     request.off('prepared', onPrepared)
     request.off('error', onPrepareError)
-    if (prepare.errors.length || !(Number.isInteger(request.handle) && request.handle > 0)) {
+    if (phaseFailed || prepare.errors.length || !(Number.isInteger(request.handle) && request.handle > 0)) {
       const skipped = 'prepare failed'
       return { prepare, prepared: false, skipped, executions: valueSets.map(values => ({ values, skipped })), unprepare: null }
     }
