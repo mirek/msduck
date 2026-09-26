@@ -28,6 +28,7 @@ pub mod query_options;
 pub mod recursive_lower;
 pub mod set_coercion;
 pub mod sql_type;
+pub mod string_agg;
 pub mod temporal_scale;
 pub mod top;
 pub mod window_frame;
