@@ -2521,6 +2521,48 @@
       ],
       "dependencies": [],
       "issue": 263
+    },
+    {
+      "id": "bounded-capture-compare-v1",
+      "title": "Bound whole-capture comparisons in reference capture scripts",
+      "state": "ready",
+      "authorization": "Direct owner instructions of 2026-09-26 to run parallel agents on shared hosts and keep PR flow healthy. First-party evidence: kernel OOM log on this host and owner-run worker root-cause analysis in PR #265; no external submission is input.",
+      "scope": [
+        "scripts/lib/reference.mjs",
+        "tests/reference-compare.test.mjs",
+        "package.json",
+        "scripts/build-system-column-seed.mjs",
+        "scripts/capture-all-objects.mjs",
+        "scripts/capture-alter-named-default.mjs",
+        "scripts/capture-attention-boundaries.mjs",
+        "scripts/capture-attention-compute.mjs",
+        "scripts/capture-char-byte.mjs",
+        "scripts/capture-datepart-numeric.mjs",
+        "scripts/capture-ddl-completion.mjs",
+        "scripts/capture-drop-index.mjs",
+        "scripts/capture-for-xml-path.mjs",
+        "scripts/capture-for-xml-wire.mjs",
+        "scripts/capture-identity-retrieval.mjs",
+        "scripts/capture-merge-execution.mjs",
+        "scripts/capture-merge-top-percent.mjs",
+        "scripts/capture-merge-top.mjs",
+        "scripts/capture-merge-transaction.mjs",
+        "scripts/capture-object-catalog-width.mjs",
+        "scripts/capture-offset-functions.mjs",
+        "scripts/capture-quotename.mjs",
+        "scripts/capture-string-agg.mjs",
+        "scripts/capture-string-split.mjs",
+        "scripts/capture-system-all-columns.mjs",
+        "scripts/capture-view-binding.mjs"
+      ],
+      "acceptance": [
+        "Add shared helpers to scripts/lib/reference.mjs: refuse an existing fixture before any container starts (existence check only), compare captures with util.isDeepStrictEqual and throw a plain bounded Error naming the first differing record/path, and write new fixtures exclusively (wx).",
+        "Convert every whole-capture/fixture node:assert comparison in the scoped scripts to the helpers without changing captured SQL, fixture format or matching semantics; small scalar asserts may stay.",
+        "Add deterministic tests that a large mismatching capture fails quickly with bounded memory and message size, that refusal never parses the fixture, and wire them into npm test; verify each converted script with node --check and a bounded check run of at least two scripts against their retained fixtures.",
+        "Leave scripts reserved by other ready tasks (capture-index-catalog, capture-rpc-session-scope, capture-attention) untouched and list them as remaining gaps."
+      ],
+      "dependencies": [],
+      "issue": 267
     }
   ]
 }
