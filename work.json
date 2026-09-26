@@ -3177,6 +3177,25 @@
       ],
       "issue": 332,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PO2FW"
+    },
+    {
+      "id": "tvp-wire-reference-v1",
+      "title": "Capture SQL Server TVP RPC request wire behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal and instruction to proceed with this first-party TVP wire reference task. Local TDS skill and source show type 0xF3 is not decoded in Rust. No external submission is input.",
+      "scope": [
+        "scripts/capture-tvp-wire.mjs",
+        "reference/tvp-wire.json",
+        "docs/tvp-wire.md"
+      ],
+      "acceptance": [
+        "Use pinned owner-run SQL Server container and isolated-database harness to capture bounded decrypted post-login outgoing TDS RPC type 0x03 requests for NULL, empty, mixed nullable INT/NVARCHAR/VARBINARY, and multirow TVPs. Exclude LOGIN7, TLS handshake and credentials.",
+        "Retain raw packet/payload bytes, typed bounded TVP observations and server response/callback evidence. Capture independent fresh database/container runs if feasible and preserve exact replication differences without normalizing.",
+        "Generator refuses overwriting retained fixture and validates replay against it. Run Node syntax and replay checks, report image/revision/outcomes/gaps, and open focused PR. TDS crate/root RPC integration stay separate."
+      ],
+      "dependencies": [],
+      "issue": 333,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PO5RZ"
     }
   ]
 }
