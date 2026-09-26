@@ -2,8 +2,11 @@
 // Retain SQL Server JSON_OBJECT, JSON_ARRAY and JSON_MODIFY rows, descriptors,
 // diagnostics and completions.
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { isDeepStrictEqual } from 'node:util'
 import { TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
@@ -367,6 +370,24 @@ function validate(run) {
   for (const record of run) assert(record.result.done.length > 0, record.name + ': no completion')
 }
 
+// Node 24 builds a failed assert.equal/deepEqual AssertionError by inspecting
+// both operands even with a custom message; for multi-MB captures that grew a
+// process to ~123 GB. Compare whole captures with isDeepStrictEqual and throw
+// plain errors naming only the first differing record.
+function same(left, right, message) {
+  if (isDeepStrictEqual(left, right)) return
+  const flat = value => value?.containers ? value.containers.flatMap(c => c.runs.flat()) : value
+  const a = flat(left)
+  const b = flat(right)
+  const index = Array.isArray(a) && Array.isArray(b)
+    ? Math.max(a.findIndex((record, i) => !isDeepStrictEqual(record, b[i])), a.length === b.length ? -1 : Math.min(a.length, b.length))
+    : -1
+  throw new Error(message + (index >= 0 ? ` (first difference at record ${index}: ${JSON.stringify(a[index]?.name ?? b[index]?.name ?? null)})` : ''))
+}
+
+// Refuse to overwrite before any container starts; never parse the fixture for this.
+if (writeFixture && existsSync(fixture)) throw new Error('refusing to overwrite retained fixture ' + fileURLToPath(fixture))
+
 await mkdir(resolve(output, '..'), { recursive: true })
 const containers = []
 for (let containerIndex = 0; containerIndex < (oneDatabase ? 1 : 2); containerIndex++) {
@@ -379,21 +400,20 @@ for (let containerIndex = 0; containerIndex < (oneDatabase ? 1 : 2); containerIn
       if (!oneDatabase) validate(run)
       runs.push(run)
     }
-    if (!oneDatabase) assert.deepEqual(runs[0], runs[1], 'JSON constructor observations differ across fresh databases')
+    if (!oneDatabase) same(runs[0], runs[1], 'JSON constructor observations differ across fresh databases')
     containers.push({ image: container.image, runs })
   })
 }
-if (!oneDatabase) assert.deepEqual(containers[0].runs[0], containers[1].runs[0], 'JSON constructor observations differ across containers')
+if (!oneDatabase) same(containers[0].runs[0], containers[1].runs[0], 'JSON constructor observations differ across containers')
 const actual = { containers }
 await writeFile(output, JSON.stringify(actual) + '\n')
 let retained
-try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
-catch (error) { if (error.code !== 'ENOENT') throw error }
-if (retained && !oneDatabase) assert.deepEqual(actual, retained, 'JSON constructor observations differ from retained fixture')
-if (writeFixture) {
-  assert.equal(retained, undefined, 'refusing to overwrite retained fixture')
-  await writeFile(fixture, JSON.stringify(actual) + '\n')
+if (!writeFixture) {
+  try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
+  catch (error) { if (error.code !== 'ENOENT') throw error }
 }
+if (retained && !oneDatabase) same(actual, retained, 'JSON constructor observations differ from retained fixture')
+if (writeFixture) await writeFile(fixture, JSON.stringify(actual) + '\n', { flag: 'wx' })
 console.log(`Captured ${containers[0].runs[0].length} JSON constructor observations` +
   (oneDatabase ? ' in one diagnostic database' : ' in four fresh databases across two containers') +
   (retained && !oneDatabase ? ' and matched retained fixture' : ''))
