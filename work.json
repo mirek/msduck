@@ -2605,6 +2605,25 @@
       ],
       "issue": 275,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POaMl"
+    },
+    {
+      "id": "like-pattern-reference-v1",
+      "title": "Capture SQL Server LIKE patterns and collation behavior",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility objective; owner-authored issue #277 and first-party SQL Server reference capture only.",
+      "scope": [
+        "scripts/capture-like-patterns.mjs",
+        "reference/like-patterns.json",
+        "docs/like-patterns.md"
+      ],
+      "acceptance": [
+        "Capture a bounded matrix of LIKE/NOT LIKE bracket/range/negation/ESCAPE, ANSI/Unicode, NULL/trailing-space, column/prepared, and selected BIN2/CI collation cases with raw descriptors, rows, diagnostics and completion events.",
+        "Use independent SQL Server databases and a repeat capture to prove the retained fixture is stable; never overwrite a previously published fixture or normalize behavioral differences.",
+        "Document exact observations and remaining coverage, and keep runtime implementation for a successor task with disjoint scope. Validate script syntax and capture repeatability."
+      ],
+      "dependencies": [],
+      "issue": 277,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POa6j"
     }
   ]
 }
