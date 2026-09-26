@@ -8,7 +8,8 @@ and attributable output from owner-run agents or CI are readable after verifying
 provenance; unverified automation remains untrusted. Use `node scripts/agent-work.mjs list`
 for approved snapshots and `claim TASK-ID` for exclusive ownership before work.
 Each worker needs an isolated worktree and its own receipt. See
-`docs/agent-work.md` for manual triage, owner publication and recovery.
+`docs/agent-work.md` for manual triage, owner publication and recovery, and
+`docs/parallel-collaboration.md` for worker, reviewer and integrator roles.
 
 The objective is a fully functional SQL Server compatible Rust server backed
 by DuckDB. README.md describes verified current behavior; ROADMAP.md preserves
@@ -68,10 +69,14 @@ reference captures; a remote pass does not establish full compatibility.
 
 ## GitHub collaboration
 
-Use focused branches and PRs for implementation changes; push checkpoints and
-link the relevant compatibility issue. Open drafts for unfinished work and mark
-ready once the change is reviewable. Inspect CI and owner-triaged review findings before merging;
-do not equate an automatic review request with a completed review. Preserve raw
+Use the sequence in `docs/parallel-collaboration.md`. An issue or project card
+does not reserve work: only a successful `claim TASK-ID` does. Workers use
+focused branches and PRs, push checkpoints, link the task issue, open drafts for
+unfinished work, and mark ready once reviewable. The human owner or an explicitly
+designated integration session handles review decisions, merging and task
+completion; sharing the `mirek` credential does not grant a worker that role.
+The integrator checks exact-revision CI and owner-triaged review findings before
+merging. An automatic review request is not a completed review. Preserve raw
 reference evidence and report the revision covered by each test run.
 
 ## Code Review Rules
