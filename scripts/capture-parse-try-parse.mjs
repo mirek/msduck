@@ -7,7 +7,7 @@
 // docs/parse-try-parse.md). Whole captures are only compared with the bounded
 // helpers from scripts/lib/reference.mjs, never with node:assert.
 import assert from 'node:assert/strict'
-import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, realpath, rename, stat, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Request, TYPES } from 'tedious'
@@ -471,8 +471,32 @@ async function canonicalPath(path) {
     return resolve(await canonicalPath(dirname(absolute)), basename(absolute))
   }
 }
+// A hard link has its own canonical path, so existing files are also compared
+// by device and inode.
+async function fileIdentity(path) {
+  try { const info = await stat(path, { bigint: true }); return `${info.dev}:${info.ino}` } catch (error) {
+    if (error.code === 'ENOENT') return null
+    throw error
+  }
+}
 async function refuseFixtureOutput(outputPath, fixturePath) {
-  if (await canonicalPath(outputPath) === await canonicalPath(fixturePath)) throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(fixturePath))
+  const refuse = () => { throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(fixturePath)) }
+  if (await canonicalPath(outputPath) === await canonicalPath(fixturePath)) refuse()
+  const [outputId, fixtureId] = await Promise.all([fileIdentity(outputPath), fileIdentity(fixturePath)])
+  if (outputId !== null && outputId === fixtureId) refuse()
+}
+
+// The output is written to a fresh sibling file and renamed into place, so
+// the rename replaces the directory entry and never writes into an inode
+// that another name (such as a hard link to the fixture made during the
+// run) still shares.
+async function replaceOutput(outputPath, text) {
+  const temporary = `${outputPath}.${process.pid}.tmp`
+  await writeFile(temporary, text, { flag: 'wx' })
+  try { await rename(temporary, outputPath) } catch (error) {
+    await unlink(temporary).catch(() => {})
+    throw error
+  }
 }
 
 // Both checks run before any container starts.
@@ -498,7 +522,8 @@ for (let containerIndex = 0; containerIndex < runsPerContainer; containerIndex++
 }
 if (!oneDatabase) assertSameCapture(containers[0].runs[0], containers[1].runs[0], 'PARSE/TRY_PARSE observations differ across containers')
 const actual = { containers }
-await writeFile(output, JSON.stringify(actual) + '\n')
+await refuseFixtureOutput(output, fixture)
+await replaceOutput(output, JSON.stringify(actual) + '\n')
 let retained
 if (!oneDatabase) {
   try { retained = JSON.parse(await readFile(fixture, 'utf8')) }

@@ -45,7 +45,10 @@ capture in a single database and skips validation and the fixture comparison.
 `--write-fixture` writes a new fixture only when none exists. Before any
 container starts, the script refuses an output path that resolves to the
 retained fixture, including through a symlinked directory and when the
-fixture does not exist yet.
+fixture does not exist yet. It also refuses an existing output file with
+the fixture's device and inode, such as a hard link. The output is written
+to a new file and then renamed into place, so the write never goes into a
+file shared with the fixture.
 
 These rules describe only what the fixture shows. They say nothing about
 inputs that were not tested, and msduck does not implement PARSE or
