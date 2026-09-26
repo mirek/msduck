@@ -3158,6 +3158,25 @@
       "dependencies": [],
       "issue": 329,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PO0mk"
+    },
+    {
+      "id": "select-into-fixture-replay-v1",
+      "title": "Remove stale SELECT INTO id descriptor tolerance after nullability fix",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement the SQL Server compatible Rust/DuckDB server and organize disjoint parallel work. First-party focused replay at owner-authored PR #331 revision 94e71523f662a3ed0cc2126fa6b0521a9d8373f7 found no SELECT INTO id descriptor differences while tests/tedious.test.mjs:8930 expected three; no external submission is input.",
+      "scope": [
+        "tests/tedious.test.mjs"
+      ],
+      "acceptance": [
+        "Start only after select-into-nullability-v1 (#328/#331) merges and is marked done in the protected registry. Replay the exact first-party SELECT INTO case at the merged revision and inspect raw after descriptors against the retained reference.",
+        "Remove only the stale three-field id descriptor tolerance from tests/tedious.test.mjs. Preserve every other fixture dimension and tolerance; do not edit production code or reference captures.",
+        "Run focused replay and broader independent client checks as appropriate at an exact revision. Record outcomes and remaining differences, open a focused PR, and leave merge to the integrator."
+      ],
+      "dependencies": [
+        "select-into-nullability-v1"
+      ],
+      "issue": 332,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PO2FW"
     }
   ]
 }
