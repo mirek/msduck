@@ -2242,7 +2242,7 @@
     {
       "id": "string-split-reference-v1",
       "title": "Capture SQL Server STRING_SPLIT reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal and GitHub project coordination request. First-party source audit found no STRING_SPLIT implementation, tests or existing task; no external submission is input.",
       "scope": [
         "scripts/capture-string-split.mjs",
@@ -2284,7 +2284,7 @@
     {
       "id": "parallel-collaboration-rules-v1",
       "title": "Clarify parallel worker and integration responsibilities",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction on 2026-09-26 to clarify issue creation, claims, PRs, reviews and merging for a separate Claude worker. The active agent-work-publish-v1 task owns the contribution skill and docs/agent-work.md; this task uses disjoint files. No external submission is input.",
       "scope": [
         "AGENTS.md",
@@ -2324,7 +2324,7 @@
     {
       "id": "offset-functions-reference-v1",
       "title": "Capture SQL Server offset-function semantics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal and 2026-09-26 instruction to utilize this host with independent parallel agents. First-party ROADMAP.md and implementation notes identify live reference, coercion and error-precedence gaps; no external submission is input.",
       "scope": [
         "scripts/capture-offset-functions.mjs",
