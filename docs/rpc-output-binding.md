@@ -38,7 +38,8 @@ without losing it (the current `parameter_declarations` returns only names and
 types), use this binder in `src/rpc.rs`, retain final variables from
 `Session::batch_response_inner`, adapt each typed value to `msduck-tds`
 RETURNVALUE encoding, and insert those tokens after statement results and
-before RETURNSTATUS/DONEPROC. It must separately cover `sp_execute` and error
+RETURNSTATUS but before DONEPROC, as the first-party raw wire capture records
+in `docs/rpc-output-wire.md`. It must separately cover `sp_execute` and error
 paths. The reference capture records tedious interpreting prepared OUTPUT
 values as an unexpected parameter even though SQL Server sent the values;
 the server must preserve the wire behavior rather than hide that client error.
