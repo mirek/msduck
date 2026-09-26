@@ -23,8 +23,10 @@ Each record keeps:
 For prepared programs it also keeps the prepare, each execution and the
 unprepare. To recapture and compare with the retained fixture, run
 `node --max-old-space-size=2048 scripts/capture-json-aggregates.mjs OUTPUT`.
-`--write-fixture` refuses to overwrite an existing fixture, and
-`--one-database` is a faster diagnostic probe that cannot write it.
+`--write-fixture` refuses to overwrite an existing fixture. Every mode
+refuses, before starting any container, an `OUTPUT` that resolves to the
+retained fixture (including through `..`, symlinked directories or a hard
+link). `--one-database` is a faster diagnostic probe that cannot write it.
 
 Values below are quoted exactly as the fixture holds them. Where this page
 summarizes, the named fixture record is authoritative.

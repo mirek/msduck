@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Retain SQL Server JSON_OBJECTAGG and JSON_ARRAYAGG rows, descriptors,
 // diagnostics and completions for batches, sp_executesql and sp_prepare.
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { Request, TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
@@ -425,6 +426,27 @@ const EXPECTED_ERRORS = [
 ]
 const EXPECTED_PREPARED = preparedCases.map(([name, , , executions]) => [name, name.includes('incompatible') ? [false, 0] : [true, executions.length]])
 
+// Scratch output must never alias the retained fixture: the unconditional
+// capture write would replace the ground truth and then compare the capture
+// with itself. Mirrors the shared refuseFixtureOutput proposed in PR #312.
+async function canonicalPath(path) {
+  const absolute = resolve(path instanceof URL ? fileURLToPath(path) : path)
+  try { return await realpath(absolute) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return resolve(await canonicalPath(dirname(absolute)), basename(absolute))
+  }
+}
+async function refuseFixtureOutput(target, retainedPath) {
+  let same = await canonicalPath(target) === await canonicalPath(retainedPath)
+  if (!same) {
+    // Hard links share an inode without sharing a path.
+    const [a, b] = await Promise.all([target, retainedPath].map(path => stat(path).catch(error => { if (error.code === 'ENOENT') return null; throw error })))
+    same = Boolean(a && b && a.dev === b.dev && a.ino === b.ino)
+  }
+  if (same) throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(retainedPath))
+}
+
+await refuseFixtureOutput(output, fixture)
 if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(resolve(output, '..'), { recursive: true })
 const count = oneDatabase ? 1 : 2
