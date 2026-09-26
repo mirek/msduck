@@ -3396,6 +3396,29 @@
       "dependencies": [],
       "issue": 350,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPFE9"
+    },
+    {
+      "id": "replicate-float-format-v1",
+      "title": "Match SQL Server REPLICATE REAL and FLOAT implicit text formatting",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement a fully functional SQL Server compatible Rust/DuckDB server; first-party retained numeric REPLICATE capture reveals REAL/FLOAT output mismatch. Parent integration session explicitly delegated this bounded task. No external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/replicate.rs",
+        "src/replicate.rs",
+        "scripts/capture-replicate-float.mjs",
+        "reference/replicate-float.json",
+        "tests/replicate_float.test.mjs",
+        "docs/replicate.md"
+      ],
+      "acceptance": [
+        "Capture pinned SQL Server REAL/FLOAT literal, column and prepared/RPC cases across signs, rounding, scientific thresholds, NULL and metadata/completion twice in fresh isolated databases; preserve raw reference fixture and reproducible script.",
+        "Route typed REAL/FLOAT operands through a bounded conversion matching captured implicit text behavior; preserve one evaluation per source/count, NULLs and compile metadata determined from declarations rather than values.",
+        "Add meaningful native and client regressions covering exact values and descriptors; report unsupported bounds as gaps rather than changing generic character conversion without evidence.",
+        "Run formatting, workspace Rust tests, strict Clippy, independent clients and diagnostic local audit; publish focused owner PR at exact tested revision and leave merge to owner or designated integrator."
+      ],
+      "dependencies": [],
+      "issue": 353,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPLZa"
     }
   ]
 }
