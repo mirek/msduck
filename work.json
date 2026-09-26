@@ -3572,6 +3572,28 @@
       ],
       "issue": 364,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPWks"
+    },
+    {
+      "id": "string-escape-result-properties-v1",
+      "title": "Preserve STRING_ESCAPE computed result metadata",
+      "state": "backlog",
+      "authorization": "Direct owner continuing SQL Server compatibility goal and explicit integration-session direction to retain and later fix the first-party pinned 27-case STRING_ESCAPE descriptor difference. Shared result-properties file is held by task #360; no external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/result_properties.rs",
+        "tests/string_escape_format.test.mjs",
+        "docs/string-escape.md"
+      ],
+      "acceptance": [
+        "After temporal-parts-properties-v1 and string-escape-format-v1 are done, derive STRING_ESCAPE nullable/computed result properties from syntax and declarations rather than runtime values; preserve unrelated function provenance.",
+        "Match SQL Server flags 33 for all metadata-bearing cases in reference/string-escape-format.json, including error and RPC shapes, and change the standalone replay from an explicit flags 1-vs-33 difference to exact full capture equality.",
+        "Run deterministic SQL crate, full workspace Rust tests, strict Clippy, standalone and full independent clients, and diagnostic audit at the exact PR revision; report remaining gaps. Open a focused owner PR and leave merge to the integrator."
+      ],
+      "dependencies": [
+        "temporal-parts-properties-v1",
+        "string-escape-format-v1"
+      ],
+      "issue": 365,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPYDX"
     }
   ]
 }
