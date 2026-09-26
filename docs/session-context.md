@@ -7,7 +7,7 @@ full column descriptors, error and info tokens, DONE tokens and return status.
 image `sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a`.
 It used two fresh databases in each of two independent containers, and all
 four captures were identical. The fixture SHA-256 is
-`587fa27b8ec62b641369c7c3a61cf562e02c45cfc4f75a80f4903ec0fe9d37e6`.
+`39dcf954de8b104a3286bba46b0b386d2052a04492cc9bfc916b419585cc97be`.
 The fixture contains tedious-decoded values and TDS descriptors, not raw TDS
 bytes. tedious turns a `sql_variant` into a JavaScript value, so every probe
 also reads `SQL_VARIANT_PROPERTY` (`BaseType`, `Precision`, `Scale`,
@@ -26,7 +26,7 @@ left by another. The step kinds are:
   (`callProcedure`)
 - 9 parameterized `sp_executesql` calls
 - 3 prepared sequences with 16 executions in total
-- 3 tedious `connection.reset` calls
+- 3 connection resets, each equivalent to tedious `connection.reset`
 - 1 explicit close and 1 explicit open
 
 The prepared capture mirrors the fixed `capturePrepared` semantics of PR #312
@@ -279,9 +279,13 @@ The server and database collation were `SQL_Latin1_General_CP1_CI_AS`.
   same key, even as read-only, without affecting the first. The first
   connection's read-only flag does not block the second, and the reverse also
   holds. A connection opened after another closes starts empty.
-- tedious `connection.reset` sets the RESETCONNECTION status bit on its
-  initial SET-options batch. The reset emitted one `resetConnection` event and
-  info 5703 (`Changed language setting to us_english.`). Afterwards:
+- A reset does what tedious `connection.reset` does: it sets the
+  RESETCONNECTION status bit on the next request and sends tedious's initial
+  SET-options batch (15 `set` statements, recorded as `sql`). The script sends
+  that request through its own capture, so the reset's tokens are retained:
+  14 DONE tokens (no row counts, the last with `more` false), no rows, no
+  RETURNSTATUS, info 5703 (`Changed language setting to us_english.`) and one
+  `resetConnection` event. Afterwards:
   - every key reads NULL
   - a former read-only key can be set again
   - an open transaction is gone (`@@TRANCOUNT` 0)

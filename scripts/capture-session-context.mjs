@@ -500,25 +500,20 @@ async function capturePrepared(connection, sql, declarations, valueSets) {
   }
 }
 
-// tedious reset: sets the RESETCONNECTION status bit on the next request, which
-// is its initial SET-options batch. Records tokens raised during that request.
-function captureReset(connection) {
-  return new Promise(resolve => {
-    const result = { errors: [], info: [], resetEvents: 0 }
-    const onError = token => { if (result.errors.length < PREPARED_LIMITS.messages) result.errors.push(messageFields(token)) }
-    const onInfo = token => { if (result.info.length < PREPARED_LIMITS.messages) result.info.push(messageFields(token)) }
-    const onReset = () => { result.resetEvents++ }
-    connection.on('errorMessage', onError)
-    connection.on('infoMessage', onInfo)
-    connection.on('resetConnection', onReset)
-    connection.reset(error => {
-      connection.off('errorMessage', onError)
-      connection.off('infoMessage', onInfo)
-      connection.off('resetConnection', onReset)
-      if (error && !result.errors.length) result.errors.push({ message: error.message, number: error.number ?? null })
-      resolve(result)
-    })
-  })
+// Equivalent of tedious `connection.reset`, which sets resetConnectionOnNextRequest
+// and sends getInitialSql() on an internal Request whose tokens are not
+// observable. Doing the same through captureRequest retains the reset
+// request's rows, DONE tokens, statuses and messages. `sql` records the
+// client-side SET batch that carried the RESETCONNECTION status bit.
+async function captureReset(connection) {
+  const sql = connection.getInitialSql()
+  let resetEvents = 0
+  const onReset = () => { resetEvents++ }
+  connection.on('resetConnection', onReset)
+  try {
+    connection.resetConnectionOnNextRequest = true
+    return { sql, ...await captureBatch(connection, sql), resetEvents }
+  } finally { connection.off('resetConnection', onReset) }
 }
 
 const closeConnection = connection => connection.closed ? undefined : new Promise(resolve => { connection.once('end', resolve); connection.close() })
@@ -585,6 +580,10 @@ function validate(run) {
   assert.deepEqual(rows('connection reset', 'a reads after reset'), [[null, null]])
   assert.deepEqual(rows('connection reset', 'b unaffected by a reset'), [[2]])
   assert.deepEqual(rows('connection reset', 'a reads after second reset', 1), [[0, null, null]])
+  for (const name of ['reset a', 'reset a with open transaction', 'reset b']) {
+    assert.equal(get('connection reset', name).resetEvents, 1, name)
+    assert.deepEqual(get('connection reset', name).errors, [], name)
+  }
   // Unsupported value types and argument validation.
   for (const [label] of rejectedTypes) assert.equal(errorNumber('value types', `rejected ${label}`), 15600, label)
   assert.equal(baseType('nvarchar 4000'), 'nvarchar')
