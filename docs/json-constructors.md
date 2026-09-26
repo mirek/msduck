@@ -177,8 +177,9 @@ These return `Error::Unsupported` instead of guessing: object keys other than
 integers, decimals, `DATE`, binary and character types; `SQL_VARIANT` holding
 anything but `INT`; non-ASCII `CHAR` padding; invalid `Scalar::Json` text;
 repeated or array-conflicting ON NULL clauses; JSON_MODIFY types, arities, path
-spellings (upper-case or misplaced modes, other key characters, `[*]`, leading
-zeros, indexes beyond `INT`) and error positions after a mode or in non-ASCII
+spellings (upper-case or misplaced modes, unquoted keys that start with a
+digit or use characters other than letters, `_` and ASCII digits, `[*]`,
+leading zeros, indexes beyond `INT`) and error positions after a mode or in non-ASCII
 text; document errors away from the root token or the end of input, or after
 leading whitespace; a document that is invalid together with an invalid path
 (precedence was not captured); key steps on arrays and index steps on objects;

@@ -253,6 +253,13 @@ fn nchar_text(text: &str, length: u32) -> Result<String, Error> {
     padded(text, length, text.encode_utf16().count())
 }
 
+/// Calendar date of a DATE operand, taken before any rounding so a time part
+/// never carries into the next day.
+fn date_text(value: DateTime2) -> String {
+    let p = value.parts();
+    format!("{:04}-{:02}-{:02}", p.year, p.month, p.day)
+}
+
 fn temporal(result: anyhow::Result<String>) -> Result<String, Error> {
     result.map_err(|_| Error::Unsupported("date/time value outside the formatter range"))
 }
@@ -291,7 +298,7 @@ fn key_text(key: &Scalar<'_>) -> Result<String, Error> {
         Scalar::Int(v) => v.to_string(),
         Scalar::BigInt(v) => v.to_string(),
         Scalar::Decimal(v) => v.to_string(),
-        Scalar::Date(v) => temporal(v.format_iso(0))?[..10].to_owned(),
+        Scalar::Date(v) => date_text(v),
         Scalar::Binary(v) => for_json::base64(v),
         Scalar::Char(v, length) => char_text(v, length)?,
         Scalar::NChar(v, length) => nchar_text(v, length)?,
@@ -314,7 +321,7 @@ fn value_json(value: &Scalar<'_>, constructor: Constructor) -> Result<Option<Str
         Scalar::SmallMoney(v) => money::format(i64::from(v), 2),
         Scalar::Float(v) => scientific(format!("{v:.15e}")),
         Scalar::Real(v) => scientific(format!("{v:.7e}")),
-        Scalar::Date(v) => quoted(&temporal(v.format_iso(0))?[..10]),
+        Scalar::Date(v) => quoted(&date_text(v)),
         Scalar::Time(v, scale) => quoted(&temporal(v.format_iso(scale))?[11..]),
         Scalar::DateTime(v) => quoted(&temporal(v.format_iso(3))?),
         Scalar::SmallDateTime(v) => quoted(&temporal(v.format_iso(0))?),
@@ -427,8 +434,10 @@ fn path_error(state: u8, character: char, position: usize) -> Error {
     ))
 }
 
+/// Unquoted key characters: letters and `_`, then ASCII digits after the first.
+/// A leading digit (such as `$.1`) was not captured and stays unsupported.
 fn key_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '_' || (!c.is_ascii() && c.is_alphanumeric())
+    c == '_' || c.is_alphabetic() || c.is_ascii_digit()
 }
 
 fn parse_path(text: &str) -> Result<Path, Error> {
@@ -495,7 +504,7 @@ fn parse_path(text: &str) -> Result<Path, Error> {
                 rest = &tail[end..];
             } else {
                 let end = tail.find(|c| !key_char(c)).unwrap_or(tail.len());
-                if end == 0 {
+                if end == 0 || tail.starts_with(|c: char| c.is_ascii_digit()) {
                     return Err(Error::Unsupported("JSON path key character not captured"));
                 }
                 steps.push(Step::Key(tail[..end].to_owned()));

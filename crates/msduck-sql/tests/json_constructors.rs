@@ -809,6 +809,8 @@ fn uncaptured_behavior_is_explicitly_unsupported() {
         ("{\"a\":1}", "strict $.", S::Int(1)),
         ("{\"a\":1}", " $.a", S::Int(1)),
         ("{\"a\":1}", "$.a b", S::Int(1)),
+        ("{\"1\":1}", "$.1", S::Int(1)),
+        ("{\"a\":1}", "$.1a", S::Int(1)),
         ("{\"a\":1}", "$[*]", S::Int(1)),
         ("{\"a\":1}", "$.a[01]", S::Int(1)),
         ("{\"a\":1}", "$.a[1", S::Int(1)),
@@ -828,6 +830,16 @@ fn uncaptured_behavior_is_explicitly_unsupported() {
     ] {
         unsupported(modify(Some(doc), Some(path), &value));
     }
+}
+
+#[test]
+fn date_ignores_its_time_part_without_rounding() {
+    let late = S::Date(dt("2024-01-01T23:59:59.9"));
+    assert_eq!(
+        text(o(&[(late, late)], &[])),
+        "{\"2024-01-01\":\"2024-01-01\"}"
+    );
+    assert_eq!(text(a(&[late], &[])), "[\"2024-01-01\"]");
 }
 
 #[test]
@@ -857,6 +869,7 @@ fn modify_spans_nested_whitespace_and_container_edges() {
         ),
         ("[[1],[2]]", "append $[1]", S::Int(3), "[[1],[2,3]]"),
         ("{\"a\":1}", "$.é", S::Int(2), "{\"a\":1,\"é\":2}"),
+        ("{\"a1\":1}", "$.a1", S::Int(2), "{\"a1\":2}"),
     ];
     for (doc, path, value, expected) in cases {
         let outcome = modify(Some(doc), Some(path), &value);
