@@ -3125,7 +3125,7 @@
     {
       "id": "select-into-nullability-v1",
       "title": "Preserve logical nullability in SELECT INTO columns",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement a fully functional SQL Server compatible Rust/DuckDB server. First-party owner-captured reference/unicode-materialized-storage.json and local client difference; no external submission is input.",
       "scope": [
         "src/select_into.rs",
