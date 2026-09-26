@@ -2,8 +2,10 @@
 // Retain SQL Server GREATEST/LEAST rows, descriptors, diagnostics and completions.
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
+import { basename, dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { Request, TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
@@ -16,6 +18,76 @@ const writeFixture = args.includes('--write-fixture')
 const positional = args.filter(arg => arg !== '--write-fixture')
 if (positional.length > 1) throw new Error('expected at most one output path')
 const output = resolve(positional[0] ?? 'artifacts/compatibility/greatest-least/capture.json')
+
+// Ordered token evidence. The shared capture() buckets metadata, messages and
+// DONE events separately and keeps only DONE kind/count/more, so this script
+// also records every token the request handler sees, in wire order, with the
+// raw DONE status word, current command and count field. tedious drops the
+// INXACT bit and invalid counts, so the DONE parsers are wrapped to retain the
+// 12 raw bytes. Both hooks are local to this process.
+const require = createRequire(import.meta.url)
+const doneParsers = require('tedious/lib/token/done-token-parser.js')
+const { RequestTokenHandler } = require('tedious/lib/token/handler.js')
+for (const name of ['doneParser', 'doneInProcParser', 'doneProcParser']) {
+  const original = doneParsers[name]
+  assert.equal(typeof original, 'function', name)
+  doneParsers[name] = (buffer, offset, options) => {
+    const result = original(buffer, offset, options)
+    assert(options.tdsVersion >= '7_2', 'expected an 8-byte DONE count')
+    result.value.raw = {
+      status: buffer.readUInt16LE(offset),
+      command: buffer.readUInt16LE(offset + 2),
+      count: buffer.readBigUInt64LE(offset + 4).toString(),
+    }
+    return result
+  }
+}
+const taps = new WeakMap()
+const message = token => ({ number: token.number, state: token.state, class: token.class, lineNumber: token.lineNumber, procName: token.procName, message: token.message })
+const done = token => ({ status: token.raw.status, command: token.raw.command, count: token.raw.count })
+for (const [method, describe] of Object.entries({
+  onColMetadata: token => ({ columns: token.columns.map(column => column.colName) }),
+  onRow: () => ({}),
+  onOrder: token => ({ columns: token.orderColumns }),
+  onErrorMessage: message,
+  onInfoMessage: message,
+  onReturnStatus: token => ({ value: token.value }),
+  onReturnValue: token => ({ paramName: token.paramName, value: token.value }),
+  onDone: done,
+  onDoneInProc: done,
+  onDoneProc: done,
+  onDatabaseChange: token => ({ newValue: token.newValue }),
+  onLanguageChange: token => ({ newValue: token.newValue }),
+  onCharsetChange: token => ({ newValue: token.newValue }),
+  onSqlCollationChange: token => ({ newValue: token.newValue }),
+  onPacketSizeChange: token => ({ newValue: token.newValue }),
+  onBeginTransaction: token => ({ newValue: token.newValue }),
+  onCommitTransaction: token => ({ oldValue: token.oldValue }),
+  onRollbackTransaction: token => ({ oldValue: token.oldValue }),
+  onResetConnection: () => ({}),
+})) {
+  const original = RequestTokenHandler.prototype[method]
+  assert.equal(typeof original, 'function', method)
+  RequestTokenHandler.prototype[method] = function (token) {
+    taps.get(this.request)?.push(canonical({ token: token.name, ...describe(token) }))
+    return original.call(this, token)
+  }
+}
+
+// Reject an output destination that resolves to the retained fixture,
+// including symlinked directories and a not-yet-existing file.
+async function canonicalPath(path) {
+  const absolute = resolve(path instanceof URL ? fileURLToPath(path) : path)
+  try { return await realpath(absolute) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    const parent = dirname(absolute)
+    if (parent === absolute) return absolute
+    return resolve(await canonicalPath(parent), basename(absolute))
+  }
+}
+if (await canonicalPath(output) === await canonicalPath(fixture)) {
+  throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(fixture))
+}
 
 const numbered = count => Array.from({ length: count }, (_, index) => String(index + 1)).join(',')
 
@@ -173,18 +245,22 @@ const preparedExecutions = [
   { a: 1, b: 2.5, c: '3' },
 ]
 
-function rpc(connection, sql, parameters) {
+async function observed(connection, sql, parameters) {
+  const tokens = []
   const transport = {
     on: (...args) => connection.on(...args),
     off: (...args) => connection.off(...args),
     execSqlBatch(request) {
+      taps.set(request, tokens)
+      if (!parameters) return connection.execSqlBatch(request)
       for (const [name, type, value, options] of parameters) {
         request.addParameter(name, type, value, options)
       }
       connection.execSql(request)
     },
   }
-  return capture(transport, sql)
+  const result = await capture(transport, sql)
+  return { ...canonical(result), tokens }
 }
 
 async function prepared(connection) {
@@ -193,16 +269,20 @@ async function prepared(connection) {
   request.addParameter('a', TYPES.Int)
   request.addParameter('b', TYPES.Decimal, undefined, { precision: 6, scale: 2 })
   request.addParameter('c', TYPES.VarChar, undefined, { length: 8 })
-  const preparation = { errors: [] }
+  const preparation = { errors: [], tokens: [] }
+  taps.set(request, preparation.tokens)
   await new Promise(resolve => {
     complete = error => { if (error) preparation.errors.push({ message: error.message, number: error.number ?? null }); resolve() }
     request.once('prepared', () => resolve())
     connection.prepare(request)
   })
   const executions = []
+  const unpreparation = { tokens: [] }
   try {
     for (const values of preparedExecutions) {
       const result = { sets: [], done: [], errors: [], info: [], returnStatus: null }
+      const tokens = []
+      taps.set(request, tokens)
       const onError = e => result.errors.push({ number: e.number, state: e.state, class: e.class, lineNumber: e.lineNumber, message: e.message })
       const onInfo = e => result.info.push({ number: e.number, state: e.state, class: e.class, lineNumber: e.lineNumber, message: e.message })
       const onMetadata = metadata => result.sets.push({ columns: metadata.map(c => ({ name: c.colName, type: c.type.name, length: c.dataLength ?? null, precision: c.precision ?? null, scale: c.scale ?? null, flags: c.flags, collation: canonical(c.collation ?? null) })), rows: [] })
@@ -229,22 +309,23 @@ async function prepared(connection) {
         request.off('columnMetadata', onMetadata); request.off('row', onRow)
         for (const [kind, listener] of Object.entries(done)) request.off(kind, listener)
       }
-      executions.push({ values, result: canonical(result) })
+      executions.push({ values, result: { ...canonical(result), tokens } })
     }
   } finally {
+    taps.set(request, unpreparation.tokens)
     await new Promise((resolve, reject) => {
       complete = error => error ? reject(error) : resolve()
       request.error = undefined
       connection.unprepare(request)
     })
   }
-  return { preparation, executions }
+  return { preparation, executions, unpreparation }
 }
 
 async function observe(connection) {
   const records = []
   async function record(name, sql, parameters) {
-    const result = canonical(await (parameters ? rpc(connection, sql, parameters) : capture(connection, sql)))
+    const result = await observed(connection, sql, parameters)
     records.push({
       name, sql,
       ...(parameters ? { parameters: parameters.map(([parameter, type, value, options]) => canonical({
@@ -345,12 +426,28 @@ function validate(run) {
     ['null and divide by zero', 8134],
     ['varchar max long value', 8152],
   ]) assert.equal(get(name).errors[0]?.number, number, name)
+  const order = result => result.tokens.map(token => token.token + (token.number ? ':' + token.number : '') + (token.status !== undefined ? ':' + token.status : ''))
+  for (const [name, tokens] of [
+    ['int with null', ['COLMETADATA', 'ROW', 'DONE:16']],
+    ['divide by zero argument', ['COLMETADATA', 'ERROR:8134', 'DONE:2']],
+    ['null and divide by zero', ['COLMETADATA', 'ERROR:8134', 'DONE:2']],
+    ['int nonnumeric string', ['COLMETADATA', 'ERROR:245', 'DONE:2']],
+    ['varchar max long value', ['COLMETADATA', 'ERROR:8152', 'DONE:2']],
+    ['255 arguments', ['ERROR:189', 'DONE:2']],
+    ['explicit collation conflict', ['ERROR:468', 'DONE:2']],
+    ['xml', ['ERROR:8116', 'DONE:2']],
+    ['rpc int int', ['COLMETADATA', 'ROW', 'DONEINPROC:17', 'RETURNSTATUS', 'DONEPROC:0']],
+  ]) assert.deepEqual(order(get(name)), tokens, name)
   const preparedRun = run.find(record => record.name === 'prepared int decimal varchar').result
   assert.deepEqual(preparedRun.preparation.errors, [])
   assert.deepEqual(preparedRun.executions.map(execution => execution.result.errors[0]?.number ?? null), [null, null, null, 8114, null])
+  assert.deepEqual(order(preparedRun.executions[3].result), ['COLMETADATA', 'ERROR:8114', 'DONEPROC:2'])
   for (const record of run) {
     const results = record.name.startsWith('prepared') ? record.result.executions.map(execution => execution.result) : [record.result]
-    for (const result of results) assert(result.done.length > 0, record.name + ': no completion')
+    for (const result of results) {
+      assert(result.done.length > 0, record.name + ': no completion')
+      assert(/^DONE(PROC)?$/.test(result.tokens.at(-1)?.token), record.name + ': no final DONE token')
+    }
   }
 }
 

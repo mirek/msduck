@@ -6,12 +6,19 @@ independent containers. Both containers used the pinned SQL Server 2025 image
 digest 86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a
 (ProductMajorVersion 17, server and database collation
 SQL_Latin1_General_CP1_CI_AS). The four raw captures matched exactly. They
-retain result rows, TDS column descriptors, error number/state/class/text,
-information messages and DONE tokens. Most projections are also described
+retain result rows, TDS column descriptors, error number/state/class/line
+text, information messages and DONE events. Each record also has a `tokens`
+array: every token the tedious request handler received, in wire order.
+DONE, DONEINPROC and DONEPROC entries carry the raw 16-bit status word,
+current command and 64-bit count field. ERROR/INFO entries carry number,
+state, class, line, procedure name and text, and RETURNSTATUS/RETURNVALUE
+tokens are kept per procedure. The ERROR token's server name is not recorded.
+It names the container host, not SQL behavior. Most projections are also described
 through sys.dm_exec_describe_first_result_set, which records the declared
 type name, precision, scale, nullability and collation.
 scripts/capture-greatest-least.mjs regenerates an artifact and checks the
-retained fixture. It refuses to overwrite an existing fixture.
+retained fixture. Before starting a container, it refuses an existing fixture
+with `--write-fixture` and any output path that resolves to the fixture.
 
 msduck does not implement these rules yet. This document records SQL Server
 behavior only.
@@ -23,7 +30,7 @@ behavior only.
 | Mix of NULL and non-NULL arguments | NULLs are ignored: `GREATEST(1,NULL,3)` is 3 and `LEAST` is 1. A bound NULL parameter is also ignored (`rpc int null` returns 7 and 7). |
 | All arguments NULL | Returns NULL. Untyped `NULL,NULL` and a single `NULL` are typed `int`. |
 | Ties | Both functions return the first tied argument as written. `'a','A'` returns `a` from both functions and `'A','a'` returns `A`. `'a ','a'` returns `a ` and `'a','a '` returns `a`. Equal DATETIMEOFFSET instants return the first argument with its own offset. |
-| Evaluation errors | Every argument is evaluated. `1,1/0` and `NULL,1/0` both send the column descriptor, then error 8134 without a row, then a DONE with no row count. |
+| Evaluation errors | `1,1/0` and `NULL,1/0` both raise the error, so neither case skips the failing argument. The token order is COLMETADATA, ERROR 8134, then DONE with status 2 (error, no count), command 193 and count 0. |
 | Arity | 1 to 254 arguments succeed. Zero or 255 arguments raise error 189 (class 15, state 1): "The greatest function requires 1 to 254 arguments." (or "least"). The describe DMV reports this as a SYNTAX error. |
 
 ## Result type
@@ -46,10 +53,10 @@ including NULL-literal arguments typed as int:
     decimal(5,2) returns decimal(21,2).
   - Decimal literals `1.5,2.25` return numeric(3,2), and numeric(4,1)
     with decimal(4,1) returns numeric(4,1).
-  - Values are converted to the result scale by rounding half away from
-    zero: 0.5 becomes 1 and -0.5 becomes -1 at scale 0. So
+  - Converting to scale 0, 0.5 became 1 and -0.5 became -1, which is
+    consistent with rounding half away from zero. So
     `LEAST(CAST(99…9 AS DECIMAL(38,0)),CAST(0.5 AS DECIMAL(38,10)))` returns
-    1, not 0.5.
+    1, not 0.5. Other fractions were not captured.
 - **Approximate numerics:** any float argument returns float. real with int
   returns real (FloatN length 4), and real with float returns float.
 - **Money:** int with money returns money and smallmoney with money returns
@@ -71,12 +78,12 @@ including NULL-literal arguments typed as int:
   nvarchar(4000) (TDS length 8000), and varbinary(MAX) returns
   varbinary(8000). A 9000-byte varchar(MAX) or 10000-byte nvarchar(MAX)
   argument raises error 8152 state 10 ("String or binary data would be
-  truncated."). The error follows the column descriptor, even inside
-  DATALENGTH.
+  truncated."). The tokens are COLMETADATA, ERROR 8152, then DONE status 2,
+  including inside DATALENGTH.
 - **Character against other families:** character arguments are converted
   to the other type:
   - `5,'10'` returns int 10 and 5.
-  - `5,'abc'` sends the int descriptor, then error 245.
+  - `5,'abc'` sends COLMETADATA (int), then ERROR 245, then DONE status 2.
   - Strings with decimal(3,1) return decimal(3,1), and with float return
     float.
   - Date strings with date return date, in either argument order.
@@ -103,12 +110,13 @@ including NULL-literal arguments typed as int:
   uniqueidentifier and sql_variant arguments are accepted.
   - binary(2) returns binary(2), and varbinary(4) returns varbinary(4) with
     byte-wise ordering. varbinary with int returns int.
-  - uniqueidentifier uses SQL Server GUID ordering:
-    `00000000-0000-0000-0000-000000000002` sorts after
-    `01000000-0000-0000-0000-000000000000`.
+  - For the one captured uniqueidentifier pair,
+    `00000000-0000-0000-0000-000000000002` is greater than
+    `01000000-0000-0000-0000-000000000000`. This is consistent with
+    SQL Server's GUID ordering, which compares the last group first.
   - sql_variant returns sql_variant (describe max_length 8016, TDS Variant
-    length 8009). Mixed base types compare by family: int 1, varchar 'a'
-    and numeric 2.5 give greatest 2.5 and least 'a'.
+    length 8009). For int 1, varchar 'a' and numeric 2.5, greatest
+    returned 2.5 and least returned 'a'.
 - **Rejected types:** xml, text, ntext and image raise error 8116 state 4
   class 16: "Argument data type xml is invalid for argument N of greatest
   function." The message names the function (`least` for LEAST) and the
@@ -143,14 +151,18 @@ nullable.
 
 - **Other clauses:** the functions work in WHERE, ORDER BY, over aggregates
   and nested.
-- **sp_executesql RPC:** calls return doneInProc followed by doneProc. The
+- **sp_executesql RPC:** the tokens are COLMETADATA, ROW, DONEINPROC
+  (status 17, command 193, count 1), RETURNSTATUS 0, then DONEPROC (status
+  0, command 224). The
   type rules match ordinary batches for the int, decimal, nvarchar/int,
   varchar/nvarchar, money/float, date/datetime2 and varbinary parameter
-  pairs. A replay of the int/int call is byte-identical to the first call.
+  pairs. A replay of the int/int call produced a capture identical to the first
+  call's (decoded values and token fields, not raw bytes).
 - **sp_prepare/sp_execute:** a prepared `@a int,@b decimal(6,2),@c
   varchar(8)` statement returns decimal(12,2) on each execution.
-  - An execution with a conversion failure sends the descriptor, then error
-    8114, then only doneProc.
+  - Preparation returns the RETURNVALUE `handle` = 1 in every database.
+  - An execution with a conversion failure sends COLMETADATA, ERROR 8114,
+    then DONEPROC with status 2. There is no DONEINPROC and no RETURNSTATUS.
   - The next execution of the same handle succeeds.
 
 ## Not captured
@@ -165,7 +177,10 @@ nullable.
   values beyond JavaScript number precision are only exact in the text
   projections, since tedious decodes decimals to numbers.
 - Execution-plan, constant-folding or short-circuit guarantees beyond the
-  captured divide-by-zero cases.
+  captured divide-by-zero cases, and whether every argument is evaluated in
+  general.
+- Raw TDS bytes. Tokens are recorded as tedious decodes them, plus the raw
+  DONE fields.
 - Computed columns, indexed views and check constraints using these
   functions.
 
@@ -203,6 +218,5 @@ catalog, metadata or client-test files.
    - Replay this fixture's batch, sp_executesql and sp_prepare/sp_execute
      programs against msduck, preserving raw differences.
 
-   DuckDB's own greatest/least ignore NULLs, but they do not follow SQL
-   Server precedence, collation or tie rules. The spelling alone is not
-   evidence of compatibility.
+   The fixture contains no DuckDB observations. DuckDB's greatest/least
+   spelling is not evidence that any of these SQL Server rules hold.
