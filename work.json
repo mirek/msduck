@@ -3141,6 +3141,23 @@
       "dependencies": [],
       "issue": 328,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PO0VM"
+    },
+    {
+      "id": "smp-window-doc-v1",
+      "title": "Correct copied SMP WNDW inclusive-window wording",
+      "state": "ready",
+      "authorization": "Direct owner instruction in this session to publish and correct the copied MC-SMP WNDW note under the continuing full SQL Server compatibility and copied-skill accuracy goal. First-party protocol review; no external submission approved.",
+      "scope": [
+        ".agents/skills/tds-protocol/state-machines-and-notes.md"
+      ],
+      "acceptance": [
+        "Change the copied note that calls WNDW exclusive to the official inclusive maximum DATA sequence rule; state that WNDW=4 allows DATA sequence numbers 1 through 4 and link the MC-SMP Header and ACK sections.",
+        "Do not alter the separate copied mssqlite sendSequence < peerWindow implementation description without verifying what sendSequence represents.",
+        "Keep the change documentation-only and within the exact file scope; verify the primary links, check the diff, and open a focused review-ready PR with claim/revision evidence."
+      ],
+      "dependencies": [],
+      "issue": 329,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PO0mk"
     }
   ]
 }
