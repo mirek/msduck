@@ -68,8 +68,11 @@ claim protections remain unchanged.
 ## Client verification in CI
 
 The full job builds the current checkout with the workspace all-target feature
-graph, then runs the complete standard client inventory with two workers through
-`scripts/run-client-shards.mjs`. No build runs concurrently with those clients.
+graph, then explicitly passes all five files from `npm test` to
+`scripts/run-client-shards.mjs` with two workers. The runner's three-file default
+previously omitted `tests/datepart_numeric.test.mjs` and
+`tests/reference-compare.test.mjs` from full-job client evidence. No build runs
+concurrently with those clients.
 The runner requires every discovered test identity to execute exactly once and
 propagates assertion failures, process failures and incomplete runs. It retains
 skips separately from passes and checks source/executable hashes after execution.

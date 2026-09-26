@@ -100,7 +100,12 @@ jobs:
       - name: Build client-test executable
         run: cargo build --workspace --all-targets --locked 2>&1 | tee artifacts/ci/build.log
       - name: Independent client tests
-        run: node scripts/run-client-shards.mjs --jobs 2 --revision "$(git rev-parse HEAD)" --output artifacts/ci/client-shards 2>&1 | tee artifacts/ci/clients.log
+        run: |
+          node scripts/run-client-shards.mjs --jobs 2 --revision "$(git rev-parse HEAD)" \
+            --output artifacts/ci/client-shards -- \
+            tests/tedious.test.mjs tests/compatibility.test.mjs tests/tls.test.mjs \
+            tests/datepart_numeric.test.mjs tests/reference-compare.test.mjs \
+            2>&1 | tee artifacts/ci/clients.log
       - name: Aggregate diagnostic reference replays
         run: node --test --test-concurrency=1 tests/aggregate_diagnostics.test.mjs tests/character_extrema.test.mjs 2>&1 | tee artifacts/ci/aggregate-diagnostics.log
       - name: Diagnostic compatibility capture
