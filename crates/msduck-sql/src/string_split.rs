@@ -177,10 +177,18 @@ fn ordinal(expr: &Expr) -> Result<bool, Error> {
             expr,
             data_type: DataType::Bit(_),
             ..
-        } => ordinal(expr),
+        } if matches!(expr.as_ref(), Expr::Value(value) if matches!(&value.value, Value::Number(number, _) if number == "1")) => {
+            Ok(true)
+        }
+        Expr::Cast { .. } => Err(Error::Unsupported(
+            "STRING_SPLIT ordinal cast form is not captured",
+        )),
         Expr::Value(value) => match &value.value {
             Value::Null => Ok(false),
-            Value::Number(value, _) if value.contains('.') => Err(invalid_type("numeric", 3)),
+            Value::Number(value, _) if value == "1.0" => Err(invalid_type("numeric", 3)),
+            Value::Number(value, _) if value.contains('.') => Err(Error::Unsupported(
+                "STRING_SPLIT ordinal decimal form is not captured",
+            )),
             Value::Number(value, _) => ordinal_integer(value),
             _ => Err(Error::Unsupported(
                 "STRING_SPLIT ordinal literal type is not captured",
@@ -199,7 +207,7 @@ fn ordinal(expr: &Expr) -> Result<bool, Error> {
                 "STRING_SPLIT ordinal unary expression is not captured",
             ))
         }
-        Expr::Identifier(_) | Expr::CompoundIdentifier(_) => Err(sql(
+        Expr::Identifier(identifier) if identifier.value.starts_with('@') => Err(sql(
             8748,
             1,
             "The enable_ordinal argument for string_split only supports constant values (not variables or columns).",
@@ -214,13 +222,13 @@ fn ordinal_integer(value: &str) -> Result<bool, Error> {
     match value {
         "0" => Ok(false),
         "1" => Ok(true),
-        _ if value.parse::<i64>().is_ok() => Err(sql(
+        "2" | "-1" => Err(sql(
             4199,
             1,
             format!("Argument value {value} is invalid for argument 3 of string_split function."),
         )),
         _ => Err(Error::Unsupported(
-            "STRING_SPLIT ordinal integer range is not captured",
+            "STRING_SPLIT ordinal integer form is not captured",
         )),
     }
 }

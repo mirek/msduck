@@ -13,12 +13,14 @@ positional argument count and captured type/ordinal errors, and returns
 `value` metadata from explicit declared source and separator types. It never
 uses a row value to choose result width, family, nullability or collation.
 Unknown declarations stay unknown. The optional `ordinal` is non-null BIGINT
-only for a constant 1 (including the captured `CAST(1 AS BIT)` form); constant
-0 or NULL omits it. Variables and columns return captured error 8748. Captured
-invalid integer values return 4199, decimal ordinal types return 8116, and
+only for the captured constant 1 and `CAST(1 AS BIT)` forms; captured constant
+0 or NULL omits it. The captured `@ordinal` variable returns error 8748.
+Captured invalid integers 2 and -1 return 4199, decimal 1.0 returns 8116, and
 wrong arity returns 313/8144. SQL Server can emit a later 207 for a SELECT
 that still names the absent `ordinal` column; that projection diagnostic is
-outside this module.
+outside this module. Other integer spellings, casts, expressions and column
+references return explicit unsupported results until first-party captures
+establish their conversion and error rules.
 
 `split_units` operates on already evaluated UTF-16 units, preserving isolated
 surrogates and empty edge/interior tokens. An empty input produces one empty

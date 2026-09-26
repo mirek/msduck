@@ -363,3 +363,30 @@ fn unrelated_table_function_is_untouched() {
         Err(Error::Unsupported(_))
     ));
 }
+
+#[test]
+fn uncaptured_ordinal_spellings_do_not_claim_sql_server_diagnostics() {
+    for ordinal in [
+        "00",
+        "3",
+        "-2",
+        "999999999999999999999999",
+        "1.00",
+        "CAST(0 AS BIT)",
+        "CAST(2 AS BIT)",
+        "id",
+    ] {
+        let sql = format!("SELECT value FROM STRING_SPLIT('a,b',',',{ordinal})");
+        assert!(
+            matches!(
+                string_split::bind(
+                    &factor(&sql),
+                    &chars(false, 3, false),
+                    &chars(false, 1, false)
+                ),
+                Err(Error::Unsupported(_))
+            ),
+            "{ordinal}"
+        );
+    }
+}
