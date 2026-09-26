@@ -3068,6 +3068,25 @@
       ],
       "issue": 321,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POrC-"
+    },
+    {
+      "id": "remote-sync-symlinks-v1",
+      "title": "Exclude local cache symlinks from remote source sync",
+      "state": "ready",
+      "authorization": "Direct owner request to use linux.local effectively for parallel verification. First-party remote runner failure at owner-authored PR310 head 83d9c2e: rsync directory-only exclusion copied local target/node_modules symlinks over isolated Linux cache paths. No external submission approved.",
+      "scope": [
+        "scripts/remote-build.mjs",
+        "tests/remote-build.test.mjs",
+        "docs/remote-build.md"
+      ],
+      "acceptance": [
+        "Exclude root target, node_modules, artifacts, .git and .msduck regardless of whether each local path is a directory or symlink; never follow or copy local absolute cache/private paths into the remote source. Preserve checksum sync, deletion confined to owned source, remote lock and source-change invalidation.",
+        "Add offline regression with local target/node_modules symlinks and pre-existing receiver cache directories: sync must retain receiver caches and not transmit symlink targets. Test privacy and ordinary source sync behavior.",
+        "Recover the isolated linux.local remote-build workspace after its cache was replaced by symlink, then run offline test and an actual remote fast/build command. Record exact revision, cache recovery and remaining full-test status. Focused PR only; no application code change."
+      ],
+      "dependencies": [],
+      "issue": 322,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POsmw"
     }
   ]
 }
