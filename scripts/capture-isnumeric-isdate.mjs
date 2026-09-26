@@ -2,8 +2,9 @@
 // Retain SQL Server ISNUMERIC and ISDATE rows, descriptors, diagnostics and
 // completions for ordinary batches, sp_executesql RPC and prepared handles.
 import assert from 'node:assert/strict'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { basename, dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Request, TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
@@ -340,6 +341,20 @@ function validate(run) {
   }
 }
 
+// Resolves symlinks in the existing part of a path, so an alias of the
+// fixture (or of its directory) compares equal even before the file exists.
+// Same logic as the shared refuseFixtureOutput proposed in PR #312.
+async function canonicalPath(path) {
+  const absolute = resolve(path instanceof URL ? fileURLToPath(path) : path)
+  try { return await realpath(absolute) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return resolve(await canonicalPath(dirname(absolute)), basename(absolute))
+  }
+}
+
+// Scratch output must never alias the retained fixture; checked before any
+// container starts.
+if (await canonicalPath(output) === await canonicalPath(fixture)) throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(fixture))
 if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(resolve(output, '..'), { recursive: true })
 const containers = []

@@ -21,8 +21,10 @@ on the basis of this task.
 - Both functions return `int`, described as an IntN column of length 4 with
   flags 33 (nullable). SELECT INTO creates a nullable `int` column, and
   sys.dm_exec_describe_first_result_set reports `int` and nullable.
-- Neither returns NULL: every NULL input (untyped, typed, column or bound
-  parameter) yields 0.
+- Neither returns NULL for an admissible argument type: untyped NULL and
+  NULL of an accepted type (column or bound parameter included) yield 0. A
+  NULL of a rejected type still raises 8116 with no result set, as the
+  retained `isnumeric date null` program shows.
 - Zero or two arguments raise error 174 (class 15, state 1) "The isnumeric
   function requires 1 argument(s)." (or isdate), before any metadata.
 - An unaliased call yields an empty column name.
@@ -48,7 +50,8 @@ DECIMAL(38,10), FLOAT and MONEY. Observed rules:
 | Input | ISNUMERIC |
 | --- | --- |
 | `0`, `123`, `-123`, `+123`, `1.5`, `.5`, `5.` | 1 |
-| Lone `.`, `+`, `-`, `+.`, `-.`, `$`, `,`, `,.`, `.,`, `\` | 1 (only MONEY converts, to 0) |
+| Lone `+` or `-` | 1 (INT, BIGINT and MONEY convert to 0; DECIMAL and FLOAT give NULL) |
+| Lone `.`, `+.`, `-.`, `$`, `,`, `,.`, `.,`, `\` | 1 (only MONEY converts, to 0) |
 | `''`, `' '`, `'   '` | 0, although INT, BIGINT, FLOAT and MONEY convert them to 0 |
 | Exponent `1e5`, `1E5`, `1e+5`, `1e-5`, `1.e1`, `1d5`, `1D5` | 1 (only FLOAT converts) |
 | `1e`, `e5`, `1e1.5`, `.e1`, `1d`, `1e5e5`, `1ee5` | 0 |
@@ -101,8 +104,10 @@ padding do not change the observed results; `CAST('' AS CHAR(3))` is 0.
 
 ## ISDATE observed rules
 
-ISDATE returns 1 exactly when the string would convert to DATETIME under the
-session's DATEFORMAT and LANGUAGE. Strings that only DATE, DATETIME2 or
+Within the captured inputs, ISDATE returns 1 exactly when a non-empty,
+non-blank string converts to DATETIME under the session's DATEFORMAT and
+LANGUAGE. The exception is `''` and `' '`: they convert to DATETIME
+1900-01-01 but give ISDATE 0. Strings that only DATE, DATETIME2 or
 SMALLDATETIME accept are not enough:
 
 | Input (us_english, mdy) | ISDATE |
