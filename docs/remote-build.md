@@ -49,6 +49,10 @@ a second invocation against that workspace fails rather than changing files
 beneath an active run. Source deletions are mirrored only inside its `source`
 subdirectory. `.git`, `.env` files, `.msduck/` credentials, database files, local `target`, `node_modules`
 and artifacts are excluded. Remote target and dependency caches survive syncs.
+The root cache and private-path exclusions match directories and symlinks.
+When a local worktree links `target` or `node_modules` elsewhere, rsync neither
+copies that link to Linux nor replaces the receiver's cache directory with it.
+The exclusions do not follow local link targets.
 `npm ci` runs when the package lock changes or dependencies are absent.
 
 Source sync compares file content (`rsync --checksum`) and does not preserve
@@ -65,7 +69,10 @@ The marker and reset are protected by the same workspace lock as synchronization
 `node --test tests/remote-build.test.mjs` exercises a same-size source change
 with an old mtime in a small offline Cargo crate. It checks that the changed
 binary rebuilds, an unchanged rerun leaves the binary untouched, and private
-`.env` and `.msduck` files stay excluded. On `linux.local`, the test passed and
+`.env` and `.msduck` files stay excluded. A second offline case links all five
+root cache/private paths locally, verifies that populated receiver cache
+directories survive two syncs, and confirms ordinary source update and deletion.
+On `linux.local`, the original test passed and
 the runner's first migrated workspace build completed in 1m 31s of Cargo time;
 an unchanged second invocation finished in 0.05s of Cargo time (0.77s wall
 clock). These are build-cache checks, not full workspace or compatibility test
@@ -81,6 +88,17 @@ The initial `linux.local` inspection found 32 logical CPUs, 122 GiB RAM and an
 x86_64 Linux environment. The default configuration uses 16 build jobs to leave
 headroom for native C++ compilation. A cold DuckDB build and cached incremental
 builds have different costs; measure representative runs before claiming a speedup.
+
+On 2026-09-26, an earlier directory-only exclusion copied a macOS `target`
+symlink into the isolated Linux source, replacing its build cache path. Under
+the remote workspace lock, the link was checked against its observed target,
+removed, and replaced with an empty Linux `target` directory. The original
+cache was not recoverable from that path, so the next build was cold. From the
+`remote-sync-symlinks-v1` worktree, the repaired runner completed `remote -- fast`
+with Rust 1.95.0: deterministic core, SQL and TDS tests passed after a 27.10s
+Cargo compile. Both offline sync tests passed locally. This verification used
+the task worktree based on `e6fd8b4` plus its uncommitted runner/test changes;
+it did not run workspace Rust tests, client tests or an audit.
 
 
 Initial verification: the deterministic suite passed all 127 tests on Linux,
