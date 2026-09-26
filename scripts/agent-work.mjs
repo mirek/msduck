@@ -61,7 +61,7 @@ function projectItem(registry, task) {
     if (found?.author?.databaseId !== owner.id) throw Error('issue author');
     const item = api('graphql', { query: 'mutation($p:ID!,$c:ID!){addProjectV2ItemById(input:{projectId:$p,contentId:$c}){item{id}}}', variables: { p: registry.project.id, c: found.id } }).data.addProjectV2ItemById.item.id;
     // The card exists now; keep its ID even if setting its fields fails.
-    try { board(registry, { projectItem: item }, 'ready'); }
+    try { board(registry, { projectItem: item }, task.state); }
     catch { console.error(`Project card for ${task.id} created but its fields were not set; retry status later.`); }
     return item;
   } catch {
@@ -90,8 +90,18 @@ async function main() {
       return;
     }
     const { registry } = await load();
+    // Validate before any board mutation so a rejected change leaves no orphan
+    // cards; publish() revalidates against the revision it actually updates.
+    applyChange(registry, change, await claimedIds(api));
     for (const task of change.add ?? []) if (!task.projectItem) task.projectItem = projectItem(registry, task);
     const result = await publish({ api, rules: rules(), change, message, log: m => console.error(m) });
+    // Mirror published state changes on existing cards; board failures are non-fatal.
+    for (const [taskId, newState] of Object.entries(change.states ?? {})) {
+      const task = result.registry.tasks.find(t => t.id === taskId);
+      if (!task?.projectItem) continue;
+      try { board(result.registry, task, newState); }
+      catch { console.error(`Registry published; project card for ${taskId} not updated to ${newState}.`); }
+    }
     console.log(JSON.stringify({ published: true, registry: result.revision, previous: result.previous, added: (change.add ?? []).map(t => t.id), states: change.states ?? {} }));
     return;
   }
