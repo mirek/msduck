@@ -41,6 +41,12 @@ and U+00A4 generic currency sign.
   - An error object already reported by an earlier phase is never attributed
     again.
   - Only tokens raised while a phase is outstanding are recorded.
+- A return status is recorded only from a RETURNSTATUS token received during
+  that request, for every batch, RPC and prepare/execute/unprepare phase. The
+  script does this with an accessor on tedious' connection-level
+  `procReturnStatusValue` that reports each token to the request being
+  observed. The value tedious passes to `doneProc` is never used, because
+  tedious carries it across requests.
 - Rows and messages are bounded per phase.
 - Whole captures are compared only with the bounded `assertSameCapture`.
 - The table constraints are named explicitly: `fmt_src_pk` and `fmt_bad_pk`.
@@ -322,11 +328,22 @@ sp_executesql results:
 - An 8116 compile failure (NVARCHAR value) sends no metadata and only a
   DONEPROC with return status 8116.
 
+Return statuses in the fixture come only from RETURNSTATUS tokens received
+while that request was outstanding. tedious keeps the last token value on the
+connection and passes it to the next `doneProc` listener, so the script never
+uses that argument (see "Capture conventions"). Ordinary batches carry no
+RETURNSTATUS and record `null`.
+
 Prepared sequences:
-- sp_prepare returns the descriptor and DONEINPROC(0). Its return status was
-  8116 for the first sequence and 0 for the second: the status of the previous
-  RPC call on the session. That preceding call was the failed
-  `rpc nvarchar value` and a successful sp_unprepare respectively.
+- sp_prepare returns the descriptor and DONEINPROC(0). It also sends a
+  RETURNSTATUS token, which is 8116 for the first sequence and 0 for the second.
+  The first sp_prepare followed the failed `rpc nvarchar value` call (8116). The
+  second followed a successful sp_unprepare.
+- A raw TDS token trace (not retained) confirms that the value is on the wire.
+  sp_prepare's RETURNSTATUS equalled the error number of the immediately
+  preceding request on the session: 8116, 8134 and 9818 after failed batches,
+  and 0 after a successful batch, including a success that followed a failure.
+  The server reports it, so it is not a tedious carry-over.
 - A failing execution (9818 for a NULL culture or 'Klingon') sends the
   metadata, no row and DONEINPROC without count, with return status -6.
 - The next execution on the same handle succeeds with no error. No stale error
@@ -393,7 +410,8 @@ literal forms. DATETIMEOFFSET 'O' gives '2024-03-05T14:07:09.1230000+00:00'.
    - Raises 9818 at run time per row, after metadata, and 8152 for an
      over-length format.
    - Preserves RPC and prepared return statuses (9818 and -6), including
-     sp_prepare's previous-status value.
+     sp_prepare's RETURNSTATUS, which reports the previous request's error
+     number.
    - Adds a tedious comparison against this fixture.
 4. **format-culture-reference-v2.** Further captures for the gaps above,
    especially the culture-name grammar, additional calendars and non-UTC

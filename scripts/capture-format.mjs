@@ -243,7 +243,41 @@ const preparedCases = [
       { v: moment, f: 'yyyy-MM-dd', c: 'ar-SA' }, { v: moment, f: 'G', c: 'fr-FR' }]],
 ].map(([name, sql, declarations, values]) => [name, `${sql} /*${name}*/`, declarations, values])
 
-function rpc(connection, sql, parameters) {
+// Return statuses are recorded only from RETURNSTATUS tokens that arrive while
+// the request is outstanding. tedious keeps the token value on the connection
+// (procReturnStatusValue) and hands it to the next 'doneProc' listener, so the
+// doneProc argument is never used as evidence. This accessor keeps tedious'
+// own behavior and reports each token to the request that is currently being
+// observed. It never reads a previous value.
+function returnStatusTokens(connection) {
+  if (connection.msduckReturnStatus) return connection.msduckReturnStatus
+  let stored = connection.procReturnStatusValue
+  const tokens = { sink: null }
+  Object.defineProperty(connection, 'procReturnStatusValue', {
+    configurable: true,
+    get: () => stored,
+    set: value => {
+      stored = value
+      if (value !== undefined && tokens.sink) tokens.sink(value)
+    },
+  })
+  connection.msduckReturnStatus = tokens
+  return tokens
+}
+
+// Runs one request with a fresh per-request status. Returns null when no
+// RETURNSTATUS token arrived during it, or the last token value otherwise.
+async function withReturnStatus(connection, run) {
+  const tokens = returnStatusTokens(connection)
+  let status = null
+  tokens.sink = value => { status = value }
+  try {
+    const result = await run()
+    return { result, status }
+  } finally { tokens.sink = null }
+}
+
+async function rpc(connection, sql, parameters) {
   const transport = {
     on: (...args) => connection.on(...args),
     off: (...args) => connection.off(...args),
@@ -252,14 +286,18 @@ function rpc(connection, sql, parameters) {
       connection.execSql(request)
     },
   }
-  return capture(transport, sql)
+  const { result, status } = await withReturnStatus(connection, () => capture(transport, sql))
+  result.returnStatus = status
+  return result
 }
 
 // Replicates capturePrepared from the owner's prepared-capture helper (PR #312,
 // docs/reference-captures.md) until it reaches main: sp_prepare completion comes
 // from the 'prepared'/'error' events, request.error is cleared before each phase,
 // an error object already attributed to an earlier phase is never reported again,
-// and only tokens raised while a phase is outstanding are recorded.
+// and only tokens raised while a phase is outstanding are recorded. Each phase's
+// returnStatus starts as null and is set only by a RETURNSTATUS token received
+// during that phase.
 const PREPARED_LIMITS = Object.freeze({ rows: 10000, messages: 200 })
 const messageFields = m => ({ number: m.number, state: m.state, class: m.class, lineNumber: m.lineNumber, message: m.message })
 const columnFields = c => ({ name: c.colName, type: c.type.name, length: c.dataLength ?? null, precision: c.precision ?? null, scale: c.scale ?? null, flags: c.flags, collation: canonical(c.collation ?? null) })
@@ -292,11 +330,14 @@ async function capturePrepared(connection, sql, declarations, valueSets) {
     if (result.done.length >= limits.messages) overflow('messages')
     else result.done.push({ kind, rowCount: rowCount ?? null, more })
   })
-  request.on('doneProc', (_count, _more, status) => { if (result) result.returnStatus = status })
+  const tokens = returnStatusTokens(connection)
   const phase = start => new Promise(resolve => {
     result = fresh()
+    const current = result
+    tokens.sink = value => { current.returnStatus = value }
     complete = (error, rowCount) => {
       complete = () => {}
+      tokens.sink = null
       const finished = result
       result = undefined
       finished.rowCount = rowCount
@@ -325,6 +366,7 @@ async function capturePrepared(connection, sql, declarations, valueSets) {
     const unprepare = await phase(() => connection.unprepare(request))
     return { prepare, prepared: true, executions, unprepare }
   } finally {
+    tokens.sink = null
     connection.off('errorMessage', onError)
     connection.off('infoMessage', onInfo)
   }
@@ -332,9 +374,15 @@ async function capturePrepared(connection, sql, declarations, valueSets) {
 
 const describeOptions = options => options ? { options: { ...options, ...(options.length === Infinity ? { length: 'max' } : {}) } } : {}
 
+async function batch(connection, sql) {
+  const { result, status } = await withReturnStatus(connection, () => capture(connection, sql))
+  result.returnStatus = status
+  return result
+}
+
 async function observe(connection) {
   const records = []
-  for (const [name, sql] of cases) records.push({ name, sql, result: canonical(await capture(connection, sql)) })
+  for (const [name, sql] of cases) records.push({ name, sql, result: canonical(await batch(connection, sql)) })
   for (const [name, sql, parameters] of rpcCases) records.push({
     name, sql, protocol: 'sp_executesql',
     parameters: parameters.map(([parameter, type, value, options]) => ({ name: parameter, type: type.name, value: canonical(value), ...describeOptions(options) })),
@@ -352,7 +400,7 @@ async function observe(connection) {
     })
   }
   const reuse = 'SELECT @@TRANCOUNT AS transaction_count, @@LANGUAGE AS language, 1 AS reusable'
-  records.push({ name: 'reuse', sql: reuse, result: canonical(await capture(connection, reuse)) })
+  records.push({ name: 'reuse', sql: reuse, result: canonical(await batch(connection, reuse)) })
   return records
 }
 
@@ -414,7 +462,15 @@ function validate(run) {
   assert.equal(preparedDecimal.prepared, true)
   assert.equal(preparedDecimal.executions[7].result.errors[0]?.number, 9818)
   for (const index of [0, 1, 2, 3, 4, 5, 6, 8]) assert.equal(preparedDecimal.executions[index].result.errors.length, 0, 'prepared decimal execution ' + index)
+  // Statuses come only from RETURNSTATUS tokens received during each request.
+  assert.equal(preparedDecimal.prepare.returnStatus, 8116, 'sp_prepare after a failed RPC')
+  assert.equal(preparedDecimal.executions[7].result.returnStatus, -6)
+  assert.equal(preparedDecimal.executions[8].result.returnStatus, 0)
+  assert.equal(result('rpc null culture').returnStatus, 9818)
+  assert.equal(result('rpc decimal').returnStatus, 0)
+  assert.equal(result('matrix decimal N').returnStatus, null)
   const preparedDate = get('prepared datetime2')
+  assert.equal(preparedDate.prepare.returnStatus, 0, 'sp_prepare after a successful sp_unprepare')
   assert.equal(preparedDate.executions[2].result.errors[0]?.number, 9818)
   for (const index of [0, 1, 3, 4]) assert.equal(preparedDate.executions[index].result.errors.length, 0, 'prepared datetime2 execution ' + index)
   assert.equal(result('reuse').errors.length, 0)
