@@ -2280,6 +2280,26 @@
       ],
       "dependencies": [],
       "issue": 242
+    },
+    {
+      "id": "parallel-collaboration-rules-v1",
+      "title": "Clarify parallel worker and integration responsibilities",
+      "state": "ready",
+      "authorization": "Direct owner instruction on 2026-09-26 to clarify issue creation, claims, PRs, reviews and merging for a separate Claude worker. The active agent-work-publish-v1 task owns the contribution skill and docs/agent-work.md; this task uses disjoint files. No external submission is input.",
+      "scope": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "docs/parallel-collaboration.md"
+      ],
+      "acceptance": [
+        "Document who may create owner-authored issues and publish protected task snapshots; distinguish issues and project cards from exclusive claims.",
+        "Give all harnesses an explicit worker sequence from approved discovery through isolated claim, draft PR, review status and handoff.",
+        "Define trusted review input and exact-revision checks, and assign merging plus completion publication to the human owner or explicitly designated integrator despite shared mirek credentials.",
+        "Link the guide from AGENTS.md and CLAUDE.md without changing the files reserved by agent-work-publish-v1; review links and documentation."
+      ],
+      "dependencies": [],
+      "issue": 243,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POOZr"
     }
   ]
 }
