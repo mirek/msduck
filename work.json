@@ -55,7 +55,7 @@
     {
       "id": "compiler-contract-plan-v1",
       "title": "Map typed compiler and result metadata boundaries",
-      "state": "ready",
+      "state": "done",
       "scope": [
         "docs/compiler-contract-plan.md"
       ],
@@ -72,7 +72,7 @@
     {
       "id": "tds-gap-inventory-v1",
       "title": "Inventory TDS protocol gaps and independent verification tasks",
-      "state": "ready",
+      "state": "done",
       "scope": [
         "docs/tds-gap-inventory.md"
       ],
@@ -110,7 +110,7 @@
     {
       "id": "smp-codec-v1",
       "title": "Implement bounded deterministic SMP framing for MARS integration",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction: continue implementing the full SQL Server compatible Rust/DuckDB server and reuse mirek/mssqlite. This is first-party protocol work derived from the inspected source inventory.",
       "scope": [
         "crates/msduck-tds/src/smp.rs",
@@ -155,7 +155,7 @@
         "Document why the SPACE test at tests/tedious.test.mjs currently encounters NVARCHAR value exceeds declared width; distinguish the observed failure from hypotheses and assess the existing expected result against retained SQL Server evidence.",
         "Propose typed lowering that evaluates operands once, respects intermediate bounded truncation/MAX/NULL and raw UTF-16, and composes with downstream character functions. List exact differential probes and bounded successor scopes. Documentation only; no test expectation changes or shared server runs."
       ],
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instructions to organize independently claimable parallel work and continue implementing the SQL Server compatible Rust/DuckDB server. First-party planning based on repository source and retained reference evidence; no external submission is approved.",
       "dependencies": [],
       "issue": 18,
@@ -164,7 +164,7 @@
     {
       "id": "concat-overflow-reference-v1",
       "title": "Capture SQL Server concatenation overflow and prepared SPACE behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction to continue implementing SQL Server compatibility; first-party follow-up to the observed concatenation regression.",
       "scope": [
         "scripts/capture-concat-overflow.mjs",
@@ -182,7 +182,7 @@
     {
       "id": "native-concat-v1",
       "title": "Implement bounded native Unicode and CP1252 concatenation primitives",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction to implement SQL Server compatibility; first-party execution primitives following captured overflow evidence.",
       "scope": [
         "src/unicode_carrier.rs"
@@ -199,7 +199,7 @@
     {
       "id": "concat-binding-v1",
       "title": "Bind deterministic character concatenation trees with explicit declarations",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction to implement SQL Server compatibility; first-party continuation from native concatenation primitives and reference captures.",
       "scope": [
         "crates/msduck-sql/src/concat.rs",
@@ -217,7 +217,7 @@
     {
       "id": "concat-integration-v1",
       "title": "Integrate declared concatenation execution and public overflow regressions",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner goal to implement SQL Server compatibility. The current worker stops result-alignment-v1 edits and preserves its PR/evidence; its full verification is blocked by inherited concat failure. This successor owns root integration paths.",
       "scope": [
         "src/concat_lower.rs",
@@ -239,7 +239,7 @@
     {
       "id": "space-properties-v1",
       "title": "Align SPACE result properties with SQL Server metadata",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner implementation goal; first-party prepared reference replay found missing computed-column metadata on SPACE.",
       "scope": [
         "crates/msduck-sql/src/result_properties.rs",
@@ -258,7 +258,7 @@
     {
       "id": "space-capacity-v1",
       "title": "Match constant SPACE capacity and dependent truncation to SQL Server",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner compatibility goal; retained SQL Server captures reveal incorrect zero and negative SPACE declaration capacities.",
       "scope": [
         "crates/msduck-sql/src/result_types.rs",
@@ -293,7 +293,7 @@
     {
       "id": "unicode-case-reference-v1",
       "title": "Capture SQL Server UTF16 casing maps for supported collations",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full compatibility goal; first-party LOWER carrier gap requires exact collation-specific reference evidence.",
       "scope": [
         "scripts/capture-unicode-case.mjs",
@@ -329,7 +329,7 @@
     {
       "id": "trim-collation-reference-v1",
       "title": "Capture collation-sensitive trim semantics from SQL Server",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal; first-party differential probes exposed CI/AI and surrogate mismatches in explicit trim character lists.",
       "scope": [
         "scripts/capture-trim-collation.mjs",
@@ -347,7 +347,7 @@
     {
       "id": "trim-collation-binding-v1",
       "title": "Validate trim collation conflicts before execution",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full compatibility and parallel-work instructions; owner-published reference capture at 508b962 proves ten missing trim conflict diagnostics.",
       "scope": [
         "crates/msduck-core/src/collation.rs",
@@ -388,7 +388,7 @@
     {
       "id": "unicode-case-native-v1",
       "title": "Execute captured Unicode casing maps in bounded native vectors",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full compatibility goal; deterministic casing maps at 00c9d05 are verified and now require a lossless native DuckDB carrier adapter.",
       "scope": [
         "src/unicode_case.rs"
@@ -406,7 +406,7 @@
     {
       "id": "unicode-case-binding-v1",
       "title": "Bind Unicode casing from scoped logical declarations",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal; native Unicode casing adapters at a5b5ebb now need deterministic scope-aware SQL binding without runtime type guesses.",
       "scope": [
         "crates/msduck-sql/src/projection/collation_validation.rs",
@@ -425,7 +425,7 @@
     {
       "id": "unicode-storage-reference-v1",
       "title": "Capture SQL Server Unicode storage and casing assignment behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Local probe at d4980b8 shows INSERT of a Unicode casing carrier is converted to struct text by the legacy storage boundary; retain reference evidence for the storage correction.",
       "scope": [
         "scripts/capture-unicode-storage.mjs",
@@ -445,7 +445,7 @@
     {
       "id": "unicode-column-storage-v1",
       "title": "Persist declared Unicode columns as raw UTF16 carriers",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. The 180 owner-generated SQL Server cases in PR49 and replay at c199d44 demonstrate ordinary Unicode storage stringifies carriers and cannot retain surrogate units.",
       "scope": [
         "crates/msduck-sql/src/character_storage.rs",
@@ -485,7 +485,7 @@
     {
       "id": "duckdb-nested-alter-v1",
       "title": "Fix same-transaction DuckDB nested-column NOT NULL commit failure",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Declared Unicode storage at b46b69f exposes a single-connection DuckDB commit failure; owner-generated direct native reproduction confirms it independently of the translator.",
       "scope": [
         "vendor/libduckdb-sys/build_bundled_cc.rs",
@@ -506,7 +506,7 @@
     {
       "id": "unicode-json-consumers-v1",
       "title": "Adapt JSON consumers to declared Unicode column storage",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal and request for owner-published parallel work. Owner-run Linux client suite at 7588ea1 exposes six JSON regressions after Unicode carrier storage; no external issue or review content was used. Start from owner-pushed commit 7588ea1 (work/duckdb-nested-alter-v1), with an isolated worktree and new private claim receipt.",
       "scope": [
         "src/isjson.rs",
@@ -543,7 +543,7 @@
     {
       "id": "unicode-currency-consumers-v1",
       "title": "Preserve Unicode column text in currency conversions",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal and request for owner-published parallel work. Owner-run Linux suite at 7588ea1 has two currency regressions after Unicode storage; no external content was used. Start from owner-pushed 7588ea1 in an isolated worktree and acquire a new private claim.",
       "scope": [
         "src/money_range.rs",
@@ -584,7 +584,7 @@
     {
       "id": "unicode-integer-consumers-v1",
       "title": "Convert exact Unicode carriers to integer values without struct text",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal and parallel work organization. First-party JSON extraction work at PR #59 reveals JSON_VALUE(j, path)+1 stringifies its exact UTF16 result in __msduck_integer_input. Native Unicode extraction itself is verified. Start from the latest owner-pushed work/unicode-json-consumers-v1 after discovering its approved snapshot, or coordinate with the current worker before choosing the starting revision.",
       "scope": [
         "src/integer_conversion.rs",
@@ -644,7 +644,7 @@
     {
       "id": "character-extrema-reference-v1",
       "title": "Capture SQL Server character MIN/MAX ordering and exact result units",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. First-party PR64 client verification exposes MAX over an OPENJSON Unicode view stringifying carrier payloads. Read-only source tracing shows a representation-only fix would leave byte-order and collation errors. Capture authoritative behavior before choosing complete extrema lowering; no external submission is approved. Start from owner-pushed 102afa6 or a verified successor.",
       "scope": [
         "scripts/capture-character-extrema.mjs",
@@ -662,7 +662,7 @@
     {
       "id": "character-extrema-native-v1",
       "title": "Add bounded native BIN2 character extrema with original payload retention",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Reference task #65/PR66 establishes that physical carrier-byte ordering is invalid. Build the native aggregation component using existing deterministic BIN2 comparison; linguistic weights and public SQL binding remain explicit subsequent requirements. Start from owner-pushed 28b7a9b or a verified successor. No external input is approved.",
       "scope": [
         "src/character_aggregate.rs",
@@ -681,7 +681,7 @@
     {
       "id": "character-extrema-binding-v1",
       "title": "Bind public BIN2 character MIN/MAX to exact native aggregation",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Native task #67/PR68 and reference #65/PR66 provide exact BIN2 aggregation; bind only proven BIN2 operands from logical declarations. Start from owner-pushed 79c5744 or verified successor. This worker retains #39 projection export, #45 shared scope visitor and #26 root integration claims; their original receipts remain in their existing checkouts. No external content is approved.",
       "scope": [
         "crates/msduck-sql/src/projection/character_extrema.rs",
@@ -738,7 +738,7 @@
     {
       "id": "windows-1252-best-fit-v1",
       "title": "Implement captured SQL Server Windows-1252 best-fit conversion",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Owner-generated character extrema reference and PR72 replay show ANSI setup failing on U+0100, which SQL Server maps to A. Capture the complete UTF16 unit conversion and width/storage boundaries using the existing pinned reference helper. No external content used.",
       "scope": [
         "crates/msduck-core/src/character.rs",
@@ -760,7 +760,7 @@
     {
       "id": "ansi-binary-conversion-v1",
       "title": "Bind ANSI character to binary conversions using SQL code-page bytes",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. PR74 exact reference replay shows CONVERT(VARBINARY, VARCHAR/CHAR) is not translated after best-fit conversion succeeds. Existing owner-generated character-extrema fixtures include raw CP1252 byte ground truth. No external content approved.",
       "scope": [
         "src/ansi_binary.rs",
@@ -779,7 +779,7 @@
     {
       "id": "binary-unicode-conversion-v1",
       "title": "Implement SQL binary to Unicode conversion with exact byte and style semantics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Owner-generated PR76 boundary replay leaves binary-to-Unicode CONVERT untranslated. Fresh pinned SQL Server probes establish odd-byte zero extension, surrogate preservation, fixed padding and style behavior. No external content approved.",
       "scope": [
         "src/binary_unicode.rs",
@@ -804,7 +804,7 @@
     {
       "id": "storage-truncation-diagnostics-v1",
       "title": "Preserve detailed character truncation diagnostics and failed-write completion",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Owner-generated PR78 unchanged best-fit replay has 52 rejected storage writes differing in error 2628 details, termination info 3621 and batch continuation. No external content approved.",
       "scope": [
         "src/storage_diagnostic.rs",
@@ -826,7 +826,7 @@
     {
       "id": "transaction-state-adapters-v1",
       "title": "Propagate uncommittable transaction state through execution adapters",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Pinned owner-generated 53-case storage transaction fixture requires XACT_ABORT state, 3930 write/commit rejection and 3998 batch-end rollback. Existing engine and storage reference integration stays under original #26 and #79 receipts.",
       "scope": [
         "src/engine/joined_output.rs",
@@ -844,7 +844,7 @@
     {
       "id": "transaction-recovery-contract-v1",
       "title": "Specify and verify the backend transaction recovery boundary",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. The owner-generated 61-case transaction matrix retains seven failures caused by DuckDB exception invalidation. Source inspection of pinned DuckDB and mirek/mssqlite requires explicit recovery constraints before adopting TRY or replay.",
       "scope": [
         "docs/transaction-recovery.md",
@@ -862,7 +862,7 @@
     {
       "id": "checked-integer-core-v1",
       "title": "Implement deterministic checked integer arithmetic from SQL Server boundary captures",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal; recovery contract #83 requires explicit value/NULL/diagnostic outcomes before nonthrowing native arithmetic adapters. No external content is approved.",
       "scope": [
         "crates/msduck-core/src/checked_integer.rs",
@@ -882,7 +882,7 @@
     {
       "id": "checked-integer-native-v1",
       "title": "Return checked integer vector outcomes without backend exceptions",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal; verified checked integer core at dd43019 matches 240 pinned reference cases. Recovery contract #83 requires nonthrowing vector adapters before SQL expression integration.",
       "scope": [
         "src/checked_integer.rs",
@@ -900,7 +900,7 @@
     {
       "id": "checked-expression-plan-v1",
       "title": "Propagate checked arithmetic through scalar expression plans",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Native checked integer outcomes at 36e9633 now permit scalar control-flow arithmetic to return diagnostics without aborting DuckDB.",
       "scope": [
         "crates/msduck-sql/src/checked_expression.rs",
@@ -919,7 +919,7 @@
     {
       "id": "checked-projection-v1",
       "title": "Carry checked integer outcomes through SELECT projections",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Scoped checked expressions at 414738d preserve per-row arithmetic diagnostics without invalidating DuckDB; integrate public SELECT projections and retain exact reference evidence.",
       "scope": [
         "crates/msduck-sql/src/checked_projection.rs",
@@ -998,7 +998,7 @@
     {
       "id": "statement-diagnostics-native-v1",
       "title": "Add explicit statement-scoped native diagnostic contexts",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Captured warning 8153 requires execution-state tracking independent of output rows and safe across sessions. Implement a bounded database-owned registry and a native NULL observer as groundwork for single-evaluation aggregate lowering; no external content used. Original root exports retain verified concat-integration-v1 ownership.",
       "scope": [
         "src/statement_diagnostics.rs",
@@ -1016,7 +1016,7 @@
     {
       "id": "aggregate-warning-integration-v1",
       "title": "Integrate statement-scoped aggregate NULL-elimination warnings",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Reference task97 defines warning8153, and native task99 provides explicit isolated diagnostic contexts. Integrate these through database/session ownership, deterministic single-evaluation aggregate lowering and completion emission. Root engine/lib remain under the same-worker original concat-integration-v1 claim; native registry updates retain task99 ownership. No external content consumed.",
       "scope": [
         "src/server.rs",
@@ -1079,7 +1079,7 @@
     {
       "id": "drop-index-binding-v1",
       "title": "Bind DROP INDEX ON to its declared table and preserve SQL Server diagnostics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server compatibility goal and request for disjoint claimable work for parallel agents. Owner-run fresh SQL Server captures confirm DROP INDEX ddl_index ON dbo.ddl_plain succeeds, omits DONE row count, and uses command201. Current msduck forwards ON to DuckDB and fails syntax. No external content consumed.",
       "scope": [
         "crates/msduck-sql/src/drop_index.rs",
@@ -1120,7 +1120,7 @@
     {
       "id": "client-test-sharding-v1",
       "title": "Build an exhaustive client test sharding runner with measured speed and failure fidelity",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner requests to improve long-running tests, use linux.local and arrange disjoint work for parallel agents. Owner-run discovery on Node24 and Node26 found identical 404 unique top-level tests:391 tedious,9 compatibility,4 TLS. No test callbacks were executed during discovery. Existing file-level concurrency leaves391 tests serialized in one file. No external submissions consumed.",
       "scope": [
         "scripts/run-client-shards.mjs",
@@ -1598,7 +1598,7 @@
     {
       "id": "idle-ignore-completion-v1",
       "title": "Match live idle Attention and IGNORE completion fields",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Owner-captured reference at 96697c9 proves idle command253 Attention ACK and command0 DONE_ERROR for pre-EOM IGNORE. Existing original root aggregate-warning-integration-v1 owns src/server.rs and concat-integration-v1 owns tests/tedious.test.mjs integration.",
       "scope": [
         "tests/attention_boundaries.test.mjs",
