@@ -2300,6 +2300,26 @@
       "dependencies": [],
       "issue": 243,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POOZr"
+    },
+    {
+      "id": "string-agg-rules-v1",
+      "title": "Add deterministic STRING_AGG declaration, separator and accumulation rules",
+      "state": "ready",
+      "authorization": "Direct owner continuing implementation goal of 2026-09-26. Successor of string-agg-reference-v1 (#236, merged #237) as named in docs/string-agg.md; evidence is the retained first-party fixture reference/string-agg.json.",
+      "scope": [
+        "crates/msduck-sql/src/string_agg.rs",
+        "crates/msduck-sql/src/lib.rs",
+        "crates/msduck-sql/tests/string_agg.rs",
+        "docs/string-agg.md"
+      ],
+      "acceptance": [
+        "Validate STRING_AGG calls from the parsed AST: exact captured diagnostics for DISTINCT (102), OVER (4113), non-literal/non-variable separators (8733) and MAX separator variables (8734); preserve WITHIN GROUP keys; classify uncaptured separator forms as explicitly unsupported rather than guessing.",
+        "Select output declarations from explicit source declarations exactly as captured (VARCHAR(8000), NVARCHAR(4000), MAX families, NVARCHAR(4000) for INT/DECIMAL/DATETIME2) and return exact 8116 diagnostics for binary sources and incompatible or non-character separators; leave uncaptured source types unknown.",
+        "Provide a bounded accumulator with NULL elimination, NULL-separator concatenation, NULL for empty/all-NULL groups and the captured 9829 byte-limit error states for bounded VARCHAR/NVARCHAR, without limiting MAX outputs.",
+        "Drive tests from reference/string-agg.json rows/errors for every case the rules cover; keep msduck-sql free of DuckDB/effects; do not wire runtime execution (separate successor)."
+      ],
+      "dependencies": [],
+      "issue": 245
     }
   ]
 }
