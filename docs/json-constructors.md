@@ -171,7 +171,11 @@ number/state/class/message; 11 cases (DATALENGTH/LEN, ISJSON,
 `sp_describe_first_result_set`, `SELECT ... INTO` and the post-UPDATE SELECT)
 are checked with case-specific assertions; 7 cases are not applicable (two
 setup statements, four parser syntax errors, and `JSON_QUERY`'s own 13609
-state 1).
+state 1). Every case, including those, also asserts its exact captured
+completion sequence (`DONE`, or `DONEINPROC` then `DONEPROC` for RPC and
+`sp_describe_first_result_set`; kind, `more` flag and row count, with the
+earlier statements of multi-statement batches), return status and total row
+count against the modeled outcome.
 
 These return `Error::Unsupported` instead of guessing: object keys other than
 integers, decimals, `DATE`, binary and character types; `SQL_VARIANT` holding

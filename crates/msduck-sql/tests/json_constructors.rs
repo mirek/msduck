@@ -26,8 +26,8 @@ enum Replay {
     /// Expected outcomes per result column: column index, declared result
     /// type, then one outcome per row with an optional terminal error.
     Values(Vec<(usize, ResultType, Vec<Outcome>)>),
-    /// Case-specific assertions already ran.
-    Checked,
+    /// Case-specific assertions already ran; the modeled final row count.
+    Checked(usize),
     NotApplicable(&'static str),
 }
 
@@ -181,7 +181,7 @@ fn describe(case: &Value, expected: &[(&str, ResultType)]) -> Replay {
             result.fixed_collation().unwrap_or(DATABASE_COLLATION)
         );
     }
-    Replay::Checked
+    Replay::Checked(expected.len())
 }
 fn scalar_row(case: &Value) -> Vec<Value> {
     rows(case)[0].as_array().unwrap().clone()
@@ -281,7 +281,7 @@ fn replay(case: &Value) -> Replay {
                     utf16_len(&out).to_string()
                 ]
             );
-            Replay::Checked
+            Replay::Checked(1)
         }
         "object long bounded value" => {
             let (x, y) = ("x".repeat(4000), "y".repeat(4000));
@@ -290,7 +290,7 @@ fn replay(case: &Value) -> Replay {
                 &[],
             ));
             assert_eq!(scalar_row(case), [(utf16_len(&out) * 2).to_string()]);
-            Replay::Checked
+            Replay::Checked(1)
         }
         "object isjson" | "array isjson" => {
             let out = if name == "object isjson" {
@@ -302,7 +302,7 @@ fn replay(case: &Value) -> Replay {
                 scalar_row(case),
                 [i32::from(json::valid(out.as_bytes(), 0))]
             );
-            Replay::Checked
+            Replay::Checked(1)
         }
         "object absent and null both" => {
             one(o(&[(S::Text("a"), S::Int(1))], &[NullOnNull, AbsentOnNull]))
@@ -374,7 +374,7 @@ fn replay(case: &Value) -> Replay {
                 assert_eq!(row[4], DATABASE_COLLATION);
             }
             assert_eq!(rows.len(), 3);
-            Replay::Checked
+            Replay::Checked(results.len())
         }
         "object column source" => column(SOURCE.iter().map(|&(id, txt, ansi, _)| {
             o(
@@ -435,7 +435,7 @@ fn replay(case: &Value) -> Replay {
             let long = "x".repeat(10000);
             let out = text(a(&[S::Text(&long)], &[]));
             assert_eq!(scalar_row(case), [(utf16_len(&out) * 2).to_string()]);
-            Replay::Checked
+            Replay::Checked(1)
         }
 
         "modify replace number" | "modify nvarchar max input" => mn("{\"a\":1}", "$.a", S::Int(2)),
@@ -586,7 +586,7 @@ fn replay(case: &Value) -> Replay {
                 assert_eq!(row[0], id);
                 assert_eq!(row[1].as_str(), updated.as_deref());
             }
-            Replay::Checked
+            Replay::Checked(SOURCE.len())
         }
 
         "bound object values" => one(o(
@@ -744,6 +744,56 @@ fn check(case: &Value, values: Vec<(usize, ResultType, Vec<Outcome>)>) {
     }
 }
 
+fn done(kind: &str, row_count: Option<usize>, more: bool) -> Value {
+    serde_json::json!({ "kind": kind, "rowCount": row_count, "more": more })
+}
+
+/// Assert the captured completion tokens exactly. `rows` is the modeled row
+/// (or affected-row) count of the final statement, `None` for DDL.
+fn check_completion(case: &Value, rows: Option<usize>, failed: bool) {
+    let name = case["name"].as_str().unwrap();
+    let result = &case["result"];
+    let procedure = case.get("parameters").is_some()
+        || case["sql"]
+            .as_str()
+            .unwrap()
+            .starts_with("EXEC sp_describe_first_result_set");
+    // Earlier statements of captured multi-statement batches, with their
+    // captured counts (DECLARE with an initializer reports one row).
+    let earlier: &[usize] = match name {
+        "object select into" => &[1],
+        "modify update statement" => &[2],
+        "modify variable path" => &[1],
+        _ => &[],
+    };
+    let mut expected: Vec<Value> = earlier
+        .iter()
+        .map(|&count| done("done", Some(count), true))
+        .collect();
+    let return_status = match (procedure, failed) {
+        (true, true) => {
+            expected.push(done("doneProc", None, false));
+            serde_json::json!({ "kind": "missing" })
+        }
+        (true, false) => {
+            expected.push(done("doneInProc", rows, true));
+            expected.push(done("doneProc", None, false));
+            serde_json::json!(0)
+        }
+        (false, _) => {
+            expected.push(done("done", if failed { None } else { rows }, false));
+            Value::Null
+        }
+    };
+    assert_eq!(result["done"], Value::Array(expected.clone()), "{name}");
+    assert_eq!(result["returnStatus"], return_status, "{name}");
+    let total: u64 = expected
+        .iter()
+        .filter_map(|token| token["rowCount"].as_u64())
+        .sum();
+    assert_eq!(result["rowCount"], total, "{name}");
+}
+
 #[test]
 fn replays_every_applicable_case_in_every_retained_run() {
     let fixture = fixture();
@@ -759,12 +809,24 @@ fn replays_every_applicable_case_in_every_retained_run() {
         for case in run.as_array().unwrap() {
             match replay(case) {
                 Replay::Values(values_for_case) => {
+                    let outcomes = &values_for_case[0].2;
+                    let failed = outcomes.last().is_some_and(Result::is_err);
+                    check_completion(case, Some(outcomes.len() - usize::from(failed)), failed);
                     check(case, values_for_case);
                     values += 1;
                 }
-                Replay::Checked => checked += 1,
+                Replay::Checked(rows) => {
+                    check_completion(case, Some(rows), false);
+                    checked += 1;
+                }
                 Replay::NotApplicable(reason) => {
-                    skipped.push((case["name"].as_str().unwrap(), reason));
+                    let name = case["name"].as_str().unwrap();
+                    match name {
+                        "create source" => check_completion(case, None, false),
+                        "insert source" => check_completion(case, Some(SOURCE.len()), false),
+                        _ => check_completion(case, Some(0), true),
+                    }
+                    skipped.push((name, reason));
                 }
             }
         }
