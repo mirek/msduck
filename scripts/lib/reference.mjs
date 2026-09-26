@@ -174,6 +174,13 @@ export function assertSameCapture(actual, expected, label) {
 //   successful execution after a failed one therefore "completes" with the
 //   earlier error object. The helper clears request.error before each phase
 //   and never reports an error object it already attributed to an earlier phase.
+// - tedious keeps the latest RETURNSTATUS token on
+//   connection.procReturnStatusValue and clears it only on a DONEPROC token, so
+//   a status left by an earlier request (for example an EXEC inside a batch,
+//   which ends with DONEINPROC/DONE) is reported by the next request's
+//   'doneProc' event as if that request had returned it. The helper clears the
+//   carried value before each phase and records returnStatus only when a
+//   status actually arrives during the phase; otherwise it stays null.
 // Only errorMessage/infoMessage tokens raised while a phase is outstanding are
 // recorded for it; a callback error is recorded only when the phase received
 // no server error (client-side validation, cancellation, socket failure).
@@ -220,7 +227,7 @@ export async function capturePrepared(connection, sql, declarations, valueSets, 
     if (result.done.length >= limits.messages) overflow('messages')
     else result.done.push({ kind, rowCount: rowCount ?? null, more })
   })
-  request.on('doneProc', (_count, _more, status) => { if (result) result.returnStatus = status })
+  request.on('doneProc', (_count, _more, status) => { if (result && status !== undefined) result.returnStatus = status })
   const phase = start => new Promise(resolve => {
     result = fresh()
     complete = (error, rowCount) => {
@@ -233,6 +240,7 @@ export async function capturePrepared(connection, sql, declarations, valueSets, 
       resolve(finished)
     }
     request.error = undefined
+    if ('procReturnStatusValue' in connection) connection.procReturnStatusValue = undefined
     start()
   })
   connection.on('errorMessage', onError)

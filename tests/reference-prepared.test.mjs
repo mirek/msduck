@@ -8,12 +8,15 @@ import { capturePrepared, useUtcTimeZone } from '../scripts/lib/reference.mjs'
 // Request objects, reproducing tedious' bookkeeping: prepare() sets
 // request.preparing (so completion is signalled through 'prepared'/'error'),
 // each server error overwrites request.error and nothing ever clears it, and
-// completion calls request.callback(request.error, rowCount).
+// completion calls request.callback(request.error, rowCount). A RETURNSTATUS
+// token is kept on connection.procReturnStatusValue and cleared only by the
+// DONEPROC that reports it.
 class FakeConnection extends EventEmitter {
   constructor(script) {
     super()
     this.script = script
     this.calls = []
+    this.procReturnStatusValue = undefined
   }
   prepare(request) {
     request.preparing = true
@@ -45,7 +48,9 @@ class FakeConnection extends EventEmitter {
         request.error = Object.assign(new Error(token.message), token)
       }
       request.emit('doneInProc', step.rowCount ?? 0, true)
-      request.emit('doneProc', undefined, false, step.errors?.length ? -6 : 0)
+      if (!step.noStatus) this.procReturnStatusValue = step.returnStatus ?? (step.errors?.length ? -6 : 0)
+      request.emit('doneProc', undefined, false, this.procReturnStatusValue)
+      this.procReturnStatusValue = undefined
       request.callback(request.error, step.rowCount ?? 0)
     })
   }
@@ -168,4 +173,33 @@ test('useUtcTimeZone pins client-side Date handling to UTC', () => {
     if (saved === undefined) delete process.env.TZ
     else process.env.TZ = saved
   }
+})
+
+test('a return status carried from an earlier request is not attributed to a step', async () => {
+  const connection = new FakeConnection({
+    prepare: { handle: 5, noStatus: true },
+    executions: [{ columns: ['value'], rows: [[1]], rowCount: 1, noStatus: true }, { columns: ['value'], rows: [[2]], rowCount: 1, returnStatus: 3 }],
+    unprepare: { noStatus: true },
+  })
+  // e.g. a batch EXEC whose RETURNSTATUS was followed by DONEINPROC, not DONEPROC
+  connection.procReturnStatusValue = 5
+  const captured = await capturePrepared(connection, 'SELECT @find AS value', declarations, [{ find: 'a', start: '1' }, { find: 'b', start: '1' }])
+  assert.equal(captured.prepare.returnStatus, null)
+  assert.deepEqual(captured.prepare.done.map(d => d.kind), ['doneInProc', 'doneProc'])
+  assert.deepEqual(captured.executions.map(e => e.result.returnStatus), [null, 3])
+  assert.equal(captured.unprepare.returnStatus, null)
+})
+
+test('a genuine sp_prepare return status arriving during the step is kept', async () => {
+  // SQL Server's sp_prepare response carries its own RETURNSTATUS (observed as
+  // the session's most recent error number); it replaces any carried value.
+  const connection = new FakeConnection({
+    prepare: { handle: 6, returnStatus: 8115 },
+    executions: [{ columns: ['value'], rows: [[1]], rowCount: 1 }],
+  })
+  connection.procReturnStatusValue = 5
+  const captured = await capturePrepared(connection, 'SELECT @find AS value', declarations, [{ find: 'a', start: '1' }])
+  assert.equal(captured.prepare.returnStatus, 8115)
+  assert.equal(captured.executions[0].result.returnStatus, 0)
+  assert.equal(captured.unprepare.returnStatus, 0)
 })

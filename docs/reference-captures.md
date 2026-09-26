@@ -46,6 +46,17 @@ hanging captures:
   `request.error` before each phase and never attributes an error object that an
   earlier phase already reported.
 
+- tedious keeps the latest RETURNSTATUS token on the connection
+  (`procReturnStatusValue`) and clears it only when a DONEPROC token reports it.
+  A status left by an earlier request, for example an `EXEC` inside a batch that
+  ends with DONEINPROC/DONE, is reported by the next request's `doneProc` event
+  as if that request had returned it. Captures for PARSE (#317) and FORMAT
+  (#319) recorded an sp_prepare status equal to the previous call's status for
+  this reason. The helper clears the carried value before each prepare, execute
+  and unprepare step and records `returnStatus` only when a status arrives
+  during that step; otherwise it stays `null`. Scripts that read `doneProc`
+  status outside the helper must apply the same rule.
+
 Only `errorMessage`/`infoMessage` tokens raised while a phase is outstanding are
 recorded for that phase, with number, state, class, line and message. A
 callback error is recorded as `{ message, number }` only when the phase received
