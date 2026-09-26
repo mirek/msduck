@@ -3087,6 +3087,23 @@
       "dependencies": [],
       "issue": 322,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POsmw"
+    },
+    {
+      "id": "attention-tls-sni-v1",
+      "title": "Use DNS SNI for TLS Attention boundary tests on Node 26",
+      "state": "ready",
+      "authorization": "Direct owner goal to keep independent client tests useful and PR cycle fast. First-party macOS npm test at PR310 head 83d9c2e under Node26.5.0: 489 passes, 12 TLS Attention boundary tests fail before SQL with IP-literal SNI error. Local tedious skill says use DNS serverName for IP TCP target; no external submission approved.",
+      "scope": [
+        "tests/attention_boundaries.test.mjs"
+      ],
+      "acceptance": [
+        "Set DNS serverName localhost only for TLS Attention fixture while retaining TCP to 127.0.0.1, generated localhost cert and existing trust setting. Do not disable TLS or suppress errors.",
+        "Run focused Node26 TLS and plaintext Attention boundary cases to completion, asserting raw response bytes and transaction state. Demonstrate pre-fix SNI failure and post-fix pass; do not change production server code.",
+        "Run syntax and relevant independent client checks at exact revision, open focused PR with claim/revision/evidence and disclose any broader suite gaps. Do not merge."
+      ],
+      "dependencies": [],
+      "issue": 324,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POvhA"
     }
   ]
 }
