@@ -3472,6 +3472,7 @@
         "src/replicate.rs",
         "src/varchar.rs",
         "src/nvarchar.rs",
+        "src/ncharacter.rs",
         "crates/msduck-core/src/diagnostic.rs",
         "tests/float_character.test.mjs",
         "docs/float-character.md",
@@ -3479,7 +3480,7 @@
         "docs/nvarchar.md"
       ],
       "acceptance": [
-        "After #353 and #356 are done in the protected registry, reuse the physical REAL/FLOAT style-0 formatter for explicit CAST, CONVERT, TRY_CAST and TRY_CONVERT to VARCHAR, CHAR, NVARCHAR and NCHAR. Typed literal, column and RPC paths must evaluate volatile operands once, preserve NULL/negative zero and declaration-based metadata.",
+        "After #353 and #356 are done in the protected registry, reuse the physical REAL/FLOAT style-0 formatter for explicit CAST, CONVERT, TRY_CAST and TRY_CONVERT with default or explicit style 0 to VARCHAR, CHAR, NVARCHAR and NCHAR. Typed literal, column and RPC paths must evaluate volatile operands once, preserve NULL/negative zero and declaration-based metadata.",
         "Match captured default, bounded and MAX widths and fixed padding. Map float-specific ANSI overflow to exact 232/state 2/value text and Unicode overflow to 8115/state 2; TRY forms return typed NULL. Preserve other numeric and text conversion behavior and raw differences.",
         "Add fixture-backed native and standalone client regressions; run exact-revision formatting, full workspace Rust tests, strict Clippy, standalone and standard independent clients, and diagnostic audit. Document remaining gaps, especially styles 1/2/3, before a focused owner PR. Leave merge to the owner or designated integrator."
       ],
