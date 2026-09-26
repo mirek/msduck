@@ -2567,7 +2567,7 @@
     {
       "id": "offset-zone-coercion-v1",
       "title": "Match captured SWITCHOFFSET and TODATETIMEOFFSET zone coercion",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal. First-party SQL Server offset-function fixture from owner-run PR #258 supplies observed behavior; no external submission is input.",
       "scope": [
         "src/switchoffset.rs",
