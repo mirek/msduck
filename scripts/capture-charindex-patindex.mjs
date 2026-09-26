@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Retain SQL Server CHARINDEX/PATINDEX rows, descriptors, diagnostics and completions.
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { Request, TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
@@ -399,6 +401,22 @@ function validate(run) {
   return { value, column, get }
 }
 
+// Node 24 inspects both operands while building a failed assert.equal or
+// assert.deepEqual AssertionError, even with a custom message. For multi-MB
+// captures that grew a process to ~123 GB. Compare whole captures with
+// isDeepStrictEqual and report only the first differing record name.
+function requireEqual(left, right, message) {
+  if (isDeepStrictEqual(left, right)) return
+  const a = left?.containers ? left.containers.flatMap(c => c.runs.flat()) : left
+  const b = right?.containers ? right.containers.flatMap(c => c.runs.flat()) : right
+  const index = Array.isArray(a) && Array.isArray(b)
+    ? Array.from({ length: Math.max(a.length, b.length) }, (_, i) => i).find(i => !isDeepStrictEqual(a[i], b[i])) ?? -1
+    : -1
+  throw new Error(message + (index >= 0 ? ` (first difference at record ${index}: ${JSON.stringify(a[index]?.name ?? b[index]?.name ?? null)})` : ''))
+}
+
+const fixtureExists = existsSync(fixture)
+if (writeFixture && fixtureExists) throw new Error('refusing to overwrite retained fixture ' + fixture.pathname)
 await mkdir(resolve(output, '..'), { recursive: true })
 const containers = []
 for (let containerIndex = 0; containerIndex < 2; containerIndex++) {
@@ -411,19 +429,13 @@ for (let containerIndex = 0; containerIndex < 2; containerIndex++) {
       validate(run)
       runs.push(run)
     }
-    assert.deepEqual(runs[0], runs[1], 'CHARINDEX/PATINDEX observations differ across fresh databases')
+    requireEqual(runs[0], runs[1], 'CHARINDEX/PATINDEX observations differ across fresh databases')
     containers.push({ image: container.image, runs })
   })
 }
-assert.deepEqual(containers[0].runs[0], containers[1].runs[0], 'CHARINDEX/PATINDEX observations differ across containers')
+requireEqual(containers[0].runs[0], containers[1].runs[0], 'CHARINDEX/PATINDEX observations differ across containers')
 const actual = { containers }
 await writeFile(output, JSON.stringify(actual) + '\n')
-let retained
-try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
-catch (error) { if (error.code !== 'ENOENT') throw error }
-if (retained) assert.deepEqual(actual, retained, 'CHARINDEX/PATINDEX observations differ from retained fixture')
-if (writeFixture) {
-  assert.equal(retained, undefined, 'refusing to overwrite retained fixture')
-  await writeFile(fixture, JSON.stringify(actual) + '\n')
-}
-console.log('Captured ' + containers[0].runs[0].length + ' CHARINDEX/PATINDEX programs in four fresh databases across two containers' + (retained ? ' and matched retained fixture' : ''))
+if (fixtureExists) requireEqual(actual, JSON.parse(await readFile(fixture, 'utf8')), 'CHARINDEX/PATINDEX observations differ from retained fixture')
+if (writeFixture) await writeFile(fixture, JSON.stringify(actual) + '\n', { flag: 'wx' })
+console.log('Captured ' + containers[0].runs[0].length + ' CHARINDEX/PATINDEX programs in four fresh databases across two containers' + (fixtureExists ? ' and matched retained fixture' : ''))
