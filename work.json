@@ -2383,7 +2383,7 @@
     {
       "id": "charindex-patindex-reference-v1",
       "title": "Capture SQL Server CHARINDEX and PATINDEX reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing implementation goal and 2026-09-26 owner request to utilize this host with parallel independent agents. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
       "scope": [
         "scripts/capture-charindex-patindex.mjs",
