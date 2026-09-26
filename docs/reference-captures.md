@@ -150,3 +150,20 @@ Keep captures, logs and helper scripts in the worktree's ignored
 `<scratchpad>/<task-id>/`. Do not write to shared paths like `/tmp/capture.json`
 or another worker's `artifacts/` directory, and pass an explicit output path
 when the script's default could collide with another worker.
+
+## Output paths never alias the fixture
+
+A capture script's scratch output path is caller-selected. Call
+`refuseFixtureOutput(output, fixture)` before any container starts. It
+resolves symlinks, including a directory symlink when the fixture does not yet
+exist. Without it, an output that resolves to the retained fixture overwrites
+the ground truth, and the fixture comparison then checks the capture against
+itself (found by Codex review on PRs #305, #320 and #339).
+
+## Multiple return statuses in one batch
+
+The shared `capture` helper in `scripts/lib/compatibility.mjs` records one
+top-level `returnStatus` per batch, not one per DONEPROC. Until it records one
+status per procedure completion, put each procedure call whose status matters
+in its own observation (Codex review on PR #320).
+

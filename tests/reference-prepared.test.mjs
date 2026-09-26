@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import test from 'node:test'
 import { TYPES } from 'tedious'
-import { capturePrepared, useUtcTimeZone } from '../scripts/lib/reference.mjs'
+import { capturePrepared, useUtcTimeZone, refuseFixtureOutput } from '../scripts/lib/reference.mjs'
 
 // A fake connection that replays scripted server responses to real tedious
 // Request objects, reproducing tedious' bookkeeping: prepare() sets
@@ -220,4 +220,25 @@ test('a failed prepare that still leaves a handle sends no execute or unprepare'
     assert.deepEqual(connection.calls.map(c => c.kind), ['prepare'])
     assert.equal(connection.listenerCount('errorMessage'), 0)
   }
+})
+
+test('capture output may not alias the retained fixture, including via symlinks', async () => {
+  const { mkdtemp, mkdir, writeFile, symlink, rm } = await import('node:fs/promises')
+  const { join, relative } = await import('node:path')
+  const { tmpdir } = await import('node:os')
+  const { pathToFileURL } = await import('node:url')
+  const root = await mkdtemp(join(tmpdir(), 'msduck-fixture-guard-'))
+  try {
+    await mkdir(join(root, 'reference'))
+    const fixture = join(root, 'reference', 'x.json')
+    await writeFile(fixture, '{}\n')
+    await symlink(fixture, join(root, 'link.json'))
+    await symlink(join(root, 'reference'), join(root, 'refdir'))
+    const refused = /refusing to write capture output over retained fixture/
+    for (const output of [fixture, join(root, 'reference', '.', 'x.json'), join(root, 'link.json'), join(root, 'refdir', 'x.json'), relative(process.cwd(), fixture)])
+      await assert.rejects(refuseFixtureOutput(output, fixture), refused, output)
+    await assert.rejects(refuseFixtureOutput(join(root, 'refdir', 'y.json'), pathToFileURL(join(root, 'reference', 'y.json'))), refused)
+    await refuseFixtureOutput(join(root, 'artifacts', 'capture.json'), fixture)
+    await refuseFixtureOutput(join(root, 'reference', 'other.json'), fixture)
+  } finally { await rm(root, { recursive: true, force: true }) }
 })

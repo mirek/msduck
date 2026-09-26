@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { access, writeFile } from 'node:fs/promises'
+import { access, realpath, writeFile } from 'node:fs/promises'
+import { dirname, basename, resolve as resolvePath } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { Connection, Request } from 'tedious'
@@ -87,6 +88,23 @@ export async function refuseExistingFixture(path) {
     throw error
   }
   throw new Error('refusing to overwrite retained fixture ' + displayPath(path))
+}
+
+// Resolves symlinks in the existing part of a path, so an alias of the
+// fixture (or of its directory) compares equal even before the file exists.
+async function canonicalPath(path) {
+  const absolute = resolvePath(path instanceof URL ? fileURLToPath(path) : path)
+  try { return await realpath(absolute) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return resolvePath(await canonicalPath(dirname(absolute)), basename(absolute))
+  }
+}
+
+// Scratch capture output must never alias the retained fixture: an
+// unconditional write would replace the ground truth and then compare the
+// capture with itself. Call before any container starts.
+export async function refuseFixtureOutput(output, fixture) {
+  if (await canonicalPath(output) === await canonicalPath(fixture)) throw new Error('refusing to write capture output over retained fixture ' + displayPath(fixture))
 }
 
 // Writes a new fixture in the retained compact JSON format; never overwrites.
