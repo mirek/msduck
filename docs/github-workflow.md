@@ -8,8 +8,8 @@ before merging. Automatic review does not mean automatic merge.
 The required PR check, **Deterministic crates**, checks formatting,
 coordination scripts, strict Clippy and tests for the three deterministic crates
 without DuckDB. It is intentionally short. The **Workspace and clients** job
-runs on pushes to main, owner manual dispatch, `verify-*` tags and the weekly
-schedule, rather than on every PR. It checks strict workspace Clippy, Rust
+runs on owner manual dispatch, `verify-*` tags and the weekly schedule. It does
+not start after each merge to main. It checks strict workspace Clippy, Rust
 integration tests, independent Node clients and a raw compatibility audit.
 Stale runs on the same ref are canceled on a newer push. Both jobs use a pinned
 Rust toolchain; full verification uses Node 24. Dependency/build caches reduce
@@ -23,8 +23,10 @@ integrator reviews that evidence and may start the full CI job on the PR branch
 with `gh workflow run ci.yml --ref work/TASK-ID`; the run records its actual
 checkout SHA in `artifacts/ci/revision.txt`. A manual run on an earlier SHA does
 not verify a later push. A `verify-*` tag pins a revision for a repeatable full
-run. The weekly and main-branch runs catch broader regressions; a green fast
-check alone does not establish SQL Server compatibility.
+run. The weekly run checks the then-current main revision; workers should
+request a manual run or create a `verify-*` tag when a specific merge needs
+full hosted verification. A green fast check alone does not establish SQL Server
+compatibility.
 
 GitHub-hosted Linux runners are the initial CI environment. The optional SSH
 builder remains available for development; its local configuration and credentials
@@ -80,4 +82,4 @@ owner-run two-CPU benchmark passed all 408 tests in about 14.4 minutes after
 splitting the oversized BIT matrix without removing assertions. This measurement
 is not a guarantee of GitHub runner performance or a diagnosis of earlier CI
 failures. It is why client verification remains available on demand and runs
-after each main push and weekly, while the short PR gate stays responsive.
+weekly, while the short PR gate stays responsive.
