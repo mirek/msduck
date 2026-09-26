@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { access, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
-import { Connection } from 'tedious'
-import { capture } from './compatibility.mjs'
+import { Connection, Request } from 'tedious'
+import { canonical, capture } from './compatibility.mjs'
 
 export function referenceConfig(env = process.env) {
   for (const name of ['MSSQL_REFERENCE_HOST','MSSQL_REFERENCE_USER','MSSQL_REFERENCE_PASSWORD']) {
@@ -152,4 +152,99 @@ export function describeFirstDifference(actual, expected) {
 export function assertSameCapture(actual, expected, label) {
   if (isDeepStrictEqual(actual, expected)) return
   throw new Error(`${String(label).slice(0, 300)} (${describeFirstDifference(actual, expected)})`)
+}
+
+// sp_prepare/sp_execute/sp_unprepare capture on one reusable tedious Request.
+//
+// tedious quirks this helper absorbs:
+// - sp_prepare completion arrives through the Request's 'prepared' or 'error'
+//   event, never through its callback; waiting on the callback hangs.
+// - tedious assigns request.error for each server error but never clears it,
+//   and passes request.error to every later callback of the same Request. A
+//   successful execution after a failed one therefore "completes" with the
+//   earlier error object. The helper clears request.error before each phase
+//   and never reports an error object it already attributed to an earlier phase.
+// Only errorMessage/infoMessage tokens raised while a phase is outstanding are
+// recorded for it; a callback error is recorded only when the phase received
+// no server error (client-side validation, cancellation, socket failure).
+// Rows and messages are bounded per phase; overflow is counted in `truncated`
+// instead of retained.
+export const PREPARED_LIMITS = Object.freeze({ rows: 10000, messages: 200 })
+
+const messageFields = m => ({ number: m.number, state: m.state, class: m.class, lineNumber: m.lineNumber, message: m.message })
+const columnFields = c => ({ name: c.colName, type: c.type.name, length: c.dataLength ?? null, precision: c.precision ?? null, scale: c.scale ?? null, flags: c.flags, collation: canonical(c.collation ?? null) })
+
+// declarations: [name, TYPES.X, options?][]; valueSets: {name: value}[].
+// Returns { prepare, prepared, executions: [{ values, result }], unprepare }.
+// Each phase result is { sets, done, errors, info, returnStatus, rowCount }
+// plus `truncated: { rows, messages }` only when a bound was exceeded. When
+// sp_prepare returns no handle, prepared is false, executions is empty and
+// unprepare is null.
+// Values are returned uncanonicalized; callers apply canonical() as needed.
+export async function capturePrepared(connection, sql, declarations, valueSets, options = {}) {
+  const limits = { ...PREPARED_LIMITS, ...(options.limits ?? {}) }
+  const RequestType = options.Request ?? Request
+  let result
+  let complete = () => {}
+  const reported = new Set()
+  const fresh = () => ({ sets: [], done: [], errors: [], info: [], returnStatus: null })
+  const overflow = kind => { result.truncated ??= { rows: 0, messages: 0 }; result.truncated[kind]++ }
+  const message = list => token => {
+    if (!result) return
+    if (result.errors.length + result.info.length >= limits.messages) overflow('messages')
+    else result[list].push(messageFields(token))
+  }
+  const onError = message('errors')
+  const onInfo = message('info')
+  const request = new RequestType(sql, (error, rowCount) => complete(error, rowCount))
+  for (const [name, type, parameterOptions] of declarations) request.addParameter(name, type, undefined, parameterOptions)
+  request.on('columnMetadata', columns => result?.sets.push({ columns: columns.map(columnFields), rows: [] }))
+  request.on('row', columns => {
+    if (!result) return
+    const set = result.sets.at(-1)
+    if (!set || set.rows.length >= limits.rows) overflow('rows')
+    else set.rows.push(columns.map(c => c.value))
+  })
+  for (const kind of ['done', 'doneInProc', 'doneProc']) request.on(kind, (rowCount, more) => {
+    if (!result) return
+    if (result.done.length >= limits.messages) overflow('messages')
+    else result.done.push({ kind, rowCount: rowCount ?? null, more })
+  })
+  request.on('doneProc', (_count, _more, status) => { if (result) result.returnStatus = status })
+  const phase = start => new Promise(resolve => {
+    result = fresh()
+    complete = (error, rowCount) => {
+      complete = () => {}
+      const finished = result
+      result = undefined
+      finished.rowCount = rowCount
+      if (error && !reported.has(error) && !finished.errors.length) finished.errors.push({ message: error.message, number: error.number ?? null })
+      if (error) reported.add(error)
+      resolve(finished)
+    }
+    request.error = undefined
+    start()
+  })
+  connection.on('errorMessage', onError)
+  connection.on('infoMessage', onInfo)
+  const onPrepared = () => complete(undefined, undefined)
+  const onPrepareError = error => complete(error, undefined)
+  try {
+    const prepare = await phase(() => {
+      request.once('prepared', onPrepared)
+      request.once('error', onPrepareError)
+      connection.prepare(request)
+    })
+    request.off('prepared', onPrepared)
+    request.off('error', onPrepareError)
+    // A returned handle is executed and released even if preparation raised.
+    if (request.handle === undefined) return { prepare, prepared: false, executions: [], unprepare: null }
+    const executions = []
+    for (const values of valueSets) executions.push({ values, result: await phase(() => connection.execute(request, values)) })
+    const unprepare = await phase(() => connection.unprepare(request))
+    return { prepare, prepared: true, executions, unprepare }
+  } finally {
+    connection.off('errorMessage', onError)
+    connection.off('infoMessage', onInfo)
+  }
 }

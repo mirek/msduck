@@ -5,10 +5,10 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
-import { Request, TYPES } from 'tedious'
+import { TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
-import { isolatedReference } from './lib/reference.mjs'
+import { capturePrepared, isolatedReference } from './lib/reference.mjs'
 
 const fixture = new URL('../reference/charindex-patindex.json', import.meta.url)
 const args = process.argv.slice(2)
@@ -275,64 +275,17 @@ function rpc(connection, sql, parameters) {
   return capture(transport, sql)
 }
 
-const errorFields = e => ({ number: e.number, state: e.state, class: e.class, lineNumber: e.lineNumber, message: e.message })
-
+// The shared helper attributes only errors raised during each execution. The
+// retained shape omits rowCount for preparation and unpreparation.
 async function prepared(connection, sql, declarations, executions) {
-  let result
-  let complete = () => {}
-  const request = new Request(sql, (...args) => complete(...args))
-  for (const [name, type, options] of declarations) request.addParameter(name, type, undefined, options)
-  const onError = e => result?.errors.push(errorFields(e))
-  const onInfo = e => result?.info.push(errorFields(e))
-  connection.on('errorMessage', onError)
-  connection.on('infoMessage', onInfo)
-  request.on('columnMetadata', columns => result?.sets.push({ columns: columns.map(x => ({ name: x.colName, type: x.type.name, length: x.dataLength ?? null, precision: x.precision ?? null, scale: x.scale ?? null, flags: x.flags, collation: canonical(x.collation ?? null) })), rows: [] }))
-  request.on('row', row => result.sets.at(-1).rows.push(row.map(x => x.value)))
-  for (const kind of ['done', 'doneInProc', 'doneProc']) request.on(kind, (rowCount, more) => result?.done.push({ kind, rowCount: rowCount ?? null, more }))
-  request.on('doneProc', (_count, _more, status) => { if (result) result.returnStatus = status })
-  const outcomes = []
-  try {
-    result = { sets: [], done: [], errors: [], info: [], returnStatus: null }
-    const prepareError = await new Promise(resolve => {
-      complete = () => {}
-      request.once('prepared', () => resolve(null))
-      request.once('error', error => resolve(error))
-      connection.prepare(request)
-    })
-    const preparation = result
-    if (prepareError) {
-      if (!preparation.errors.length) preparation.errors.push({ message: prepareError.message, number: prepareError.number ?? null })
-      result = undefined
-      return { preparation: canonical(preparation), prepared: false, executions: [] }
-    }
-    for (const values of executions) {
-      result = { sets: [], done: [], errors: [], info: [], returnStatus: null }
-      await new Promise(resolve => {
-        complete = (error, rowCount) => {
-          result.rowCount = rowCount
-          if (error && !result.errors.length) result.errors.push({ message: error.message, number: error.number ?? null })
-          resolve()
-        }
-        request.error = undefined
-        connection.execute(request, values)
-      })
-      outcomes.push({ values, result: canonical(result) })
-    }
-    result = { sets: [], done: [], errors: [], info: [], returnStatus: null }
-    await new Promise(resolve => {
-      complete = error => {
-        if (error && !result.errors.length) result.errors.push({ message: error.message, number: error.number ?? null })
-        resolve()
-      }
-      request.error = undefined
-      connection.unprepare(request)
-    })
-    const unpreparation = result
-    result = undefined
-    return { preparation: canonical(preparation), prepared: true, executions: outcomes, unpreparation: canonical(unpreparation) }
-  } finally {
-    connection.off('errorMessage', onError)
-    connection.off('infoMessage', onInfo)
+  const handle = await capturePrepared(connection, sql, declarations, executions)
+  const { rowCount: _prepareCount, ...preparation } = handle.prepare
+  if (!handle.prepared) return { preparation: canonical(preparation), prepared: false, executions: [] }
+  const { rowCount: _unprepareCount, ...unpreparation } = handle.unprepare
+  return {
+    preparation: canonical(preparation), prepared: true,
+    executions: handle.executions.map(({ values, result }) => ({ values, result: canonical(result) })),
+    unpreparation: canonical(unpreparation),
   }
 }
 
