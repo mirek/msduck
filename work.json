@@ -3049,6 +3049,25 @@
       "dependencies": [],
       "issue": 316,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POocc"
+    },
+    {
+      "id": "identity-alter-preflight-v1",
+      "title": "Preflight dependent IDENTITY columns before ALTER DDL",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal. First-party macOS explicit-transaction reproduction during owner-authored identity-sequence-dependency-v1 review; no external submission approved.",
+      "scope": [
+        "src/table_alter.rs"
+      ],
+      "acceptance": [
+        "Start after identity-sequence-dependency-v1 merges. Use its crate-visible identity::dependent_columns helper without editing src/identity.rs. Reproduce explicit-transaction failure: nested nextval private-sequence default on another table, DROP COLUMN id reports error but id disappears inside the open transaction on current code.",
+        "Before executing any ALTER command, preflight removal of identity columns against live defaults. Reject when another live default references the sequence, preserving the target column, rows and caller transaction. Do not reject unrelated ALTER operations or a same-statement removal that legitimately eliminates all dependencies.",
+        "Test explicit caller transaction, autocommit failure, multi-action atomicity and successful retry after removing dependency. Preserve existing table_alter tests and run formatting, workspace Rust tests, strict Clippy, independent client tests and diagnostic audit at exact revision; report remaining SQL Server diagnostic gaps."
+      ],
+      "dependencies": [
+        "identity-sequence-dependency-v1"
+      ],
+      "issue": 321,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POrC-"
     }
   ]
 }
