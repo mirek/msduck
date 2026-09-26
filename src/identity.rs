@@ -2,6 +2,7 @@
 use anyhow::{Result, bail, ensure};
 use duckdb::Connection;
 use sqlparser::{ast::*, dialect::GenericDialect, parser::Parser};
+use std::ops::ControlFlow;
 
 pub const EXPLICIT: &str =
     "Cannot insert explicit value for identity column when IDENTITY_INSERT is set to OFF.";
@@ -35,6 +36,48 @@ pub(crate) fn sequence_name(value: Option<&str>) -> Option<String> {
 
 pub fn is_default(value: Option<&str>) -> bool {
     sequence_name(value).is_some()
+}
+
+fn references_sequence(default: &str, name: &str) -> bool {
+    let parsed = Parser::new(&GenericDialect {})
+        .try_with_sql(default)
+        .and_then(|mut parser| parser.parse_expr());
+    let Ok(expr) = parsed else {
+        // Unknown native default syntax must not strand a live private sequence.
+        return default
+            .to_ascii_lowercase()
+            .contains(&name.to_ascii_lowercase());
+    };
+    visit_expressions(&expr, |expr| {
+        let Expr::Function(function) = expr else {
+            return ControlFlow::Continue(());
+        };
+        if !function.name.to_string().eq_ignore_ascii_case("nextval") {
+            return ControlFlow::Continue(());
+        }
+        let FunctionArguments::List(arguments) = &function.args else {
+            return ControlFlow::Continue(());
+        };
+        for argument in &arguments.args {
+            let FunctionArg::Unnamed(FunctionArgExpr::Expr(value)) = argument else {
+                continue;
+            };
+            if visit_expressions(value, |part| match part {
+                Expr::Value(value)
+                    if matches!(&value.value, Value::SingleQuotedString(text) if text.eq_ignore_ascii_case(name)) =>
+                {
+                    ControlFlow::Break(())
+                }
+                _ => ControlFlow::Continue(()),
+            })
+            .is_break()
+            {
+                return ControlFlow::Break(());
+            }
+        }
+        ControlFlow::Continue(())
+    })
+    .is_break()
 }
 
 pub(crate) fn columns(db: &Connection, name: &ObjectName) -> Result<Vec<(String, String)>> {
@@ -89,7 +132,7 @@ pub(crate) fn drop_sequence(db: &Connection, name: &str) -> Result<()> {
     })? {
         let (schema, table, column, default) = row?;
         ensure!(
-            sequence_name(Some(&default)).as_deref() != Some(name),
+            !references_sequence(&default, name),
             "Cannot drop identity sequence {name}: still referenced by {schema}.{table}.{column}"
         );
     }
@@ -360,6 +403,67 @@ pub fn create(db: &Connection, statement: &Statement, autocommit: bool) -> Resul
 mod tests {
     use super::*;
     #[test]
+    fn nested_defaults_find_private_sequence_calls() {
+        let name = format!("{PREFIX}{}", "0".repeat(32));
+        assert!(references_sequence(
+            &format!("nextval('{name}') + 1"),
+            &name
+        ));
+        assert!(references_sequence(
+            &format!("coalesce(nextval(CAST('{name}' AS VARCHAR)), 0)"),
+            &name
+        ));
+        assert!(!references_sequence(&format!("'{name}'"), &name));
+        assert!(!references_sequence("nextval('main.other')", &name));
+    }
+    #[test]
+    fn nested_default_blocks_identity_column_drop_until_dependency_is_removed() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE SCHEMA dbo").unwrap();
+        let parse = |sql| {
+            Parser::parse_sql(&sqlparser::dialect::MsSqlDialect {}, sql)
+                .unwrap()
+                .remove(0)
+        };
+        create(
+            &db,
+            &parse("CREATE TABLE dbo.ids(id INT IDENTITY,v INT)"),
+            true,
+        )
+        .unwrap();
+        let name = table_sequences(
+            &db,
+            &ObjectName::from(vec![Ident::new("dbo"), Ident::new("ids")]),
+        )
+        .unwrap()
+        .remove(0);
+        db.execute_batch(&format!(
+            "CREATE TABLE dbo.dependency(id INT DEFAULT nextval('{name}') + 1)"
+        ))
+        .unwrap();
+        let Statement::AlterTable(alter) = parse("ALTER TABLE dbo.ids DROP COLUMN id") else {
+            panic!()
+        };
+        assert!(
+            crate::table_alter::execute(&db, &alter, true)
+                .unwrap_err()
+                .to_string()
+                .contains("still referenced by dbo.dependency.id")
+        );
+        db.execute_batch(
+            "INSERT INTO dbo.ids(v) VALUES(1); INSERT INTO dbo.dependency DEFAULT VALUES",
+        )
+        .unwrap();
+        db.execute_batch("DROP TABLE dbo.dependency").unwrap();
+        crate::table_alter::execute(&db, &alter, true).unwrap();
+        let sequence_count: i64 = db
+            .query_row("SELECT count(*) FROM duckdb_sequences()", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(sequence_count, 0);
+    }
+    #[test]
     fn table_drop_cleans_sequences_and_rollback_restores_both() {
         let db = Connection::open_in_memory().unwrap();
         db.execute_batch("CREATE SCHEMA dbo").unwrap();
@@ -391,10 +495,15 @@ mod tests {
         .unwrap()
         .remove(0);
         db.execute_batch(&format!(
-            "CREATE TABLE dbo.dependency(id INT DEFAULT nextval('{name}'))"
+            "CREATE TABLE dbo.dependency(id INT DEFAULT nextval('{name}') + 1)"
         ))
         .unwrap();
-        assert!(drop_table(&db, &drop, true).is_err());
+        assert!(
+            drop_table(&db, &drop, true)
+                .unwrap_err()
+                .to_string()
+                .contains("still referenced by dbo.dependency.id")
+        );
         let count: i64 = db
             .query_row("SELECT count(*) FROM dbo.ids", [], |r| r.get(0))
             .unwrap();
