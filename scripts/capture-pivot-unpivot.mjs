@@ -19,7 +19,9 @@ process.env.TZ = 'UTC'
 if (new Date(0).getTimezoneOffset() !== 0) throw new Error('could not switch the process time zone to UTC')
 
 const { mkdir, writeFile, readFile } = await import('node:fs/promises')
-const { resolve } = await import('node:path')
+const { basename, dirname, resolve } = await import('node:path')
+const { realpath } = await import('node:fs/promises')
+const { fileURLToPath } = await import('node:url')
 const { Request, TYPES } = await import('tedious')
 const { canonical } = await import('./lib/compatibility.mjs')
 const { withReferenceContainer } = await import('./lib/reference-container.mjs')
@@ -318,8 +320,23 @@ function request(connection, sql, parameters) {
   })
 }
 
+// Replica of PR #312 refuseFixtureOutput (12013d4): resolve symlinks in the
+// existing part of a path so an alias of the fixture, or of its directory,
+// compares equal even before the file exists.
+async function canonicalPath(path) {
+  const absolute = resolve(path instanceof URL ? fileURLToPath(path) : path)
+  try { return await realpath(absolute) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return resolve(await canonicalPath(dirname(absolute)), basename(absolute))
+  }
+}
+async function refuseFixtureOutput(target, retained) {
+  if (await canonicalPath(target) === await canonicalPath(retained)) throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(retained))
+}
+
 // Replica of PR #312 capturePrepared (scripts/lib/reference.mjs on
-// origin/work/prepared-capture-helper-v1 at 29c8c58).
+// origin/work/prepared-capture-helper-v1 at 8f2ad7b), including its rule
+// that a failed sp_prepare skips execution and unpreparation.
 async function capturePrepared(connection, sql, declarations, valueSets) {
   let result
   let complete = () => {}
@@ -375,7 +392,10 @@ async function capturePrepared(connection, sql, declarations, valueSets) {
     })
     req.off('prepared', onPrepared)
     req.off('error', onPrepareError)
-    if (req.handle === undefined) return { prepare, prepared: false, executions: [], unprepare: null }
+    if (prepare.errors.length || !(Number.isInteger(req.handle) && req.handle > 0)) {
+      const skipped = 'prepare failed'
+      return { prepare, prepared: false, skipped, executions: valueSets.map(values => ({ values, skipped })), unprepare: null }
+    }
     const executions = []
     for (const values of valueSets) executions.push({ values, result: await phase(() => connection.execute(req, values)) })
     const unprepare = await phase(() => connection.unprepare(req))
@@ -413,7 +433,7 @@ function check(condition, message) { if (!condition) throw new Error(message) }
 function validate(run) {
   check(run.length === setup.length + cases.length + boundCases.length + preparedCases.length + 1, 'unexpected record count')
   for (const record of run) {
-    const phases = record.prepared ? [record.prepared.prepare, ...record.prepared.executions.map(e => e.result), record.prepared.unprepare].filter(Boolean) : [record.result]
+    const phases = record.prepared ? [record.prepared.prepare, ...record.prepared.executions.map(e => e.result).filter(Boolean), record.prepared.unprepare].filter(Boolean) : [record.result]
     for (const phase of phases) {
       check(!phase.truncated, `${record.name}: bounded capture truncated`)
       check(phase.done.length > 0 || phase.errors.length > 0 || record.prepared, `${record.name}: no completion`)
@@ -442,12 +462,17 @@ function validate(run) {
     ['identifier equals grouping column', '265,8156'], ['unpivot int smallint conflict', '8167'],
     ['unpivot varchar length conflict', '8167'], ['unpivot duplicate column', '277'], ['pivot recursive member', '4190'],
   ]) check(errors(name) === expected, `${name}: expected errors ${expected}, got ${errors(name).slice(0, 80)}`)
+  const invalid = get('prepared pivot invalid')
+  check(invalid.prepared === false && invalid.unprepare === null && invalid.executions.every(e => e.skipped === 'prepare failed'), 'failed prepare must skip execution')
+  check(invalid.prepare.errors.map(e => e.number).join(',') === '8156,8180', 'prepared invalid errors')
   const divide = get('prepared pivot divide')
   check(divide.executions[1].result.errors.map(e => e.number).join(',') === '8134', 'prepared divide error attribution')
   check(divide.executions[2].result.errors.length === 0 && divide.executions[2].result.returnStatus === 0, 'prepared divide recovery')
 }
 
-// Refuse before any container starts; the fixture is checked by existence only.
+// Refuse before any container starts: the output must never alias the
+// fixture, and --write-fixture checks the fixture by existence only.
+await refuseFixtureOutput(output, fixture)
 if (writeFixture) await refuseExistingFixture(fixture)
 
 await mkdir(resolve(output, '..'), { recursive: true })

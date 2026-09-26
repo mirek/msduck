@@ -2,8 +2,8 @@
 
 The retained fixture in reference/pivot-unpivot.json contains 174 SQL Server
 records per capture: 6 setup batches, 156 single-batch programs, 7
-`sp_executesql` RPC calls, 4 prepared sequences (one `sp_prepare`, 11
-`sp_execute` calls in total, and `sp_unprepare`), and a final
+`sp_executesql` RPC calls, 4 prepared sequences (10 `sp_execute` calls in
+total, plus 1 execution skipped after a failed `sp_prepare`), and a final
 session-reusability probe. Each record was captured in two fresh databases in
 each of two independent containers. Both containers used the pinned SQL Server
 2025 image digest
@@ -15,23 +15,27 @@ text), DONE/DONEINPROC/DONEPROC tokens with row counts, and return statuses.
 scripts/capture-pivot-unpivot.mjs regenerates an artifact (default
 `artifacts/pivot-unpivot-reference-v1/capture.json`) and compares it with the
 retained fixture through the bounded `assertSameCapture` helper.
-`--write-fixture` refuses to run if the fixture exists; it checks existence
-only, before starting any container. `--one-database` is a diagnostic mode
+Before any container starts, the script rejects an output path that resolves
+to the retained fixture. Resolution uses realpath, so it catches symlinked
+directories and a file that does not exist yet. `--write-fixture` refuses to
+run if the fixture exists; it checks existence only. `--one-database` is a diagnostic mode
 that never writes or compares the fixture.
 
 ## Capture conventions
 
 The script follows docs/reference-captures.md from PR #312
 (`origin/work/prepared-capture-helper-v1`). Because those helpers are not on
-main, the script contains its own copies of the batch/RPC request helper and
-`capturePrepared` (from 29c8c58). It does not change `scripts/lib`.
+main, the script contains its own copies of the batch/RPC request helper,
+`capturePrepared` (from 8f2ad7b) and `refuseFixtureOutput` (from 12013d4). It does not change `scripts/lib`.
 
 - The return status that tedious carries on the connection is cleared before
   each request and each prepared step. A status is recorded only when it
   arrives during that request or step.
 - `sp_prepare` completes through the `prepared` or `error` event. Each
   execution records only the server errors raised during that execution.
-  tedious' sticky `request.error` is cleared before each phase.
+  tedious' sticky `request.error` is cleared before each phase. When
+  `sp_prepare` raises an error or returns no positive handle, the executions
+  are recorded as `skipped: 'prepare failed'` and no `sp_unprepare` is sent.
 - Rows (2000 per result set) and messages/DONE tokens (200 per request) are
   bounded. None of the retained records reached a bound.
 - `process.env.TZ = 'UTC'`. There are no clock reads and no server `WHILE`
@@ -203,12 +207,10 @@ PIVOT through `STRING_AGG(QUOTENAME(...)) WITHIN GROUP (ORDER BY ...)` and
   (`@d = 0`) sends the descriptor, then error 8134, then return status -6.
   Execution 3 succeeds with status 0 and no carried error.
 - 'prepared pivot invalid' (duplicate IN names) fails in `sp_prepare` with
-  8156 and 8180, return status 8180. tedious still records a handle. Its
-  following `sp_execute` gets server error 8009 ("Data type 0x00 is
-  unknown", a DONE token), and `sp_unprepare` gets 8179 for handle 0. These
-  two outcomes come from the client sending a request without a valid
-  handle. They show tedious behavior after a failed prepare, not a SQL
-  Server PIVOT rule.
+  8156 then 8180 and return status 8180, and no result descriptor. Following
+  the PR #312 skip rule, its execution is recorded as skipped and no
+  `sp_unprepare` is sent. An earlier branch-only capture sent them anyway and
+  recorded client-caused 8009 and 8179 errors. That capture is not retained.
 
 Completion tokens: successful SELECTs end with DONE and the row count. A
 compile-time error ends with DONE and no row count. SELECT INTO, INSERT and
@@ -233,7 +235,8 @@ come from the DMF, so they have ordinary DONE row counts.
 - Execution plans, statistics and PIVOT rewrites to GROUP BY/CASE.
 - Whether ANSI_WARNINGS changes arithmetic overflow inside PIVOT
   aggregates. Only the NULL-elimination message was checked.
-- Behavior of other clients after a failed `sp_prepare`.
+- What SQL Server does with `sp_execute`/`sp_unprepare` after a failed
+  `sp_prepare`. Those calls are skipped.
 
 ## Proposed successors
 
