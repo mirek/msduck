@@ -39,7 +39,7 @@ function tlsOptions(t) {
  t.after(()=>rmSync(directory,{recursive:true,force:true}))
  const certificate=join(directory,'cert.pem'), key=join(directory,'key.pem')
  execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=localhost','-keyout',key,'-out',certificate],{stdio:'ignore'})
- return {serverArgs:['--tls-cert',certificate,'--tls-key',key],options:{encrypt:true,trustServerCertificate:true}}
+ return {serverArgs:['--tls-cert',certificate,'--tls-key',key],options:{encrypt:true,trustServerCertificate:true,serverName:'localhost'}}
 }
 
 // Registered from the existing tedious suite so normal CI discovery/sharding
