@@ -33,7 +33,8 @@ text substitutions. Preserve exact behavioral differences in compatibility
 audit results instead of normalizing them away.
 
 DuckDB native debug archives are large. Development/test profiles disable
-debug symbols. Use `cargo build --workspace --all-targets` for client tests to reuse the
+debug symbols and build only the bundled DuckDB engine at opt-level 1,
+because unoptimized DuckDB made native and client tests several times slower. Use `cargo build --workspace --all-targets` for client tests to reuse the
 same feature graph as `cargo test` and avoid redundant native builds.
 
 ## Crate boundaries

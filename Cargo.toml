@@ -38,6 +38,12 @@ debug = 0
 [profile.test]
 debug = 0
 
+# Unoptimized DuckDB C++ dominates native and client test time. Level 1 gives
+# nearly all of O2/O3's runtime gain for a much smaller build-time increase.
+# Only the bundled engine is optimized; workspace crates keep fast rebuilds.
+[profile.dev.package.libduckdb-sys]
+opt-level = 1
+
 [patch.crates-io]
 duckdb = { path = "vendor/duckdb" }
 libduckdb-sys = { path = "vendor/libduckdb-sys" }
