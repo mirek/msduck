@@ -2344,7 +2344,7 @@
     {
       "id": "temporal-parts-reference-v1",
       "title": "Capture SQL Server temporal constructor semantics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal and 2026-09-26 instruction to utilize this host with independent parallel agents. First-party ROADMAP.md and constructor notes identify live reference, precision diagnostics and coercion gaps; no external submission is input.",
       "scope": [
         "scripts/capture-temporal-parts.mjs",
