@@ -4,8 +4,8 @@
 // and never hides a failure. See docs/local-verification.md.
 import { spawn, execFileSync } from 'node:child_process'
 import { createWriteStream, readFileSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { availableParallelism, cpus, freemem, totalmem, platform, arch, release } from 'node:os'
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { availableParallelism, cpus, freemem, loadavg, totalmem, platform, arch, release } from 'node:os'
 import { resolve, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -13,10 +13,12 @@ const root = fileURLToPath(new URL('../', import.meta.url))
 const GiB = 1024 ** 3
 // Planning constants, not machine measurements. A DuckDB-linked Rust/C++ job
 // group can transiently need several GB (C++ units, rustc, test-binary links).
-// A client shard runs one node:test process plus short-lived msduck servers.
+// A client shard runs one node:test process plus msduck servers whose DuckDB
+// queries use several threads; many client tests have 20-30 s deadlines, so
+// shards get whole idle CPUs rather than a share of a busy machine.
 const CARGO_JOB_BYTES = 3 * GiB
 const CLIENT_JOB_BYTES = 1.5 * GiB
-const CLIENT_JOB_CPUS = 2
+const CLIENT_JOB_CPUS = 4
 const CLIENT_JOB_LIMIT = 16 // run-client-shards.mjs accepts 1..16
 
 const usage = `Usage: node scripts/verify-local.mjs [options]
@@ -108,7 +110,9 @@ function checkToolchain(toolchain) {
 // macOS reports only free pages (reclaimable cache excluded), so a fraction of
 // total memory is the better estimate there. process.constrainedMemory() reports
 // cgroup/container limits where Node can see them.
-function plan({ cpuCount, total, free, constrained, os, full, cargoJobs, clientJobs }) {
+// Client timeouts are sensitive to other work on the host, so client shards are
+// sized from CPUs left idle by the one-minute load average at the start.
+function plan({ cpuCount, load, total, free, constrained, os, full, cargoJobs, clientJobs }) {
   const limit = constrained > 0 ? Math.min(constrained, total) : total
   const reclaimable = os === 'darwin' ? Math.max(free, total * 0.6) : free
   const usable = Math.min(reclaimable, limit)
@@ -117,10 +121,11 @@ function plan({ cpuCount, total, free, constrained, os, full, cargoJobs, clientJ
   const gb = bytes => `${(bytes / GiB).toFixed(1)} GiB`
   const byMemCargo = Math.floor(budget / CARGO_JOB_BYTES)
   const autoCargo = Math.max(1, Math.min(cpuCount, byMemCargo))
-  const byCpuClient = Math.floor(cpuCount / CLIENT_JOB_CPUS)
+  const idle = Math.max(1, Math.min(cpuCount, Math.round(cpuCount - load)))
+  const byCpuClient = Math.floor(idle / CLIENT_JOB_CPUS)
   const byMemClient = Math.floor(budget / CLIENT_JOB_BYTES)
   const autoClient = Math.max(1, Math.min(byCpuClient, byMemClient, CLIENT_JOB_LIMIT))
-  const basis = `${cpuCount} CPUs; ${gb(usable)} usable memory${os === 'darwin' ? ' (macOS: max(free, 60% of total))' : ''}` +
+  const basis = `${cpuCount} CPUs (load ${load.toFixed(1)}, ~${idle} idle); ${gb(usable)} usable memory${os === 'darwin' ? ' (macOS: max(free, 60% of total))' : ''}` +
     `${limit < total ? ' (process/container limit)' : ''} minus ${gb(headroom)} OS headroom = ${gb(budget)} budget`
   const result = {
     basis,
@@ -133,7 +138,7 @@ function plan({ cpuCount, total, free, constrained, os, full, cargoJobs, clientJ
   if (full) result.client = {
     jobs: clientJobs ?? autoClient,
     reason: clientJobs ? 'explicit --client-jobs override'
-      : `min(${byCpuClient} by CPU at ${CLIENT_JOB_CPUS} CPUs/shard, ${byMemClient} by memory at ${gb(CLIENT_JOB_BYTES)}/shard, runner limit ${CLIENT_JOB_LIMIT}), at least 1`,
+      : `min(${byCpuClient} by ${idle} idle CPUs at ${CLIENT_JOB_CPUS}/shard, ${byMemClient} by memory at ${gb(CLIENT_JOB_BYTES)}/shard, runner limit ${CLIENT_JOB_LIMIT}), at least 1`,
   }
   return result
 }
@@ -163,6 +168,28 @@ function countShards(text) {
   } catch { return null }
 }
 const counters = { cargo: countCargo, node: countNodeTest, shards: countShards, none: () => null }
+
+// Top-level TAP failures plus the per-test failure type and error, and any
+// accounting problems (missing/unexpected tests, process exits) the runner saw.
+async function shardFailures(directory) {
+  const lines = []
+  try {
+    const summary = JSON.parse(await readFile(resolve(root, directory, 'summary.json'), 'utf8'))
+    for (const r of summary.results ?? []) {
+      for (const problem of r.problems ?? []) lines.push(`- job ${r.index} (${r.log ? relative(root, r.log) : 'no log'}): ${problem}`)
+    }
+    for (const name of (await readdir(resolve(root, directory))).filter(f => /^job-\d+\.tap$/.test(f)).sort()) {
+      const tap = (await readFile(resolve(root, directory, name), 'utf8')).split('\n')
+      tap.forEach((line, i) => {
+        const failed = line.match(/^not ok \d+ - (.*)$/)
+        if (!failed) return
+        const detail = tap.slice(i + 1, i + 30).map(l => l.trim()).filter(l => /^(failureType|error):/.test(l)).slice(0, 2).join('; ')
+        lines.push(`- ${name}: ${failed[1]}${detail ? ` (${detail})` : ''}`)
+      })
+    }
+  } catch (error) { lines.push(`- could not read shard results: ${error.message}`) }
+  return lines.slice(0, 60)
+}
 
 let current = null
 let interrupted = false
@@ -253,11 +280,11 @@ async function main() {
 
   const host = {
     platform: platform(), arch: arch(), release: release(), cpuModel: cpus()[0]?.model?.trim() ?? 'unknown CPU',
-    availableParallelism: availableParallelism(), totalMemoryGiB: +(totalmem() / GiB).toFixed(1), freeMemoryGiB: +(freemem() / GiB).toFixed(1),
+    availableParallelism: availableParallelism(), loadAverage1m: +loadavg()[0].toFixed(2), totalMemoryGiB: +(totalmem() / GiB).toFixed(1), freeMemoryGiB: +(freemem() / GiB).toFixed(1),
     memoryLimitGiB: process.constrainedMemory?.() > 0 && process.constrainedMemory() < totalmem() ? +(process.constrainedMemory() / GiB).toFixed(1) : null,
   }
   const parallelism = plan({
-    cpuCount: availableParallelism(), total: totalmem(), free: freemem(), constrained: process.constrainedMemory?.() ?? 0,
+    cpuCount: availableParallelism(), load: loadavg()[0], total: totalmem(), free: freemem(), constrained: process.constrainedMemory?.() ?? 0,
     os: platform(), full: options.full, cargoJobs: options.cargoJobs, clientJobs: options.clientJobs,
   })
 
@@ -283,7 +310,7 @@ async function main() {
       { id: 'full-2-clippy', job: 'full', command: 'cargo clippy --workspace --all-targets --locked -- -D warnings', count: 'none' },
       { id: 'full-3-rust-tests', job: 'full', command: 'cargo test --workspace --locked', count: 'cargo' },
       { id: 'full-4-build', job: 'full', command: 'cargo build --workspace --all-targets --locked', count: 'none' },
-      { id: 'full-5-clients', job: 'full', command: `node scripts/run-client-shards.mjs --jobs ${parallelism.client.jobs} --revision ${head} --output ${relative(root, resolve(output, 'client-shards'))}`, count: 'shards' },
+      { id: 'full-5-clients', job: 'full', command: `node scripts/run-client-shards.mjs --jobs ${parallelism.client.jobs} --revision ${head} --output ${relative(root, resolve(output, 'client-shards'))}`, count: 'shards', shards: relative(root, resolve(output, 'client-shards')) },
       { id: 'full-6-aggregate-diagnostics', job: 'full', command: 'node --test --test-concurrency=1 tests/aggregate_diagnostics.test.mjs tests/character_extrema.test.mjs', count: 'node' },
     )
     if (options.audit) steps.push({ id: 'full-7-audit', job: 'full', command: 'npm run audit:local', count: 'none' })
@@ -315,6 +342,11 @@ async function main() {
     if (record.status !== 'passed') {
       // Tools such as rustfmt colour diffs regardless of CARGO_TERM_COLOR.
       record.tail = r.text.replace(/\x1b(?:\[[0-9;?]*[A-Za-z]|\([A-Z0-9])/g, '').trimEnd().split('\n').slice(-40).join('\n')
+      // The shard runner prints only totals; name the failing tests from its logs.
+      if (step.shards) {
+        const failures = await shardFailures(step.shards)
+        if (failures.length) record.tail += `\n\nFailing client tests (${step.shards}):\n${failures.join('\n')}`
+      }
       console.log(`--- last lines of ${record.log} ---\n${record.tail}\n--- end ---`)
       if (!options.keepGoing) stop = true
     }

@@ -72,27 +72,33 @@ Differences from CI:
 ## Parallelism
 
 The command prints the values it chose and why. The inputs are
-`os.availableParallelism()`, total memory, currently available memory
-(`os.freemem()`, which is `MemAvailable` on Linux) and
-`process.constrainedMemory()`, which reports a container or cgroup limit where
-Node can see one. On macOS,
-`os.freemem()` leaves out reclaimable cache, so the command uses the larger of
-free memory and 60% of total memory.
+`os.availableParallelism()`, the one-minute load average when the run starts,
+total memory, currently available memory (`os.freemem()`, which is
+`MemAvailable` on Linux) and `process.constrainedMemory()`, which reports a
+container or cgroup limit where Node can see one. On macOS, `os.freemem()`
+leaves out reclaimable cache, so the command uses the larger of free memory and
+60% of total memory.
 
 - The memory budget is usable memory minus OS headroom. Headroom is the larger
   of 2 GiB and 15% of total (or limited) memory.
 - Cargo jobs are the smaller of the CPU count and the budget divided by 3 GiB.
   DuckDB C++ units and linking test binaries against DuckDB can each need
   several GB at once.
-- Client shards are the smaller of half the CPU count (each shard runs a Node
-  test process plus msduck servers), the budget divided by 1.5 GiB, and 16.
+- Client shards are the smaller of the idle CPUs (CPU count minus the load
+  average) divided by 4, the budget divided by 1.5 GiB, and 16. Each shard runs
+  a Node test process plus msduck servers whose DuckDB queries use several
+  threads. Many client tests have 20 or 30 second deadlines, and some already
+  take most of that when run alone. Packing more shards onto the CPUs turns
+  those tests into timeout failures, so each shard gets whole idle CPUs.
 - Neither value goes below 1.
 
-A small laptop gets a few Cargo jobs and a few shards. A large builder gets up
-to one Cargo job per CPU and up to 16 shards. If a machine is busy with other
-work, such as another worktree's build, set `--cargo-jobs` and `--client-jobs`
-explicitly. Client tests bind ephemeral ports, so separate worktrees can run
-them at the same time. They still compete for CPU.
+A small laptop gets a few Cargo jobs and one or two shards. A large idle
+builder gets up to one Cargo job per CPU and more shards. The load average only
+shows work running at the start. If other work starts during the run, such as
+another worktree's build, or if client tests time out, rerun with a lower
+`--client-jobs`. A test that times out still counts as a failure. Client tests
+bind ephemeral ports, so separate worktrees can run them at the same time, but
+they still compete for CPU.
 
 ## Evidence
 
@@ -119,6 +125,8 @@ result lines, the Node test runner's final totals, and the shard runner's final
 JSON line. Other steps show no count. The command stops at the first failed step
 unless you pass `--keep-going`. Steps that did not run are listed as "not run".
 Each failed step's last 40 log lines are printed and included in `summary.md`.
+For a failed client-shard step, the summary also names each failing test with
+its failure type and error, and any accounting problems from the shard runner.
 Any failure, interruption or change to the tree during the run gives a nonzero
 exit status.
 
