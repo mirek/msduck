@@ -3,7 +3,8 @@
 // the native workspace/client job. It records evidence; it never installs tools
 // and never hides a failure. See docs/local-verification.md.
 import { spawn, execFileSync } from 'node:child_process'
-import { createWriteStream, readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { createWriteStream, lstatSync, readFileSync, readlinkSync } from 'node:fs'
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { availableParallelism, cpus, freemem, loadavg, totalmem, platform, arch, release } from 'node:os'
 import { resolve, relative } from 'node:path'
@@ -66,27 +67,74 @@ const quiet = (command, args, env) => {
   catch { return null }
 }
 
-// Read the pinned toolchain and the fast job's commands from the workflow so the
-// local gate cannot silently drift from CI. Only single-line `- run:` steps are
-// accepted; anything else in the fast job needs this script to be updated.
+// Read the pinned toolchain and the fast job's steps from the workflow so the
+// local gate cannot silently drift from CI. Every step must be understood:
+// `uses:` actions are CI setup (checkout, caches, setup-node), the rustup
+// install step is replaced by checkToolchain, and each other `run:` step, named
+// or not, single-line or a `|` block, runs locally. Anything else in the job
+// (step env/shell/if, job env/defaults/services, folded scalars) is rejected.
+const JOB_KEYS = new Set(['name', 'if', 'needs', 'runs-on', 'timeout-minutes', 'steps'])
+const STEP_KEYS = new Set(['name', 'uses', 'with', 'run', 'timeout-minutes'])
 function readWorkflow() {
   const text = readFileSync(resolve(root, '.github/workflows/ci.yml'), 'utf8')
   const toolchain = text.match(/^ {2}RUSTUP_TOOLCHAIN:\s*['"]?([A-Za-z0-9._-]+)['"]?\s*$/m)?.[1]
   if (!toolchain) throw Error('Could not find the top-level RUSTUP_TOOLCHAIN in .github/workflows/ci.yml')
+  const unsupported = why => Error(`Unsupported CI fast job (${why}); update scripts/verify-local.mjs so it mirrors the job`)
   const lines = text.split('\n')
   const start = lines.findIndex(line => line === '  fast:')
   if (start < 0) throw Error('Could not find the fast job in .github/workflows/ci.yml')
   let end = lines.findIndex((line, i) => i > start && /^ {2}[A-Za-z0-9_-]+:/.test(line))
   if (end < 0) end = lines.length
-  const commands = []
-  for (const line of lines.slice(start, end)) {
-    const run = line.match(/^\s+- run:\s*(.*)$/)
-    if (!run) continue
-    if (!run[1] || /^[|>]/.test(run[1])) throw Error('Unsupported multi-line run step in the CI fast job; update scripts/verify-local.mjs')
-    commands.push(run[1])
+  const job = lines.slice(start + 1, end)
+  const indent = line => line.match(/^ */)[0].length
+  const blank = line => !line.trim() || /^\s*#/.test(line)
+  for (const line of job) {
+    const key = line.match(/^ {4}([A-Za-z0-9_-]+):/)?.[1]
+    if (key && !JOB_KEYS.has(key)) throw unsupported(`job key "${key}"`)
+  }
+  const stepsAt = job.findIndex(line => /^ {4}steps:\s*$/.test(line))
+  if (stepsAt < 0) throw unsupported('no steps list')
+  const body = job.slice(stepsAt + 1)
+  const itemIndent = indent(body.find(line => !blank(line)) ?? '')
+  const items = []
+  for (const line of body) {
+    if (blank(line)) { items.at(-1)?.push(line); continue }
+    if (indent(line) <= 4) break
+    if (indent(line) === itemIndent && line.slice(itemIndent).startsWith('- ')) items.push([' '.repeat(itemIndent + 2) + line.slice(itemIndent + 2)])
+    else if (indent(line) < itemIndent + 2 || !items.length) throw unsupported(`unexpected line "${line.trim()}"`)
+    else items.at(-1).push(line)
+  }
+  const keyIndent = itemIndent + 2
+  const commands = [], setup = [], substituted = []
+  for (const item of items) {
+    const step = {}
+    for (let i = 0; i < item.length; i++) {
+      const line = item[i]
+      if (blank(line) || indent(line) > keyIndent) continue
+      const m = line.match(/^\s*([A-Za-z0-9_-]+):\s?(.*)$/)
+      if (!m) throw unsupported(`unexpected line "${line.trim()}"`)
+      const [, key, value] = m
+      if (!STEP_KEYS.has(key)) throw unsupported(`step key "${key}"`)
+      if (key !== 'run') { step[key] = value.trim(); continue }
+      if (/^\|[-+]?\s*$/.test(value)) {
+        const block = []
+        while (i + 1 < item.length && (blank(item[i + 1]) || indent(item[i + 1]) > keyIndent)) block.push(item[++i])
+        const depth = Math.min(...block.filter(l => l.trim()).map(indent))
+        step.run = block.map(l => l.slice(depth)).join('\n').trim()
+      } else if (!value.trim() || /^[>'"]/.test(value.trim())) {
+        throw unsupported('folded, quoted or empty run value')
+      } else step.run = value.trim()
+      if (!step.run) throw unsupported('empty run step')
+    }
+    const label = step.name || step.run || step.uses
+    if (step.run && step.uses) throw unsupported(`step "${label}" has both run and uses`)
+    if (step.uses) setup.push(step.name ? `${step.name} (${step.uses})` : step.uses)
+    else if (!step.run) throw unsupported(`step "${label ?? '?'}" has neither run nor uses`)
+    else if (/^rustup toolchain install\b/.test(step.run) && !step.run.includes('\n')) substituted.push(`${step.name ?? step.run}: replaced by the local toolchain check`)
+    else commands.push(step.run)
   }
   if (!commands.length) throw Error('No run steps found in the CI fast job')
-  return { toolchain, fastCommands: commands }
+  return { toolchain, fastCommands: commands, ciSetup: { actions: setup, substituted } }
 }
 
 function checkToolchain(toolchain) {
@@ -191,6 +239,26 @@ async function shardFailures(directory) {
   return lines.slice(0, 60)
 }
 
+// Content fingerprint of HEAD, the index, tracked changes and untracked files.
+// Comparing it at the end detects edits during a run even when the tree was
+// already dirty at the start (--allow-dirty).
+function treeFingerprint() {
+  const hash = createHash('sha256')
+  const run = (...args) => execFileSync('git', args, { cwd: root, maxBuffer: 1024 ** 3 })
+  hash.update(run('rev-parse', 'HEAD'))
+  hash.update(run('status', '--porcelain=v1', '-z', '--untracked-files=all'))
+  hash.update(run('diff', '--binary', '--no-ext-diff', 'HEAD'))
+  hash.update(run('diff', '--binary', '--no-ext-diff', '--cached', 'HEAD'))
+  for (const file of run('ls-files', '--others', '--exclude-standard', '-z').toString('utf8').split('\0').filter(Boolean).sort()) {
+    hash.update(`\0${file}\0`)
+    try {
+      const path = resolve(root, file)
+      hash.update(lstatSync(path).isSymbolicLink() ? `link:${readlinkSync(path)}` : readFileSync(path))
+    } catch (error) { hash.update(`unreadable:${error.code}`) }
+  }
+  return hash.digest('hex')
+}
+
 let current = null
 let interrupted = false
 function runStep(step, env, directory, verbose) {
@@ -246,11 +314,12 @@ function markdown(summary) {
     `- Toolchain: ${toolchain.rustc ?? 'unknown rustc'} (CI pin ${toolchain.pinned}); ${toolchain.cargo ?? 'unknown cargo'}; node ${toolchain.node}${toolchain.npm ? `; npm ${toolchain.npm}` : ''}`,
     `- Host: ${host.platform}/${host.arch}, ${host.cpuModel}, ${host.availableParallelism} CPUs, ${host.totalMemoryGiB} GiB RAM`,
     `- Parallelism: cargo ${parallelism.cargo.jobs} (${parallelism.cargo.reason})${parallelism.client ? `; client shards ${parallelism.client.jobs} (${parallelism.client.reason})` : ''}`,
+    `- CI setup not run locally: ${[...summary.ciSetup.substituted, ...summary.ciSetup.actions.map(a => a.replace(/@[0-9a-f]{40}/, ''))].join('; ')}`,
     `- Total: ${duration(summary.durationMs)}; started ${summary.startedAt}`,
     '',
     '| Step | Result | Time | Tests |',
     '| --- | --- | --- | --- |',
-    ...summary.steps.map(s => `| \`${s.command.replaceAll('|', '\\|')}\` | ${icon[s.status]}${s.status === 'failed' ? ` (exit ${s.exitCode ?? s.signal})` : ''} | ${s.durationMs === null ? '' : duration(s.durationMs)} | ${describeTests(s.tests)} |`),
+    ...summary.steps.map(s => `| \`${s.command.replaceAll('\n', '; ').replaceAll('|', '\\|')}\` | ${icon[s.status]}${s.status === 'failed' ? ` (exit ${s.exitCode ?? s.signal})` : ''} | ${s.durationMs === null ? '' : duration(s.durationMs)} | ${describeTests(s.tests)} |`),
     '',
     `Local evidence complements, and does not replace, full CI on main or an owner-dispatched run. Logs: \`${summary.output}\``,
   ]
@@ -264,7 +333,7 @@ function markdown(summary) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2))
-  const { toolchain, fastCommands } = readWorkflow()
+  const { toolchain, fastCommands, ciSetup } = readWorkflow()
   const toolcheck = checkToolchain(toolchain)
   if (!toolcheck.ok) { console.error(toolcheck.message); return 1 }
 
@@ -277,6 +346,7 @@ async function main() {
     return 1
   }
   const dirty = Boolean(status)
+  const fingerprint = treeFingerprint()
 
   const host = {
     platform: platform(), arch: arch(), release: release(), cpuModel: cpus()[0]?.model?.trim() ?? 'unknown CPU',
@@ -320,6 +390,7 @@ async function main() {
   console.log(`Toolchain: ${versions.rustc} (CI pin ${toolchain}), node ${versions.node}`)
   console.log(`Host: ${host.platform}/${host.arch} ${host.cpuModel}; ${parallelism.basis}`)
   console.log(`Cargo jobs: ${parallelism.cargo.jobs} (${parallelism.cargo.reason})`)
+  console.log(`CI setup not run locally: ${[...ciSetup.substituted, ...ciSetup.actions].join('; ')}`)
   if (parallelism.client) console.log(`Client shards: ${parallelism.client.jobs} (${parallelism.client.reason})`)
   console.log(`Logs: ${relative(root, output)}\n`)
 
@@ -355,15 +426,16 @@ async function main() {
   const problems = []
   if (dirty) problems.push('tree had uncommitted changes at start')
   const endHead = git('rev-parse', 'HEAD')
-  const endStatus = git('status', '--porcelain', '--untracked-files=normal')
+  const endFingerprint = treeFingerprint()
   if (endHead !== head) problems.push(`HEAD moved during the run to ${endHead}`)
-  if (!dirty && endStatus) problems.push('tree changed during the run')
+  if (endFingerprint !== fingerprint) problems.push('tree changed during the run')
   if (interrupted) problems.push('run interrupted')
   const allPassed = results.every(s => s.status === 'passed')
   const summary = {
-    ok: allPassed && !interrupted && endHead === head && (dirty || !endStatus),
+    ok: allPassed && !interrupted && endHead === head && endFingerprint === fingerprint,
     mode, representsCommit: !problems.length, problems, startedAt, durationMs: performance.now() - started,
-    revision: { head, short, dirtyAtStart: dirty, dirtyFiles: dirty ? status.split('\n') : [] },
+    revision: { head, short, dirtyAtStart: dirty, dirtyFiles: dirty ? status.split('\n') : [], treeFingerprint: { start: fingerprint, end: endFingerprint } },
+    ciSetup,
     toolchain: versions, host, parallelism, options, output: relative(root, output),
     steps: results.map(({ tail, ...s }) => s),
   }

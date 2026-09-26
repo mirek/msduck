@@ -39,13 +39,24 @@ install ...` command and exits nonzero; it never installs anything itself.
 
 ## What each mode covers
 
-**Fast mode** runs the single-line `run:` commands of the CI `fast` job, read
-from the workflow at run time so the two cannot drift silently: the coordination
-script tests (`node --test tests/agent-work.test.mjs tests/client-shards.test.mjs`),
+**Fast mode** runs the `run:` steps of the CI `fast` job, read from the
+workflow at run time so the two cannot drift silently. Currently these are the
+coordination script tests
+(`node --test tests/agent-work.test.mjs tests/client-shards.test.mjs`),
 `cargo fmt --all --check`, and strict Clippy and tests for `msduck-core`,
-`msduck-sql` and `msduck-tds`. It does not compile DuckDB. If the fast job gains
-a step this script cannot read, the script stops with an error rather than
-skipping it.
+`msduck-sql` and `msduck-tds`. It does not compile DuckDB.
+
+The command accounts for every step in that job:
+
+- A `run:` step, named or not, runs locally. It can be a single line or a `|`
+  block.
+- A `uses:` action (checkout, cache, setup-node) is CI setup and is not run.
+- The `rustup toolchain install` step is replaced by the local toolchain check.
+
+Both kinds of skipped step are listed in the summary. If the job gains anything
+else, such as a step with `env`, `shell` or `if`, a job-level `env` or
+`defaults`, or a folded or quoted `run:` value, the command stops with an error
+rather than skipping or approximating it.
 
 **Full mode** adds, in the CI order:
 
@@ -104,8 +115,11 @@ they still compete for CPU.
 
 The command refuses a tree with uncommitted or untracked changes unless you
 pass `--allow-dirty`. With that option, the summary says that the result does
-not represent the commit and lists the changed files. If `HEAD` or the tree
-changes during a run, the run fails and is marked as not representing a commit.
+not represent the commit and lists the changed files. The command fingerprints
+`HEAD`, the index, tracked changes and the contents of untracked files before and
+after the run. If `HEAD` or the fingerprint changes during a run, the run fails
+and is marked as not representing a commit. This also applies to a run with
+`--allow-dirty`.
 
 Each run writes to
 `artifacts/local-verify/<short-rev>/<mode>[-dirty]-<timestamp>/`, which is
@@ -114,7 +128,8 @@ gitignored:
 - `<step>.log` holds each step's raw combined output, starting with its command.
 - `client-shards/` holds the shard runner's plan, provenance, TAP/event logs and
   summary.
-- `summary.json` records the revision, the dirty state, toolchain versions
+- `summary.json` records the revision, the dirty state and the start and end
+  tree fingerprints, the CI setup steps not run locally, toolchain versions
   (pinned, `rustc`, `cargo`, `node`, `npm`), the host, the chosen parallelism
   with its reasons, and each step's command, status, exit code, duration and
   parsed test counts.
