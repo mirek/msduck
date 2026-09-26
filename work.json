@@ -2509,7 +2509,7 @@
     {
       "id": "reference-container-cleanup-v1",
       "title": "Tolerate Docker auto-remove races when cleaning up reference containers",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instructions of 2026-09-26: continue implementation, run parallel agents, and keep PR flow fast (PR CI must not exceed one hour). First-party evidence: CI workflow after #251 and an owner-run worker report on PR #259; no external submission is input.",
       "scope": [
         "scripts/lib/reference-container.mjs",
