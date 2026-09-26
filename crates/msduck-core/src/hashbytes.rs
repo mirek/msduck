@@ -210,23 +210,33 @@ fn invalid_argument(type_name: &str, position: usize) -> BindError {
     }
 }
 
-// Merkle-Damgard padding: 0x80, zeros, then the message bit length in a
-// `length_bytes`-wide field (little- or big-endian) ending on a block boundary.
-fn padded<const BLOCK: usize>(input: &[u8], length_bytes: usize, little_endian: bool) -> Vec<u8> {
+// Message blocks with Merkle-Damgard padding: 0x80, zeros, then the message
+// bit length in a `length_bytes`-wide field (little- or big-endian) ending on
+// a block boundary. Complete blocks are read from `input` in place; only the
+// final one or two blocks are allocated, so MAX inputs are not copied.
+fn blocks<const BLOCK: usize>(
+    input: &[u8],
+    length_bytes: usize,
+    little_endian: bool,
+) -> impl Iterator<Item = [u8; BLOCK]> + '_ {
+    let full = input.chunks_exact(BLOCK);
     let bits = (input.len() as u128).wrapping_mul(8);
-    let mut message = Vec::with_capacity(input.len() + BLOCK + length_bytes);
-    message.extend_from_slice(input);
-    message.push(0x80);
-    while !(message.len() + length_bytes).is_multiple_of(BLOCK) {
-        message.push(0);
+    let mut tail = Vec::with_capacity(2 * BLOCK);
+    tail.extend_from_slice(full.remainder());
+    tail.push(0x80);
+    while !(tail.len() + length_bytes).is_multiple_of(BLOCK) {
+        tail.push(0);
     }
-    let length = if little_endian {
-        bits.to_le_bytes()[..length_bytes].to_vec()
+    if little_endian {
+        tail.extend_from_slice(&bits.to_le_bytes()[..length_bytes]);
     } else {
-        bits.to_be_bytes()[16 - length_bytes..].to_vec()
-    };
-    message.extend_from_slice(&length);
-    message
+        tail.extend_from_slice(&bits.to_be_bytes()[16 - length_bytes..]);
+    }
+    let tail: Vec<[u8; BLOCK]> = tail
+        .chunks_exact(BLOCK)
+        .map(|block| block.try_into().unwrap())
+        .collect();
+    full.map(|block| block.try_into().unwrap()).chain(tail)
 }
 
 fn le_words(block: &[u8]) -> [u32; 16] {
@@ -257,8 +267,8 @@ pub fn md4(input: &[u8]) -> [u8; 16] {
     const SHIFT: [[u32; 4]; 3] = [[3, 7, 11, 19], [3, 5, 9, 13], [3, 9, 11, 15]];
     const ADD: [u32; 3] = [0, 0x5a82_7999, 0x6ed9_eba1];
     let mut state = MD_INITIAL;
-    for block in padded::<64>(input, 8, true).chunks_exact(64) {
-        let x = le_words(block);
+    for block in blocks::<64>(input, 8, true) {
+        let x = le_words(&block);
         let [mut a, mut b, mut c, mut d] = state;
         for round in 0..3 {
             for step in 0..16 {
@@ -357,8 +367,8 @@ pub fn md5(input: &[u8]) -> [u8; 16] {
         [6, 10, 15, 21],
     ];
     let mut state = MD_INITIAL;
-    for block in padded::<64>(input, 8, true).chunks_exact(64) {
-        let m = le_words(block);
+    for block in blocks::<64>(input, 8, true) {
+        let m = le_words(&block);
         let [mut a, mut b, mut c, mut d] = state;
         for (i, k) in K.iter().enumerate() {
             let (f, g) = match i / 16 {
@@ -387,7 +397,7 @@ pub fn sha1(input: &[u8]) -> [u8; 20] {
         0x1032_5476,
         0xc3d2_e1f0,
     ];
-    for block in padded::<64>(input, 8, false).chunks_exact(64) {
+    for block in blocks::<64>(input, 8, false) {
         let mut w = [0u32; 80];
         for (word, bytes) in w.iter_mut().zip(block.chunks_exact(4)) {
             *word = u32::from_be_bytes(bytes.try_into().unwrap());
@@ -500,7 +510,7 @@ pub fn sha256(input: &[u8]) -> [u8; 32] {
         0x1f83_d9ab,
         0x5be0_cd19,
     ];
-    for block in padded::<64>(input, 8, false).chunks_exact(64) {
+    for block in blocks::<64>(input, 8, false) {
         let mut w = [0u32; 64];
         for (word, bytes) in w.iter_mut().zip(block.chunks_exact(4)) {
             *word = u32::from_be_bytes(bytes.try_into().unwrap());
@@ -632,7 +642,7 @@ pub fn sha512(input: &[u8]) -> [u8; 64] {
         0x1f83_d9ab_fb41_bd6b,
         0x5be0_cd19_137e_2179,
     ];
-    for block in padded::<128>(input, 16, false).chunks_exact(128) {
+    for block in blocks::<128>(input, 16, false) {
         let mut w = [0u64; 80];
         for (word, bytes) in w.iter_mut().zip(block.chunks_exact(8)) {
             *word = u64::from_be_bytes(bytes.try_into().unwrap());
