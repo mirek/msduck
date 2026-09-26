@@ -10,9 +10,18 @@ use sqlparser::ast::*;
 pub const ARITY: &str = "The string_escape function requires 2 argument(s).";
 pub const NULL_FORMAT: &str =
     "Argument data type NULL is invalid for argument 2 of string_escape function.";
+pub const TYPED_NULL_FORMAT: &str =
+    "Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function.";
 
 pub fn diagnostic(message: &str) -> Option<SqlError> {
-    (message == json_escape::INVALID_FORMAT).then(|| SqlError::new(13622, 1, message))
+    let message = message
+        .strip_prefix("Invalid Input Error: ")
+        .unwrap_or(message);
+    match message {
+        json_escape::INVALID_FORMAT => Some(SqlError::new(13622, 1, message)),
+        TYPED_NULL_FORMAT => Some(SqlError::new(8116, 8, message)),
+        _ => None,
+    }
 }
 pub fn lower(expr: &mut Expr) -> Result<(), String> {
     let Expr::Function(f) = expr else {
@@ -58,6 +67,9 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
 pub struct Escape;
 impl VScalar for Escape {
     type State = ();
+    fn special_null_handling() -> bool {
+        true
+    }
     fn invoke(
         _: &(),
         input: &mut DataChunkHandle,
@@ -70,12 +82,14 @@ impl VScalar for Escape {
         let values = [input.flat_vector(0), input.flat_vector(1)];
         let mut result = output.flat_vector();
         for row in 0..len {
-            if values.iter().any(|v| v.row_is_null(row as u64)) {
-                result.set_null(row);
-                continue;
+            if values[1].row_is_null(row as u64) {
+                return Err(TYPED_NULL_FORMAT.into());
             }
             let mut texts = [String::new(), String::new()];
             for (index, value) in values.iter().enumerate() {
+                if index == 0 && value.row_is_null(row as u64) {
+                    continue;
+                }
                 // Exact VARCHAR inputs. Copy inline storage before borrowing its bytes.
                 let mut value =
                     unsafe { value.as_slice_with_len::<duckdb::ffi::duckdb_string_t>(len)[row] };
@@ -86,6 +100,11 @@ impl VScalar for Escape {
                     )
                 };
                 texts[index] = std::str::from_utf8(bytes)?.to_owned();
+            }
+            json_escape::escape("", &texts[1])?;
+            if values[0].row_is_null(row as u64) {
+                result.set_null(row);
+                continue;
             }
             let escaped = json_escape::escape(&texts[0], &texts[1])?;
             result.insert(row, escaped.as_ref());
@@ -121,12 +140,14 @@ fn escape_unicode(
     let mut encoded = Vec::with_capacity(len);
     let mut remaining = CHUNK_LIMIT;
     for row in 0..len {
-        if parents.iter().any(|v| v.row_is_null(row as u64)) {
-            encoded.push(None);
-            continue;
+        if parents[1].row_is_null(row as u64) {
+            return Err(TYPED_NULL_FORMAT.into());
         }
         let mut units = [Vec::new(), Vec::new()];
         for (index, value) in values.iter().enumerate() {
+            if index == 0 && parents[0].row_is_null(row as u64) {
+                continue;
+            }
             if value.row_is_null(row as u64) {
                 return Err("invalid Unicode carrier: NULL payload".into());
             }
@@ -142,6 +163,10 @@ fn escape_unicode(
         // Validate the format before reporting any resource limit, without
         // allocating the escaped text. An empty source has the same format rule.
         json_escape::escape_utf16(&[], &units[1])?;
+        if parents[0].row_is_null(row as u64) {
+            encoded.push(None);
+            continue;
+        }
         let size: usize = units[0]
             .iter()
             .map(|&unit| match unit {
@@ -177,12 +202,45 @@ fn escape_unicode(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn exact_runtime_diagnostics() {
+        assert_eq!(
+            diagnostic(TYPED_NULL_FORMAT),
+            Some(SqlError::new(8116, 8, TYPED_NULL_FORMAT))
+        );
+        assert_eq!(
+            diagnostic(&format!("Invalid Input Error: {TYPED_NULL_FORMAT}")),
+            Some(SqlError::new(8116, 8, TYPED_NULL_FORMAT))
+        );
+        assert_eq!(
+            diagnostic(json_escape::INVALID_FORMAT),
+            Some(SqlError::new(13622, 1, json_escape::INVALID_FORMAT))
+        );
+        assert!(diagnostic("unrelated NULL format").is_none());
+    }
+
     #[test]
     fn chunk_nulls_and_single_evaluation() {
         let db = duckdb::Connection::open_in_memory().unwrap();
         crate::scalar::register(&db).unwrap();
-        let wrong:i64=db.query_row("SELECT count(*) FROM range(6000) r(i) WHERE __msduck_string_escape(CASE WHEN i%17=0 THEN NULL ELSE '/雪' END,CASE WHEN i%19=0 THEN NULL ELSE 'json' END) IS DISTINCT FROM CASE WHEN i%17=0 OR i%19=0 THEN NULL ELSE '\\/雪' END",[],|r|r.get(0)).unwrap();
+        let wrong:i64=db.query_row("SELECT count(*) FROM range(6000) r(i) WHERE __msduck_string_escape(CASE WHEN i%17=0 THEN NULL ELSE '/雪' END,'json ') IS DISTINCT FROM CASE WHEN i%17=0 THEN NULL ELSE '\\/雪' END",[],|r|r.get(0)).unwrap();
         assert_eq!(wrong, 0);
+        for sql in [
+            "SELECT __msduck_string_escape(NULL,'xml')",
+            "SELECT __msduck_string_escape('x',NULL)",
+        ] {
+            let error = db.execute_batch(sql).unwrap_err().to_string();
+            assert!(
+                error.contains(if sql.contains("'xml'") {
+                    json_escape::INVALID_FORMAT
+                } else {
+                    TYPED_NULL_FORMAT
+                }),
+                "{error}"
+            );
+        }
         db.execute_batch("CREATE SEQUENCE escape_source; CREATE SEQUENCE escape_format")
             .unwrap();
         let n:i64=db.query_row("SELECT count(*) FROM range(6000) WHERE __msduck_string_escape(printf('/%d',nextval('escape_source')),CASE WHEN nextval('escape_format')>0 THEN 'json' ELSE 'xml' END) LIKE '\\/%'",[],|r|r.get(0)).unwrap();

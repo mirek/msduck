@@ -6,7 +6,7 @@ pub const INVALID_FORMAT: &str = "An invalid value was specified for argument 2.
 /// Escape string contents, without adding JSON quotation marks.
 /// SQL NULL handling belongs to the adapter. Only JSON escaping is supported.
 pub fn escape<'a>(source: &'a str, format: &str) -> Result<Cow<'a, str>, &'static str> {
-    if !format.eq_ignore_ascii_case("json") {
+    if !format.trim_end_matches(' ').eq_ignore_ascii_case("json") {
         return Err(INVALID_FORMAT);
     }
     if !source
@@ -42,6 +42,10 @@ pub fn escape<'a>(source: &'a str, format: &str) -> Result<Cow<'a, str>, &'stati
 /// units. SQL Server leaves all non-control Unicode units unchanged, including
 /// isolated high/low surrogates (see the Unicode JSON reference capture).
 pub fn escape_utf16<'a>(source: &'a [u16], format: &[u16]) -> Result<Cow<'a, [u16]>, &'static str> {
+    let format = &format[..format
+        .iter()
+        .rposition(|&unit| unit != u16::from(b' '))
+        .map_or(0, |index| index + 1)];
     if format.len() != 4
         || !format.iter().zip(b"json").all(|(&unit, &ascii)| {
             unit == u16::from(ascii) || unit == u16::from(ascii.to_ascii_uppercase())
@@ -108,7 +112,19 @@ mod tests {
     #[test]
     fn json_format_and_unbounded_expansion() {
         assert_eq!(escape("/", "JSON").unwrap(), r"\/");
-        for format in ["", "xml", "url", "json ", " json"] {
+        for format in ["json ", "json  ", "JsOn   "] {
+            assert_eq!(escape("x", format).unwrap(), "x");
+        }
+        for format in [
+            "",
+            "xml",
+            "url",
+            " json",
+            "json\t",
+            "json\n",
+            "json\u{a0}",
+            "jsonx",
+        ] {
             assert_eq!(escape("x", format), Err(INVALID_FORMAT));
         }
         let input = "\0🦆/".repeat(5000);
@@ -142,10 +158,15 @@ mod tests {
         );
         for format in [
             vec![],
-            vec![106, 115, 111, 110, 32],
+            vec![32, 106, 115, 111, 110],
+            vec![106, 115, 111, 110, 9],
+            vec![106, 115, 111, 110, 160],
             vec![106, 115, 111, 0xd800],
         ] {
             assert_eq!(escape_utf16(&[], &format), Err(INVALID_FORMAT));
+        }
+        for format in [vec![106, 115, 111, 110, 32], vec![74, 83, 79, 78, 32, 32]] {
+            assert_eq!(escape_utf16(&[120], &format).unwrap().as_ref(), &[120]);
         }
     }
 }
