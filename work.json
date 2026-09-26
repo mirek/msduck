@@ -2364,7 +2364,7 @@
     {
       "id": "fast-pr-ci-v1",
       "title": "Make PR CI a fast gate and run full verification separately",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction on 2026-09-26 to reduce over-hour PR CI latency and run complete tests manually, periodically or on tags. First-party CI workflow and branch protection inspection; no external submission is input.",
       "scope": [
         ".github/workflows/ci.yml",
