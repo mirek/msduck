@@ -2,8 +2,11 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['verify-*']
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 0'
 
 permissions:
   contents: read
@@ -25,7 +28,7 @@ jobs:
   fast:
     name: Deterministic crates
     if: >-
-      github.actor_id == '8561' &&
+      (github.event_name == 'schedule' || github.actor_id == '8561') &&
       (github.event_name != 'pull_request' ||
        (github.event.pull_request.user.id == 8561 && github.event.pull_request.head.repo.full_name == github.repository))
     runs-on: ubuntu-24.04
@@ -55,6 +58,9 @@ jobs:
   full:
     name: Workspace and clients
     needs: fast
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.actor_id == '8561' && github.event_name != 'pull_request')
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
