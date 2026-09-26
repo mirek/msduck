@@ -3317,6 +3317,27 @@
       ],
       "issue": 344,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PO9F_"
+    },
+    {
+      "id": "server-connection-admission-v1",
+      "title": "Bound server connection admission before DuckDB clone and worker spawn",
+      "state": "ready",
+      "authorization": "Direct owner instruction of 2026-09-26 to implement a production connection-admission resource bound under the continuing full SQL Server compatibility goal. Owner explicitly handed off src/server.rs from prior done aggregate-warning-integration-v1; its old receipt cannot resume. First-party source review only; no external submission is input.",
+      "scope": [
+        "src/server.rs",
+        "src/main.rs",
+        "tests/server_admission.rs",
+        "docs/server-admission.md"
+      ],
+      "acceptance": [
+        "Provide validated positive configurable concurrent accepted-connection limit, default 128, with --max-connections N bounded to 1..=1024 and clear invalid CLI errors.",
+        "Acquire an atomic RAII permit immediately after TCP accept and before DuckDB clone or worker spawn. Close saturated sockets without fabricated TDS tokens. Use fallible thread spawn and release permits on spawn failure, normal exit and panic.",
+        "Preserve admitted clients' existing PRELOGIN, TLS, authentication, session and query paths. Add focused finite/process tests for idle PRELOGIN saturation, ordinary query, release and readmission, and invalid CLI; run existing TLS/login regression.",
+        "Document that idle admitted clients can occupy all slots and that SQL Server overload diagnostic parity is unknown. Run formatting, exact-revision workspace Rust tests and strict Clippy, plus relevant independent client checks."
+      ],
+      "dependencies": [],
+      "issue": 345,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PO-3X"
     }
   ]
 }
