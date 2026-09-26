@@ -3104,6 +3104,23 @@
       "dependencies": [],
       "issue": 324,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POvhA"
+    },
+    {
+      "id": "reference-container-startup-retry-v1",
+      "title": "Retry reference container startup failures before login readiness",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development with parallel agents and shared coordination. First-party evidence: owner-run capture worker reports on PRs #265, #319 and #312; no external submission is input.",
+      "scope": [
+        "scripts/lib/reference-container.mjs",
+        "tests/compatibility.test.mjs"
+      ],
+      "acceptance": [
+        "When an owned reference container exits, disappears or fails inspection before login readiness, remove it and retry startup with a fresh name a bounded number of times, recording the attempt count; never retry after the workload started and never touch containers the invocation did not create.",
+        "Keep credential handling, labels and existing lifecycle tests unchanged; add deterministic tests for a transient startup exit that succeeds on retry, persistent startup failure reporting all attempts, and workload failures not being retried."
+      ],
+      "dependencies": [],
+      "issue": 326,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POxLI"
     }
   ]
 }
