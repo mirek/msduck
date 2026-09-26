@@ -2624,6 +2624,27 @@
       "dependencies": [],
       "issue": 277,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POa6j"
+    },
+    {
+      "id": "returnvalue-codec-v1",
+      "title": "Implement bounded typed TDS RETURNVALUE encoding",
+      "state": "ready",
+      "authorization": "Direct owner continuing objective to implement the SQL Server compatible Rust/DuckDB server and owner request for disjoint parallel tasks. First-party TDS gap documented in docs/tds-gap-inventory.md, local MS-TDS skill and owner-controlled mirek/mssqlite; no external submission is input.",
+      "scope": [
+        "crates/msduck-tds/src/return_value.rs",
+        "crates/msduck-tds/src/lib.rs",
+        "crates/msduck-tds/tests/return_value.rs",
+        "docs/return-value-codec.md"
+      ],
+      "acceptance": [
+        "Encode TDS 7.2–7.4 RETURNVALUE ordinal, UTF-16 name, OUTPUT/UDF status, user type, flags, TYPE_INFO and typed value with bounds checks before append; support NULL, raw UTF-16, signed integer widths, binary, decimal and character declarations in the codec.",
+        "Keep the existing prepared-handle wire vector unchanged through the typed encoder. Reject unsupported/oversized declarations and values explicitly and leave the output buffer unchanged on error.",
+        "Compare exact byte vectors with the local MS-TDS RETURNVALUE specification and owner-controlled mirek/mssqlite codec, including NULL and malformed/limit cases; keep transport and RPC execution effects outside this crate.",
+        "Run formatting, deterministic tests, strict Clippy and appropriate full workspace/client checks at an exact revision; document remaining root RPC integration."
+      ],
+      "dependencies": [],
+      "issue": 280,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POegM"
     }
   ]
 }
