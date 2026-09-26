@@ -250,8 +250,9 @@ PATINDEX follows these rules:
 - A search with trailing spaces under any other type combination is
   unsupported.
 
-`Collation::from_name` recognizes these names and returns `None` for any
-other:
+`Collation::from_name` recognizes these names, ignoring ASCII case like the
+other msduck-core collation identity comparisons, and returns `None` for any
+other. The fixture spells every collation in canonical case.
 
 - `SQL_Latin1_General_CP1_{CI|CS}_{AS|AI}`
 - `Latin1_General[_100]_{CI|CS}_{AS|AI}`

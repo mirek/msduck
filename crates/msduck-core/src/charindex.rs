@@ -211,13 +211,16 @@ impl Collation {
     /// `Latin1_General[_100]_{CI|CS}_{AS|AI}`, `Latin1_General_100_.._SC`,
     /// `Latin1_General_100_.._SC_UTF8` and `Latin1_General[_100]_BIN2`.
     /// Kana, width and variation-selector sensitive, `_BIN` and other
-    /// language collations return `None`.
+    /// language collations return `None`. Names match ASCII case-insensitively,
+    /// like the other collation identity comparisons in msduck-core; callers
+    /// pass names that binding has already accepted.
     pub fn from_name(name: &str) -> Option<Self> {
-        let (rest, version_100) = if let Some(rest) = name.strip_prefix("SQL_Latin1_General_CP1_") {
+        let name = name.to_ascii_uppercase();
+        let (rest, version_100) = if let Some(rest) = name.strip_prefix("SQL_LATIN1_GENERAL_CP1_") {
             (rest, None)
-        } else if let Some(rest) = name.strip_prefix("Latin1_General_100_") {
+        } else if let Some(rest) = name.strip_prefix("LATIN1_GENERAL_100_") {
             (rest, Some(true))
-        } else if let Some(rest) = name.strip_prefix("Latin1_General_") {
+        } else if let Some(rest) = name.strip_prefix("LATIN1_GENERAL_") {
             (rest, Some(false))
         } else {
             return None;

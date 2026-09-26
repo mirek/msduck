@@ -866,6 +866,25 @@ fn collation_names_outside_the_modelled_families_are_rejected() {
         Collation::from_name("SQL_Latin1_General_CP1_CI_AS"),
         Some(Collation::DEFAULT)
     );
+    for (spelled, canonical) in [
+        (
+            "sql_latin1_general_cp1_ci_as",
+            "SQL_Latin1_General_CP1_CI_AS",
+        ),
+        ("latin1_general_ci_as", "Latin1_General_CI_AS"),
+        ("LATIN1_GENERAL_BIN2", "Latin1_General_BIN2"),
+        (
+            "latin1_general_100_ci_as_sc_utf8",
+            "Latin1_General_100_CI_AS_SC_UTF8",
+        ),
+    ] {
+        assert_eq!(
+            Collation::from_name(spelled),
+            Collation::from_name(canonical),
+            "{spelled}"
+        );
+        assert!(Collation::from_name(spelled).is_some(), "{spelled}");
+    }
 }
 
 #[test]
