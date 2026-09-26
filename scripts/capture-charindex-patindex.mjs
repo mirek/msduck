@@ -280,7 +280,7 @@ function rpc(connection, sql, parameters) {
 async function prepared(connection, sql, declarations, executions) {
   const handle = await capturePrepared(connection, sql, declarations, executions)
   const { rowCount: _prepareCount, ...preparation } = handle.prepare
-  if (!handle.prepared) return { preparation: canonical(preparation), prepared: false, executions: [] }
+  if (!handle.prepared) return { preparation: canonical(preparation), prepared: false, skipped: handle.skipped, executions: canonical(handle.executions) }
   const { rowCount: _unprepareCount, ...unpreparation } = handle.unprepare
   return {
     preparation: canonical(preparation), prepared: true,
@@ -317,7 +317,7 @@ function validate(run) {
   const column = name => get(name).sets[0]?.columns[0]
   for (const record of run) {
     if (record.result) assert(record.result.done.length > 0, record.name + ': no completion')
-    else for (const execution of record.executions) assert(execution.result.done.length > 0, record.name + ': no completion')
+    else for (const execution of record.executions) if (!execution.skipped) assert(execution.result.done.length > 0, record.name + ': no completion')
   }
   assert.equal(value('charindex basic'), 2)
   assert.equal(value('charindex not found'), 0)

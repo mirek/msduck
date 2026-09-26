@@ -27,9 +27,18 @@ never overwrite one to make a check pass.
 `capturePrepared` returns
 `{ prepare, prepared, executions: [{ values, result }], unprepare }`. Each phase
 result has `sets`, `done`, `errors`, `info`, `returnStatus` and `rowCount`.
-`values` are returned as given; apply `canonical()` when retaining them. When
-`sp_prepare` returns no handle, `prepared` is false, no execution runs and
-`unprepare` is `null`. Scripts map this to their retained record shape; for
+`values` are returned as given; apply `canonical()` when retaining them.
+
+When the prepare step reports an error, or no valid handle (a positive integer)
+arrives, the helper sends no `sp_execute` or `sp_unprepare`. It returns
+`prepared: false`, `skipped: 'prepare failed'`, each value set as
+`{ values, skipped: 'prepare failed' }` without a result, and `unprepare: null`.
+tedious keeps a handle even after a failed `sp_prepare`; executing and
+releasing it only yields client-caused server errors (8009 malformed request,
+8179 no statement for handle 0), which a capture worker (PR #339) found
+recorded as if they were behavior under test. To observe how an invalid
+statement fails at execution time, capture it through a batch or
+`sp_executesql` instead. Scripts map this to their retained record shape; for
 example the HASHBYTES capture keeps `prepare.rowCount` as canonical `missing`,
 while the CHARINDEX/PATINDEX capture omits `rowCount` from preparation and
 unpreparation.

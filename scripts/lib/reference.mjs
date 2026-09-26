@@ -195,8 +195,13 @@ const columnFields = c => ({ name: c.colName, type: c.type.name, length: c.dataL
 // Returns { prepare, prepared, executions: [{ values, result }], unprepare }.
 // Each phase result is { sets, done, errors, info, returnStatus, rowCount }
 // plus `truncated: { rows, messages }` only when a bound was exceeded. When
-// sp_prepare returns no handle, prepared is false, executions is empty and
-// unprepare is null.
+// the prepare step reports an error or no valid handle (a positive integer)
+// arrives, prepared is false, skipped is 'prepare failed', each value set is
+// recorded as { values, skipped: 'prepare failed' } without a result, and
+// unprepare is null. No sp_execute or sp_unprepare request is sent: tedious
+// keeps a handle after a failed sp_prepare, and executing it only yields
+// client-caused server errors (8009 malformed request, 8179 no statement for
+// handle 0) that are not behavior under test.
 // Values are returned uncanonicalized; callers apply canonical() as needed.
 export async function capturePrepared(connection, sql, declarations, valueSets, options = {}) {
   const limits = { ...PREPARED_LIMITS, ...(options.limits ?? {}) }
@@ -255,8 +260,10 @@ export async function capturePrepared(connection, sql, declarations, valueSets, 
     })
     request.off('prepared', onPrepared)
     request.off('error', onPrepareError)
-    // A returned handle is executed and released even if preparation raised.
-    if (request.handle === undefined) return { prepare, prepared: false, executions: [], unprepare: null }
+    if (prepare.errors.length || !(Number.isInteger(request.handle) && request.handle > 0)) {
+      const skipped = 'prepare failed'
+      return { prepare, prepared: false, skipped, executions: valueSets.map(values => ({ values, skipped })), unprepare: null }
+    }
     const executions = []
     for (const values of valueSets) executions.push({ values, result: await phase(() => connection.execute(request, values)) })
     const unprepare = await phase(() => connection.unprepare(request))

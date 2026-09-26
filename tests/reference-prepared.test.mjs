@@ -126,7 +126,8 @@ test('preparation completes through tedious prepared/error events', async () => 
   const failed = await capturePrepared(failing, 'SELECT FROM', declarations, [{ find: 'b', start: '1' }])
   assert.equal(failed.prepared, false)
   assert.deepEqual(failed.prepare.errors.map(e => e.number), [102])
-  assert.deepEqual(failed.executions, [])
+  assert.equal(failed.skipped, 'prepare failed')
+  assert.deepEqual(failed.executions, [{ values: { find: 'b', start: '1' }, skipped: 'prepare failed' }])
   assert.equal(failed.unprepare, null)
   assert.deepEqual(failing.calls.map(c => c.kind), ['prepare'])
   assert.equal(failing.listenerCount('errorMessage'), 0)
@@ -202,4 +203,21 @@ test('a genuine sp_prepare return status arriving during the step is kept', asyn
   assert.equal(captured.prepare.returnStatus, 8115)
   assert.equal(captured.executions[0].result.returnStatus, 0)
   assert.equal(captured.unprepare.returnStatus, 0)
+})
+
+test('a failed prepare that still leaves a handle sends no execute or unprepare', async () => {
+  // tedious keeps a handle output even when sp_prepare raised; executing it
+  // would only produce client-caused 8009/8179 errors.
+  for (const prepare of [{ handle: 0, errors: [8180, 207] }, { handle: 11, errors: [207] }, { handle: 0 }, {}]) {
+    const connection = new FakeConnection({ prepare, executions: [{ errors: [8009] }, { errors: [8009] }], unprepare: { errors: [8179] } })
+    const valueSets = [{ find: 'a', start: '1' }, { find: 'b', start: '2' }]
+    const captured = await capturePrepared(connection, 'SELECT missing_column', declarations, valueSets)
+    assert.equal(captured.prepared, false, JSON.stringify(prepare))
+    assert.equal(captured.skipped, 'prepare failed')
+    assert.deepEqual(captured.prepare.errors.map(e => e.number), prepare.errors ?? [])
+    assert.deepEqual(captured.executions, valueSets.map(values => ({ values, skipped: 'prepare failed' })))
+    assert.equal(captured.unprepare, null)
+    assert.deepEqual(connection.calls.map(c => c.kind), ['prepare'])
+    assert.equal(connection.listenerCount('errorMessage'), 0)
+  }
 })
