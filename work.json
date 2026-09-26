@@ -3162,7 +3162,7 @@
     {
       "id": "select-into-fixture-replay-v1",
       "title": "Remove stale SELECT INTO id descriptor tolerance after nullability fix",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement the SQL Server compatible Rust/DuckDB server and organize disjoint parallel work. First-party focused replay at owner-authored PR #331 revision 94e71523f662a3ed0cc2126fa6b0521a9d8373f7 found no SELECT INTO id descriptor differences while tests/tedious.test.mjs:8930 expected three; no external submission is input.",
       "scope": [
         "tests/tedious.test.mjs"
