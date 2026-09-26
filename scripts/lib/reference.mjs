@@ -229,8 +229,12 @@ export async function capturePrepared(connection, sql, declarations, valueSets, 
   const reported = new Set()
   const fresh = () => ({ sets: [], done: [], errors: [], info: [], returnStatus: null })
   const overflow = kind => { result.truncated ??= { rows: 0, messages: 0 }; result.truncated[kind]++ }
+  // Server errors that arrive after the message bound are still errors: the
+  // callback fallback below must never stand in for a truncated diagnostic.
+  let serverError = false
   const message = list => token => {
     if (!result) return
+    if (list === 'errors') serverError = true
     if (result.errors.length + result.info.length >= limits.messages) overflow('messages')
     else result[list].push(messageFields(token))
   }
@@ -253,12 +257,16 @@ export async function capturePrepared(connection, sql, declarations, valueSets, 
   request.on('doneProc', (_count, _more, status) => { if (result && status !== undefined) result.returnStatus = status })
   const phase = start => new Promise(resolve => {
     result = fresh()
+    serverError = false
     complete = (error, rowCount) => {
       complete = () => {}
       const finished = result
       result = undefined
       finished.rowCount = rowCount
-      if (error && !reported.has(error) && !finished.errors.length) finished.errors.push({ message: error.message, number: error.number ?? null })
+      if (error && !reported.has(error) && !serverError) {
+        if (finished.errors.length + finished.info.length >= limits.messages) { result = finished; overflow('messages'); result = undefined }
+        else finished.errors.push({ message: error.message, number: error.number ?? null })
+      }
       if (error) reported.add(error)
       resolve(finished)
     }

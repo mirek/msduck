@@ -242,3 +242,15 @@ test('capture output may not alias the retained fixture, including via symlinks'
     await refuseFixtureOutput(join(root, 'reference', 'other.json'), fixture)
   } finally { await rm(root, { recursive: true, force: true }) }
 })
+
+test('a server error beyond the message bound is counted, never replaced by the callback error', async () => {
+  const connection = new FakeConnection({
+    prepare: { handle: 1 },
+    executions: [{ info: [5701, 5703], errors: [8115] }],
+  })
+  const result = await capturePrepared(connection, 'select 1', declarations, [{ find: 'b', start: 1 }], { limits: { messages: 2 } })
+  const run = result.executions[0].result
+  assert.deepEqual(run.info.map(m => m.number), [5701, 5703])
+  assert.deepEqual(run.errors, [])
+  assert.equal(run.truncated.messages, 1)
+})
