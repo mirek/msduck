@@ -96,8 +96,13 @@ output'). With `SET ANSI_WARNINGS OFF` the rows are the same.
   one row per `id`.
 - `SELECT *` column order is the grouping columns in source order, then the
   pivot columns in IN-list order (for example `yr,region,Q2,Q1`).
-- Grouping columns keep their source type and nullability, for example
-  `id` INT NOT NULL (flags 0). Every pivot column is nullable.
+- Grouping columns keep their source type and nullability. Their TDS
+  COLMETADATA flags word is 8 for NOT NULL `id`/`yr` and 9 for nullable
+  columns: bit 0 is the nullable bit, and bits 2-3 = 2 mean "updateable
+  unknown". A case-sensitive collation column adds bit 1 (`v5cs` = 11).
+  Every pivot column has flags 1: nullable, with updateable = read-only.
+  UNPIVOT value and name columns also have flags 1. The retained descriptors
+  record the full word.
 - A NULL grouping value forms its own group (the `region` NULL row).
 - With no grouping columns, a non-empty input gives exactly one row. An
   empty input gives **no** row, even with COUNT. This differs from a scalar

@@ -20,7 +20,7 @@ if (new Date(0).getTimezoneOffset() !== 0) throw new Error('could not switch the
 
 const { mkdir, writeFile, readFile } = await import('node:fs/promises')
 const { basename, dirname, resolve } = await import('node:path')
-const { realpath } = await import('node:fs/promises')
+const { realpath, stat } = await import('node:fs/promises')
 const { fileURLToPath } = await import('node:url')
 const { Request, TYPES } = await import('tedious')
 const { canonical } = await import('./lib/compatibility.mjs')
@@ -330,8 +330,19 @@ async function canonicalPath(path) {
     return resolve(await canonicalPath(dirname(absolute)), basename(absolute))
   }
 }
+// A hard link has a distinct realpath but shares the inode, so existing
+// files are also compared by device and inode.
+async function identity(path) {
+  try { const info = await stat(path); return `${info.dev}:${info.ino}` } catch (error) {
+    if (error.code === 'ENOENT') return null
+    throw error
+  }
+}
 async function refuseFixtureOutput(target, retained) {
-  if (await canonicalPath(target) === await canonicalPath(retained)) throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(retained))
+  const refuse = () => { throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(retained)) }
+  if (await canonicalPath(target) === await canonicalPath(retained)) refuse()
+  const [a, b] = await Promise.all([identity(target), identity(retained)])
+  if (a !== null && a === b) refuse()
 }
 
 // Replica of PR #312 capturePrepared (scripts/lib/reference.mjs on
@@ -436,7 +447,7 @@ function validate(run) {
     const phases = record.prepared ? [record.prepared.prepare, ...record.prepared.executions.map(e => e.result).filter(Boolean), record.prepared.unprepare].filter(Boolean) : [record.result]
     for (const phase of phases) {
       check(!phase.truncated, `${record.name}: bounded capture truncated`)
-      check(phase.done.length > 0 || phase.errors.length > 0 || record.prepared, `${record.name}: no completion`)
+      check(phase.done.length > 0 || phase.errors.length > 0, `${record.name}: no completion`)
     }
   }
   for (const [name] of setup) check(run.find(r => r.name === name).result.errors.length === 0, `${name}: setup failed`)
