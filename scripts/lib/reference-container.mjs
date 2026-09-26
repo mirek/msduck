@@ -22,7 +22,11 @@ export async function withReferenceContainer(work, operations = {}) {
   const image = operations.image ?? process.env.MSSQL_REFERENCE_IMAGE ?? referenceImage
   let started = false
   try {
-    await run(['run', '--detach', '--rm', '--name', name, '--platform', 'linux/amd64',
+    // Labels let a worker identify orphans it left behind after a crash
+    // without guessing from timing; parallel workers share one Docker daemon.
+    await run(['run', '--detach', '--rm', '--name', name,
+      '--label', 'msduck.reference=1', '--label', `msduck.owner=${process.cwd()}:${process.pid}`,
+      '--platform', 'linux/amd64',
       '--env', 'ACCEPT_EULA=Y', '--env', 'MSSQL_PID=Developer', '--env', 'TZ=UTC',
       '--env', 'MSSQL_SA_PASSWORD', '--publish', '127.0.0.1::1433', image], { MSSQL_SA_PASSWORD: password })
     started = true
@@ -55,6 +59,20 @@ export async function withReferenceContainer(work, operations = {}) {
     // The name is fresh and owned by this invocation, including a partially
     // successful docker run. Never stop or remove a caller-supplied container.
     try { await run(['rm', '--force', name]) }
-    catch (error) { if (started) throw new Error(`Could not remove owned reference container ${name}`, { cause: error }) }
+    catch (error) {
+      if (started && !await removed(run, sleep, name)) throw new Error(`Could not remove owned reference container ${name}`, { cause: error })
+    }
   }
+}
+
+// `--rm` auto-removal can race a forced removal ("removal already in progress").
+// Succeed only once the owned container no longer exists, within a bound.
+async function removed(run, sleep, name, attempts = 30) {
+  for (let attempt = 0; attempt < attempts; ++attempt) {
+    try {
+      if (await run(['ps', '--all', '--quiet', '--filter', `name=^/${name}$`]) === '') return true
+    } catch { return false }
+    await sleep(1000)
+  }
+  return false
 }
