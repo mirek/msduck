@@ -6,20 +6,83 @@ use duckdb::{
     vtab::arrow::WritableVector,
 };
 use msduck_core::character::{CharacterType, Family, Length};
+use std::borrow::Cow;
 
 // Allocation policy, separate from SQL's 8,000-byte bounded-result rule. The
 // chunk allowance accommodates ordinary bounded results even when CP1252 values
 // expand to three UTF-8 bytes per character. MAX results also have a cell cap.
 const CHUNK_OUTPUT_LIMIT: usize = 64 * 1024 * 1024;
 const CELL_OUTPUT_LIMIT: usize = 16 * 1024 * 1024;
+
+// SQL Server's default implicit REAL/FLOAT-to-VARCHAR style retains six
+// significant digits. It selects fixed notation after rounding for exponents
+// -4..=5 and otherwise uses an exponent with at least three digits.
+fn float_text<T: std::fmt::LowerExp + Copy + Into<f64>>(value: T) -> Result<String, &'static str> {
+    let number: f64 = value.into();
+    if !number.is_finite() {
+        return Err("REPLICATE floating source is not finite");
+    }
+    if number == 0.0 {
+        return Ok("0".into());
+    }
+    let scientific = format!("{value:.5e}");
+    let (mantissa, exponent) = scientific
+        .split_once('e')
+        .ok_or("invalid floating conversion")?;
+    let exponent: i32 = exponent.parse().map_err(|_| "invalid floating exponent")?;
+    let (negative, mantissa) = if let Some(unsigned) = mantissa.strip_prefix('-') {
+        (true, unsigned)
+    } else {
+        (false, mantissa)
+    };
+    let mut digits: String = mantissa.chars().filter(|ch| *ch != '.').collect();
+    while digits.ends_with('0') && digits.len() > 1 {
+        digits.pop();
+    }
+    let mut result = String::with_capacity(24);
+    if negative {
+        result.push('-');
+    }
+    if !(-4..=5).contains(&exponent) {
+        result.push(digits.as_bytes()[0] as char);
+        if digits.len() > 1 {
+            result.push('.');
+            result.push_str(&digits[1..]);
+        }
+        result.push('e');
+        result.push_str(&format!("{exponent:+04}"));
+    } else {
+        let position = exponent + 1;
+        if position <= 0 {
+            result.push_str("0.");
+            result.extend(std::iter::repeat_n('0', (-position) as usize));
+            result.push_str(&digits);
+        } else if position as usize >= digits.len() {
+            result.push_str(&digits);
+            result.extend(std::iter::repeat_n('0', position as usize - digits.len()));
+        } else {
+            result.push_str(&digits[..position as usize]);
+            result.push('.');
+            result.push_str(&digits[position as usize..]);
+        }
+    }
+    Ok(result)
+}
+
 struct Replicate<
     const UNICODE: bool,
     const MAX: bool,
     const BUDGET: usize = CHUNK_OUTPUT_LIMIT,
     const BINARY: bool = false,
+    const FLOAT_KIND: u8 = 0,
 >;
-impl<const UNICODE: bool, const MAX: bool, const BUDGET: usize, const BINARY: bool> VScalar
-    for Replicate<UNICODE, MAX, BUDGET, BINARY>
+impl<
+    const UNICODE: bool,
+    const MAX: bool,
+    const BUDGET: usize,
+    const BINARY: bool,
+    const FLOAT_KIND: u8,
+> VScalar for Replicate<UNICODE, MAX, BUDGET, BINARY, FLOAT_KIND>
 {
     type State = ();
     fn invoke(
@@ -49,21 +112,33 @@ impl<const UNICODE: bool, const MAX: bool, const BUDGET: usize, const BINARY: bo
             // only non-NULL slots inside this chunk; DuckDB owns the string bytes
             // for the duration of this invocation, including inline strings.
             let count = unsafe { counts.as_slice_with_len::<i32>(len)[row] };
-            let mut source =
-                unsafe { strings.as_slice_with_len::<duckdb::ffi::duckdb_string_t>(len)[row] };
-            let bytes = unsafe {
-                std::slice::from_raw_parts(
-                    duckdb::ffi::duckdb_string_t_data(&mut source).cast::<u8>(),
-                    duckdb::ffi::duckdb_string_t_length(source) as usize,
-                )
-            };
-            let text = if BINARY {
-                if bytes.len() > CELL_OUTPUT_LIMIT {
-                    return Err("REPLICATE binary source exceeds the configured input limit".into());
-                }
-                std::borrow::Cow::Owned(msduck_core::encoding::decode_cp1252(bytes))
+            let text = if FLOAT_KIND == 1 {
+                Cow::Owned(float_text(unsafe {
+                    strings.as_slice_with_len::<f32>(len)[row]
+                })?)
+            } else if FLOAT_KIND == 2 {
+                Cow::Owned(float_text(unsafe {
+                    strings.as_slice_with_len::<f64>(len)[row]
+                })?)
             } else {
-                std::borrow::Cow::Borrowed(std::str::from_utf8(bytes)?)
+                let mut source =
+                    unsafe { strings.as_slice_with_len::<duckdb::ffi::duckdb_string_t>(len)[row] };
+                let bytes = unsafe {
+                    std::slice::from_raw_parts(
+                        duckdb::ffi::duckdb_string_t_data(&mut source).cast::<u8>(),
+                        duckdb::ffi::duckdb_string_t_length(source) as usize,
+                    )
+                };
+                if BINARY {
+                    if bytes.len() > CELL_OUTPUT_LIMIT {
+                        return Err(
+                            "REPLICATE binary source exceeds the configured input limit".into()
+                        );
+                    }
+                    Cow::Owned(msduck_core::encoding::decode_cp1252(bytes))
+                } else {
+                    Cow::Borrowed(std::str::from_utf8(bytes)?)
+                }
             };
             match msduck_core::replicate::plan(
                 Some(text.as_ref()),
@@ -83,7 +158,11 @@ impl<const UNICODE: bool, const MAX: bool, const BUDGET: usize, const BINARY: bo
     fn signatures() -> Vec<ScalarFunctionSignature> {
         vec![ScalarFunctionSignature::exact(
             vec![
-                if BINARY {
+                if FLOAT_KIND == 1 {
+                    LogicalTypeId::Float.into()
+                } else if FLOAT_KIND == 2 {
+                    LogicalTypeId::Double.into()
+                } else if BINARY {
                     LogicalTypeId::Blob.into()
                 } else {
                     LogicalTypeId::Varchar.into()
@@ -105,12 +184,80 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
     )?;
     db.register_scalar_function::<Replicate<false, true, CHUNK_OUTPUT_LIMIT, true>>(
         "__msduck_replicate_binary_max",
+    )?;
+    db.register_scalar_function::<Replicate<false, false, CHUNK_OUTPUT_LIMIT, false, 1>>(
+        "__msduck_replicate_real",
+    )?;
+    db.register_scalar_function::<Replicate<false, false, CHUNK_OUTPUT_LIMIT, false, 2>>(
+        "__msduck_replicate_float",
     )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn captured_float_literals_match_sql_server_implicit_text() {
+        let reference: serde_json::Value =
+            serde_json::from_str(include_str!("../reference/replicate-float.json")).unwrap();
+        let db = duckdb::Connection::open_in_memory().unwrap();
+        register(&db).unwrap();
+        let cases = reference["runs"][0].as_array().unwrap();
+        let mut compared = 0;
+        for case in cases {
+            let name = case["name"].as_str().unwrap();
+            if !name.contains(" literal ") {
+                continue;
+            }
+            let sql = case["sql"].as_str().unwrap();
+            let source = sql
+                .strip_prefix("SELECT REPLICATE(")
+                .unwrap()
+                .split_once(",2) AS repeated")
+                .unwrap()
+                .0;
+            let numeric = source
+                .strip_prefix("CAST(")
+                .unwrap()
+                .split_once(" AS ")
+                .unwrap()
+                .0;
+            // Bind exact IEEE values. DuckDB's decimal-literal-to-REAL cast
+            // has a separate double-rounding boundary from the native text
+            // conversion exercised here.
+            let actual: Option<String> = if name.starts_with("REAL ") {
+                let value = if numeric == "NULL" {
+                    None
+                } else {
+                    Some(numeric.parse::<f32>().unwrap())
+                };
+                db.query_row(
+                    "SELECT __msduck_replicate_real(?1,2)",
+                    duckdb::params![value],
+                    |row| row.get(0),
+                )
+                .unwrap()
+            } else {
+                let value = if numeric == "NULL" {
+                    None
+                } else {
+                    Some(numeric.parse::<f64>().unwrap())
+                };
+                db.query_row(
+                    "SELECT __msduck_replicate_float(?1,2)",
+                    duckdb::params![value],
+                    |row| row.get(0),
+                )
+                .unwrap()
+            };
+            let expected = case["result"]["sets"][0]["rows"][0][0]
+                .as_str()
+                .map(str::to_owned);
+            assert_eq!(actual, expected, "{name}");
+            compared += 1;
+        }
+        assert_eq!(compared, 46);
+    }
     #[test]
     fn values_caps_nulls_heap_strings_and_unicode_cross_chunks() {
         let db = duckdb::Connection::open_in_memory().unwrap();
@@ -198,6 +345,24 @@ mod tests {
         let counts: (i64, i64) = db
             .query_row(
                 "SELECT currval('source_seq'),currval('count_seq')",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(counts, (1, 2));
+        db.execute_batch("CREATE SEQUENCE real_source_seq; CREATE SEQUENCE real_count_seq START 2")
+            .unwrap();
+        let actual: String = db
+            .query_row(
+                "SELECT __msduck_replicate_real(CAST(nextval('real_source_seq') AS REAL),CAST(nextval('real_count_seq') AS INTEGER))",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(actual, "11");
+        let counts: (i64, i64) = db
+            .query_row(
+                "SELECT currval('real_source_seq'),currval('real_count_seq')",
                 [],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
