@@ -3338,6 +3338,25 @@
       "dependencies": [],
       "issue": 345,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PO-3X"
+    },
+    {
+      "id": "ci-client-inventory-v1",
+      "title": "Include the complete npm client inventory in full CI shards",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to make SQL Server compatibility verification accurate and faster, with owner-agent instruction of 2026-09-26 to correct the first-party full CI client inventory. Prior workflow claims are completed; this successor has a disjoint active scope. No external submission is input.",
+      "scope": [
+        ".github/workflows/ci.yml",
+        "docs/github-workflow.md"
+      ],
+      "acceptance": [
+        "In the owner-controlled full CI job, pass all five files from the serial npm test script explicitly to scripts/run-client-shards.mjs. Preserve two workers, exact revision label, artifact output, and fail-closed shard accounting.",
+        "Leave the required PR fast job, serial npm test, sharding runner, other CI phases, and owner-only workflow guards unchanged.",
+        "Document the previous three-versus-five coverage gap and corrected full-job evidence without claiming SQL Server equivalence.",
+        "Run five-file shard discovery/plan-only validation, workflow syntax or structural checks, and diff checks at an exact revision. Open a focused PR; merge remains the integrator’s responsibility."
+      ],
+      "dependencies": [],
+      "issue": 347,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPB4g"
     }
   ]
 }
