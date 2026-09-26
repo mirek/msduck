@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { acquire, verify, loadRegistry, validateRegistry, readyTask, refFor, repository } from '../scripts/lib/agent-work.mjs';
+import { acquire, verify, loadRegistry, validateRegistry, readyTask, refFor, repository, applyChange, availableTasks, claimedIds, publish, restoreProtection } from '../scripts/lib/agent-work.mjs';
 
 function fixture() {
   return validateRegistry({ version:1, repository, owner:{login:'mirek',id:8561}, tasks:[{id:'example-v1',title:'Bounded task',state:'ready',issue:1,scope:['docs/example.md'],acceptance:['Evidence exists']}] });
@@ -119,4 +119,147 @@ test('disabled, bypassable, incomplete or excluding rules stop before any conten
     const s=registryServer(change);await assert.rejects(loadRegistry(s.api,rules),/protection changed/);assert.equal(s.calls.length,1);
   }
   const s=registryServer();await assert.rejects(loadRegistry(s.api,[]),/Missing/);assert.equal(s.calls.length,0);
+});
+
+test('inactive registry protection is a retryable publication state and fetches no content',async()=>{
+  const s=registryServer(r=>{ if(r.target==='branch') r.enforcement='disabled'; });
+  await assert.rejects(loadRegistry(s.api,rules),e=>e.code==='PROTECTION_INACTIVE');
+  assert(s.calls.every(p=>p.includes('/rulesets/')));
+});
+
+const authorization='Direct owner instruction recorded for this test task';
+const task=(id,scope=[`docs/${id}.md`])=>({id,title:'Bounded task',state:'ready',authorization,issue:2,scope,acceptance:['Evidence exists']});
+test('changes add tasks and set states but never reuse IDs or skip validation',()=>{
+  const r=fixture(); const none=new Set();
+  const next=applyChange(r,{add:[task('new-v1')],states:{'example-v1':'done'}},none);
+  assert.deepEqual(next.tasks.map(t=>[t.id,t.state]),[['example-v1','done'],['new-v1','ready']]);
+  assert.equal(r.tasks.length,1);
+  for (const [change,claimed,pattern] of [
+    [{add:[task('example-v1')]},none,/already exists/],
+    [{add:[task('old-v1')]},new Set(['old-v1']),/already exists or was claimed/],
+    [{add:[{...task('new-v1'),authorization:undefined}]},none,/authorization/],
+    [{add:[task('new-v1',['docs/example.md'])]},none,/Overlapping/],
+    [{add:[{...task('new-v1'),dependencies:['missing-v1']}]},none,/Unknown/],
+    [{states:{'missing-v1':'done'}},none,/Unknown task/],
+    [{states:{'example-v1':'finished'}},none,/Invalid state/],
+  ]) assert.throws(()=>applyChange(r,change,claimed),pattern);
+});
+test('available tasks are ready, unclaimed and have completed dependencies',()=>{
+  const r=applyChange(fixture(),{add:[task('free-v1'),{...task('waiting-v1'),dependencies:['example-v1']},task('taken-v1')]},new Set());
+  assert.deepEqual(availableTasks(r,new Set(['taken-v1'])).map(t=>t.id),['example-v1','free-v1']);
+  r.tasks[0].state='done';
+  assert.deepEqual(availableTasks(r,new Set(['taken-v1'])).map(t=>t.id),['free-v1','waiting-v1']);
+});
+
+// Simulated GitHub: rulesets, git objects, fast-forward-only ref updates that
+// the active registry rule refuses, and create-only claim tags.
+function github({failPatch=0,failRestore=0}={}) {
+  const objects=new Map(); let next=0; const calls=[];
+  const put=(value)=>{const sha=(++next).toString(16).padStart(40,'0');objects.set(sha,value);return sha;};
+  const blob=put({content:JSON.stringify(fixture())});
+  const head={sha:put({tree:put({entries:{'work.json':blob}}),parents:[]})};
+  const enforcement=new Map(rules.map(r=>[r.id,'active']));
+  const claims=['refs/tags/agent-claims/example-v1'];
+  let activePublishers=0, maxDisabled=0;
+  const api=async(path,data,missing=false,method=data?'POST':'GET')=>{
+    calls.push({path,method});
+    await new Promise(resolve=>setImmediate(resolve));
+    const p=path.replace(`repos/${repository}/`,'');
+    const rule=rules.find(r=>p===`rulesets/${r.id}`);
+    if(rule&&method==='GET') return {enforcement:enforcement.get(rule.id),target:rule.target,bypass_actors:[],conditions:{ref_name:{include:[rule.pattern],exclude:[]}},rules:[{type:'update'},{type:'deletion'}]};
+    if(rule&&method==='PUT') {
+      if(data.enforcement==='active'&&failRestore-->0) throw Error('transient');
+      enforcement.set(rule.id,data.enforcement);
+      activePublishers+=data.enforcement==='disabled'?1:0; maxDisabled=Math.max(maxDisabled,activePublishers);
+      return {};
+    }
+    if(p==='git/ref/heads/agent-control') return {object:{sha:head.sha}};
+    if(p.startsWith('git/matching-refs/tags/agent-claims/')) {
+      const q=new URLSearchParams(p.split('?')[1]??''); const per=Number(q.get('per_page')??100), page=Number(q.get('page')??1);
+      return claims.slice((page-1)*per,page*per).map(ref=>({ref}));
+    }
+    if(p.startsWith('compare/')) {
+      const [base,headSha]=p.slice(8).split('...');
+      if(base===headSha) return {status:'identical'};
+      for(let c=objects.get(headSha)?.parents?.[0];c;c=objects.get(c).parents[0]) if(c===base) return {status:'ahead'};
+      return {status:'diverged'};
+    }
+    if(p.startsWith('contents/work.json?ref=')) {
+      const commit=objects.get(p.split('=')[1]);
+      return {encoding:'base64',content:Buffer.from(objects.get(objects.get(commit.tree).entries['work.json']).content).toString('base64')};
+    }
+    if(p.startsWith('git/commits/')) return {tree:{sha:objects.get(p.slice(12)).tree}};
+    if(p==='git/blobs') return {sha:put({content:data.content})};
+    if(p==='git/trees') return {sha:put({entries:{...objects.get(data.base_tree).entries,[data.tree[0].path]:data.tree[0].sha}})};
+    if(p==='git/commits') return {sha:put({tree:data.tree,parents:data.parents})};
+    if(p==='git/refs/heads/agent-control'&&method==='PATCH') {
+      if(failPatch-->0) throw Error('lost');
+      if(enforcement.get(2)==='active') throw Error('rule violation');
+      if(data.force!==false||objects.get(data.sha).parents[0]!==head.sha) throw Error('not a fast-forward');
+      head.sha=data.sha; return {object:{sha:data.sha}};
+    }
+    throw Error('Unexpected endpoint: '+method+' '+path);
+  };
+  const registry=()=>JSON.parse(objects.get(objects.get(objects.get(head.sha).tree).entries['work.json']).content);
+  const advance=(message='later')=>{const tree=objects.get(head.sha).tree;head.sha=put({tree,parents:[head.sha]});return head.sha;};
+  return {api,calls,enforcement,registry,claims,advance,history:()=>{const out=[];for(let s=head.sha;s;s=objects.get(s).parents[0])out.push(s);return out;},maxDisabled:()=>maxDisabled};
+}
+const fast={sleep:()=>new Promise(resolve=>setImmediate(resolve))};
+test('concurrent publishers serialize as fast-forwards and always restore protection',async()=>{
+  const g=github();
+  const results=await Promise.allSettled(Array.from({length:6},(_,i)=>publish({api:g.api,rules,change:{add:[task(`parallel-${i}-v1`)]},message:`add ${i}`,attempts:40,...fast})));
+  assert.deepEqual(results.map(r=>r.status),Array(6).fill('fulfilled'));
+  assert.deepEqual(g.registry().tasks.map(t=>t.id).sort(),['example-v1',...Array.from({length:6},(_,i)=>`parallel-${i}-v1`)].sort());
+  assert.equal(g.history().length,7);
+  assert.equal(g.enforcement.get(2),'active'); assert.equal(g.enforcement.get(1),'active');
+  assert(g.calls.every(c=>!/rulesets\/1$/.test(c.path)||c.method==='GET'),'claim protection is never modified');
+  assert(g.calls.every(c=>!/issues|comments|pulls|search|notifications|projects/.test(c.path)));
+});
+test('a lost update response is resolved by reading the ref back',async()=>{
+  const g=github({failPatch:1});
+  await assert.rejects(publish({api:g.api,rules,change:{add:[task('new-v1')]},message:'m',attempts:1,...fast}),/did not succeed/);
+  assert.equal(g.enforcement.get(2),'active');
+  const r=await publish({api:g.api,rules,change:{add:[task('new-v1')]},message:'m',...fast});
+  assert.equal(r.registry.tasks.length,2); assert.equal(g.history().length,2);
+});
+test('conflicting publication fails validation after reload instead of overwriting',async()=>{
+  const g=github();
+  const results=await Promise.allSettled([1,2].map(()=>publish({api:g.api,rules,change:{add:[task('same-v1')]},message:'m',attempts:10,...fast})));
+  assert.equal(results.filter(r=>r.status==='fulfilled').length,1);
+  assert.match(results.find(r=>r.status==='rejected').reason.message,/already exists/);
+  assert.equal(g.registry().tasks.length,2); assert.equal(g.enforcement.get(2),'active');
+});
+test('protection restore retries and reports failure for manual recovery',async()=>{
+  const g=github({failRestore:2}); g.enforcement.set(2,'disabled');
+  await restoreProtection(g.api,rules[1]); assert.equal(g.enforcement.get(2),'active');
+  const h=github({failRestore:99}); h.enforcement.set(2,'disabled');
+  await assert.rejects(restoreProtection(h.api,rules[1]),/protect/);
+});
+test('publication waits while another publisher holds protection inactive',async()=>{
+  const g=github(); g.enforcement.set(2,'disabled');
+  let waits=0; const sleep=async()=>{ if(++waits===2) g.enforcement.set(2,'active'); await fast.sleep(); };
+  await publish({api:g.api,rules,change:{states:{'example-v1':'done'}},message:'m',sleep});
+  assert.equal(g.registry().tasks[0].state,'done'); assert(waits>=2);
+});
+test('claim listing uses one request per page and follows every page',async()=>{
+  const g=github(); assert.deepEqual([...await claimedIds(g.api)],['example-v1']); assert.equal(g.calls.length,1);
+  const h=github(); for(let i=0;i<250;i++) h.claims.push(`refs/tags/agent-claims/bulk-${i}-v1`);
+  const ids=await claimedIds(h.api); assert.equal(ids.size,251); assert(ids.has('bulk-249-v1'));
+  assert.equal(h.calls.filter(c=>c.path.includes('matching-refs')).length,3);
+  // An endpoint that ignores paging returns the whole list for every page.
+  const all=Array.from({length:150},(_,i)=>({ref:`refs/tags/agent-claims/x-${i}-v1`}));
+  let calls=0; const unpaged=await claimedIds(async()=>{calls++;return all;});
+  assert.equal(unpaged.size,150); assert.equal(calls,2);
+});
+test('a later fast-forward after a successful update still counts as published',async()=>{
+  const g=github(); const inner=g.api; let raced=false;
+  const api=async(path,data,missing,method)=>{
+    const result=await inner(path,data,missing,method);
+    // Another publisher fast-forwards right after this PATCH succeeds.
+    if(method==='PATCH'&&!raced){raced=true;g.advance();}
+    return result;
+  };
+  const r=await publish({api,rules,change:{add:[task('raced-v1')]},message:'m',...fast});
+  assert.equal(r.registry.tasks.length,2); assert.equal(g.history().length,3);
+  assert(g.calls.some(c=>c.path.includes('/compare/')));
 });
