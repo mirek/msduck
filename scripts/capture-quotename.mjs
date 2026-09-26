@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { withReferenceContainer } from './lib/reference-container.mjs'
-import { isolatedReference } from './lib/reference.mjs'
+import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/quotename.json', import.meta.url)
@@ -94,6 +94,7 @@ function validate(run) {
   }
 }
 
+if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(resolve(output, '..'), { recursive: true })
 await withReferenceContainer(async (config, container) => {
   const runs = []
@@ -114,16 +115,15 @@ await withReferenceContainer(async (config, container) => {
       return run
     }))
   }
-  assert.deepEqual(runs[0], runs[1], 'fresh SQL Server databases differ')
+  assertSameCapture(runs[0], runs[1], 'fresh SQL Server databases differ')
   const actual = { image: container.image, runs }
   let retained
   try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
   catch (error) { if (error.code !== 'ENOENT') throw error }
-  if (retained) assert.deepEqual(actual, retained, 'fresh capture differs from retained fixture')
+  if (retained) assertSameCapture(actual, retained, 'fresh capture differs from retained fixture')
   await writeFile(output, JSON.stringify(actual) + '\n')
   if (writeFixture) {
-    assert.equal(retained, undefined, 'refusing to overwrite retained fixture')
-    await writeFile(fixture, JSON.stringify(actual) + '\n')
+    await writeNewFixture(fixture, actual)
   }
   console.log(`Captured ${cases.length} QUOTENAME cases in two fresh databases${retained ? ' and matched the retained fixture' : ''}`)
 })

@@ -5,7 +5,7 @@ import {resolve} from 'node:path'
 import {setTimeout as delay} from 'node:timers/promises'
 import {Request} from 'tedious'
 import {withReferenceContainer} from './lib/reference-container.mjs'
-import {connect, command, isolatedReference} from './lib/reference.mjs'
+import {connect, command, isolatedReference, assertSameCapture} from './lib/reference.mjs'
 import {canonical} from './lib/compatibility.mjs'
 const require = createRequire(import.meta.url)
 const SqlBatchPayload = require('tedious/lib/sqlbatch-payload.js')
@@ -151,7 +151,7 @@ async function oneCase(config, entry, key) {
     if(bytes[1]&1) {reassembled.push(Buffer.concat(fragments).toString('hex'));fragments=[]}
    }
    assert.equal(fragments.length,0,'response EOM observed')
-   assert.deepEqual(rawResponses,reassembled,'every observed response consumed exactly once')
+   assertSameCapture(rawResponses,reassembled,'every observed response consumed exactly once')
    const result={entry,active,responses,responsePayloads,transactionDescriptor,rawResponses,packets:wire.packets}
    await writeFile(resolve(output,`${key}.json`),JSON.stringify(result,null,2)+'\n')
    return result
@@ -183,7 +183,7 @@ await withReferenceContainer(async(config,container)=>{
  if(fixture) {
   assert.equal(actual.image,fixture.image)
   assert.equal(actual.transport,fixture.transport)
-  assert.deepEqual(actual.results,fixture.results,'Retained boundary observations differ')
+  assertSameCapture(actual.results,fixture.results,'Retained boundary observations differ')
  }
  console.log(`Captured ${cases.length} Attention/IGNORE boundaries twice${fixture?' and matched retained fixture':''}`)
 })

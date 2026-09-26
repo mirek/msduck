@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import {mkdir, readFile, writeFile} from 'node:fs/promises'
 import {resolve} from 'node:path'
 import {withReferenceContainer} from './lib/reference-container.mjs'
-import {isolatedReference} from './lib/reference.mjs'
+import {isolatedReference, assertSameCapture} from './lib/reference.mjs'
 import {capture, canonical} from './lib/compatibility.mjs'
 
 const setup = ['CREATE TABLE dbo.width_user(id INT)', 'CREATE VIEW dbo.width_view AS SELECT id FROM dbo.width_user']
@@ -80,13 +80,13 @@ await withReferenceContainer(async (config, container) => {
       return {results, declarations, lob}
     }))
   }
-  assert.deepEqual(runs[0], runs[1], 'Fresh object catalog captures differ')
+  assertSameCapture(runs[0], runs[1], 'Fresh object catalog captures differ')
   const actual = {image: container.image, identicalFreshCaptures: 2, setup, ...runs[0]}
   await writeFile(resolve(output, 'runs.json'), JSON.stringify(runs, null, 2) + '\n')
   await writeFile(resolve(output, 'object-catalog-width.json'), JSON.stringify(actual, null, 2) + '\n')
   let fixture
   try { fixture = JSON.parse(await readFile(new URL('../reference/object-catalog-width.json', import.meta.url), 'utf8')) }
   catch (error) { if (error.code !== 'ENOENT') throw error }
-  if (fixture) assert.deepEqual(actual, fixture, 'Retained object catalog capture differs')
+  if (fixture) assertSameCapture(actual, fixture, 'Retained object catalog capture differs')
   console.log(`Captured ${actual.results.length} catalog observations and ${actual.lob.length} LOB scenarios twice identically${fixture ? ' and matched retained fixture' : ''}`)
 })

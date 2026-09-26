@@ -6,7 +6,7 @@ import { resolve } from 'node:path'
 import { TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
-import { isolatedReference } from './lib/reference.mjs'
+import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 
 const fixture = new URL('../reference/string-agg.json', import.meta.url)
 const args = process.argv.slice(2)
@@ -126,6 +126,7 @@ function validate(run) {
   for (const record of run) assert(record.result.done.length > 0, record.name + ': no completion')
 }
 
+if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(resolve(output, '..'), { recursive: true })
 const containers = []
 for (let containerIndex = 0; containerIndex < 2; containerIndex++) {
@@ -138,19 +139,18 @@ for (let containerIndex = 0; containerIndex < 2; containerIndex++) {
       validate(run)
       runs.push(run)
     }
-    assert.deepEqual(runs[0], runs[1], 'STRING_AGG observations differ across fresh databases')
+    assertSameCapture(runs[0], runs[1], 'STRING_AGG observations differ across fresh databases')
     containers.push({ image: container.image, runs })
   })
 }
-assert.deepEqual(containers[0].runs[0], containers[1].runs[0], 'STRING_AGG observations differ across containers')
+assertSameCapture(containers[0].runs[0], containers[1].runs[0], 'STRING_AGG observations differ across containers')
 const actual = { containers }
 await writeFile(output, JSON.stringify(actual) + '\n')
 let retained
 try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
 catch (error) { if (error.code !== 'ENOENT') throw error }
-if (retained) assert.deepEqual(actual, retained, 'STRING_AGG observations differ from retained fixture')
+if (retained) assertSameCapture(actual, retained, 'STRING_AGG observations differ from retained fixture')
 if (writeFixture) {
-  assert.equal(retained, undefined, 'refusing to overwrite retained fixture')
-  await writeFile(fixture, JSON.stringify(actual) + '\n')
+  await writeNewFixture(fixture, actual)
 }
 console.log('Captured ' + containers[0].runs[0].length + ' STRING_AGG observations in four fresh databases across two containers' + (retained ? ' and matched retained fixture' : ''))

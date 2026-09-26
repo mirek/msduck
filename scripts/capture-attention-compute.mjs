@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url'
 import {setTimeout as delay} from 'node:timers/promises'
 import {Request, TYPES} from 'tedious'
 import {withReferenceContainer} from './lib/reference-container.mjs'
-import {connect, command, isolatedReference} from './lib/reference.mjs'
+import {connect, command, isolatedReference, assertSameCapture} from './lib/reference.mjs'
 import {capture, canonical} from './lib/compatibility.mjs'
 
 // Observe only post-login plaintext TDS. No authentication traffic or credentials.
@@ -199,7 +199,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
     const observations = runs.map(run => run.map(({packets, rawResponses, transactionDescriptor, schedulerObservation, ...result}) => result))
     await writeFile(resolve(output, 'runs.json'), JSON.stringify(runs,null,2)+'\n')
-    assert.deepEqual(observations[0], observations[1], 'Repeated observations differ; raw traces retained')
+    assertSameCapture(observations[0], observations[1], 'Repeated observations differ; raw traces retained')
     const actual = {image:container.image, identicalFreshCaptures:2, transport:'TLS', results:observations[0], rawCaptures:runs.map(run=>run.map(({entry,packets,rawResponses,transactionDescriptor,schedulerObservation})=>({entry,packets,responses:rawResponses,transactionDescriptor,schedulerObservation})))}
     await writeFile(resolve(output, 'attention-compute.json'), JSON.stringify(actual,null,2)+'\n')
     let fixture
@@ -208,7 +208,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     if(fixture) {
       assert.equal(actual.image,fixture.image)
       assert.equal(actual.transport,fixture.transport)
-      assert.deepEqual(actual.results, fixture.results, 'Retained Attention observations differ')
+      assertSameCapture(actual.results, fixture.results, 'Retained Attention observations differ')
     }
     console.log(`Captured ${actual.results.length} cancellation scenarios twice${fixture?' and matched fixture':''}`)
   })

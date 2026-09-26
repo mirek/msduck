@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { withReferenceContainer } from './lib/reference-container.mjs'
-import { isolatedReference } from './lib/reference.mjs'
+import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/for-xml-wire.json', import.meta.url)
@@ -198,7 +198,7 @@ async function runDatabase(config) {
         const tokens = decodeResponse(responses[0].payloadHex)
       assert.equal(tokens.at(-1)?.token, 'DONE', `${scenario.name}: final DONE`)
       assert.equal(tokens.filter(token => token.token === 'ROW').length, result.sets[0]?.rows.length ?? 0, `${scenario.name}: row tokens`)
-      assert.deepEqual(tokens.filter(token => token.token === 'ROW').map(token => token.value), result.sets[0]?.rows.map(row => row[0]) ?? [], `${scenario.name}: row values`)
+      assertSameCapture(tokens.filter(token => token.token === 'ROW').map(token => token.value), result.sets[0]?.rows.map(row => row[0]) ?? [], `${scenario.name}: row values`)
       const metadata = tokens.find(token => token.token === 'COLMETADATA')
       if (scenario.expectError) {
         assert.equal(metadata, undefined, 'invalid shape has no metadata')
@@ -224,27 +224,27 @@ async function runDatabase(config) {
   })
 }
 
+if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(dirname(output), { recursive: true })
 try {
   let retained
   try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
   catch (error) { if (error.code !== 'ENOENT') throw error }
-  if (writeFixture) assert.equal(retained, undefined, 'refusing to overwrite retained fixture')
   const captureContainer = () => withReferenceContainer(async (config, container) => {
     const runs = [await runDatabase(config), await runDatabase(config)]
-    assert.deepEqual(stable(runs[0]), stable(runs[1]), 'fresh databases differ')
+    assertSameCapture(stable(runs[0]), stable(runs[1]), 'fresh databases differ')
     return { image: container.image, runs }
   })
   const first = await captureContainer()
   await writeFile(output, JSON.stringify(first) + '\n')
   const independent = await captureContainer()
   assert.equal(independent.image, first.image, 'same pinned image')
-  for (const run of independent.runs) assert.deepEqual(stable(run), stable(first.runs[0]), 'independent container differs')
+  for (const run of independent.runs) assertSameCapture(stable(run), stable(first.runs[0]), 'independent container differs')
   const actual = { ...first, independentRuns: independent.runs }
   await writeFile(output, JSON.stringify(actual) + '\n')
-  if (retained) assert.deepEqual(stable(actual.runs[0]), stable(retained.runs[0]), 'retained wire observations differ')
+  if (retained) assertSameCapture(stable(actual.runs[0]), stable(retained.runs[0]), 'retained wire observations differ')
   if (writeFixture) {
-    await writeFile(fixture, JSON.stringify(actual) + '\n')
+    await writeNewFixture(fixture, actual)
   }
   console.log(`Captured ${cases.length} FOR XML wire cases in two fresh databases and an independent fresh container`)
 } catch (error) {
