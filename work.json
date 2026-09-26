@@ -3508,6 +3508,28 @@
       "dependencies": [],
       "issue": 359,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPUBp"
+    },
+    {
+      "id": "temporal-parts-properties-v1",
+      "title": "Preserve FROMPARTS computed and nullable result flags",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement the fully functional SQL Server compatible Rust/DuckDB server, and explicit direction to organize disjoint parallel work. First-party gap from retained owner-generated temporal-parts reference and local source; no external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/result_properties.rs",
+        "crates/msduck-sql/src/projection.rs",
+        "crates/msduck-sql/tests/temporal_parts_properties.rs",
+        "tests/temporal_parts_properties.test.mjs",
+        "docs/temporal-parts-properties.md"
+      ],
+      "acceptance": [
+        "Derive FROMPARTS nullable/computed properties from explicit argument syntax and declarations without executing expressions or reading runtime values; preserve unrelated temporal metadata.",
+        "Match retained reference/temporal-parts.json flags 32 for literal and constant bitwise scales and 33 for CAST/arithmetic/division and bound parameters across TIMEFROMPARTS, DATETIME2FROMPARTS and DATETIMEOFFSETFROMPARTS, including empty results.",
+        "Add deterministic property/projection and independent public client regressions; keep temporal scale parser and task #359 tests untouched.",
+        "Run formatting, workspace Rust tests, strict Clippy, standalone and full client tests and diagnostic audit at the exact PR revision when remote build resources permit; report any cases requiring #359 integration as pending, and open focused owner PR without merging."
+      ],
+      "dependencies": [],
+      "issue": 360,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPVH0"
     }
   ]
 }
