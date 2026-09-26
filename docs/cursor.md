@@ -2,15 +2,20 @@
 
 `reference/cursor.json` retains 114 ordered SQL Server observations of T-SQL
 cursors: decoded rows, full column descriptors, errors and informational
-messages (number, state, class, line and procedure name), DONE/DONEINPROC/DONEPROC
-tokens, per-request return status, and the browse-mode TABNAME/COLINFO tokens
+messages (number, state, class, line and procedure name), the verbatim
+DONE/DONEINPROC/DONEPROC bodies (status, CurCmd, 64-bit row count), per-request
+return status, and the browse-mode TABNAME/COLINFO tokens
 that accompany cursor FETCH results. `scripts/capture-cursor.mjs` ran against the
 pinned SQL Server 2025 image
 `sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a`.
 Two fresh databases in each of two independent containers produced identical
 captures, and the fixture was written only after all four matched (fixture
-SHA-256 `8f49e5865abd51b0b83fb70892e1d2dd271063720e159066dee165fce23636a7`).
-It contains tedious-decoded values and descriptors, not raw TDS packets.
+SHA-256 `bfbaf1162087d163e203d124e36e3337ddf6fa02febe17ef58f5e0ceb3645836`).
+The one exception is the error line number of a single step, which varies by
+container. It is kept raw and excluded only from the cross-container comparison
+(see below). The fixture holds tedious-decoded values and descriptors, not raw
+TDS packets; the DONE bodies and browse tokens are decoded by the script's
+parser hook.
 
 msduck currently has no cursor statements. `DECLARE CURSOR`, `OPEN`, `FETCH`,
 `CLOSE`, `DEALLOCATE`, `WHERE CURRENT OF`, cursor variables, `@@FETCH_STATUS`,
@@ -37,11 +42,20 @@ text. This task changed no parser, engine, catalog, metadata or client-test file
 - Constraints are named explicitly. `process.env.TZ = 'UTC'` is set. No step
   reads the clock: `sys.dm_exec_cursors` is projected to `name`, `properties` and
   `is_open` only.
+- DONE tokens: tedious's `done` events expose only the row count (when
+  DONE_COUNT is set) and MORE, and drop CurCmd and the ERROR, INXACT, ATTN and
+  SRVERROR bits. The script's stream-parser hook therefore records each 12-byte
+  DONE body verbatim (`status`, `curCmd`, `rowCount` as a decimal string, even
+  when DONE_COUNT is unset) before tedious parses it unchanged. The validator
+  requires the hooked token count to equal tedious's done-event count.
 - Rows and messages are bounded per request (1000 rows per set, 200
   messages/done/browse tokens), with overflow counted instead of kept. Captures
   are compared with `assertSameCapture` only. Runs used
   `node --max-old-space-size=2048` under an RSS watchdog that kills above 4 GB;
-  peak RSS was about 116 MB.
+  peak RSS was about 110 MB. The scratch output path is rejected before any
+  container starts if it resolves to the fixture, including through symlinked
+  directories and before the file exists. This is the same logic as
+  `refuseFixtureOutput` in PR #312.
 - Only one server-side `WHILE @@FETCH_STATUS = 0` loop is captured
   (`default loop into variables`, three iterations). Each iteration emits its
   own DONE tokens, and that one batch holds 13, so the count depends on the
@@ -57,8 +71,12 @@ text. This task changed no parser, engine, catalog, metadata or client-test file
   them with the results of every `FETCH` that returns rows to the client, and
   tedious fails the connection with `Unknown type: 164`. The script therefore
   patches `StreamParser.prototype.readToken` locally for these two
-  length-prefixed token types only. The patch decodes each token into the
-  current request's `browse` list and continues with the next token. The
+  length-prefixed token types only (plus the DONE recording above). The patch
+  decodes each token into the current request's `browse` list and continues
+  with the next token. Every nested length (part counts, part lengths, renamed
+  column names) is checked against the remaining payload. A payload that does
+  not decode exactly would be kept as bounded hex with `undecoded: true`, and the
+  validator rejects that. None occurred. The
   decoded order among browse tokens is kept, but their position relative to
   COLMETADATA and ROW is not. Any other client harness (including `npm test`
   suites and the audit runner) needs the same handling before it can consume
@@ -67,13 +85,18 @@ text. This task changed no parser, engine, catalog, metadata or client-test file
   unhandled parser `error` event before `withReferenceContainer` could clean up.
   The worker removed that one container, which carried its own
   `msduck.owner=<worktree>:<pid>` label, after confirming the PID was gone.
-- **Error 1049 reports an unstable line number.** For the one-line batch
-  `DECLARE c INSENSITIVE CURSOR LOCAL ...`, SQL Server reported line 17 in one
-  container and 18 in another. The value was stable across the databases
-  within each container and reproduced in three separate four-database runs.
-  Only this field of this step is replaced by `{ "kind": "unstable" }`, and the
-  record lists `unstable: ["errors[].lineNumber"]`. Every other step matched
-  exactly across 12 captures.
+- **Error 1049 reports a line number that varies by container.** For the
+  one-line batch `DECLARE c INSENSITIVE CURSOR LOCAL ...`, SQL Server reported
+  lines 14, 15, 16, 17 and 18 across the 12 containers whose raw value was
+  recorded (five two-container runs and two single-database runs). Both
+  databases within a container always reported the same value. The fixture keeps every raw value:
+  - the step is marked `variesByContainer: ["errors[].lineNumber"]`;
+  - the top-level `varying` array lists the per-container/per-database values
+    ([[17],[17]] and [[16],[16]] in the retained capture).
+  Databases within a container are compared strictly on the raw capture.
+  Cross-container and retained-fixture comparisons replace only that field, in
+  a comparison copy, and nothing else. Every other field of every step matched
+  exactly in all captures.
 - `sp_prepare` of any multi-statement batch returns status **8182** with no
   metadata. Both cursor batches and the cursor-free control
   `DECLARE @copy INT = @min; SELECT @copy AS copy` do this, so it is not
@@ -81,6 +104,29 @@ text. This task changed no parser, engine, catalog, metadata or client-test file
   metadata.
 
 ## Observed rules
+
+### DONE tokens
+
+All values below are from the retained DONE bodies (status bits: 0x1 MORE,
+0x2 ERROR, 0x10 COUNT).
+- `CurCmd` values:
+  - DECLARE CURSOR, SELECT and FETCH: 193.
+  - OPEN: 32.
+  - CLOSE: 43.
+  - DEALLOCATE: 44.
+  - Positioned UPDATE: 125. Positioned DELETE: 126.
+  - WHILE: 192.
+  - DONEPROC of a procedure or `sp_executesql`: 224.
+- A FETCH that returns a row, with or without INTO, sets COUNT with row count 1.
+- DECLARE, OPEN, CLOSE and DEALLOCATE carry no COUNT, and their raw row count is 0.
+- A statement-level cursor error sets ERROR on that statement's DONE: OPEN of an
+  open cursor is status 0x3, CurCmd 32; a rejected positioned UPDATE is 0x2,
+  CurCmd 125.
+- The batch-aborting conversion error 245 ends the batch with status 0x2,
+  CurCmd 253.
+- The prepared GLOBAL re-execution carries its errors as ERROR bits on the
+  DONEINPROC tokens. Its final DONEPROC has status 0 even though the RETURNSTATUS
+  is -6.
 
 ### Session globals and database defaults
 
@@ -122,7 +168,7 @@ DYNAMIC cursor still reports 1.
 Option conflicts fail at compile time with error 1048 (class 15, line 1):
 `FAST_FORWARD SCROLL`, `FORWARD_ONLY SCROLL`, `STATIC ... FOR UPDATE` and
 `READ_ONLY ... FOR UPDATE`. Mixing ISO and T-SQL syntax
-(`INSENSITIVE CURSOR LOCAL`) is error 1049 (class 15; line unstable, see above).
+(`INSENSITIVE CURSOR LOCAL`) is error 1049 (class 15; the line number varies by container, see above).
 
 ### CURSOR_STATUS and lifecycle errors
 

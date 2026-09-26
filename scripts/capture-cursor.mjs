@@ -8,9 +8,10 @@
 // should be replaced by the shared helpers once #312 merges.
 process.env.TZ = 'UTC'
 import assert from 'node:assert/strict'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Request, TYPES } from 'tedious'
 import { canonical } from './lib/compatibility.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
@@ -21,47 +22,79 @@ if (new Date(0).getTimezoneOffset() !== 0) throw new Error('could not switch the
 // Per-request bounds; overflow is counted in `truncated` instead of retained.
 const LIMITS = Object.freeze({ rows: 1000, messages: 200 })
 
-// SQL Server sends browse-mode TABNAME (0xA4) and COLINFO (0xA5) tokens before
-// the rows of a FETCH from some cursors. tedious 20 has no parser for either
-// and fails the whole connection with "Unknown type: 164". Both tokens carry a
-// USHORT byte length, so this capture-local shim decodes them as data, attaches
-// them to the request that is outstanding, and continues with the next token.
-// Nothing is changed for any other token type.
+// Token hooks on tedious's stream parser (capture-local; tedious itself is not
+// modified).
+// - SQL Server sends browse-mode TABNAME (0xA4) and COLINFO (0xA5) tokens with
+//   the rows of every cursor FETCH that returns rows to the client. tedious 20
+//   has no parser for either and fails the connection with "Unknown type: 164".
+//   Both carry a USHORT byte length; the hook decodes them as data for the
+//   outstanding request and continues with the next token. Every nested length
+//   is checked against the remaining payload; a payload that does not decode
+//   exactly is kept as bounded hex instead of as metadata.
+// - tedious's DONE/DONEPROC/DONEINPROC events expose only the row count (when
+//   DONE_COUNT is set) and MORE, and drop the other status bits (ERROR, INXACT,
+//   ATTN, SRVERROR) and CurCmd. The hook records each DONE body (TDS 7.2+:
+//   USHORT status, USHORT CurCmd, ULONGLONG row count) verbatim before tedious
+//   parses it unchanged.
 const StreamParser = createRequire(import.meta.url)('tedious/lib/token/stream-parser.js')
 const browseTypes = new Map([[0xA4, 'TABNAME'], [0xA5, 'COLINFO']])
-let browseSink = null
+const doneTypes = new Map([[0xFD, 'done'], [0xFE, 'doneProc'], [0xFF, 'doneInProc']])
+let tokenSink = null
 let strayBrowseTokens = 0
 function decodeBrowse(type, bytes) {
+  let at = 0
+  const take = n => {
+    if (!Number.isInteger(n) || n < 0 || at + n > bytes.length) throw new RangeError('field exceeds token payload')
+    const start = at
+    at += n
+    return start
+  }
+  const u8 = () => bytes.readUInt8(take(1))
+  const u16 = () => bytes.readUInt16LE(take(2))
+  const utf16 = chars => { const start = take(chars * 2); return bytes.toString('utf16le', start, start + chars * 2) }
   try {
     if (type === 0xA4) {
       const tables = []
-      for (let at = 0; at < bytes.length;) {
+      while (at < bytes.length) {
+        const count = u8()
         const parts = []
-        const count = bytes.readUInt8(at++)
-        for (let i = 0; i < count; i++) {
-          const chars = bytes.readUInt16LE(at); at += 2
-          parts.push(bytes.toString('utf16le', at, at + chars * 2)); at += chars * 2
-        }
+        for (let i = 0; i < count; i++) parts.push(utf16(u16()))
         tables.push(parts)
       }
       return { token: 'TABNAME', tables }
     }
     const columns = []
-    for (let at = 0; at < bytes.length;) {
-      const column = { column: bytes.readUInt8(at), table: bytes.readUInt8(at + 1), status: bytes.readUInt8(at + 2) }
-      at += 3
-      if (column.status & 0x20) {
-        const chars = bytes.readUInt8(at++)
-        column.name = bytes.toString('utf16le', at, at + chars * 2); at += chars * 2
-      }
+    while (at < bytes.length) {
+      const column = { column: u8(), table: u8(), status: u8() }
+      if (column.status & 0x20) column.name = utf16(u8())
       columns.push(column)
     }
     return { token: 'COLINFO', columns }
-  } catch { return { token: browseTypes.get(type), hex: bytes.subarray(0, 512).toString('hex'), length: bytes.length } }
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error
+    return { token: browseTypes.get(type), undecoded: true, hex: bytes.subarray(0, 512).toString('hex'), length: bytes.length }
+  }
 }
 const readToken = StreamParser.prototype.readToken
 StreamParser.prototype.readToken = function (type) {
-  return browseTypes.has(type) ? skipBrowse(this, type) : readToken.call(this, type)
+  if (browseTypes.has(type)) return skipBrowse(this, type)
+  if (doneTypes.has(type)) return recordDone(this, type)
+  return readToken.call(this, type)
+}
+function recordDone(parser, type) {
+  if (!(parser.options.tdsVersion >= '7_2')) throw new Error(`unexpected TDS version ${parser.options.tdsVersion}`)
+  const at = parser.position
+  if (parser.buffer.length < at + 12) return parser.waitForChunk().then(() => recordDone(parser, type))
+  if (tokenSink) {
+    if (tokenSink.done.length < LIMITS.messages) tokenSink.done.push({
+      kind: doneTypes.get(type),
+      status: parser.buffer.readUInt16LE(at),
+      curCmd: parser.buffer.readUInt16LE(at + 2),
+      rowCount: parser.buffer.readBigUInt64LE(at + 4).toString(),
+    })
+    else tokenSink.overflow++
+  }
+  return readToken.call(parser, type)
 }
 function skipBrowse(parser, type) {
   const at = parser.position
@@ -69,10 +102,21 @@ function skipBrowse(parser, type) {
   const length = parser.buffer.readUInt16LE(at)
   const token = decodeBrowse(type, Buffer.from(parser.buffer.subarray(at + 2, at + 2 + length)))
   parser.position = at + 2 + length
-  if (!browseSink) strayBrowseTokens++
-  else if (browseSink.length < LIMITS.messages) browseSink.push(token)
+  if (!tokenSink) strayBrowseTokens++
+  else if (tokenSink.browse.length < LIMITS.messages) tokenSink.browse.push(token)
+  else tokenSink.overflow++
   return nextToken(parser)
 }
+// Attaches the hooked tokens to a finished request or phase. `done` holds the
+// verbatim DONE bodies; tedious's own done events are only counted, as a
+// consistency check.
+function attachTokens(result, sink, doneEvents) {
+  result.done = sink.done
+  if (sink.browse.length) result.browse = sink.browse
+  if (sink.overflow) { result.truncated ??= { rows: 0, messages: 0 }; result.truncated.messages += sink.overflow }
+  if (doneEvents !== sink.done.length + sink.overflow) result.doneEventMismatch = { events: doneEvents, tokens: sink.done.length + sink.overflow }
+}
+const newSink = () => ({ browse: [], done: [], overflow: 0 })
 function nextToken(parser) {
   if (parser.buffer.length < parser.position + 1) return parser.waitForChunk().then(() => nextToken(parser))
   const type = parser.buffer.readUInt8(parser.position)
@@ -109,10 +153,11 @@ function execute(connection, sql, { kind = 'batch', parameters = [] } = {}) {
     }
     const onError = message('errors')
     const onInfo = message('info')
-    const browse = []
+    const sink = newSink()
+    let doneEvents = 0
     const finish = (error, rowCount) => {
-      browseSink = null
-      if (browse.length) result.browse = browse
+      tokenSink = null
+      attachTokens(result, sink, doneEvents)
       connection.off('errorMessage', onError)
       connection.off('infoMessage', onInfo)
       connection.procReturnStatusValue = undefined
@@ -128,15 +173,12 @@ function execute(connection, sql, { kind = 'batch', parameters = [] } = {}) {
       if (!set || set.rows.length >= LIMITS.rows) overflow('rows')
       else set.rows.push(columns.map(c => c.value))
     })
-    for (const name of ['done', 'doneInProc', 'doneProc']) request.on(name, (rowCount, more) => {
-      if (result.done.length >= LIMITS.messages) overflow('messages')
-      else result.done.push({ kind: name, rowCount: rowCount ?? null, more })
-    })
+    for (const name of ['done', 'doneInProc', 'doneProc']) request.on(name, () => { doneEvents++ })
     request.on('doneProc', (_count, _more, status) => { if (status !== undefined) result.returnStatus = status })
     connection.on('errorMessage', onError)
     connection.on('infoMessage', onInfo)
     connection.procReturnStatusValue = undefined
-    browseSink = browse
+    tokenSink = sink
     try {
       if (kind === 'batch') connection.execSqlBatch(request)
       else if (kind === 'rpc') connection.execSql(request)
@@ -176,23 +218,21 @@ async function capturePrepared(connection, sql, declarations, valueSets) {
     if (!set || set.rows.length >= LIMITS.rows) overflow('rows')
     else set.rows.push(columns.map(c => c.value))
   })
-  for (const name of ['done', 'doneInProc', 'doneProc']) request.on(name, (rowCount, more) => {
-    if (!result) return
-    if (result.done.length >= LIMITS.messages) overflow('messages')
-    else result.done.push({ kind: name, rowCount: rowCount ?? null, more })
-  })
+  let sink = newSink()
+  let doneEvents = 0
+  for (const name of ['done', 'doneInProc', 'doneProc']) request.on(name, () => { if (result) doneEvents++ })
   request.on('doneProc', (_count, _more, status) => { if (result && status !== undefined) result.returnStatus = status })
-  let browse = []
   const phase = start => new Promise(settle => {
     result = fresh()
-    browse = []
-    browseSink = browse
+    sink = newSink()
+    doneEvents = 0
+    tokenSink = sink
     complete = (error, rowCount) => {
       complete = () => {}
       const finished = result
       result = undefined
-      browseSink = null
-      if (browse.length) finished.browse = browse
+      tokenSink = null
+      attachTokens(finished, sink, doneEvents)
       finished.rowCount = rowCount
       if (error && !reported.has(error) && !finished.errors.length) finished.errors.push({ message: error.message, number: error.number ?? null })
       if (error) reported.add(error)
@@ -245,21 +285,15 @@ async function observe(connection, config) {
   // Every batch gets a unique trailing comment so no two steps share statement
   // text (and plan cache entries). The two 'rpc local cursor' executions share
   // text intentionally; procedure calls send only the procedure name.
-  // unstableErrorLine: SQL Server reports error 1049 for a one-line batch at
-  // line 17 in one container and 18 in another (stable across databases within
-  // a container), so that single field is replaced by an explicit marker after
-  // checking it is an integer. Every other field is retained exactly.
-  async function record(name, sql, { session = 'primary', kind = 'batch', parameters, shared = false, unstableErrorLine = false } = {}) {
+  // variesByContainer: fields retained raw but excluded (only) from the
+  // reproducibility comparison; see VARYING below.
+  async function record(name, sql, { session = 'primary', kind = 'batch', parameters, shared = false, variesByContainer } = {}) {
     assert(!name.includes('*/'))
     const target = session === 'primary' ? connection : secondary
     const text = kind === 'procedure' || shared ? sql : `${sql} /*${name}*/`
     const typed = parameters?.map(([p, type, value]) => [p, TYPES[type], value])
     const result = canonical(await execute(target, text, { kind, parameters: typed }))
-    if (unstableErrorLine) for (const error of result.errors) {
-      assert(Number.isInteger(error.lineNumber), `${name}: expected an integer line number`)
-      error.lineNumber = { kind: 'unstable' }
-    }
-    records.push({ name, session, kind, sql: text, ...(parameters ? { parameters: canonical(parameters) } : {}), ...(unstableErrorLine ? { unstable: ['errors[].lineNumber'] } : {}), result })
+    records.push({ name, session, kind, sql: text, ...(parameters ? { parameters: canonical(parameters) } : {}), ...(variesByContainer ? { variesByContainer } : {}), result })
     return result
   }
   async function prepared(name, sql, declarations, valueSets) {
@@ -325,7 +359,7 @@ CLOSE c_vars; DEALLOCATE c_vars`)
     await record('static for update conflict', 'DECLARE c_conflict3 CURSOR LOCAL STATIC FOR SELECT id FROM dbo.cur_items FOR UPDATE')
     await record('read only for update conflict', 'DECLARE c_conflict4 CURSOR LOCAL READ_ONLY FOR SELECT id FROM dbo.cur_items FOR UPDATE')
     await record('iso insensitive scroll', `DECLARE c_iso INSENSITIVE SCROLL CURSOR FOR SELECT id, name FROM dbo.cur_items ORDER BY id FOR READ ONLY; OPEN c_iso; SELECT @@CURSOR_ROWS AS cursor_rows, CURSOR_STATUS('global','c_iso') AS global_status; FETCH LAST FROM c_iso; ${cursors}; CLOSE c_iso; DEALLOCATE c_iso`)
-    await record('iso syntax with tsql option', 'DECLARE c_iso2 INSENSITIVE CURSOR LOCAL FOR SELECT id FROM dbo.cur_items', { unstableErrorLine: true })
+    await record('iso syntax with tsql option', 'DECLARE c_iso2 INSENSITIVE CURSOR LOCAL FOR SELECT id FROM dbo.cur_items', { variesByContainer: ['errors[].lineNumber'] })
 
     // Declared and effective cursor models, @@CURSOR_ROWS and CURSOR_STATUS per type.
     const models = [
@@ -509,6 +543,8 @@ function validate(run) {
     for (const phase of phases) {
       assert(phase.done.length > 0, `${record.name}: no completion`)
       assert(!phase.truncated, `${record.name}: truncated`)
+      assert(!phase.doneEventMismatch, `${record.name}: DONE tokens and tedious done events disagree`)
+      for (const b of phase.browse ?? []) assert(!b.undecoded, `${record.name}: undecoded ${b.token}`)
     }
   }
 
@@ -553,7 +589,7 @@ function validate(run) {
   assert.deepEqual(errors(get('dynamic absolute rejected')), [16925])
   for (const name of ['fast forward scroll conflict', 'forward only scroll conflict', 'static for update conflict', 'read only for update conflict']) assert.deepEqual(errors(get(name)), [1048], name)
   assert.deepEqual(errors(get('iso syntax with tsql option')), [1049])
-  assert.deepEqual(get('iso syntax with tsql option').errors[0].lineNumber, { kind: 'unstable' })
+  assert(Number.isInteger(get('iso syntax with tsql option').errors[0].lineNumber))
   assert.deepEqual(rows('iso insensitive scroll', 2), [['c_iso', 'TSQL | Snapshot | Read Only | Global (0)', true]])
 
   // Declared versus effective model and @@CURSOR_ROWS.
@@ -640,6 +676,19 @@ function validate(run) {
   assert.deepEqual(rows('final cursors'), [])
 }
 
+// Resolves symlinks in the existing part of a path, so an alias of the fixture
+// (or of its directory) compares equal even before the file exists. Same logic
+// as refuseFixtureOutput in owner PR #312, which is not on main yet.
+async function canonicalPath(path) {
+  const absolute = resolve(path instanceof URL ? fileURLToPath(path) : path)
+  try { return await realpath(absolute) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return resolve(await canonicalPath(dirname(absolute)), basename(absolute))
+  }
+}
+// The scratch output is written unconditionally, so it must never alias the
+// retained fixture. Both checks run before any container starts.
+if (await canonicalPath(output) === await canonicalPath(fixture)) throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(fixture))
 if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(resolve(output, '..'), { recursive: true })
 const containers = []
@@ -654,20 +703,43 @@ for (let containerIndex = 0; containerIndex < (oneDatabase ? 1 : 2); containerIn
     containers.push({ image: container.image, runs })
   })
 }
+// Every captured field is retained raw. A step may declare fields that vary
+// between containers (variesByContainer); `varying` lists their raw values per
+// container and database as evidence. Databases within one container are
+// compared strictly on the raw capture; comparisons across containers and with
+// the retained fixture exclude exactly the declared fields and nothing else.
+const errorLineField = 'errors[].lineNumber'
+function varyingValues(run) {
+  return run.filter(r => r.variesByContainer).map(r => {
+    assert.deepEqual(r.variesByContainer, [errorLineField], `${r.name}: unsupported varying field`)
+    return { step: r.name, field: errorLineField, value: r.result.errors.map(e => e.lineNumber) }
+  })
+}
+function comparable(run) {
+  return run.map(r => r.variesByContainer
+    ? { ...r, result: { ...r.result, errors: r.result.errors.map(e => ({ ...e, lineNumber: { kind: 'excluded from comparison' } })) } }
+    : r)
+}
+const comparableCapture = capture => capture.containers.map(c => ({ image: c.image, runs: c.runs.map(comparable) }))
+const varying = varyingValues(containers[0].runs[0]).map(({ step, field }) => ({
+  step, field,
+  values: containers.map(c => c.runs.map(run => varyingValues(run).find(v => v.step === step).value)),
+}))
 // The raw capture is written before comparison so a difference can be inspected.
-const actual = { containers }
+const actual = { containers, varying }
 await writeFile(output, JSON.stringify(actual) + '\n')
 if (!oneDatabase) {
   for (const [index, { runs }] of containers.entries()) assertSameCapture(runs[0], runs[1], `cursor observations differ across fresh databases in container ${index}`)
-  assertSameCapture(containers[0].runs[0], containers[1].runs[0], 'cursor observations differ across containers')
+  assertSameCapture(comparable(containers[0].runs[0]), comparable(containers[1].runs[0]), 'cursor observations differ across containers')
 }
 let retained
 if (!oneDatabase) {
   try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
   catch (error) { if (error.code !== 'ENOENT') throw error }
-  if (retained) assertSameCapture(actual, retained, 'cursor observations differ from retained fixture')
+  if (retained) assertSameCapture(comparableCapture(actual), comparableCapture(retained), 'cursor observations differ from retained fixture')
   if (writeFixture) await writeNewFixture(fixture, actual)
 }
+for (const v of varying) console.log(`${v.step} ${v.field} per container/database: ${JSON.stringify(v.values)}`)
 console.log(`Captured ${containers[0].runs[0].length} cursor observations` +
   (oneDatabase ? ' in one diagnostic database' : ' in four fresh databases across two containers') +
   (retained ? ' and matched retained fixture' : ''))
