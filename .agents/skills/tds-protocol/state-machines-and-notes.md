@@ -274,8 +274,10 @@ Every SMP frame starts with 16 little-endian bytes:
 complete TDS packet after the header, so its minimum useful length is 24.
 The client opens each SID with SYN sequence 0 and initial window credit
 (Microsoft clients use 4). DATA sequence numbers begin at 1 and increase per
-direction; WNDW advertises the exclusive high-water mark available to the
-peer. FIN carries the sender's current sequence and is answered by peer FIN.
+direction; WNDW is the inclusive maximum DATA sequence permitted to the peer:
+WNDW=4 allows DATA sequences 1 through 4 (see the [MC-SMP header](https://learn.microsoft.com/en-us/openspecs/windows_protocols/mc-smp/4ada62f7-33c2-45bb-980c-f566f5a6c11a)
+and [ACK example](https://learn.microsoft.com/en-us/openspecs/windows_protocols/mc-smp/e1138e43-ba11-4c44-9173-09fb765890c2)).
+FIN carries the sender's current sequence and is answered by peer FIN.
 
 ### mssqlite behavior
 
