@@ -2258,6 +2258,28 @@
       "dependencies": [],
       "issue": 239,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PNddn"
+    },
+    {
+      "id": "agent-work-publish-v1",
+      "title": "Add safe concurrent registry publication and fast task discovery",
+      "state": "ready",
+      "authorization": "Direct owner instruction in session 2026-09-26: continue implementation and make creating and claiming work reliable for concurrent agents. First-party audit of scripts/agent-work.mjs and agent-control history; no external submission is input.",
+      "scope": [
+        "scripts/agent-work.mjs",
+        "scripts/lib/agent-work.mjs",
+        "tests/agent-work.test.mjs",
+        "docs/agent-work.md",
+        ".agents/skills/contribute/SKILL.md"
+      ],
+      "acceptance": [
+        "Add a publish command that applies declarative task additions/state changes, validates the full registry, refuses ID reuse (including claimed IDs) and edits of existing task definitions, and fast-forwards agent-control from the validated revision only.",
+        "Disable registry protection only around the ref update, always restore it, recover lost races by reloading, and provide an idempotent protect recovery command.",
+        "Workers wait briefly instead of failing while a concurrent publication has registry protection inactive, never reading content while inactive.",
+        "List claims in one request and add an --available filter showing ready, unclaimed tasks with completed dependencies.",
+        "Test concurrent publishers, lost races, protection restoration and the new listing; document the procedure without changing claim semantics."
+      ],
+      "dependencies": [],
+      "issue": 242
     }
   ]
 }
