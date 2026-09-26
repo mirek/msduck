@@ -2320,6 +2320,46 @@
       ],
       "dependencies": [],
       "issue": 245
+    },
+    {
+      "id": "offset-functions-reference-v1",
+      "title": "Capture SQL Server offset-function semantics",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal and 2026-09-26 instruction to utilize this host with independent parallel agents. First-party ROADMAP.md and implementation notes identify live reference, coercion and error-precedence gaps; no external submission is input.",
+      "scope": [
+        "scripts/capture-offset-functions.mjs",
+        "reference/offset-functions.json",
+        "docs/offset-functions-reference.md"
+      ],
+      "acceptance": [
+        "Capture exact SQL Server rows, typed descriptors, errors and completion tokens for SWITCHOFFSET and TODATETIMEOFFSET across scales 0-7, NULLs, signed offsets, date boundaries, source columns and prepared/RPC reuse.",
+        "Probe integer, text and numeric offset coercions, invalid syntax/ranges and error precedence; retain exact differences and unsupported cases.",
+        "Use isolated pinned SQL Server containers, two fresh databases and an independent second container; compare raw captures, retain a reproducible generator that refuses silent overwrite.",
+        "Document observed rules and remaining runtime gaps without editing implementation or claimed files."
+      ],
+      "dependencies": [],
+      "issue": 248,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POR76"
+    },
+    {
+      "id": "temporal-parts-reference-v1",
+      "title": "Capture SQL Server temporal constructor semantics",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal and 2026-09-26 instruction to utilize this host with independent parallel agents. First-party ROADMAP.md and constructor notes identify live reference, precision diagnostics and coercion gaps; no external submission is input.",
+      "scope": [
+        "scripts/capture-temporal-parts.mjs",
+        "reference/temporal-parts.json",
+        "docs/temporal-parts-reference.md"
+      ],
+      "acceptance": [
+        "Capture exact SQL Server rows, typed descriptors, errors and completion tokens for TIMEFROMPARTS, DATETIME2FROMPARTS and DATETIMEOFFSETFROMPARTS across precisions, boundaries, NULLs, invalid fields and fractional ticks.",
+        "Probe constant precision expressions, invalid/NULL/noninteger precision, argument coercion and prepared/RPC reuse; retain exact error ordering and function-specific differences.",
+        "Use isolated pinned SQL Server containers, two fresh databases and an independent second container; compare raw captures, retain a reproducible generator that refuses silent overwrite.",
+        "Document observed rules and remaining runtime gaps without editing implementation or claimed files."
+      ],
+      "dependencies": [],
+      "issue": 249,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POR75"
     }
   ]
 }
