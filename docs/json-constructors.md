@@ -144,3 +144,46 @@ msduck does not implement these functions; this task only retains evidence.
    completion tokens, and replay this fixture through Tedious before
    claiming compatibility. DuckDB's `json_object`/`json_array` spelling is
    not evidence that these SQL Server rules hold.
+
+## Implementation: deterministic core rules
+
+`crates/msduck-sql/src/json_constructor.rs` (task `json-constructors-core-v1`)
+implements the rules above over already-evaluated operands. It depends only on
+`std` and `msduck_core` (`json_escape`, `json`, `json_path`, `for_json::base64`,
+`money`, `value::Decimal`, `datetime2`, `datetimeoffset`), has no DuckDB, I/O
+or clock access, and is not registered in `lib.rs` yet: its integration test
+includes it with `#[path]`. Parsing, binding and root wiring remain the
+`json-constructors-root-v1` successor.
+
+| API | Behavior |
+| --- | --- |
+| `object(pairs, clause)`, `array(elements, clause)` | Render `Scalar` operands with the scalar-family table, escape keys and strings with `json_escape`, embed `Scalar::Json` sources unescaped, keep duplicate keys and argument order, and apply `NULL ON NULL`/`ABSENT ON NULL`. A NULL key is runtime 13638 state 1; a CLR operand is runtime 13666 state 2 (object) or 3 (array). |
+| `null_clause(constructor, written)` | Defaults (`NULL ON NULL` for objects, `ABSENT ON NULL` for arrays) and the compile-time 102 state 20 for both object clauses. |
+| `constructor_result(returning_json, argument_types)` | `ResultType::Json` for `RETURNING JSON` or a `JSON`-typed argument, otherwise `NVarCharMax`; `system_type_name()` and `fixed_collation()` give the described type and the UTF-8 collation. |
+| `modify_signature(types)` | Compile-time arity 174 and argument-type 8116 state 1 checks for the captured types, and the result type (`Json` for JSON input). |
+| `modify(input, path, value)` | NULL input returns NULL; NULL path is runtime 8116 state 8. The path grammar (`append`, `lax`, `strict`, `$`, `.key`, `."quoted"`, `[n]`) reports 13607 states 14/21/22 with positions, 13619 for `$` and 13660 for `.*`. Documents must have an object or array root; failures are 13609 state 7 at the root token or at the end of truncated input. Edits splice the original text, so untouched whitespace is kept: replace the first matching key, lax NULL deletes the first match, strict NULL writes `null`, lax insert appends a member, `append` extends or (lax) creates an array, and missing targets are 13608 state 2 (strict) or unchanged (lax); appending to a non-array under strict is 13621 state 1. |
+
+`Error::Compile` errors precede the result descriptor and `Error::Runtime`
+errors follow it, matching the capture's timing. `crates/msduck-sql/tests/json_constructors.rs`
+replays all four retained runs: per run, 229 cases compare exact text, NULLs,
+row counts, descriptor type/length/collation family and error
+number/state/class/message; 11 cases (DATALENGTH/LEN, ISJSON,
+`sp_describe_first_result_set`, `SELECT ... INTO` and the post-UPDATE SELECT)
+are checked with case-specific assertions; 7 cases are not applicable (two
+setup statements, four parser syntax errors, and `JSON_QUERY`'s own 13609
+state 1).
+
+These return `Error::Unsupported` instead of guessing: object keys other than
+integers, decimals, `DATE`, binary and character types; `SQL_VARIANT` holding
+anything but `INT`; non-ASCII `CHAR` padding; invalid `Scalar::Json` text;
+repeated or array-conflicting ON NULL clauses; JSON_MODIFY types, arities, path
+spellings (upper-case or misplaced modes, other key characters, `[*]`, leading
+zeros, indexes beyond `INT`) and error positions after a mode or in non-ASCII
+text; document errors away from the root token or the end of input, or after
+leading whitespace; a document that is invalid together with an invalid path
+(precedence was not captured); key steps on arrays and index steps on objects;
+strict NULL array elements and lax NULL out-of-range elements; and `append`
+through a scalar or missing parent, or creating an array with NULL. Text is
+handled as Rust strings, so isolated UTF-16 surrogates are not represented;
+whitespace around deleted or appended members follows a simple splice rule
+beyond the single captured whitespace case.
