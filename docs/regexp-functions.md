@@ -290,11 +290,33 @@ must not claim equivalence silently.
 
 ## Protocol shape
 
-- Successful batches end with DONE and a count.
+The shape of a successful call depends on the statement and the protocol. The
+fixture retains these shapes, and nothing else should be inferred from them:
+
+| Successful program | Captured completion tokens |
+| --- | --- |
+| Batch with one SELECT, including one that returns no rows | One DONE whose count is the number of rows returned (0 for an empty or NULL-argument table function) |
+| CREATE TABLE (create source, create check constraint) | One DONE without a count |
+| INSERT (insert source, check constraint accepts) | One DONE whose count is the number of rows inserted (4, 2) |
+| Batch of DECLARE with an initializer, SELECT, SET, SELECT (matches variable null then value) | Four DONEs with the more bit set on all but the last: count 1, 0 (the empty result), 1, 1 |
+| DECLARE plus EXEC(@sql) running ALTER DATABASE ... SET COMPATIBILITY_LEVEL | DONE count 1 with the more bit set, then DONEINPROC without a count, then DONEPROC without a count; return status 0 |
+| sp_executesql, and sp_execute on a prepared handle | DONEINPROC whose count is the number of rows returned, then DONEPROC without a count |
+| sp_prepare | DONEINPROC count 0 after the column descriptor, then DONEPROC |
+| sp_unprepare | One DONEPROC without a count |
+
+An implementation must not add row counts to DDL, or replace the DONEPROC
+sequence of an EXEC or RPC call with a batch DONE.
+
+Failure shapes:
+
 - Type, arity, flag and range errors on literal arguments (8116, 189, 156,
   102, 313, 8144, 19300-19309, 19301, 19302, 19303) occur before any column
-  metadata. After them, a batch has a DONE without a count.
-- Errors 245 and 8115 occur after the column descriptor.
+  metadata. After them, a batch has a DONE without a count. The CHECK
+  violation 547 and the level-160 constraint load failure (195 then 427) end
+  the same way.
+- Errors 245 and 8115 occur after the column descriptor, followed by a DONE
+  without a count. This also happens for a column-derived pattern that is
+  invalid only on row 2: that call returns row 1 before the error.
 - A table function with an invalid pattern or flag, even as a literal, sends
   its column descriptor before the error.
 - With sp_executesql or prepared parameters, range and pattern errors occur at
@@ -302,14 +324,17 @@ must not claim equivalence silently.
   error, followed by a DONEINPROC without a count and then a DONEPROC.
 - Parameter type errors (NVARCHAR flags, a MAX pattern) occur before
   metadata, with only a DONEPROC.
-- A prepared handle survives execution errors, and sp_unprepare succeeds.
+- A prepared handle survives execution errors: the next sp_execute returns
+  rows, and sp_unprepare succeeds.
 - When the prepare fails (NVARCHAR flags):
   - The retained sp_execute gives 8179 "Could not find prepared statement with
     handle 1929396226". The fixture keeps the handle value, which was the
     same in all four captures.
   - sp_unprepare gives 8179 state 8 with handle 0.
-- The session remains reusable (@@TRANCOUNT 0, XACT_STATE 0) after all
-  programs.
+  - All three calls end with a single DONEPROC without a count.
+
+After all programs, the session remains reusable (@@TRANCOUNT 0,
+XACT_STATE 0).
 
 ## Not captured
 
