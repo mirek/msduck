@@ -3196,6 +3196,28 @@
       "dependencies": [],
       "issue": 333,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PO5RZ"
+    },
+    {
+      "id": "tvp-codec-v1",
+      "title": "Decode bounded TVP RPC values from retained SQL Server wire requests",
+      "state": "ready",
+      "authorization": "Direct owner continuing SQL Server compatibility goal and instruction to publish this first-party dependent TVP codec successor. Owner-run #333/#334 retained wire capture is the only behavioral input; no external submission is approved.",
+      "scope": [
+        "crates/msduck-tds/src/tvp.rs",
+        "crates/msduck-tds/tests/tvp.rs",
+        "docs/tvp-codec.md"
+      ],
+      "acceptance": [
+        "Start only after tvp-wire-reference-v1 (#333/#334) merges and is marked done in the protected registry. Replay applicable retained reference/tvp-wire.json raw RPC request bytes for null, empty, mixed nullable INT/NVARCHAR/VARBINARY and multirow TVPs, preserving declared metadata and raw values.",
+        "Implement deterministic bounded TVP RPC value decoding with explicit unsupported cases. Reject malformed/truncated lengths, unexpected row/end tokens, excess counts and trailing bytes without unbounded allocation or panics.",
+        "Use only the three new scoped files; test-import the module by path while msduck-tds lib.rs is claimed. No DuckDB, sessions, transport I/O, process state, root src/rpc.rs wiring or runtime table-type semantics.",
+        "Run formatting, focused TDS tests, strict Clippy and broader Rust checks as appropriate at exact revision, report gaps and open a focused PR. Integrator handles merge."
+      ],
+      "dependencies": [
+        "tvp-wire-reference-v1"
+      ],
+      "issue": 335,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PO6Gc"
     }
   ]
 }
