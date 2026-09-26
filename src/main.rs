@@ -1,5 +1,5 @@
 use anyhow::{Result, ensure};
-use msduck::server::Server;
+use msduck::server::{DEFAULT_MAX_CONNECTIONS, Server};
 use std::net::TcpListener;
 fn main() -> Result<()> {
     let mut address = "127.0.0.1:1433".to_string();
@@ -7,6 +7,7 @@ fn main() -> Result<()> {
     let mut tls_cert = None;
     let mut tls_key = None;
     let mut administrator_file = None;
+    let mut max_connections = DEFAULT_MAX_CONNECTIONS;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -38,9 +39,22 @@ fn main() -> Result<()> {
                         anyhow::anyhow!("--admin-credentials requires a JSON path")
                     })?)
             }
+            "--max-connections" => {
+                let value = args.next().ok_or_else(|| {
+                    anyhow::anyhow!("--max-connections requires a positive integer")
+                })?;
+                max_connections = value.parse::<usize>().map_err(|_| {
+                    anyhow::anyhow!("--max-connections requires a positive integer")
+                })?;
+                ensure!(
+                    (1..=msduck::server::MAX_CONNECTIONS_LIMIT).contains(&max_connections),
+                    "--max-connections must be between 1 and {}",
+                    msduck::server::MAX_CONNECTIONS_LIMIT
+                );
+            }
             "--help" | "-h" => {
                 println!(
-                    "msduck [--listen 127.0.0.1:1433] [--database :memory:|path]\nDevelopment server: loopback only; SQL logins require --admin-credentials for authentication.\nOptional required TLS 1.2: --tls-cert chain.pem --tls-key key.pem\nBootstrap SQL administrator: --admin-credentials credentials.json (requires TLS)"
+                    "msduck [--listen 127.0.0.1:1433] [--database :memory:|path]\nDevelopment server: loopback only; SQL logins require --admin-credentials for authentication.\nOptional required TLS 1.2: --tls-cert chain.pem --tls-key key.pem\nBootstrap SQL administrator: --admin-credentials credentials.json (requires TLS)\nMaximum concurrent accepted connections: --max-connections N (default 128, range 1..=1024)"
                 );
                 return Ok(());
             }
@@ -67,7 +81,7 @@ fn main() -> Result<()> {
         listener.local_addr()?.ip().is_loopback(),
         "development listener must use a loopback address"
     );
-    let mut server = Server::open(&database)?;
+    let mut server = Server::open(&database)?.with_max_connections(max_connections)?;
     let mode = if let Some(tls) = tls {
         server = server.with_tls(tls);
         "required TLS development mode"

@@ -4,7 +4,10 @@ use duckdb::Connection as BackendConnection;
 use std::{
     collections::HashMap,
     net::{TcpListener, TcpStream},
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
     thread,
 };
 use zeroize::Zeroize;
@@ -16,6 +19,34 @@ pub struct Server {
     diagnostics: crate::statement_diagnostics::Registry,
     tls: Option<Arc<rustls::ServerConfig>>,
     administrator: Option<Arc<crate::authentication::Administrator>>,
+    max_connections: usize,
+}
+
+pub const DEFAULT_MAX_CONNECTIONS: usize = 128;
+pub const MAX_CONNECTIONS_LIMIT: usize = 1024;
+
+struct Admission {
+    active: AtomicUsize,
+    limit: usize,
+}
+
+impl Admission {
+    fn acquire(self: &Arc<Self>) -> Option<Permit> {
+        self.active
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |active| {
+                (active < self.limit).then_some(active + 1)
+            })
+            .ok()
+            .map(|_| Permit(Arc::clone(self)))
+    }
+}
+
+struct Permit(Arc<Admission>);
+
+impl Drop for Permit {
+    fn drop(&mut self) {
+        self.0.active.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 
 /// A backend connection paired with its database-owned execution services.
@@ -65,6 +96,7 @@ impl Server {
             diagnostics,
             tls: None,
             administrator: None,
+            max_connections: DEFAULT_MAX_CONNECTIONS,
         })
     }
     pub fn with_tls(mut self, config: Arc<rustls::ServerConfig>) -> Self {
@@ -79,17 +111,37 @@ impl Server {
         self.administrator = Some(Arc::new(administrator));
         Ok(self)
     }
+    pub fn with_max_connections(mut self, limit: usize) -> Result<Self> {
+        ensure!(
+            (1..=MAX_CONNECTIONS_LIMIT).contains(&limit),
+            "max connections must be between 1 and {MAX_CONNECTIONS_LIMIT}"
+        );
+        self.max_connections = limit;
+        Ok(self)
+    }
     pub fn serve(self, listener: TcpListener) -> Result<()> {
+        let admission = Arc::new(Admission {
+            active: AtomicUsize::new(0),
+            limit: self.max_connections,
+        });
         for stream in listener.incoming() {
             let stream = stream?;
+            let Some(permit) = admission.acquire() else {
+                // No TDS request has been read, so there is no proven SQL Server
+                // diagnostic to send. Drop the socket before allocating a DB
+                // connection or worker.
+                drop(stream);
+                continue;
+            };
             let db = self.connection()?;
             let tls = self.tls.clone();
             let administrator = self.administrator.clone();
-            thread::spawn(move || {
+            thread::Builder::new().spawn(move || {
+                let _permit = permit;
                 if let Err(error) = serve_connection_configured(stream, db, tls, administrator) {
                     eprintln!("connection ended: {error}");
                 }
-            });
+            })?;
         }
         Ok(())
     }
