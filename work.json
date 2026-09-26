@@ -3490,6 +3490,24 @@
       ],
       "issue": 358,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPRWG"
+    },
+    {
+      "id": "temporal-parts-cast-scale-v1",
+      "title": "Accept constant INT casts as temporal FROMPARTS scale",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement a fully functional SQL Server compatible Rust/DuckDB server; first-party gap from retained SQL Server temporal-parts capture on current main. No external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/expression_metadata/temporal.rs",
+        "tests/temporal_parts_precision_cast.test.mjs"
+      ],
+      "acceptance": [
+        "Match the retained SQL Server 2025 reference/temporal-parts.json CAST(3 AS INT) cases for TIMEFROMPARTS, DATETIME2FROMPARTS and DATETIMEOFFSETFROMPARTS through deterministic scale inference and public Tedious execution; preserve scale-3 value and column metadata, including empty result sets.",
+        "Accept only constant integer CAST expressions with SQL Server-compatible type/range semantics; reject nonconstant, unsupported and out-of-range scales with the existing 10760 diagnostic. Never evaluate parameters, columns or volatile expressions to choose compile metadata.",
+        "Run formatting, complete workspace Rust tests, strict workspace Clippy, standalone and full independent client tests, and diagnostic audit at the exact PR revision. Preserve raw compatibility differences and document remaining gaps in the PR."
+      ],
+      "dependencies": [],
+      "issue": 359,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPUBp"
     }
   ]
 }
