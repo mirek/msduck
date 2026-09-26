@@ -7,10 +7,11 @@
 // connections to the fresh database and closes them before the next scenario,
 // so no scenario observes state left by another one.
 import assert from 'node:assert/strict'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { basename, dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Request, TYPES } from 'tedious'
-import { capture, canonical } from './lib/compatibility.mjs'
+import { canonical } from './lib/compatibility.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
 import { assertSameCapture, connect, isolatedReference, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 
@@ -22,6 +23,18 @@ const positional = args.filter(arg => !['--write-fixture', '--one-database'].inc
 if (positional.length > 1) throw new Error('expected at most one output path')
 if (writeFixture && oneDatabase) throw new Error('a retained fixture requires four independent captures')
 const output = resolve(positional[0] ?? 'artifacts/session-context-reference-v1/capture.json')
+
+// Mirrors refuseFixtureOutput from PR #312 (not yet on main): resolves symlinks
+// in the existing part of each path, so an alias of the fixture or of its
+// directory is refused even before the file exists.
+async function canonicalPath(path) {
+  const absolute = resolve(path instanceof URL ? fileURLToPath(path) : path)
+  try { return await realpath(absolute) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return resolve(await canonicalPath(dirname(absolute)), basename(absolute))
+  }
+}
+if (await canonicalPath(output) === await canonicalPath(fixture)) throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(fixture))
 
 // Exact runtime type of a stored value; tedious decodes sql_variant values to
 // JavaScript values, so the base type and its facets are read explicitly.
@@ -356,17 +369,6 @@ function parameterValue(value) {
   return value
 }
 
-function withParameters(connection, parameters, dispatch) {
-  return {
-    on: (...args) => connection.on(...args),
-    off: (...args) => connection.off(...args),
-    execSqlBatch: request => {
-      for (const [name, type, value, options] of parameters) request.addParameter(name, TYPES[type], parameterValue(value), options)
-      dispatch(request)
-    },
-  }
-}
-
 // Mirrors capturePrepared from docs/reference-captures.md (PR #312), which is
 // not yet on main: one sp_prepare, one sp_execute per value set and one
 // sp_unprepare on a single Request. Preparation completes through the
@@ -376,6 +378,61 @@ function withParameters(connection, parameters, dispatch) {
 const PREPARED_LIMITS = Object.freeze({ rows: 10000, messages: 200 })
 const messageFields = m => ({ number: m.number, state: m.state, class: m.class, lineNumber: m.lineNumber, message: m.message })
 const columnFields = c => ({ name: c.colName, type: c.type.name, length: c.dataLength ?? null, precision: c.precision ?? null, scale: c.scale ?? null, flags: c.flags, collation: canonical(c.collation ?? null) })
+
+// tedious passes the RETURNSTATUS value preceding each DONEPROC token and
+// clears it afterwards, so `status` is exact per token; null means the token
+// had no RETURNSTATUS. It is recorded on every DONEPROC entry because a batch
+// with several EXEC statements has several statuses.
+const doneEntry = (kind, rowCount, more, status) => kind === 'doneProc'
+  ? { kind, rowCount: rowCount ?? null, more, status: status ?? null }
+  : { kind, rowCount: rowCount ?? null, more }
+
+// Batch/RPC capture with the shape of lib/compatibility.mjs `capture`, plus a
+// per-DONEPROC status and the same bounds as the prepared helper.
+// The 1 MB fill loops emit about 760 DONE tokens per batch, so batches get a
+// larger (still bounded) token limit; validate() rejects any truncation.
+const BATCH_LIMITS = Object.freeze({ rows: 10000, messages: 2000 })
+function captureRequest(connection, sql, dispatch, parameters = []) {
+  return new Promise(resolve => {
+    const limits = BATCH_LIMITS
+    const result = { sets: [], done: [], errors: [], info: [], returnStatus: null }
+    const overflow = kind => { result.truncated ??= { rows: 0, messages: 0 }; result.truncated[kind]++ }
+    const message = list => token => {
+      if (result.errors.length + result.info.length >= limits.messages) overflow('messages')
+      else result[list].push(messageFields(token))
+    }
+    const onError = message('errors')
+    const onInfo = message('info')
+    const detach = () => { connection.off('errorMessage', onError); connection.off('infoMessage', onInfo) }
+    const request = new Request(sql, (error, rowCount) => {
+      detach()
+      result.rowCount = rowCount
+      if (error && !result.errors.length) result.errors.push({ message: error.message, number: error.number ?? null })
+      resolve(result)
+    })
+    for (const [name, type, value, options] of parameters) request.addParameter(name, TYPES[type], parameterValue(value), options)
+    connection.on('infoMessage', onInfo)
+    connection.on('errorMessage', onError)
+    request.on('columnMetadata', columns => result.sets.push({ columns: columns.map(columnFields), rows: [] }))
+    request.on('row', columns => {
+      const set = result.sets.at(-1)
+      if (!set || set.rows.length >= limits.rows) overflow('rows')
+      else set.rows.push(columns.map(c => c.value))
+    })
+    for (const kind of ['done', 'doneInProc', 'doneProc']) request.on(kind, (rowCount, more, status) => {
+      if (result.done.length >= limits.messages) overflow('messages')
+      else result.done.push(doneEntry(kind, rowCount, more, status))
+    })
+    request.on('doneProc', (_count, _more, status) => { result.returnStatus = status })
+    try { dispatch(request) }
+    catch (error) {
+      detach()
+      result.errors.push({ message: error.message, number: error.number ?? null })
+      resolve(result)
+    }
+  })
+}
+const captureBatch = (connection, sql) => captureRequest(connection, sql, request => connection.execSqlBatch(request))
 
 async function capturePrepared(connection, sql, declarations, valueSets) {
   const limits = PREPARED_LIMITS
@@ -400,10 +457,10 @@ async function capturePrepared(connection, sql, declarations, valueSets) {
     if (!set || set.rows.length >= limits.rows) overflow('rows')
     else set.rows.push(columns.map(c => c.value))
   })
-  for (const kind of ['done', 'doneInProc', 'doneProc']) request.on(kind, (rowCount, more) => {
+  for (const kind of ['done', 'doneInProc', 'doneProc']) request.on(kind, (rowCount, more, status) => {
     if (!result) return
     if (result.done.length >= limits.messages) overflow('messages')
-    else result.done.push({ kind, rowCount: rowCount ?? null, more })
+    else result.done.push(doneEntry(kind, rowCount, more, status))
   })
   request.on('doneProc', (_count, _more, status) => { if (result) result.returnStatus = status })
   const phase = start => new Promise(resolve => {
@@ -479,9 +536,9 @@ async function runScenario(config, scenario) {
     for (const label of scenario.sessions.filter(label => !scenario.steps.some(([kind, target]) => kind === 'open' && target === label))) await open(label)
     for (const [kind, label, name, text, parameters, valueSets] of scenario.steps) {
       const record = { scenario: scenario.name, name, session: label, kind }
-      if (kind === 'batch') Object.assign(record, { sql: text, result: canonical(await capture(session(label), text)) })
-      else if (kind === 'rpc') Object.assign(record, { sql: text, parameters, result: canonical(await capture(withParameters(session(label), parameters, request => session(label).execSql(request)), text)) })
-      else if (kind === 'procedure') Object.assign(record, { procedure: text, parameters, result: canonical(await capture(withParameters(session(label), parameters, request => session(label).callProcedure(request)), text)) })
+      if (kind === 'batch') Object.assign(record, { sql: text, result: canonical(await captureBatch(session(label), text)) })
+      else if (kind === 'rpc') Object.assign(record, { sql: text, parameters, result: canonical(await captureRequest(session(label), text, request => session(label).execSql(request), parameters)) })
+      else if (kind === 'procedure') Object.assign(record, { procedure: text, parameters, result: canonical(await captureRequest(session(label), text, request => session(label).callProcedure(request), parameters)) })
       else if (kind === 'prepared') Object.assign(record, { sql: text, declarations: parameters, result: canonical(await capturePrepared(session(label), text, parameters, valueSets)) })
       else if (kind === 'reset') record.result = canonical(await captureReset(session(label)))
       else if (kind === 'close') { await closeConnection(session(label)); sessions.delete(label) }
@@ -496,7 +553,7 @@ async function runScenario(config, scenario) {
 }
 
 async function observe(connection, config) {
-  const database = (await capture(connection, 'SELECT DB_NAME() AS name')).sets[0].rows[0][0]
+  const database = (await captureBatch(connection, 'SELECT DB_NAME() AS name')).sets[0].rows[0][0]
   const scoped = { ...config, options: { ...config.options, database, requestTimeout: 120000 } }
   const records = []
   for (const scenario of scenarios) records.push(...await runScenario(scoped, scenario))
@@ -544,10 +601,15 @@ function validate(run) {
   assert.deepEqual(rows('key comparison', 'lower key variants'), [[1, null, 1, 1, null, 1, null, null]])
   assert.deepEqual(rows('key comparison', 'five character key variants'), [[1, 1, 1, null, null]])
   assert.deepEqual(rows('key comparison', 'read_only variants'), [[1, 2, 1, 2]])
+  // Every DONEPROC keeps its own RETURNSTATUS.
+  const statuses = (scenario, name) => get(scenario, name).done.filter(d => d.kind === 'doneProc').map(d => d.status)
+  assert.deepEqual(statuses('overwrite, NULL and arguments', 'read_only NULL'), [1, 0])
+  assert.deepEqual(statuses('read_only keys', 'promote writable key'), [0, 0, 1])
   // Total size limit.
   assert.deepEqual(rows('size limits', 'fill until limit'), [[125, 15665]])
   assert.equal(errorNumber('size limits', 'fill until limit'), 15665)
   for (const record of run) {
+    assert(!record.result?.truncated && !record.result?.executions?.some(e => e.result.truncated), `${record.scenario}: ${record.name}: truncated`)
     if (['batch', 'rpc', 'procedure'].includes(record.kind)) assert(record.result.done.length > 0, `${record.scenario}: ${record.name}: no completion`)
     if (record.kind === 'prepared') assert.equal(record.result.prepared, true, `${record.scenario}: ${record.name}: not prepared`)
   }

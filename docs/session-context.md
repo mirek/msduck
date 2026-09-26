@@ -7,7 +7,7 @@ full column descriptors, error and info tokens, DONE tokens and return status.
 image `sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a`.
 It used two fresh databases in each of two independent containers, and all
 four captures were identical. The fixture SHA-256 is
-`5194738a4d1da13016f2d7560bf6331e1d49c0aa7edd0c843e412b9d6ed305bd`.
+`587fa27b8ec62b641369c7c3a61cf562e02c45cfc4f75a80f4903ec0fe9d37e6`.
 The fixture contains tedious-decoded values and TDS descriptors, not raw TDS
 bytes. tedious turns a `sql_variant` into a JavaScript value, so every probe
 also reads `SQL_VARIANT_PROPERTY` (`BaseType`, `Precision`, `Scale`,
@@ -40,6 +40,20 @@ not on main yet:
 
 When that helper lands on main, this script should import it instead of
 keeping its own copy.
+
+Batches and RPCs use a local capture with the record shape of
+`lib/compatibility.mjs` `capture`. It also stores `status` on every DONEPROC
+entry: the RETURNSTATUS value that preceded that token, or null when there was
+none. tedious passes that value with each DONEPROC and then clears it, so every
+`EXEC` in a batch keeps its own status. The top-level `returnStatus` is only
+the last one. Rows are bounded at 10000 per result set, and messages plus DONE
+tokens at 2000 per batch (200 per prepared phase). The fill loops emit about
+760 DONE tokens, and validation rejects any truncated record.
+
+The script refuses, before any container starts, an output path that resolves
+to the retained fixture. Symlinks in the existing part of the path are
+resolved, so the check also covers a file that does not exist yet. This mirrors
+`refuseFixtureOutput` from PR #312.
 
 Every RPC, `sp_executesql` and prepared statement text ends with a unique
 `/*case name*/` comment. Named constraints use explicit names (`pk_ctx_rows`,
@@ -81,7 +95,10 @@ The server and database collation were `SQL_Latin1_General_CP1_CI_AS`.
   passes 6 as the key and fails with 225.
 - Success returns status 0 (`EXEC @r = ...` gives 0). Every failure returns 1,
   and the batch continues after the statement-level error (`@@ERROR` is the
-  error number).
+  error number). Each `EXEC` has its own DONEPROC status. For example,
+  `read_only NULL` records `[1, 0]` and `promote writable key` records
+  `[0, 0, 1]`. When a failure is caught by TRY/CATCH, the failing call's
+  DONEPROC has no RETURNSTATUS (`status` null).
 - `EXEC` arguments must be constants or variables. `1+1` and `GETDATE()` fail
   with 102 (syntax).
 - The value keeps the declared base type of its variable, with type facets:
