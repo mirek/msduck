@@ -2,7 +2,7 @@
 // Retain SQL Server ISNUMERIC and ISDATE rows, descriptors, diagnostics and
 // completions for ordinary batches, sp_executesql RPC and prepared handles.
 import assert from 'node:assert/strict'
-import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Request, TYPES } from 'tedious'
@@ -352,9 +352,18 @@ async function canonicalPath(path) {
   }
 }
 
-// Scratch output must never alias the retained fixture; checked before any
-// container starts.
-if (await canonicalPath(output) === await canonicalPath(fixture)) throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(fixture))
+// Filesystem identity of an existing file, or null when it does not exist.
+async function identity(path) {
+  try { const { dev, ino } = await stat(path, { bigint: true }); return `${dev}:${ino}` }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error }
+}
+
+// Scratch output must never alias the retained fixture, whether by path,
+// symlink or hard link (same device and inode); checked before any container
+// starts.
+const outputIdentity = await identity(output)
+if (await canonicalPath(output) === await canonicalPath(fixture) ||
+  (outputIdentity !== null && outputIdentity === await identity(fixture))) throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(fixture))
 if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(resolve(output, '..'), { recursive: true })
 const containers = []
