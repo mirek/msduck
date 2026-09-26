@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Retain SQL Server DATETRUNC and DATE_BUCKET rows, descriptors, diagnostics and completions.
 import assert from 'node:assert/strict'
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { access, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { Request, TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
@@ -359,11 +360,37 @@ function same(left, right, message) {
   throw new Error(message + (index >= 0 ? ` (first difference at record ${index}: ${JSON.stringify(a[index]?.name ?? null)})` : ''))
 }
 
+// The scratch output must never alias the retained fixture: an unconditional
+// write would replace the ground truth and then compare the capture with
+// itself. Resolve symlinks in the existing part of each path (so a symlinked
+// directory or a not-yet-existing file still compares equal) and also compare
+// device/inode when both exist, which catches hard links.
+async function canonicalPath(path) {
+  const absolute = resolve(path)
+  try { return await realpath(absolute) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    const parent = dirname(absolute)
+    if (parent === absolute) return absolute
+    return resolve(await canonicalPath(parent), basename(absolute))
+  }
+}
+async function identity(path) {
+  try { const { dev, ino } = await stat(path); return `${dev}:${ino}` } catch (error) {
+    if (error.code === 'ENOENT') return undefined
+    throw error
+  }
+}
+const fixturePath = fileURLToPath(fixture)
+const outputIdentity = await identity(output)
+if (await canonicalPath(output) === await canonicalPath(fixturePath) || (outputIdentity !== undefined && outputIdentity === await identity(fixturePath))) {
+  throw new Error('refusing to write capture output over retained fixture ' + fixturePath)
+}
+
 let fixtureExists = false
 try { await access(fixture); fixtureExists = true }
 catch (error) { if (error.code !== 'ENOENT') throw error }
 // Refuse before starting any container, not after a full capture.
-if (writeFixture && fixtureExists) throw new Error('refusing to overwrite retained fixture ' + fixture.pathname)
+if (writeFixture && fixtureExists) throw new Error('refusing to overwrite retained fixture ' + fixturePath)
 
 await mkdir(resolve(output, '..'), { recursive: true })
 const containers = []
@@ -383,8 +410,9 @@ for (let containerIndex = 0; containerIndex < 2; containerIndex++) {
 }
 same(containers[0].runs[0], containers[1].runs[0], 'DATETRUNC/DATE_BUCKET observations differ across containers')
 const actual = { containers }
-await writeFile(output, JSON.stringify(actual) + '\n')
+// Read the retained fixture before writing the scratch output.
 const retained = fixtureExists ? JSON.parse(await readFile(fixture, 'utf8')) : undefined
+await writeFile(output, JSON.stringify(actual) + '\n')
 if (retained !== undefined) same(actual, retained, 'DATETRUNC/DATE_BUCKET observations differ from retained fixture')
 if (writeFixture) await writeFile(fixture, JSON.stringify(actual) + '\n', { flag: 'wx' })
 console.log('Captured ' + containers[0].runs[0].length + ' DATETRUNC/DATE_BUCKET observations in four fresh databases across two containers' + (retained ? ' and matched retained fixture' : ''))

@@ -10,7 +10,9 @@ The four raw captures matched exactly. They retain result rows, TDS column
 descriptors, error number/state/class/line/text, information messages, DONE
 tokens and RPC return status. scripts/capture-datetrunc-bucket.mjs
 regenerates an artifact and checks it against the retained fixture. It
-refuses to overwrite an existing fixture.
+refuses to overwrite an existing fixture. Before starting any container, it
+also rejects an output path that resolves to the fixture through a symlink
+or hard link.
 
 Every scalar probe projects the typed result and
 `CONVERT(VARCHAR(50), result, 121)`. The text column keeps offsets and all
