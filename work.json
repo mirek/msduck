@@ -3494,7 +3494,7 @@
     {
       "id": "temporal-parts-cast-scale-v1",
       "title": "Accept constant INT casts as temporal FROMPARTS scale",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement a fully functional SQL Server compatible Rust/DuckDB server; first-party gap from retained SQL Server temporal-parts capture on current main. No external submission is input.",
       "scope": [
         "crates/msduck-sql/src/expression_metadata/temporal.rs",
@@ -3512,7 +3512,7 @@
     {
       "id": "temporal-parts-properties-v1",
       "title": "Preserve FROMPARTS computed and nullable result flags",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement the fully functional SQL Server compatible Rust/DuckDB server, and explicit direction to organize disjoint parallel work. First-party gap from retained owner-generated temporal-parts reference and local source; no external submission is input.",
       "scope": [
         "crates/msduck-sql/src/result_properties.rs",
