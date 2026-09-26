@@ -2858,6 +2858,82 @@
       "dependencies": [],
       "issue": 294,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POl2x"
+    },
+    {
+      "id": "regexp-functions-reference-v1",
+      "title": "Capture SQL Server 2025 REGEXP function reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-regexp-functions.mjs",
+        "reference/regexp-functions.json",
+        "docs/regexp-functions.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, descriptors, errors and completion tokens for ordinary and prepared/RPC REGEXP_LIKE, REGEXP_REPLACE, REGEXP_SUBSTR, REGEXP_INSTR, REGEXP_COUNT and the REGEXP_MATCHES/REGEXP_SPLIT_TO_TABLE table functions: flags, occurrence/position/return-option arguments, NULLs, VARCHAR/NVARCHAR/MAX result types, invalid patterns, surrogates, collations and database compatibility-level requirements.",
+        "Use the pinned SQL Server 2025 image in two fresh databases and independently in a second container; compare all four raw captures with the shared bounded helpers in scripts/lib/reference.mjs (refuseExistingFixture/assertSameCapture/writeNewFixture) and never pass whole captures to node:assert.",
+        "Document observed deterministic rules, uncaptured gaps and proposed deterministic-core and root successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 298,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POmi7"
+    },
+    {
+      "id": "isnumeric-isdate-reference-v1",
+      "title": "Capture SQL Server ISNUMERIC and ISDATE reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-isnumeric-isdate.mjs",
+        "reference/isnumeric-isdate.json",
+        "docs/isnumeric-isdate.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, descriptors, errors and completion tokens for ordinary and prepared/RPC ISNUMERIC and ISDATE across currency symbols, signs, exponents, whitespace, separators, hex, Unicode digits, NULL and typed inputs, and ISDATE under SET DATEFORMAT and SET LANGUAGE variations and datetime2-only literals.",
+        "Use the pinned SQL Server 2025 image in two fresh databases and independently in a second container; compare all four raw captures with the shared bounded helpers in scripts/lib/reference.mjs (refuseExistingFixture/assertSameCapture/writeNewFixture) and never pass whole captures to node:assert.",
+        "Document observed deterministic rules, uncaptured gaps and proposed deterministic-core and root successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 299,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POmjK"
+    },
+    {
+      "id": "soundex-difference-reference-v1",
+      "title": "Capture SQL Server SOUNDEX and DIFFERENCE reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-soundex-difference.mjs",
+        "reference/soundex-difference.json",
+        "docs/soundex-difference.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, descriptors, errors and completion tokens for ordinary and prepared/RPC SOUNDEX and DIFFERENCE: leading non-letters, H/W separator rules, vowels, accented and non-Latin characters, empty/NULL/whitespace inputs, VARCHAR/NVARCHAR/MAX typing and compatibility-level effects.",
+        "Use the pinned SQL Server 2025 image in two fresh databases and independently in a second container; compare all four raw captures with the shared bounded helpers in scripts/lib/reference.mjs (refuseExistingFixture/assertSameCapture/writeNewFixture) and never pass whole captures to node:assert.",
+        "Document observed deterministic rules, uncaptured gaps and proposed deterministic-core and root successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 300,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POmjZ"
+    },
+    {
+      "id": "json-aggregates-reference-v1",
+      "title": "Capture SQL Server JSON_OBJECTAGG and JSON_ARRAYAGG reference behavior",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
+      "scope": [
+        "scripts/capture-json-aggregates.mjs",
+        "reference/json-aggregates.json",
+        "docs/json-aggregates.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, descriptors, errors and completion tokens for ordinary and prepared/RPC JSON_OBJECTAGG and JSON_ARRAYAGG: NULL ON NULL/ABSENT ON NULL defaults, ORDER BY within JSON_ARRAYAGG, grouped and empty inputs, duplicate keys, value typing/escaping per scalar family, nested constructors, RETURNING JSON and window/OVER restrictions.",
+        "Use the pinned SQL Server 2025 image in two fresh databases and independently in a second container; compare all four raw captures with the shared bounded helpers in scripts/lib/reference.mjs (refuseExistingFixture/assertSameCapture/writeNewFixture) and never pass whole captures to node:assert.",
+        "Document observed deterministic rules, uncaptured gaps and proposed deterministic-core and root successors without editing parser, engine, catalog, metadata or client-test files."
+      ],
+      "dependencies": [],
+      "issue": 301,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POmjm"
     }
   ]
 }
