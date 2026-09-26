@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Retain SQL Server DATETRUNC and DATE_BUCKET rows, descriptors, diagnostics and completions.
 import assert from 'node:assert/strict'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { Request, TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
@@ -215,7 +216,7 @@ async function prepared(connection, sql, declarations, executions) {
         request.off('columnMetadata', onMetadata); request.off('row', onRow)
         for (const [kind, listener] of Object.entries(done)) request.off(kind, listener)
       }
-      results.push({ values: canonical(values), result: canonical(result) })
+      results.push({ values: canonical(values), result: canonical(bounded(sql, result)) })
     }
   } finally {
     await new Promise((resolve, reject) => {
@@ -259,10 +260,21 @@ const preparedCases = [
     [{ f: 1, d: at('2024-05-15T00:00:00Z') }, { f: 3, d: at('2024-05-15T00:00:00Z') }, { f: 7, d: at('2024-05-15T00:00:00Z') }]],
 ]
 
+// Every program returns at most a handful of rows; fail loudly on anything
+// that looks like unbounded accumulation instead of retaining it.
+const limits = { sets: 4, rows: 16, messages: 16, done: 8 }
+function bounded(name, result) {
+  const rows = result.sets.reduce((total, set) => total + set.rows.length, 0)
+  if (result.sets.length > limits.sets || rows > limits.rows || result.errors.length + result.info.length > limits.messages || result.done.length > limits.done) {
+    throw new Error(`${name}: result exceeds capture bounds (${result.sets.length} sets, ${rows} rows, ${result.errors.length + result.info.length} messages, ${result.done.length} DONE tokens)`)
+  }
+  return result
+}
+
 async function observe(connection) {
   const records = []
   async function record(name, sql, parameters) {
-    const result = canonical(await (parameters ? rpc(connection, sql, parameters) : capture(connection, sql)))
+    const result = canonical(bounded(name, await (parameters ? rpc(connection, sql, parameters) : capture(connection, sql))))
     records.push({
       name, sql,
       ...(parameters ? { parameters: parameters.map(([parameter, type, value, options]) => ({
@@ -332,6 +344,27 @@ function validate(run) {
   return get
 }
 
+// Never hand whole captures to node:assert. On Node 24, building the
+// AssertionError for a failed strictEqual/deepStrictEqual with this ~3 MB
+// capture as an operand inspects it without a practical bound: the process
+// exceeded 3 GB RSS even under --max-old-space-size=2048, and an unguarded
+// run reached ~123 GB and was OOM-killed. Compare with isDeepStrictEqual and
+// raise plain errors that name only the first differing record.
+function same(left, right, message) {
+  if (isDeepStrictEqual(left, right)) return
+  const a = left?.containers ? left.containers.flatMap(c => c.runs.flat()) : left
+  const b = right?.containers ? right.containers.flatMap(c => c.runs.flat()) : right
+  const index = Array.isArray(a) && Array.isArray(b)
+    ? a.findIndex((record, i) => !isDeepStrictEqual(record, b[i])) : -1
+  throw new Error(message + (index >= 0 ? ` (first difference at record ${index}: ${JSON.stringify(a[index]?.name ?? null)})` : ''))
+}
+
+let fixtureExists = false
+try { await access(fixture); fixtureExists = true }
+catch (error) { if (error.code !== 'ENOENT') throw error }
+// Refuse before starting any container, not after a full capture.
+if (writeFixture && fixtureExists) throw new Error('refusing to overwrite retained fixture ' + fixture.pathname)
+
 await mkdir(resolve(output, '..'), { recursive: true })
 const containers = []
 for (let containerIndex = 0; containerIndex < 2; containerIndex++) {
@@ -344,19 +377,14 @@ for (let containerIndex = 0; containerIndex < 2; containerIndex++) {
       validate(run)
       runs.push(run)
     }
-    assert.deepEqual(runs[0], runs[1], 'DATETRUNC/DATE_BUCKET observations differ across fresh databases')
+    same(runs[0], runs[1], 'DATETRUNC/DATE_BUCKET observations differ across fresh databases')
     containers.push({ image: container.image, runs })
   })
 }
-assert.deepEqual(containers[0].runs[0], containers[1].runs[0], 'DATETRUNC/DATE_BUCKET observations differ across containers')
+same(containers[0].runs[0], containers[1].runs[0], 'DATETRUNC/DATE_BUCKET observations differ across containers')
 const actual = { containers }
 await writeFile(output, JSON.stringify(actual) + '\n')
-let retained
-try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
-catch (error) { if (error.code !== 'ENOENT') throw error }
-if (retained) assert.deepEqual(actual, retained, 'DATETRUNC/DATE_BUCKET observations differ from retained fixture')
-if (writeFixture) {
-  assert.equal(retained, undefined, 'refusing to overwrite retained fixture')
-  await writeFile(fixture, JSON.stringify(actual) + '\n')
-}
+const retained = fixtureExists ? JSON.parse(await readFile(fixture, 'utf8')) : undefined
+if (retained !== undefined) same(actual, retained, 'DATETRUNC/DATE_BUCKET observations differ from retained fixture')
+if (writeFixture) await writeFile(fixture, JSON.stringify(actual) + '\n', { flag: 'wx' })
 console.log('Captured ' + containers[0].runs[0].length + ' DATETRUNC/DATE_BUCKET observations in four fresh databases across two containers' + (retained ? ' and matched retained fixture' : ''))
