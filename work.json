@@ -2645,6 +2645,24 @@
       "dependencies": [],
       "issue": 280,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POegM"
+    },
+    {
+      "id": "duckdb-dev-opt-level-v1",
+      "title": "Optimize bundled DuckDB in dev/test builds to cut native and client test time",
+      "state": "ready",
+      "authorization": "Direct owner instruction of 2026-09-26 that CI over one hour is unacceptable and PR flow must be faster; first-party measurements on an owner host (issue body). No external submission is input.",
+      "scope": [
+        "Cargo.toml",
+        "AGENTS.md"
+      ],
+      "acceptance": [
+        "Compile only the bundled libduckdb-sys package at a measured optimization level in dev/test profiles, keeping debug symbols disabled and workspace crates unchanged, without altering Cargo.lock, vendored sources or release profiles.",
+        "Record revision-stamped before/after evidence: DuckDB build CPU time, cargo test --workspace and full client-shard results/timings, with all tests passing at the new level.",
+        "Update the AGENTS.md build-profile note; do not edit CI workflow files (owned separately)."
+      ],
+      "dependencies": [],
+      "issue": 282,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POhZq"
     }
   ]
 }
