@@ -2799,6 +2799,46 @@
       ],
       "issue": 291,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POlOv"
+    },
+    {
+      "id": "rpc-output-binding-v1",
+      "title": "Bind application RPC OUTPUT parameters deterministically",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement a fully functional SQL Server compatible Rust/DuckDB server and request for independently claimable parallel work. First-party follow-up to owner-authored RPC OUTPUT reference #284/#285; no external submission is approved.",
+      "scope": [
+        "crates/msduck-sql/src/rpc_output.rs",
+        "crates/msduck-sql/tests/rpc_output.rs",
+        "docs/rpc-output-binding.md"
+      ],
+      "acceptance": [
+        "Implement deterministic application-RPC binding over explicit ordered declarations (name, type, OUTPUT direction) and received parameters (name or positional slot, status, typed input). Retain bindings and OUTPUT slots in RPC order with declared types independent of runtime values.",
+        "Reject count mismatch, duplicate/undeclared names, invalid status/direction combinations and unsupported shapes. Resolve positional/named parameters without silent reassignment; preserve NULL, empty and raw UTF-16 values.",
+        "Given caller-supplied final variables and completion/error outcome, return typed ordered OUTPUT values only when captured SQL Server behavior permits them. No DuckDB, TDS, sessions, clocks, I/O or mutable global state; add pure ordering and rejection tests.",
+        "Only three new files; import module by path in tests because SQL crate export and root RPC/engine files retain other claims. Document successor direction-aware declaration parsing, export and root integration. Run formatting, deterministic tests and strict Clippy at exact revision."
+      ],
+      "dependencies": [],
+      "issue": 292,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POliR"
+    },
+    {
+      "id": "smp-session-v1",
+      "title": "Track deterministic SMP session flow control and lifecycle",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement a fully functional SQL Server compatible Rust/DuckDB server and request for independently claimable parallel work. First-party protocol gap in docs/smp.md and local TDS skill, checked against Microsoft MC-SMP; no external GitHub submission is approved.",
+      "scope": [
+        "crates/msduck-tds/src/smp_session.rs",
+        "crates/msduck-tds/tests/smp_session.rs",
+        "docs/smp-session.md"
+      ],
+      "acceptance": [
+        "Implement deterministic bounded per-SID state over validated SMP fields: establishment, independent send/receive DATA sequences, inclusive peer/local receive high-water marks, consumed credit and FIN lifecycle. Return explicit adapter actions without transport/session effects.",
+        "SYN sequence 0 with window 4 permits outbound DATA 1–4 and blocks 5 until ACK advances credit. ACK/FIN do not increment DATA sequence. DATA wraps u32::MAX to 0. Validate duplicate/skipped/out-of-credit DATA and backward/zero peer windows with wrap-aware arithmetic; local credit advances only when upper-layer capacity is released.",
+        "Handle FIN in either order, duplicate FIN and MC-SMP DATA-in-FIN-SENT behavior explicitly. Rejected events leave state/actions unchanged. Bound active sessions/credit, and test exact vectors and two-SID isolation.",
+        "Only three new files: tests import module by path with crate::smp shim while lib.rs remains under #280/#281. Document deferred library export and root MARS integration; keep PRELOGIN MARS disabled. Run formatting, deterministic tests and strict Clippy at exact revision."
+      ],
+      "dependencies": [],
+      "issue": 293,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POllP"
     }
   ]
 }
