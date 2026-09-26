@@ -6083,6 +6083,12 @@ test('SWITCHOFFSET preserves instants precision and typed storage', { timeout: 3
   const p=await prepare(c,'SELECT DATENAME(tz,SWITCHOFFSET(d,@zone)),DATEPART(hour,SWITCHOFFSET(d,@zone)) FROM dbo.switch_values WHERE id=1',[['zone',TYPES.NVarChar]])
   assert.deepEqual(await p.run({zone:'+05:30'}),[['+05:30',15]]);assert.deepEqual(await p.run({zone:null}),[[null,null]]);await p.release()
   for(const zone of ["'+14:01'","'-00:60'","'bad'",'841','-841']) await assert.rejects(query(c,`SELECT SWITCHOFFSET(${original},${zone})`),e=>e.number===9812)
+  for(const [zone,minutes] of [["CAST(90.5 AS DECIMAL(8,1))",90],["CAST(-90.5 AS NUMERIC(8,1))",-90],["CAST(90.5 AS FLOAT)",90],["CAST(-90.5 AS REAL)",-90],["CAST(90.5 AS MONEY)",91],["CAST(N'+01:30' AS NVARCHAR(12))",90]]) {
+    assert.deepEqual((await query(c,`SELECT DATEPART(tzoffset,SWITCHOFFSET(${original},${zone}))`)).rows,[[minutes]],zone)
+  }
+  for(const zone of ["' +01:30 '","'90'"]) await assert.rejects(query(c,`SELECT SWITCHOFFSET(${original},${zone})`),e=>e.number===9812)
+  await query(c,'CREATE TABLE dbo.switch_zones (zone DECIMAL(8,1)); INSERT INTO dbo.switch_zones VALUES (90.5),(-90.5)')
+  assert.deepEqual((await query(c,`SELECT DATEPART(tzoffset,SWITCHOFFSET(${original},zone)) FROM dbo.switch_zones ORDER BY zone`)).rows,[[-90],[90]])
   for(const [value,offset] of [['0001-01-01T00:00:00Z',-1],['9999-12-31T23:59:59Z',1]]) await assert.rejects(query(c,`SELECT SWITCHOFFSET(CAST('${value}' AS DATETIMEOFFSET(7)),${offset})`),e=>e.number===9813)
 })
 
@@ -6101,6 +6107,12 @@ test('TODATETIMEOFFSET attaches fixed offsets to local temporal fields', { timeo
   const p=await prepare(c,'SELECT DATENAME(tz,TODATETIMEOFFSET(d,@zone)) FROM dbo.attach_values WHERE id=1',[['zone',TYPES.NVarChar]])
   assert.deepEqual(await p.run({zone:'-00:30'}),[['-00:30']]);assert.deepEqual(await p.run({zone:null}),[[null]]);await p.release()
   for(const zone of ["'+14:01'","'-00:60'","'bad'",'841','-841']) await assert.rejects(query(c,`SELECT TODATETIMEOFFSET(CAST('2024-01-01T00:00:00' AS DATETIME2(7)),${zone})`),e=>e.number===9812 && e.message.includes('todatetimeoffset'))
+  for(const [zone,minutes] of [["CAST(90.5 AS DECIMAL(8,1))",90],["CAST(-90.5 AS NUMERIC(8,1))",-90],["CAST(90.5 AS FLOAT)",90],["CAST(-90.5 AS REAL)",-90],["CAST(90.5 AS MONEY)",91],["CAST(N'+01:30' AS NVARCHAR(12))",90]]) {
+    assert.deepEqual((await query(c,`SELECT DATEPART(tzoffset,TODATETIMEOFFSET(CAST('2024-01-01T00:00:00' AS DATETIME2(7)),${zone}))`)).rows,[[minutes]],zone)
+  }
+  for(const zone of ["' +01:30 '","'90'"]) await assert.rejects(query(c,`SELECT TODATETIMEOFFSET(CAST('2024-01-01T00:00:00' AS DATETIME2(7)),${zone})`),e=>e.number===9812)
+  await query(c,'CREATE TABLE dbo.attach_zones (zone DECIMAL(8,1)); INSERT INTO dbo.attach_zones VALUES (90.5),(-90.5)')
+  assert.deepEqual((await query(c,"SELECT DATEPART(tzoffset,TODATETIMEOFFSET(CAST('2024-01-01T00:00:00' AS DATETIME2(7)),zone)) FROM dbo.attach_zones ORDER BY zone")).rows,[[-90],[90]])
   for(const [value,zone] of [['0001-01-01T00:00:00',1],['9999-12-31T23:59:59',-1]]) await assert.rejects(query(c,`SELECT TODATETIMEOFFSET(CAST('${value}' AS DATETIME2(7)),${zone})`),e=>e.number===9813 && e.message.includes('todatetimeoffset'))
 })
 
