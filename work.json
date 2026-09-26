@@ -2360,6 +2360,25 @@
       "dependencies": [],
       "issue": 249,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POR75"
+    },
+    {
+      "id": "fast-pr-ci-v1",
+      "title": "Make PR CI a fast gate and run full verification separately",
+      "state": "ready",
+      "authorization": "Direct owner instruction on 2026-09-26 to reduce over-hour PR CI latency and run complete tests manually, periodically or on tags. First-party CI workflow and branch protection inspection; no external submission is input.",
+      "scope": [
+        ".github/workflows/ci.yml",
+        "docs/github-workflow.md"
+      ],
+      "acceptance": [
+        "Keep short owner-only PR formatting, coordination, deterministic strict Clippy and deterministic crate tests as the required check.",
+        "Move native workspace/client/reference audit verification to main pushes, owner manual dispatch and periodic schedule; support exact PR branch verification on demand, recording revision and retaining raw artifacts.",
+        "Preserve owner-only guards and external-contributor workflow approval; full diagnostic audit is not SQL Server equivalence.",
+        "After a successful exact-head fast PR run, require only the short check in main branch protection while retaining strict up-to-date checking. Document contributor full-suite obligations and exact-revision evidence."
+      ],
+      "dependencies": [],
+      "issue": 250,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POSGg"
     }
   ]
 }
