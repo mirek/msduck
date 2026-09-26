@@ -2934,6 +2934,23 @@
       "dependencies": [],
       "issue": 301,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POmjm"
+    },
+    {
+      "id": "identity-sequence-dependency-v1",
+      "title": "Protect private IDENTITY sequences referenced by other defaults",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal. First-party workspace regression in table_alter::tests::dropping_identity_column_cleans_and_restores_private_objects at main e6fd8b4; no external submission approved.",
+      "scope": [
+        "src/identity.rs"
+      ],
+      "acceptance": [
+        "Reproduce the existing table_alter dependency failure at exact main revision e6fd8b4 and identify why DuckDB permits private sequence removal while another table default references it.",
+        "In src/identity.rs, reject deletion of a private identity sequence while any live column default still references it. Preserve transaction rollback and successful retry after removing the dependent table; never cascade or silently strand defaults.",
+        "Add focused tests in src/identity.rs if needed; keep existing table_alter test unchanged and preserve ordinary identity create/drop behavior. Run formatting, workspace tests, strict Clippy, independent npm client tests and diagnostic audit at exact revision; report unrelated failures."
+      ],
+      "dependencies": [],
+      "issue": 307,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POnUJ"
     }
   ]
 }
