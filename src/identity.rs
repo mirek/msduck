@@ -73,6 +73,26 @@ fn table_sequences(db: &Connection, name: &ObjectName) -> Result<Vec<String>> {
 
 pub(crate) fn drop_sequence(db: &Connection, name: &str) -> Result<()> {
     // Names are recognized private sequence defaults. Never cascade dependencies.
+    // DuckDB's dependency check can lose a reference after an ALTER TABLE in the
+    // same transaction. Inspect live defaults before removing the sequence so a
+    // failed ALTER or DROP can roll back without stranding another table.
+    let mut defaults = db.prepare(
+        "SELECT table_schema,table_name,column_name,column_default FROM information_schema.columns WHERE table_catalog=current_database() AND column_default IS NOT NULL",
+    )?;
+    for row in defaults.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+        ))
+    })? {
+        let (schema, table, column, default) = row?;
+        ensure!(
+            sequence_name(Some(&default)).as_deref() != Some(name),
+            "Cannot drop identity sequence {name}: still referenced by {schema}.{table}.{column}"
+        );
+    }
     db.execute_batch(&format!("DROP SEQUENCE {name}"))?;
     catalog(db)?;
     db.execute(
