@@ -113,8 +113,13 @@ async function main() {
     console.log(JSON.stringify({ owned: true, task }));
   }
   if (command !== 'verify') {
-    try { board(registry, task, command === 'claim' ? 'claimed' : state); }
-    catch { console.error('Claim remains owned; project update failed. Retry status later.'); }
+    const readiness = command === 'claim' ? 'claimed' : state;
+    // Only the project board changes here. The registry state stays as
+    // published until the owner or integrator publishes completion.
+    let boardResult = task.projectItem ? 'updated' : 'no project card';
+    try { board(registry, task, readiness); }
+    catch { boardResult = 'failed (claim remains owned; retry status later)'; }
+    console.log(JSON.stringify({ board: { readiness, result: boardResult }, registryState: task.state, note: 'registry state changes only when the integrator publishes completion' }));
   }
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1; });
