@@ -60,7 +60,9 @@ function projectItem(registry, task) {
     const found = api('graphql', { query: 'query($o:String!,$n:String!,$i:Int!){repository(owner:$o,name:$n){issue(number:$i){id author{... on User{databaseId}}}}}', variables: { o: login, n: name, i: task.issue } }).data.repository.issue;
     if (found?.author?.databaseId !== owner.id) throw Error('issue author');
     const item = api('graphql', { query: 'mutation($p:ID!,$c:ID!){addProjectV2ItemById(input:{projectId:$p,contentId:$c}){item{id}}}', variables: { p: registry.project.id, c: found.id } }).data.addProjectV2ItemById.item.id;
-    board(registry, { projectItem: item }, 'ready');
+    // The card exists now; keep its ID even if setting its fields fails.
+    try { board(registry, { projectItem: item }, 'ready'); }
+    catch { console.error(`Project card for ${task.id} created but its fields were not set; retry status later.`); }
     return item;
   } catch {
     console.error(`No project card for ${task.id} (owner issue and project scope required); publishing without one.`);

@@ -174,7 +174,16 @@ function github({failPatch=0,failRestore=0}={}) {
       return {};
     }
     if(p==='git/ref/heads/agent-control') return {object:{sha:head.sha}};
-    if(p==='git/matching-refs/tags/agent-claims/') return claims.map(ref=>({ref}));
+    if(p.startsWith('git/matching-refs/tags/agent-claims/')) {
+      const q=new URLSearchParams(p.split('?')[1]??''); const per=Number(q.get('per_page')??100), page=Number(q.get('page')??1);
+      return claims.slice((page-1)*per,page*per).map(ref=>({ref}));
+    }
+    if(p.startsWith('compare/')) {
+      const [base,headSha]=p.slice(8).split('...');
+      if(base===headSha) return {status:'identical'};
+      for(let c=objects.get(headSha)?.parents?.[0];c;c=objects.get(c).parents[0]) if(c===base) return {status:'ahead'};
+      return {status:'diverged'};
+    }
     if(p.startsWith('contents/work.json?ref=')) {
       const commit=objects.get(p.split('=')[1]);
       return {encoding:'base64',content:Buffer.from(objects.get(objects.get(commit.tree).entries['work.json']).content).toString('base64')};
@@ -192,7 +201,8 @@ function github({failPatch=0,failRestore=0}={}) {
     throw Error('Unexpected endpoint: '+method+' '+path);
   };
   const registry=()=>JSON.parse(objects.get(objects.get(objects.get(head.sha).tree).entries['work.json']).content);
-  return {api,calls,enforcement,registry,history:()=>{const out=[];for(let s=head.sha;s;s=objects.get(s).parents[0])out.push(s);return out;},maxDisabled:()=>maxDisabled};
+  const advance=(message='later')=>{const tree=objects.get(head.sha).tree;head.sha=put({tree,parents:[head.sha]});return head.sha;};
+  return {api,calls,enforcement,registry,claims,advance,history:()=>{const out=[];for(let s=head.sha;s;s=objects.get(s).parents[0])out.push(s);return out;},maxDisabled:()=>maxDisabled};
 }
 const fast={sleep:()=>new Promise(resolve=>setImmediate(resolve))};
 test('concurrent publishers serialize as fast-forwards and always restore protection',async()=>{
@@ -231,6 +241,25 @@ test('publication waits while another publisher holds protection inactive',async
   await publish({api:g.api,rules,change:{states:{'example-v1':'done'}},message:'m',sleep});
   assert.equal(g.registry().tasks[0].state,'done'); assert(waits>=2);
 });
-test('claim listing uses one request',async()=>{
+test('claim listing uses one request per page and follows every page',async()=>{
   const g=github(); assert.deepEqual([...await claimedIds(g.api)],['example-v1']); assert.equal(g.calls.length,1);
+  const h=github(); for(let i=0;i<250;i++) h.claims.push(`refs/tags/agent-claims/bulk-${i}-v1`);
+  const ids=await claimedIds(h.api); assert.equal(ids.size,251); assert(ids.has('bulk-249-v1'));
+  assert.equal(h.calls.filter(c=>c.path.includes('matching-refs')).length,3);
+  // An endpoint that ignores paging returns the whole list for every page.
+  const all=Array.from({length:150},(_,i)=>({ref:`refs/tags/agent-claims/x-${i}-v1`}));
+  let calls=0; const unpaged=await claimedIds(async()=>{calls++;return all;});
+  assert.equal(unpaged.size,150); assert.equal(calls,2);
+});
+test('a later fast-forward after a successful update still counts as published',async()=>{
+  const g=github(); const inner=g.api; let raced=false;
+  const api=async(path,data,missing,method)=>{
+    const result=await inner(path,data,missing,method);
+    // Another publisher fast-forwards right after this PATCH succeeds.
+    if(method==='PATCH'&&!raced){raced=true;g.advance();}
+    return result;
+  };
+  const r=await publish({api,rules,change:{add:[task('raced-v1')]},message:'m',...fast});
+  assert.equal(r.registry.tasks.length,2); assert.equal(g.history().length,3);
+  assert(g.calls.some(c=>c.path.includes('/compare/')));
 });

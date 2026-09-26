@@ -103,10 +103,19 @@ export async function loadRegistry(api, rules) {
 }
 
 // Claim tags for every task in one request instead of one lookup per task.
-export async function claimedIds(api) {
-  const refs = await api(`repos/${repository}/git/matching-refs/tags/agent-claims/`);
-  if (!Array.isArray(refs)) throw Error('Unexpected claim listing');
-  return new Set(refs.map(r => r.ref.slice(refFor('').length)));
+// Claim tags for every task. The endpoint may return everything at once and
+// ignore paging, so stop at a short page, a page adding nothing new, or a
+// hard bound; never loop on a repeated page.
+export async function claimedIds(api, perPage = 100, maxPages = 1000) {
+  const ids = new Set();
+  for (let page = 1; page <= maxPages; ++page) {
+    const refs = await api(`repos/${repository}/git/matching-refs/tags/agent-claims/?per_page=${perPage}&page=${page}`);
+    if (!Array.isArray(refs)) throw Error('Unexpected claim listing');
+    const before = ids.size;
+    for (const r of refs) ids.add(r.ref.slice(refFor('').length));
+    if (refs.length < perPage || ids.size === before) return ids;
+  }
+  throw Error('Claim listing did not terminate; stop and check the GitHub API');
 }
 export function availableTasks(registry, claimed) {
   const done = new Set(registry.tasks.filter(t => t.state === 'done').map(t => t.id));
@@ -167,12 +176,18 @@ export async function publish({ api, rules, change, message, attempts = 6, sleep
       await restoreProtection(api, rule);
     }
     const current = await api(`repos/${repository}/git/ref/heads/agent-control`);
-    if (current.object.sha === commit.sha) return { revision: commit.sha, registry: next, previous: revision };
+    // A later publisher may already have fast-forwarded past this commit; the
+    // change is published whenever the current registry descends from it.
+    if (current.object.sha === commit.sha || await descends(api, commit.sha, current.object.sha)) return { revision: commit.sha, registry: next, previous: revision };
     if (updated) throw Error('Registry ref changed after publication; inspect agent-control history');
     log(`publication attempt ${attempt} lost a race; reloading`);
     await sleep(1000 * attempt + Math.floor(Math.random() * 1000));
   }
   throw Error('Registry publication did not succeed; retry later');
+}
+async function descends(api, ancestor, head) {
+  const comparison = await api(`repos/${repository}/compare/${ancestor}...${head}`);
+  return ['ahead', 'identical'].includes(comparison.status);
 }
 export async function restoreProtection(api, rule) {
   for (let i = 0; i < 5; ++i) {
