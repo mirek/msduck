@@ -2585,6 +2585,26 @@
       ],
       "issue": 270,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POUoN"
+    },
+    {
+      "id": "ci-periodic-full-v1",
+      "title": "Move full CI from main pushes to periodic and explicit runs",
+      "state": "ready",
+      "authorization": "Direct owner request to keep PR/merge cycles fast and run the long full suite on tags, manual dispatch or periodically; owner-only first-party workflow change.",
+      "scope": [
+        ".github/workflows/ci.yml",
+        "docs/github-workflow.md"
+      ],
+      "acceptance": [
+        "Preserve the short required PR check and owner-only CI intake guard.",
+        "Run the full workspace/client/audit job on the weekly schedule, owner manual dispatch and verify-* tags, without an automatic main-push run.",
+        "Update workflow documentation with the exact triggers, revision-pinning procedure and practical limits; verify YAML/workflow structure and relevant checks."
+      ],
+      "dependencies": [
+        "fast-pr-ci-v1"
+      ],
+      "issue": 275,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POaMl"
     }
   ]
 }
