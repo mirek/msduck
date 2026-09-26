@@ -2487,6 +2487,40 @@
       ],
       "dependencies": [],
       "issue": 257
+    },
+    {
+      "id": "local-verify-v1",
+      "title": "Add host-adaptive local full verification with PR-ready evidence",
+      "state": "ready",
+      "authorization": "Direct owner instructions of 2026-09-26: continue implementation, run parallel agents, and keep PR flow fast (PR CI must not exceed one hour). First-party evidence: CI workflow after #251 and an owner-run worker report on PR #259; no external submission is input.",
+      "scope": [
+        "scripts/verify-local.mjs",
+        "docs/local-verification.md"
+      ],
+      "acceptance": [
+        "Provide one command that runs the fast gate (coordination tests, fmt, deterministic strict Clippy/tests) and optionally the full native checks (workspace Clippy, cargo test --workspace, client shards) with the CI-pinned toolchain read from the workflow.",
+        "Size Cargo and client-shard parallelism from the host's available CPUs and memory with explicit overrides, so the same command works on small ARM laptops and large builders; never hardcode one machine's numbers.",
+        "Refuse or clearly mark uncommitted trees, record the exact revision, toolchain, host summary, step durations, test counts and raw logs under ignored artifacts, and print a PR-ready summary; failures stay visible and nonzero.",
+        "Do not modify CI workflow files, test code or claim tooling; document usage and that local evidence complements, not replaces, main/manual CI."
+      ],
+      "dependencies": [],
+      "issue": 262
+    },
+    {
+      "id": "reference-container-cleanup-v1",
+      "title": "Tolerate Docker auto-remove races when cleaning up reference containers",
+      "state": "ready",
+      "authorization": "Direct owner instructions of 2026-09-26: continue implementation, run parallel agents, and keep PR flow fast (PR CI must not exceed one hour). First-party evidence: CI workflow after #251 and an owner-run worker report on PR #259; no external submission is input.",
+      "scope": [
+        "scripts/lib/reference-container.mjs",
+        "tests/compatibility.test.mjs"
+      ],
+      "acceptance": [
+        "When forced removal of an owned reference container fails, confirm by bounded polling whether the container is already gone (for example auto-removal in progress) and succeed only once it no longer exists; otherwise still report the owned container that could not be removed.",
+        "Keep credentials out of arguments, never touch containers not created by the invocation, and keep existing cleanup ordering tests passing; add deterministic tests for the race, a persistent failure and polling bounds."
+      ],
+      "dependencies": [],
+      "issue": 263
     }
   ]
 }
