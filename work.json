@@ -2663,6 +2663,25 @@
       "dependencies": [],
       "issue": 282,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POhZq"
+    },
+    {
+      "id": "rpc-output-reference-v1",
+      "title": "Capture SQL Server RPC OUTPUT parameter values and token ordering",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement a fully functional SQL Server compatible Rust/DuckDB server. First-party follow-up to the owner-controlled RETURNVALUE codec task #280 and local TDS gap inventory; no external submission is approved.",
+      "scope": [
+        "scripts/capture-rpc-output.mjs",
+        "reference/rpc-output.json",
+        "docs/rpc-output-reference.md"
+      ],
+      "acceptance": [
+        "Capture sp_executesql application OUTPUT and input/output values through tedious, retaining ordered row/metadata, output-value, INFO/ERROR, RETURNSTATUS, DONE and callback observations. Cover initialized, unchanged, assigned, NULL and multiple outputs with declaration order distinct from query order.",
+        "Cover supported scalar families (INT/BIGINT/BIT, NVARCHAR/VARCHAR, VARBINARY, DECIMAL), declared widths and precision, empty versus NULL, and MAX/PLP boundary values. Capture failures before/after assignment, TRY/CATCH, NOCOUNT and result rows, plus procedure and prepared execution where SQL Server permits them. Preserve raw UTF-16 in the JSON evidence.",
+        "Run twice in fresh databases using the pinned owner-managed SQL Server reference container on linux.local, compare complete captures, retain image/provenance, and document exact observations and unresolved questions. Capture is evidence, not a claim that msduck implements OUTPUT parameters."
+      ],
+      "dependencies": [],
+      "issue": 284,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POkYm"
     }
   ]
 }
