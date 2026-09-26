@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { withReferenceContainer } from './lib/reference-container.mjs'
-import { isolatedReference } from './lib/reference.mjs'
+import { isolatedReference, assertSameCapture } from './lib/reference.mjs'
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const output = resolve(process.argv[2] ?? 'artifacts/compatibility/view-binding-reference')
@@ -29,10 +29,10 @@ await withReferenceContainer(async (config, container) => {
     }
     // Preserve both raw executions before checking determinism or old evidence.
     await writeFile(resolve(output, `view-${name}-runs.json`), JSON.stringify(runs, null, 2) + '\n')
-    assert.deepEqual(runs[0], runs[1], `${name}: fresh captures differ`)
+    assertSameCapture(runs[0], runs[1], `${name}: fresh captures differ`)
     const actual = { image: container.image, identicalFreshCaptures: 2, results: runs[0] }
     await writeFile(resolve(output, `view-${name}.json`), JSON.stringify(actual, null, 2) + '\n')
-    try { assert.deepEqual(actual, fixture) } catch { differences.push(name) }
+    try { assertSameCapture(actual, fixture, name) } catch { differences.push(name) }
     console.log(`Captured ${name}: ${actual.results.length} cases, two identical fresh databases`)
   }
 }, { image })

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { withReferenceContainer } from './lib/reference-container.mjs'
-import { isolatedReference } from './lib/reference.mjs'
+import { isolatedReference, assertSameCapture } from './lib/reference.mjs'
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const fixture = JSON.parse(await readFile(new URL('../reference/ddl-completion.json', import.meta.url), 'utf8'))
@@ -40,9 +40,9 @@ await withReferenceContainer(async (config, container) => {
     runs.push(modes)
   }
   await writeFile(resolve(output, 'runs.json'), JSON.stringify(runs, null, 2) + '\n')
-  assert.deepEqual(runs[0], runs[1], 'Fresh DDL completion captures differ')
+  assertSameCapture(runs[0], runs[1], 'Fresh DDL completion captures differ')
   const actual = { image: container.image, identicalFreshCaptures: 2, results: runs[0] }
   await writeFile(resolve(output, 'ddl-completion.json'), JSON.stringify(actual, null, 2) + '\n')
-  assert.deepEqual(actual, fixture, `Retained reference differs; inspect raw captures in ${output}`)
+  assertSameCapture(actual, fixture, `Retained reference differs; inspect raw captures in ${output}`)
   console.log(`Captured ${runs[0].reduce((n, suite) => n + suite.results.length, 0)} batch/RPC observations twice identically`)
 }, { image: fixture.image })

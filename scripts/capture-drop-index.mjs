@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {mkdir, readFile, writeFile} from 'node:fs/promises'
 import {resolve} from 'node:path'
 import {withReferenceContainer} from './lib/reference-container.mjs'
-import {isolatedReference} from './lib/reference.mjs'
+import {isolatedReference, assertSameCapture} from './lib/reference.mjs'
 import {capture, canonical} from './lib/compatibility.mjs'
 
 const cases = [
@@ -64,12 +64,12 @@ await withReferenceContainer(async(config,container)=>{
     runs.push(results)
     await writeFile(resolve(output,'runs.json'),JSON.stringify(runs,null,2)+'\n')
   }
-  assert.deepEqual(runs[0],runs[1],'Fresh DROP INDEX captures differ')
+  assertSameCapture(runs[0],runs[1],'Fresh DROP INDEX captures differ')
   const actual={image:container.image,identicalFreshCaptures:2,setup,inventory,results:runs[0]}
   await writeFile(resolve(output,'drop-index.json'),JSON.stringify(actual,null,2)+'\n')
   const path=new URL('../reference/drop-index.json',import.meta.url)
   let fixture
   try{fixture=JSON.parse(await readFile(path,'utf8'))}catch(error){if(error.code!=='ENOENT')throw error}
-  if(fixture)assert.deepEqual(actual,fixture,'Retained DROP INDEX reference differs')
+  if(fixture)assertSameCapture(actual,fixture,'Retained DROP INDEX reference differs')
   console.log(`Captured ${cases.length} DROP INDEX observations twice identically${fixture?' and matched retained fixture':''}`)
 })

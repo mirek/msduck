@@ -110,6 +110,32 @@ test('reference container cleans up startup and workload failures', async () => 
   }
 })
 
+test('reference container labels its owner and tolerates auto-removal races', async () => {
+  const {withReferenceContainer}=await import('../scripts/lib/reference-container.mjs')
+  for (const [remaining, outcome] of [[0,'ok'],[3,'ok'],[99,'fail'],[-1,'fail']]) {
+    const calls=[];let listed=0;let slept=0
+    const run=withReferenceContainer(async()=>7,{
+      delay:async()=>{slept++},connect:async()=>({close(){}}),
+      docker:async args=>{
+        calls.push(args)
+        if(args[0]==='port')return '127.0.0.1:15433'
+        if(args[0]==='inspect')return 'true'
+        if(args[0]==='rm')throw new Error('removal already in progress')
+        if(args[0]==='ps'){if(remaining<0)throw new Error('daemon unavailable');return listed++<remaining?'abc123':''}
+        return ''
+      }
+    })
+    if(outcome==='ok')assert.equal(await run,7)
+    else await assert.rejects(run,/Could not remove owned reference container msduck-reference-/)
+    const name=calls[0][4]
+    assert.deepEqual(calls[0].slice(5,9),['--label','msduck.reference=1','--label',`msduck.owner=${process.cwd()}:${process.pid}`])
+    const polls=calls.filter(c=>c[0]==='ps')
+    assert(polls.every(c=>c.join(' ')===`ps --all --quiet --filter name=^/${name}$`))
+    assert.equal(polls.length, remaining<0?1:Math.min(remaining+1,30))
+    assert(slept<=30)
+  }
+})
+
 test('reference container cleans up after invalid bindings timeout and cancellation', async () => {
   const {withReferenceContainer}=await import('../scripts/lib/reference-container.mjs')
   for(const failure of ['binding','timeout','abort']) {
