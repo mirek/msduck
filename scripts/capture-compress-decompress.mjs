@@ -6,8 +6,9 @@
 // SHA-256) instead of full bytes; see boundValue. Small values stay exact.
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { basename, dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { gunzipSync } from 'node:zlib'
 import { Request, TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
@@ -417,6 +418,20 @@ function validate(run) {
   }
 }
 
+// Replicates refuseFixtureOutput from owner PR #312 (not on main yet): resolve
+// both paths through realpath, including symlinked directories and a
+// not-yet-existing file, and refuse output that aliases the retained fixture.
+async function canonicalPath(path) {
+  const absolute = resolve(path instanceof URL ? fileURLToPath(path) : path)
+  try { return await realpath(absolute) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return resolve(await canonicalPath(dirname(absolute)), basename(absolute))
+  }
+}
+async function refuseFixtureOutput(path, retainedFixture) {
+  if (await canonicalPath(path) === await canonicalPath(retainedFixture)) throw new Error('refusing to write capture output over retained fixture ' + fileURLToPath(retainedFixture))
+}
+
 let containers
 let retained
 if (checkFixture) {
@@ -433,6 +448,7 @@ if (checkFixture) {
   assertSameCapture(containers[0].runs[0], containers[1].runs[0], 'retained runs differ across containers')
   console.log(`Retained fixture validated: ${containers[0].runs[0].length} COMPRESS/DECOMPRESS observations in four matching captures`)
 } else {
+  await refuseFixtureOutput(output, fixture)
   if (writeFixture) await refuseExistingFixture(fixture)
   await mkdir(resolve(output, '..'), { recursive: true })
   containers = []

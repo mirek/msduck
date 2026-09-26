@@ -63,7 +63,7 @@ Server only.
 | Examples | `'hello'` gives `1f8b0800000000000400cb48cdc9c9070086a6103605000000`. 0x00 gives `1f8b08000000000004006300008def02d201000000`. REPLICATE('a',100) gives 24 bytes. DATALENGTH is 21 for one byte and 23 for three bytes. The fixture contains more exact examples. |
 | Empty input | `''`, `N''`, `0x`, empty VARCHAR(MAX), empty RPC and empty prepared inputs all return **an empty VARBINARY (0x, DATALENGTH 0), not a GZIP member**. The result is not NULL. |
 | NULL | A typed NULL (VARCHAR, NVARCHAR(MAX), VARBINARY), an untyped `NULL` literal, an RPC NULL and a prepared NULL all return NULL with the VarBinary(MAX) descriptor. The untyped literal raises no error. |
-| Rejected types | Error 8116, state 1, class 16, "Argument data type T is invalid for argument 1 of Compress function.", before any metadata. The batch then ends with DONE (rowCount null). T is: int, numeric (for 1.5), float, bit, datetime, date, uniqueidentifier, xml, text, ntext, image, sql_variant, timestamp (ROWVERSION) or json. There is no implicit conversion. An INT RPC parameter also gives 8116, followed by a lone DONEPROC. |
+| Rejected types | Error 8116, state 1, class 16, "Argument data type T is invalid for argument 1 of Compress function.", before any metadata. The batch then ends with DONE (rowCount null). T is: int, numeric (for 1.5), float, bit, datetime, date, uniqueidentifier, xml, text, ntext, image, sql_variant, timestamp (ROWVERSION) or json. There is no implicit conversion. An INT sp_executesql parameter also gives 8116, followed by a lone DONEPROC with return status 8116. |
 | Argument count | Zero or two arguments: error 174, state 1, class 15 ("The Compress function requires 1 argument(s)."). |
 | Nesting | `COMPRESS(COMPRESS('abc'))` is a valid 39-byte member. The inner result round-trips through two DECOMPRESS calls. |
 | Incompressible data | The deflate stream falls back to stored blocks. 256 bytes of SHA-256 noise give 279 bytes (header 10, one stored block header 5, data 256, trailer 8). 20,000 bytes give 20,028 bytes. 65,536 bytes give 65,574 bytes, which is 20 bytes of stored-block headers (four blocks). The first stored block of the 64 KB input has LEN 0x4007. The server-built and client-sent 64 KB inputs are the same bytes (SHA-256 `b9309a4e…`) and give the same compressed digest (`896f3ce3…`). |
@@ -90,7 +90,7 @@ evidence for that encoder, but it is not a specification of it.
 | Accepted input types | Only binary types. VARBINARY, VARBINARY(MAX) and BINARY(n) are accepted. A BINARY(30) holding a 25-byte member plus 5 zero-padding bytes decompresses to 'hello'. VARCHAR, NVARCHAR, VARCHAR(MAX) (even when it holds GZIP bytes) and INT raise 8116, state 1 ("Argument data type varchar(max) is invalid for argument 1 of Decompress function."). With zero arguments it raises 174, state 1, class 15. |
 | NULL and empty | An untyped `NULL`, a typed NULL and an RPC or prepared NULL all return NULL. `DECOMPRESS(0x)` returns **0x** (empty, not NULL), so `DECOMPRESS(COMPRESS(''))` is 0x. |
 | Header fields | These are parsed and skipped: FTEXT, FNAME, FCOMMENT, FEXTRA and FHCRC. A **wrong FHCRC is not checked**. The reserved flag bit 0x20 is ignored. Nonzero MTIME and OS 0 or 3 are ignored. Each of these returns 'hello'. |
-| Rejected members | Error 9826, state 1, class 16 ("Uncompressed or corrupted data passed as argument to DECOMPRESS builtin."). It is raised for CM=7, a wrong second magic byte, a wrong CRC-32, a wrong ISIZE, a zlib (RFC 1950) wrapper, raw deflate without a header, a lone 0x00 byte, and an empty member whose ISIZE is 1. The column metadata is sent first, then the error with no rows, and then DONE (rowCount null). Over RPC and prepared execution the sequence is DONEINPROC (rowCount null), then DONEPROC. The prepared execution returned status -6. |
+| Rejected members | Error 9826, state 1, class 16 ("Uncompressed or corrupted data passed as argument to DECOMPRESS builtin."). It is raised for CM=7, a wrong second magic byte, a wrong CRC-32, a wrong ISIZE, a zlib (RFC 1950) wrapper, raw deflate without a header, a lone 0x00 byte, and an empty member whose ISIZE is 1. The column metadata is sent first, then the error with no rows, and then DONE (rowCount null). Over RPC and prepared execution the sequence is DONEINPROC (rowCount null), then DONEPROC. sp_executesql returned status 9826 and sp_execute returned -6 (see the protocol section). |
 | Truncation returns NULL | Input that ends before the deflate stream completes returns **NULL with no error**. This covers `0x1f`, `0x1f8b`, `0x1f8b08`, a truncated header (7 bytes), a complete header with no deflate data, and a header with partial deflate data. The same applies to an empty member (`0x1f8b0800000000000003` + `0300` + zero CRC/ISIZE): although it is valid, it returns NULL, not 0x. |
 | Trailer | When the deflate stream completes but the 8-byte trailer is missing or only half present (4 bytes), the data is returned and the check is skipped. When a full trailer is present, both CRC-32 and ISIZE are verified. |
 | Trailing data | Bytes after the first member's trailer are ignored. Garbage returns 'hello'. For two concatenated members, only the first is returned ('hello', not 'helloworld'). |
@@ -101,16 +101,30 @@ evidence for that encoder, but it is not a specification of it.
 
 ## RPC and prepared protocol shapes
 
-sp_executesql results carry DONEINPROC (rowCount 1, more) followed by DONEPROC
-(rowCount null). For a compile-time error, such as 8116 for an INT argument,
-only DONEPROC is sent. Prepared handles return one column set per execution
-with status 0. The handles cover NVARCHAR(4000), VARBINARY(MAX) and
-VARBINARY(8000) declarations, and include empty, NULL and 3,000-character or
-20,000-byte values. sp_prepare returned the metadata (an empty result set)
-followed by DONEINPROC (rowCount 0) and DONEPROC. sp_unprepare returned only
-DONEPROC with status 0. In the `prepared decompress` handle, the executions
-after a 9826 failure (NULL, a truncated member, then a valid member) have no
-errors.
+Successful executions: every successful sp_executesql call returned
+DONEINPROC (rowCount 1, more) then DONEPROC (rowCount null) with return status
+0. Every successful prepared execution returned one column set, the same
+DONEINPROC/DONEPROC pair and status 0. The handles cover NVARCHAR(4000),
+VARBINARY(MAX) and VARBINARY(8000) declarations, and include empty, NULL and
+3,000-character or 20,000-byte values. Each sp_prepare returned the metadata
+(an empty result set), then DONEINPROC (rowCount 0) and DONEPROC with status 0.
+Each sp_unprepare returned only DONEPROC with status 0.
+
+Failed executions differ, and the fixture keeps each variant:
+
+| Call | Error | Completion tokens | Return status |
+| --- | --- | --- | --- |
+| `rpc compress int` (sp_executesql, compile-time 8116) | 8116 | DONEPROC only (rowCount null) | **8116** |
+| `rpc decompress invalid` (sp_executesql, run-time) | 9826 | Metadata, no rows, DONEINPROC (rowCount null, more), DONEPROC | **9826** |
+| `prepared decompress`, execution 2 (sp_execute) | 9826 | Metadata, no rows, DONEINPROC (rowCount null, more), DONEPROC | **-6** |
+| `prepared decompress int conversion`, execution 2 (sp_execute, 245 after DECOMPRESS) | 245 | Metadata, no rows, DONEPROC only | **none** (no RETURNSTATUS token) |
+
+So sp_executesql reported the error number as its return status, while
+sp_execute reported -6 for the statement-level 9826 failure and sent no status
+for the batch-aborting 245 conversion. In both prepared handles, later
+executions with valid input returned status 0 and had no recorded errors. In
+`prepared decompress`, those were a NULL, a truncated member (NULL result) and
+a valid member.
 
 ## Gaps not captured
 
