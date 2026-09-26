@@ -2839,6 +2839,25 @@
       "dependencies": [],
       "issue": 293,
       "projectItem": "PVTI_lAHNIXHOAZHkr84POllP"
+    },
+    {
+      "id": "rpc-output-wire-reference-v1",
+      "title": "Capture raw SQL Server RPC OUTPUT wire tokens",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal. First-party follow-up to owner-authored tedious RPC OUTPUT reference #284/#285 and existing owner-controlled post-login TDS capture helper; no external submission approved.",
+      "scope": [
+        "scripts/capture-rpc-output-wire.mjs",
+        "reference/rpc-output-wire.json",
+        "docs/rpc-output-wire.md"
+      ],
+      "acceptance": [
+        "Capture only post-login decrypted TDS packets on pinned SQL Server reference container, with no credentials or LOGIN7 payload. Bound packet/token parsing; reject incomplete/unexpected framing. Retain raw response payload hex and parsed token fields for application OUTPUT cases.",
+        "Capture INT, NULL NVARCHAR(4), raw surrogate Unicode, DECIMAL(9,2), at least one MAX/PLP output, error after assignment and nonzero procedure return. Preserve RETURNVALUE ordinal/name/status/userType/flags/TYPE_INFO/value bytes, RETURNSTATUS, ERROR/INFO and DONE-family order without normalizing differences.",
+        "Run twice in fresh databases, compare complete stable observations and independently reproduce if practical. Keep raw fixture and generator; document exact bytes relevant to typed codec #280/#281 and parser/client limitations. No production code change or OUTPUT support claim."
+      ],
+      "dependencies": [],
+      "issue": 294,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84POl2x"
     }
   ]
 }
