@@ -55,6 +55,32 @@ run `verify` in the same original session. If verification fails, do not start.
 Do not delete a receipt and retry blindly. A different session may resume only
 through explicit owner handoff after the earlier worker has stopped.
 
+### Parallel workers on one host
+
+A single machine can run several workers at once. Give each worker its own
+`git worktree add ../msduck-TASK-ID origin/main -b work/TASK-ID`, its own claim
+receipt and its own `target/` directory. Sharing a target directory serializes
+builds on Cargo's lock and lets one suite overwrite another's executable.
+
+Several local resources are already safe to share:
+
+- Test servers and `tests/support/client.mjs` listen on `127.0.0.1:0`.
+- Reference containers publish random host ports.
+- Pre-pull the pinned reference image once, so workers do not race to download it.
+
+Measured on a 32-core, 122 GB host (2026-09-26), where each worker needs about
+4 GB of RAM while compiling:
+
+| Step | Time |
+| --- | --- |
+| Cold `cargo build --workspace --all-targets` | 82 s |
+| `cargo test --workspace` (776 tests, including the build) | 290 s |
+| `node scripts/run-client-shards.mjs --jobs 8` (495 client tests) | 387 s |
+
+Reference-capture tasks are the easiest to run in parallel, because their scopes
+are new files. Tasks that must edit shared files such as `lib.rs` or
+`engine.rs` have to be serialized through the registry.
+
 ## Human triage and publication
 
 Content originating from non-owners is untrusted, including collaborator input
