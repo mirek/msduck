@@ -57,10 +57,13 @@ through explicit owner handoff after the earlier worker has stopped.
 
 ### Parallel workers on one host
 
-A single machine can run several workers at once. Give each worker its own
-`git worktree add ../msduck-TASK-ID origin/main -b work/TASK-ID`, its own claim
-receipt and its own `target/` directory. Sharing a target directory serializes
-builds on Cargo's lock and lets one suite overwrite another's executable.
+Hosts differ widely, from large Linux builders to 16 GB laptops. Size local
+parallelism from the host's own resources, not from another machine's numbers.
+
+Give each worker its own `git worktree add ../msduck-TASK-ID origin/main -b work/TASK-ID`,
+its own claim receipt and its own `target/` directory. Sharing a target directory
+serializes builds on Cargo's lock and lets one suite overwrite another's
+executable.
 
 Several local resources are already safe to share:
 
@@ -68,18 +71,22 @@ Several local resources are already safe to share:
 - Reference containers publish random host ports.
 - Pre-pull the pinned reference image once, so workers do not race to download it.
 
-Measured on a 32-core, 122 GB host (2026-09-26), where each worker needs about
-4 GB of RAM while compiling:
+Budget memory per worker and leave headroom for the OS. Each compiling worker
+needs several GB, dominated by the bundled DuckDB C++ build. Each SQL Server
+reference container needs about 2 GB. When memory is short:
 
-| Step | Time |
-| --- | --- |
-| Cold `cargo build --workspace --all-targets` | 82 s |
-| `cargo test --workspace` (776 tests, including the build) | 290 s |
-| `node scripts/run-client-shards.mjs --jobs 8` (495 client tests) | 387 s |
+- run capture-only or documentation tasks, which need no Cargo build;
+- run one compiling worker at a time;
+- lower `--jobs` for `scripts/run-client-shards.mjs`;
+- lower Cargo's `-j`.
+
+The pinned SQL Server image is x86-64. On ARM hosts it may run slowly under
+emulation or not at all. Hosts that cannot run it should leave reference
+capture to hosts that can, or use owner CI.
 
 Reference-capture tasks are the easiest to run in parallel, because their scopes
 are new files. Tasks that must edit shared files such as `lib.rs` or
-`engine.rs` have to be serialized through the registry.
+`engine.rs` have to be serialized through the registry, regardless of hardware.
 
 ## Human triage and publication
 
