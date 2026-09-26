@@ -3357,6 +3357,26 @@
       "dependencies": [],
       "issue": 347,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPB4g"
+    },
+    {
+      "id": "string-split-binding-v1",
+      "title": "Implement deterministic STRING_SPLIT binding rules from SQL Server fixture",
+      "state": "ready",
+      "authorization": "Direct owner instruction of 2026-09-26 to publish, claim and implement a narrow first-party STRING_SPLIT deterministic task under the continuing full SQL Server compatibility goal; no external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/string_split.rs",
+        "crates/msduck-sql/tests/string_split.rs",
+        "docs/string-split-binding.md"
+      ],
+      "acceptance": [
+        "Use retained owner-authored reference/string-split.json to implement pure AST recognition/argument preflight and explicit-input typed metadata for value and optional BIGINT ordinal, with no DuckDB/session/I/O or runtime-value-dependent compile metadata.",
+        "Preserve captured NULL versus empty input, repeated/edge separator values, ordinal rules and exact invalid separator/ordinal/argument type or arity diagnostics in meaningful pure fixture-backed tests; do not normalize raw differences.",
+        "Do not edit claimed lib.rs, src/engine.rs, projection.rs or aggregate_columns.rs; path-import in tests while exports remain claimed. Document successor wiring needed for public SELECT/APPLY/RPC behavior and avoid compatibility completion claims.",
+        "Claim in an isolated worktree, run fast SQL crate tests, formatting and strict Clippy, and publish a focused PR with exact revision and evidence."
+      ],
+      "dependencies": [],
+      "issue": 349,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPEbm"
     }
   ]
 }
