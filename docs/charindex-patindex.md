@@ -16,8 +16,9 @@ to overwrite an existing fixture.
 
 Values are one-based positions. BIGINT results appear in the fixture as the
 decimal strings tedious returns for BIGINT. The rules below are exactly what
-the fixture shows. They are not claims about untested inputs, and msduck
-does not implement them yet.
+the fixture shows. They are not claims about untested inputs. msduck does
+not use them at runtime yet; the deterministic core rules are described in
+the Implementation section at the end.
 
 ## Result declarations
 
@@ -187,3 +188,121 @@ remains reusable (@@TRANCOUNT 0) after all programs.
 
    Shared parser, engine, catalog, metadata and client-test files were
    outside this reference task's scope and were not changed.
+
+## Implementation (charindex-patindex-core-v1)
+
+`crates/msduck-core/src/charindex.rs` holds the deterministic rules. It uses
+only std and is not yet registered in `lib.rs`. Its integration test
+`crates/msduck-core/tests/charindex_patindex.rs` includes the file with
+`#[path]`. Registration, SQL binding and root wiring are separate successors.
+
+Evaluation has two stages:
+
+- `resolve_charindex` and `resolve_patindex` take the bound `ArgType` of each
+  argument. They return either a signature, or a `Rejection` raised before
+  any metadata. The rejection is error 189 or 174 for arity, error 8116 for
+  the argument position, or error 257 for an XML search with a VARCHAR find.
+  Arity is checked first. If several arguments are invalid, the result is
+  unsupported, because the fixture only rejects one argument at a time.
+  `result_type()` is BIGINT only for a VARCHAR(MAX), NVARCHAR(MAX) or
+  VARBINARY(MAX) searched expression.
+- `Charindex::evaluate` and `Patindex::evaluate` evaluate one row. They take
+  NULL-able UTF-16 or byte operands and one resolved `Collation`, and return
+  `Evaluation::Value`, `Evaluation::Error` (8115 after the descriptor) or
+  `Evaluation::Unsupported`.
+
+The caller does the following:
+
+- Resolves collation precedence and conflicts (error 468).
+- Rejects the ESCAPE syntax (error 156).
+- Decodes non-Unicode text from its code page.
+- Converts INT, DECIMAL, DATETIME and UNIQUEIDENTIFIER search values, and an
+  INT pattern, to their VARCHAR text.
+
+A start value is `Start::Integer` or `Start::Decimal` (unscaled value and
+scale):
+
+- For a non-MAX search, the start is converted to INT, truncating a DECIMAL,
+  and out-of-range values give 8115.
+- For a MAX search, an integer start stays BIGINT.
+- A nonpositive start searches from position 1.
+- A NULL operand gives NULL.
+- An empty find gives 0.
+
+The core also reports these uncaptured orders as unsupported:
+
+- An overflowing start together with a NULL or empty operand.
+- A DECIMAL start with a MAX search.
+
+PATINDEX follows these rules:
+
+- It parses `%`, `_`, literals and bracket classes.
+- A closing bracket always ends a class, so `[]` never matches.
+- `^` negates a class only in first position.
+- A leading or trailing `-` in a class is literal.
+- An unclosed `[` never matches.
+- The result is the first position where the pattern, less its leading `%`,
+  matches the rest of the search. A pattern made only of `%` returns 1.
+- A VARCHAR or CHAR search with a VARCHAR or INT pattern may end its match
+  before trailing spaces.
+- An NVARCHAR search with an NVARCHAR pattern keeps trailing spaces
+  significant.
+- A search with trailing spaces under any other type combination is
+  unsupported.
+
+`Collation::from_name` recognizes these names and returns `None` for any
+other:
+
+- `SQL_Latin1_General_CP1_{CI|CS}_{AS|AI}`
+- `Latin1_General[_100]_{CI|CS}_{AS|AI}`
+- `Latin1_General_100_{CI|CS}_{AS|AI}_SC[_UTF8]`
+- `Latin1_General[_100]_BIN2`
+
+Rejected names include kana-sensitive, width-sensitive and
+variation-selector-sensitive collations, `_BIN`, and other languages.
+
+Comparison and counting work as follows:
+
+- BIN2 compares UTF-16 code units. Range order is modelled for Unicode
+  operands without surrogates and for ASCII non-Unicode operands.
+- `_SC` counts positions and `_` in code points. Other collations count
+  UTF-16 units.
+- Linguistic collations model three groups of characters:
+  - Printable ASCII.
+  - Latin-1 letters that are an ASCII base letter with one diacritic.
+  - U+1F600, the one captured supplementary character, under `_SC` only.
+- Within those groups, letters compare by base letter, accent and case, as
+  the collation's CI/CS and AI/AS flags say. Other distinct characters are
+  unequal.
+- Range order is modelled only for digit and letter primary differences.
+
+These cases return unsupported:
+
+- Any operand character outside the modelled groups, for example ß
+  expansion, soft hyphen, full-width forms, controls and unpaired
+  surrogates under `_SC`.
+- Every surrogate under a non-`_SC` linguistic collation, which covers the
+  unexplained default-collation results.
+- Case or accent ties inside a range.
+- Symbol range order.
+- Uncaptured argument types.
+- Mixed binary and character operands.
+- The class forms `[^]`, an unclosed `[^`, a dash after a range, and a dash
+  range endpoint.
+
+The test replays all four retained runs. In each run it covers the
+following:
+
+- 197 exact comparisons of batch, sp_executesql and prepared-execution
+  results. Each compares the descriptor length (INT or BIGINT), the value,
+  or the error number, state, class and message.
+- 13 captured results that must return unsupported:
+  - Eight batch surrogate cases: three CHARINDEX and four PATINDEX cases
+    under the default collation, and the lone high surrogate under `_SC`.
+  - The ß expansion and soft hyphen.
+  - The surrogate cases over sp_executesql and sp_prepare.
+- 7 column-sourced, WHERE and describe-first-result-set checks.
+
+It skips 9 programs: setup, environment, reuse, the two 468 collation
+conflicts and the ESCAPE syntax error. They belong to the SQL binding
+successor. The test also checks that every captured case name is mapped.
