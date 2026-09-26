@@ -13,8 +13,11 @@ return status.
 scripts/capture-concat-ws-translate.mjs regenerates an artifact and compares it
 with the retained fixture. `--write-fixture` refuses to run when the fixture
 exists, and the fixture is opened exclusively. `--check-fixture` revalidates the
-retained file offline: that the four captures are identical and that the key
-assertions hold. `--one-database` is a diagnostic mode only.
+retained file offline: that the four captures are identical, that every
+documented error number, state and return status holds, that no other program
+reports an error, and that value descriptor flags match this document. Capture
+output paths that resolve (through symlinks) to the retained fixture are
+rejected before any container starts. `--one-database` is a diagnostic mode only.
 
 The programs cover 49 ordinary CONCAT_WS batches, 45 ordinary TRANSLATE
 batches, 15 sp_executesql RPC calls, three prepared statements (sp_prepare,
@@ -32,7 +35,7 @@ denotes MAX.
 | NULL separator | Literal NULL, typed NULL, NULL column value and NULL RPC/prepared parameter all concatenate without a separator (`ab`). |
 | Empty strings | Empty-string arguments are kept and separated (`'a','','b',''` gives `a,,b,`). An empty separator concatenates directly. |
 | Spaces | Leading/trailing spaces in values and separators are preserved. CHAR(3) and NCHAR(2) arguments keep their padding (`a  |b `). |
-| Nullability | Every CONCAT_WS descriptor has flags 32 (not nullable), including column and parameter inputs. |
+| Nullability | Every captured CONCAT_WS value descriptor is not nullable, including column and parameter inputs: flags 32, or 34 for the one case with an explicit COLLATE (Latin1_General_100_BIN2). |
 | Result family | VARCHAR when all string-typed inputs are VARCHAR/CHAR; NVARCHAR as soon as the separator or any argument is NVARCHAR/NCHAR. Numeric, date/time, uniqueidentifier and binary arguments with VARCHAR separators produce VARCHAR. |
 | Bounded width | Width is the sum of argument widths plus one separator width per gap (arguments minus one). Examples: `'-'`,VARCHAR(10),VARCHAR(20) gives VarChar 31; VARCHAR(7) separator with 10/20/30 gives 74; NVARCHAR 10/20 with N'-' gives NVarChar 62 bytes (31 characters). A NULL literal contributes width 0 (`',','a',NULL,'b'` is 4; `NULL,'a','b'` is 2); `''` contributes 1. INT contributes 12 (`CONCAT_WS(0,'a','b')` is 14). |
 | Width cap | Bounded widths cap at VARCHAR(8000) / NVARCHAR(4000) (8000 bytes). The value is silently truncated at the cap without an error or message: two VARCHAR(5000) values of 5000 characters give LEN 8000 / DATALENGTH 8000; two NVARCHAR(3000) values give LEN 4000 / DATALENGTH 8000. |
@@ -62,7 +65,7 @@ descriptor before any execution.
 | --- | --- |
 | Argument count | Exactly three. Two or four arguments fail with error 174 state 1 class 15, "The translate function requires 3 argument(s).", before metadata. |
 | NULL | Any NULL argument (literal, typed, column value or parameter) returns NULL. |
-| Nullability | Every TRANSLATE descriptor has flags 33 (nullable), or 35 with an explicit case-sensitive or binary collation. |
+| Nullability | Every captured TRANSLATE value descriptor is nullable: flags 33, or 35 for the two cases with an explicit Latin1_General_100_BIN2 or Latin1_General_100_CS_AS collation. The SC and UTF-8 collation cases kept flags 33. |
 | Result family and width | Bounded inputs always give VARCHAR(8000) or NVARCHAR(4000) (8000 bytes), independent of the declared input width (VARCHAR(10) input gives VarChar 8000). The result is NVARCHAR when any of the three arguments is NVARCHAR (VARCHAR input with N'' characters, NVARCHAR input with VARCHAR characters). A MAX first argument gives MAX (65535); a MAX second argument with a bounded input does not. VARCHAR(MAX) with 9000 characters and NVARCHAR(MAX) with 9000 characters were translated in full (DATALENGTH 9000 and 18000). |
 | Mapping | Characters map position by position without chaining (`'abc','ab','bc'` gives `bcc`). With a repeated source character the first mapping wins (`'aab','aa','xy'` gives `xxb`). Empty second and third arguments return the input unchanged; an empty input returns the empty string. |
 | Length mismatch | Unequal character counts fail with error 9828 class 16, "The second and third arguments of the TRANSLATE built-in function must contain an equal number of characters." The result descriptor is sent first, no rows follow, and the batch DONE has no row count. State is 1 for VARCHAR evaluations and 3 for NVARCHAR evaluations. Trailing spaces count (`'a '` against `'x'` fails; `'x_'` succeeds). Deletion is not supported: `TRANSLATE(CAST(1.50 AS DECIMAL(8,2)),'.','')` fails with 9828. |

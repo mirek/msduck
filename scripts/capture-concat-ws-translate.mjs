@@ -3,7 +3,9 @@
 // Usage: capture-concat-ws-translate.mjs [output] [--write-fixture | --one-database | --check-fixture]
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { basename, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { resolve } from 'node:path'
 import { Request, TYPES } from 'tedious'
@@ -22,6 +24,24 @@ if (positional.length > 1) throw new Error('expected at most one output path')
 if (writeFixture && oneDatabase) throw new Error('a retained fixture requires four independent captures')
 if (checkFixture && (writeFixture || oneDatabase || positional.length)) throw new Error('--check-fixture takes no other arguments')
 const output = resolve(positional[0] ?? 'artifacts/compatibility/concat-ws-translate/capture.json')
+
+// Resolve symlinks through the nearest existing ancestor so a not-yet-existing
+// output path or a symlinked directory cannot alias the retained fixture.
+async function canonicalPath(path) {
+  try { return await realpath(path) }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    const parent = dirname(path)
+    if (parent === path) return path
+    return resolve(await canonicalPath(parent), basename(path))
+  }
+}
+
+async function refuseFixtureOutput(outputPath, fixturePath) {
+  if (await canonicalPath(outputPath) === await canonicalPath(fixturePath)) {
+    throw new Error('refusing to write capture output over retained fixture ' + fixturePath)
+  }
+}
 
 const list = (count, value) => Array.from({ length: count }, () => value).join(',')
 
@@ -304,11 +324,67 @@ function validate(run) {
   assert.deepEqual(rows('tr null input'), [[null]])
   assert.deepEqual(rows('rpc tr unicode'), [['(a)']])
   assert.equal(get('cws 254 arguments').errors.length, 0)
-  assert.notEqual(errorNumber('cws one argument'), undefined)
-  assert.notEqual(errorNumber('cws 255 arguments'), undefined)
-  assert.notEqual(errorNumber('tr length mismatch longer'), undefined)
-  assert.notEqual(errorNumber('rpc tr length mismatch'), undefined)
-  assert.notEqual(errorNumber('tr column mismatch row'), undefined)
+  // Documented diagnostics: [record, number, state].
+  for (const [name, number, state] of [
+    ['cws one argument', 189, 1],
+    ['cws separator only null', 189, 1],
+    ['cws no arguments', 189, 1],
+    ['cws 255 arguments', 189, 1],
+    ['cws 256 arguments', 189, 1],
+    ['cws sql_variant argument', 257, 3],
+    ['cws xml argument', 257, 3],
+    ['cws conflicting explicit collations', 468, 9],
+    ['cws implicit column collations', 451, 1],
+    ['tr length mismatch longer', 9828, 1],
+    ['tr length mismatch shorter', 9828, 1],
+    ['tr trailing space mismatch', 9828, 1],
+    ['tr decimal input', 9828, 1],
+    ['tr conflicting explicit collations', 468, 9],
+    ['tr integer characters', 8116, 1],
+    ['tr two arguments', 174, 1],
+    ['tr four arguments', 174, 1],
+    ['tr supplementary default collation mismatch', 9828, 3],
+    ['tr supplementary sc collation pair', 9828, 3],
+    ['tr column mismatch row', 9828, 3],
+    ['rpc tr length mismatch', 9828, 3],
+    ['rpc tr mismatch then select', 9828, 3],
+  ]) {
+    const errors = get(name).errors
+    assert.equal(errors.length, 1, name + ': error count')
+    assert.equal(errors[0].number, number, name + ': error number')
+    assert.equal(errors[0].state, state, name + ': error state')
+  }
+  assert.equal(get('rpc tr length mismatch').returnStatus, 9828)
+  assert.equal(get('rpc tr mismatch then select').returnStatus, 0)
+  for (const [name, index, number, state, status] of [
+    ['prepared tr', 2, 9828, 3, -6],
+    ['prepared tr ansi', 1, 9828, 1, -6],
+  ]) {
+    const execution = run.find(record => record.name === name).prepared.executions[index].result
+    assert.equal(execution.errors.length, 1, name + ': prepared error count')
+    assert.equal(execution.errors[0].number, number, name + ': prepared error number')
+    assert.equal(execution.errors[0].state, state, name + ': prepared error state')
+    assert.equal(execution.returnStatus, status, name + ': prepared return status')
+  }
+  // No other record may carry an error.
+  const expectedErrors = new Set(['cws one argument', 'cws separator only null', 'cws no arguments', 'cws 255 arguments',
+    'cws 256 arguments', 'cws sql_variant argument', 'cws xml argument', 'cws conflicting explicit collations',
+    'cws implicit column collations', 'tr length mismatch longer', 'tr length mismatch shorter', 'tr trailing space mismatch',
+    'tr decimal input', 'tr conflicting explicit collations', 'tr integer characters', 'tr two arguments', 'tr four arguments',
+    'tr supplementary default collation mismatch', 'tr supplementary sc collation pair', 'tr column mismatch row',
+    'rpc tr length mismatch', 'rpc tr mismatch then select'])
+  for (const record of run) {
+    if (record.result && !expectedErrors.has(record.name)) assert.equal(record.result.errors.length, 0, record.name + ': unexpected error')
+  }
+  // Documented descriptor flags for the value column.
+  for (const record of run) {
+    const result = record.result ?? record.prepared.prepare
+    const column = result.sets[0]?.columns.find(c => c.name === 'value')
+    if (!column) continue
+    const concat = /^(cws|rpc cws|prepared cws)/.test(record.name)
+    const explicit = ['cws explicit collation', 'tr binary collation', 'tr case sensitive collation'].includes(record.name)
+    assert.equal(column.flags, (concat ? 32 : 33) | (explicit ? 2 : 0), record.name + ': value flags')
+  }
   for (const record of run) {
     if (record.prepared) {
       assert.equal(record.prepared.unprepare.errors.length, 0, record.name + ': unprepare error')
@@ -354,6 +430,7 @@ if (checkFixture) {
   console.log('Retained fixture holds ' + retained.containers[0].runs[0].length + ' matching CONCAT_WS/TRANSLATE observations in four fresh databases across two containers')
 } else {
   if (writeFixture && existsSync(fixture)) throw new Error('refusing to overwrite retained fixture')
+  await refuseFixtureOutput(output, fileURLToPath(fixture))
   await mkdir(resolve(output, '..'), { recursive: true })
   const containers = []
   for (let containerIndex = 0; containerIndex < (oneDatabase ? 1 : 2); containerIndex++) {
