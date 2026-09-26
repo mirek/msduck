@@ -38,6 +38,19 @@ pub fn is_default(value: Option<&str>) -> bool {
     sequence_name(value).is_some()
 }
 
+fn table_key(name: &ObjectName) -> Option<(String, String)> {
+    let parts = name
+        .0
+        .iter()
+        .map(|part| part.as_ident().map(|ident| ident.value.as_str()))
+        .collect::<Option<Vec<_>>>()?;
+    match parts.as_slice() {
+        [table] => Some(("dbo".into(), (*table).into())),
+        [schema, table] => Some(((*schema).into(), (*table).into())),
+        _ => None,
+    }
+}
+
 fn references_sequence(default: &str, name: &str) -> bool {
     let parsed = Parser::new(&GenericDialect {})
         .try_with_sql(default)
@@ -81,22 +94,12 @@ fn references_sequence(default: &str, name: &str) -> bool {
 }
 
 pub(crate) fn columns(db: &Connection, name: &ObjectName) -> Result<Vec<(String, String)>> {
-    let parts = name
-        .0
-        .iter()
-        .map(|p| p.as_ident().map(|p| p.value.as_str()))
-        .collect::<Option<Vec<_>>>();
-    let Some(parts) = parts else {
+    let Some((schema, table)) = table_key(name) else {
         return Ok(vec![]);
-    };
-    let (schema, table) = match parts.as_slice() {
-        [table] => ("dbo", *table),
-        [schema, table] => (*schema, *table),
-        _ => return Ok(vec![]),
     };
     let mut stmt = db.prepare("SELECT column_name,column_default FROM information_schema.columns WHERE table_catalog=current_database() AND table_schema=? COLLATE NOCASE AND table_name=? COLLATE NOCASE")?;
     let mut sequences = vec![];
-    for row in stmt.query_map([schema, table], |r| {
+    for row in stmt.query_map([&schema, &table], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
     })? {
         let (column, default) = row?;
@@ -114,14 +117,15 @@ fn table_sequences(db: &Connection, name: &ObjectName) -> Result<Vec<String>> {
         .collect())
 }
 
-pub(crate) fn drop_sequence(db: &Connection, name: &str) -> Result<()> {
-    // Names are recognized private sequence defaults. Never cascade dependencies.
-    // DuckDB's dependency check can lose a reference after an ALTER TABLE in the
-    // same transaction. Inspect live defaults before removing the sequence so a
-    // failed ALTER or DROP can roll back without stranding another table.
+/// Live defaults using this private sequence, including nested `nextval` calls.
+pub(crate) fn dependent_columns(
+    db: &Connection,
+    name: &str,
+) -> Result<Vec<(String, String, String)>> {
     let mut defaults = db.prepare(
         "SELECT table_schema,table_name,column_name,column_default FROM information_schema.columns WHERE table_catalog=current_database() AND column_default IS NOT NULL",
     )?;
+    let mut columns = vec![];
     for row in defaults.query_map([], |row| {
         Ok((
             row.get::<_, String>(0)?,
@@ -131,11 +135,33 @@ pub(crate) fn drop_sequence(db: &Connection, name: &str) -> Result<()> {
         ))
     })? {
         let (schema, table, column, default) = row?;
-        ensure!(
-            !references_sequence(&default, name),
+        if references_sequence(&default, name) {
+            columns.push((schema, table, column));
+        }
+    }
+    Ok(columns)
+}
+
+fn ensure_no_dependents(db: &Connection, name: &str, dropping: &[(String, String)]) -> Result<()> {
+    for (schema, table, column) in dependent_columns(db, name)? {
+        if dropping.iter().any(|(drop_schema, drop_table)| {
+            schema.eq_ignore_ascii_case(drop_schema) && table.eq_ignore_ascii_case(drop_table)
+        }) {
+            continue;
+        }
+        bail!(
             "Cannot drop identity sequence {name}: still referenced by {schema}.{table}.{column}"
         );
     }
+    Ok(())
+}
+
+pub(crate) fn drop_sequence(db: &Connection, name: &str) -> Result<()> {
+    // Names are recognized private sequence defaults. Never cascade dependencies.
+    // DuckDB's dependency check can lose a reference after an ALTER TABLE in the
+    // same transaction. Inspect live defaults before removing the sequence so a
+    // failed ALTER or DROP can roll back without stranding another table.
+    ensure_no_dependents(db, name, &[])?;
     db.execute_batch(&format!("DROP SEQUENCE {name}"))?;
     catalog(db)?;
     db.execute(
@@ -162,6 +188,10 @@ pub fn drop_table(db: &Connection, statement: &Statement, autocommit: bool) -> R
         let mut sequences = std::collections::BTreeSet::new();
         for name in names {
             sequences.extend(table_sequences(db, name)?);
+        }
+        let dropping = names.iter().filter_map(table_key).collect::<Vec<_>>();
+        for sequence in &sequences {
+            ensure_no_dependents(db, sequence, &dropping)?;
         }
         db.execute_batch(&statement.to_string())?;
         for name in sequences {
@@ -498,6 +528,18 @@ mod tests {
             "CREATE TABLE dbo.dependency(id INT DEFAULT nextval('{name}') + 1)"
         ))
         .unwrap();
+        db.execute_batch("BEGIN").unwrap();
+        assert!(
+            drop_table(&db, &drop, false)
+                .unwrap_err()
+                .to_string()
+                .contains("still referenced by dbo.dependency.id")
+        );
+        let count: i64 = db
+            .query_row("SELECT count(*) FROM dbo.ids", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 2);
+        db.execute_batch("ROLLBACK").unwrap();
         assert!(
             drop_table(&db, &drop, true)
                 .unwrap_err()
