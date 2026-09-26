@@ -17,6 +17,28 @@ rollback removes the newly created table. Existing destinations are not replaced
 The statement emits a completion row count without a result set. Preparation
 binds/describes the source without creating the destination or evaluating rows.
 
+Destination nullability now uses the bound logical projection when its field
+count and every output name align with DuckDB's `DESCRIBE` result (names are
+matched case-insensitively). A resolved `NOT NULL` result creates a `NOT NULL`
+column; a resolved nullable result does not. Unknown properties, mismatched
+width or renamed/reordered fields retain the backend description rather than
+inventing a constraint. Types and names still come from the backend description.
+This decision is made during execution; prepare-time validation still describes
+the source without creating a table.
+
+The owner-captured `reference/unicode-materialized-storage.json` includes
+`SELECT 1 AS id, ... INTO typed_stage`. SQL Server reads back `id` as fixed
+non-null `Int` (flags 8); previously msduck exposed nullable `IntN` (length 4,
+flags 9). A native regression reproduced the old nullable destination before
+this correction. New native tests check the non-null storage declaration and
+fixed TDS INT metadata, nullable and non-null source columns, outer-join null
+extension, `CAST(NULL)`, empty sources, preparation without effects, failed
+population leaving an empty table, and explicit rollback. The independent
+tedious fixture test still records its historical three-field difference; that
+separately owned file must be updated only after its exact live replay confirms
+the new output. A corrected literal case does not establish full SELECT INTO
+nullability or identity-transfer compatibility.
+
 Tedious tests cover typed and empty destinations, row counts, prepared execution,
 existing-table rejection, conversion failure, transaction rollback, CTE/TOP,
 and unnamed/duplicate output rejection. The Rust persistence test verifies the
