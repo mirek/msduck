@@ -19,16 +19,14 @@ test('constant INT casts select the captured temporal FROMPARTS scale and descri
   const connection = await start(t)
   for (const sample of samples) {
     const actual = canonical(await capture(connection, sample.sql))
-    assert.deepEqual(differences(actual, sample.result), [{
-      path: '/sets/0/columns/0/flags', local: 1, reference: 33,
-    }], `${sample.name} retains the known computed-column flag gap`)
+    assert.deepEqual(differences(actual, sample.result), [],
+      `${sample.name} must match the retained SQL Server capture exactly`)
 
     const empty = canonical(await capture(connection, `${sample.sql} WHERE 1=0`))
     assert.deepEqual(empty.errors, [], `${sample.name} empty result errors`)
     assert.deepEqual(empty.sets[0].rows, [], `${sample.name} empty result rows`)
-    assert.deepEqual(empty.sets[0].columns[0], {
-      ...sample.result.sets[0].columns[0], flags: 1,
-    }, `${sample.name} retains the known empty-result computed-column flag gap`)
+    assert.deepEqual(empty.sets[0].columns[0], sample.result.sets[0].columns[0],
+      `${sample.name} empty-result descriptor`)
     assert.deepEqual(empty.done, [{ kind: 'done', rowCount: 0, more: false }],
       `${sample.name} empty result completion`)
   }
