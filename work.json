@@ -4209,7 +4209,7 @@
     {
       "id": "session-reset-skiptran-doc-v1",
       "title": "Link SKIPTRAN reference from session reset guide",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction to implement full SQL Server compatibility and verified owner-initiated Codex review on owner PR #424",
       "scope": [
         "docs/session-reset.md"
