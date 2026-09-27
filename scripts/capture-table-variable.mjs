@@ -218,10 +218,10 @@ const batches = [
   ['INSERT SELECT into table variable', 'DECLARE @t TABLE(i INT NOT NULL,n INT); INSERT @t(i,n) SELECT id,n FROM (VALUES(1,10),(2,20)) s(id,n); SELECT i,n FROM @t ORDER BY i'],
   ['join and CTE source', 'DECLARE @t TABLE(i INT,n INT); INSERT @t VALUES(1,10),(2,20); WITH c AS (SELECT i,n FROM @t) SELECT c.i,c.n+x.delta AS total FROM c JOIN (VALUES(1,3),(2,4)) x(i,delta) ON x.i=c.i ORDER BY c.i'],
   ['failed multi-row insert is atomic', 'DECLARE @t TABLE(i INT NOT NULL); INSERT @t VALUES(7); BEGIN TRY INSERT @t VALUES(8),(NULL),(9); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS number,ERROR_STATE() AS state,ERROR_SEVERITY() AS severity,XACT_STATE() AS xact_state,@@TRANCOUNT AS tran_count; END CATCH; SELECT i FROM @t ORDER BY i'],
-  // The first inserted row can update (3 -> 1); the second cannot (1 -> -1).
-  // Catch generated CHECK constraint names while preserving the exact stable
-  // diagnostic identity, preexisting rows, descriptors and DONE tokens.
-  ['failed multi-row update is atomic', 'DECLARE @t TABLE(i INT CHECK(i>0),n INT); INSERT @t VALUES(3,10),(1,20); BEGIN TRY UPDATE @t SET i=i-2; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS number,ERROR_STATE() AS state,ERROR_SEVERITY() AS severity,XACT_STATE() AS xact_state,@@TRANCOUNT AS tran_count; END CATCH; SELECT i,n FROM @t ORDER BY i'],
+  // OUTPUT exposes the valid (3 -> 1) row before the later CHECK failure;
+  // the final SELECT then tests that this observable update was rolled back.
+  // Catch generated constraint names but retain the stable diagnostic identity.
+  ['failed multi-row update is atomic', 'DECLARE @t TABLE(i INT CHECK(i>0),n INT); INSERT @t VALUES(3,10),(1,20); BEGIN TRY UPDATE @t SET i=i-2 OUTPUT inserted.i,inserted.n; END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS number,ERROR_STATE() AS state,ERROR_SEVERITY() AS severity,XACT_STATE() AS xact_state,@@TRANCOUNT AS tran_count; END CATCH; SELECT i,n FROM @t ORDER BY i'],
   ['table variable and temp table names', 'DECLARE @t TABLE(v INT); CREATE TABLE #t(v INT); INSERT @t VALUES(1); INSERT #t VALUES(2); SELECT (SELECT SUM(v) FROM @t) AS local_value,(SELECT SUM(v) FROM #t) AS temp_value; DROP TABLE #t'],
   ['table variable and ordinary table names', 'DECLARE @t TABLE(v INT); INSERT @t VALUES(1); INSERT dbo.tv_base(v) VALUES(2); SELECT (SELECT SUM(v) FROM @t) AS local_value,(SELECT SUM(v) FROM dbo.tv_base) AS table_value; DELETE dbo.tv_base'],
   ['dynamic SQL cannot see caller variable', "DECLARE @t TABLE(v INT); INSERT @t VALUES(1); EXEC(N'SELECT v FROM @t'); SELECT v FROM @t"],
