@@ -110,6 +110,19 @@ pub fn precision_scale(expr: &Expr) -> Option<u8> {
 pub(crate) fn integer_constant(expr: &Expr) -> Option<i32> {
     match expr {
         Expr::Nested(e) => integer_constant(e),
+        Expr::Cast {
+            expr,
+            data_type: DataType::Int(_) | DataType::Integer(_),
+            format: None,
+            ..
+        } => cast_int_constant(expr),
+        Expr::Convert {
+            expr,
+            data_type: Some(DataType::Int(_) | DataType::Integer(_)),
+            charset: None,
+            styles,
+            ..
+        } if styles.is_empty() => cast_int_constant(expr),
         Expr::Value(v) => match &v.value {
             Value::Number(n, false) => n.parse().ok(),
             _ => None,
@@ -135,6 +148,50 @@ pub(crate) fn integer_constant(expr: &Expr) -> Option<i32> {
             }
         }
         _ => None,
+    }
+}
+
+fn cast_int_constant(expr: &Expr) -> Option<i32> {
+    let expr = crate::variant_cast::source(expr).unwrap_or(expr);
+    match expr {
+        Expr::Nested(value) => cast_int_constant(value),
+        Expr::Value(value) => match &value.value {
+            Value::Number(number, false) => {
+                if number.contains(['e', 'E']) {
+                    let value = number.parse::<f64>().ok()?;
+                    (value.is_finite()
+                        && value >= f64::from(i32::MIN)
+                        && value < f64::from(i32::MAX) + 1.0)
+                        .then(|| value.trunc() as i32)
+                } else if let Some((whole, fraction)) = number.split_once('.') {
+                    if !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+                        return None;
+                    }
+                    if whole.is_empty() {
+                        Some(0)
+                    } else {
+                        whole.parse().ok()
+                    }
+                } else {
+                    number.parse().ok()
+                }
+            }
+            Value::SingleQuotedString(text) | Value::NationalStringLiteral(text) => {
+                let text = text.trim();
+                if text.is_empty() {
+                    Some(0)
+                } else {
+                    text.parse().ok()
+                }
+            }
+            _ => None,
+        },
+        Expr::UnaryOp { op, expr } => match op {
+            UnaryOperator::Plus => cast_int_constant(expr),
+            UnaryOperator::Minus => cast_int_constant(expr)?.checked_neg(),
+            _ => None,
+        },
+        _ => integer_constant(expr),
     }
 }
 
