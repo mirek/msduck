@@ -3902,7 +3902,7 @@
     {
       "id": "docker-image-v1",
       "title": "Publish mirek/msduck Docker image as a drop-in for the SQL Server container",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction 2026-09-27: publish mirek/msduck on Docker Hub; it should behave like the public mssql container, accepting its configuration and ignoring ineffective settings (e.g. ACCEPT_EULA) so users can swap images. Owner chose v* tags + main as edge, native amd64+arm64, Docker Hub namespace mirek/msduck with DOCKERHUB_USERNAME/DOCKERHUB_TOKEN secrets.",
       "scope": [
         "Dockerfile",
