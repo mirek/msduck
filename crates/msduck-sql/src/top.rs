@@ -143,8 +143,7 @@ pub const DISTINCT_ORDER: &str =
     "ORDER BY items must appear in the select list if SELECT DISTINCT is specified.";
 const POSITION_PREFIX: &str = "The ORDER BY position number ";
 const WILDCARD_ORDINAL: &str = "unsupported TOP PERCENT/WITH TIES ordinal ordering over a wildcard";
-const VOLATILE_KEY: &str =
-    "unsupported TOP PERCENT/WITH TIES ordering by a volatile select-list expression";
+const VOLATILE_KEY: &str = "unsupported TOP PERCENT/WITH TIES ordering by a volatile expression";
 /// Functions that return a different value on each evaluation. Ranking must
 /// not evaluate them separately from the projected value.
 const VOLATILE: [&str; 9] = [
@@ -414,12 +413,12 @@ fn source_keys(
                 None => alias(&key.expr, projection)?,
             };
             if let Some(index) = index {
-                let expr = projected(&projection[index])?;
-                // The ranking copy would be evaluated apart from the projection.
-                if volatile(expr) {
-                    return Err(VOLATILE_KEY.into());
-                }
-                key.expr = expr.clone();
+                key.expr = projected(&projection[index])?.clone();
+            }
+            // The ranking copy would be evaluated apart from the projection
+            // and from the final ORDER BY.
+            if volatile(&key.expr) {
+                return Err(VOLATILE_KEY.into());
             }
             if windowed(&key.expr) {
                 return Err(WINDOW_KEY.into());

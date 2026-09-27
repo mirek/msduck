@@ -171,6 +171,14 @@ fn unsupported_shapes_remain_explicit() {
             "volatile",
         ),
         (
+            "SELECT TOP (1) WITH TIES id FROM t ORDER BY nextval('calls')",
+            "volatile",
+        ),
+        (
+            "SELECT TOP (10) PERCENT id FROM t ORDER BY NEWID()",
+            "volatile",
+        ),
+        (
             "SELECT TOP (1) WITH TIES ROW_NUMBER() OVER (ORDER BY id) AS rn FROM t ORDER BY rn",
             "window function",
         ),

@@ -69,10 +69,18 @@ It sorts rows only within equal-score groups for tie cases, as the capture
 script does. Each run must match on 48 cases. The two retained differences are
 listed exactly in the test:
 
-- `server identity`: msduck reports its own version and collation.
-- `text percent`: SQL Server sends the column metadata and then error 8114
-  (state 5, class 16, "Error converting data type varchar to float."). msduck
-  reports DuckDB's conversion error before sending any metadata.
+- `server identity`: `SERVERPROPERTY` is not implemented, so msduck returns
+  no result set and error 208 ("Catalog Error: Scalar Function with name
+  serverproperty does not exist!") instead of SQL Server's version and
+  collation row.
+- `text percent`: both servers send the column metadata, no rows and one DONE.
+  SQL Server then reports error 8114 (state 5, class 16, "Error converting data
+  type varchar to float."); msduck reports DuckDB's conversion error 245
+  (state 1, class 16, "Conversion Error: Could not convert string 'abc' to
+  DOUBLE").
+
+The test asserts these exact msduck results, comparing the first line of each
+error message. Any other change in either case fails the test.
 
 The prepared NULL percentage matches SQL Server: it returns error 1014 after
 the two-column metadata token, and reusing the handle then succeeds.
@@ -89,13 +97,21 @@ the two-column metadata token, and reusing the handle then succeeds.
   not captured, so its behavior is unchanged.
 - DISTINCT with TOP PERCENT/WITH TIES is explicitly unsupported when an ORDER BY
   key names an unnamed expression, when output names repeat, or when the select
-  list has a wildcard. Non-DISTINCT ordinals that point at a wildcard are also
-  rejected explicitly.
+  list has a wildcard. Every integer ORDER BY position over a wildcard is also
+  rejected explicitly, because positions count expanded columns. A position
+  outside the select list raises error 108, and an ORDER BY alias that more than
+  one select-list item defines raises error 209.
+- ORDER BY keys that are, or resolve to, a window function are rejected
+  explicitly. The ranking window cannot nest another window.
 - Percentages are computed in double precision. Every captured boundary is
   matched, but SQL Server's internal arithmetic at other extreme precisions has
   not been compared.
-- A volatile ORDER BY key such as `NEWID()` is evaluated once for the TOP window
-  and again for the final sort. The selected rows are still a valid TOP result,
-  but their output order is independent of the ranking.
+- ORDER BY keys with a volatile function (`NEWID`, `NEWSEQUENTIALID`, `RAND`,
+  `CRYPT_GEN_RANDOM`, or DuckDB `random`, `uuid`, `gen_random_uuid`, `nextval`,
+  `setseed`) are rejected explicitly, whether written directly or through an
+  alias or position. The ranking window would evaluate them separately from the
+  projection and the final sort. This includes the random-sample idiom
+  `TOP (n) PERCENT ... ORDER BY NEWID()`; plain `TOP (n) ... ORDER BY NEWID()`
+  is not affected.
 - DML `TOP` (INSERT/UPDATE/DELETE) and collation-sensitive tie comparison of
   character keys are not covered.
