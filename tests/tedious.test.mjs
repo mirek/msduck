@@ -1859,15 +1859,30 @@ async function topPercentPrepared(c, sql, values) {
   return executions
 }
 
-// Retained differences are listed exactly; every other case must match the
-// SQL Server capture, including descriptors, errors and completion tokens.
-const topPercentKnownDifferences = new Set([
-  // msduck reports its own identity rather than SQL Server's.
-  'server identity',
-  // SQL Server's varchar-to-float conversion error 8114 follows metadata;
-  // msduck reports DuckDB's conversion error before metadata.
-  'text percent',
+// Retained differences are listed exactly: each maps the SQL Server capture
+// to the precise msduck result. Every other case must match the capture,
+// including descriptors, errors and completion tokens.
+const topPercentKnownDifferences = new Map([
+  // SERVERPROPERTY is not implemented, so the identity query fails to bind.
+  ['server identity', captured => ({
+    ...captured,
+    sets: [],
+    done: [{ kind: 'done', rowCount: null, more: false }],
+    rowCount: 0,
+    errors: [{ number: 208, state: 1, class: 16, lineNumber: 1, message: 'Catalog Error: Scalar Function with name serverproperty does not exist!' }],
+  })],
+  // SQL Server reports varchar-to-float error 8114; msduck reports DuckDB's
+  // conversion error 245 with the same metadata, rows and completion.
+  ['text percent', captured => ({
+    ...captured,
+    errors: [{ number: 245, state: 1, class: 16, lineNumber: 1, message: "Conversion Error: Could not convert string 'abc' to DOUBLE" }],
+  })],
 ])
+
+// Backend messages add a caret excerpt of the lowered SQL after the first line.
+function topPercentDifference(result) {
+  return { ...result, errors: result.errors.map(error => ({ ...error, message: error.message.split('\n')[0] })) }
+}
 
 test('SELECT TOP PERCENT and WITH TIES replay the retained SQL Server capture', { timeout: 60000 }, async t => {
   const c = await start(t)
@@ -1893,6 +1908,13 @@ test('SELECT TOP PERCENT and WITH TIES replay the retained SQL Server capture', 
       const same = JSON.stringify(topPercentStable(item.name, observed.result)) === JSON.stringify(topPercentStable(item.name, item.result))
       if (!same) differences.push(item.name)
     }
+    for (const [name, expectedDifference] of topPercentKnownDifferences) {
+      assert.deepEqual(
+        topPercentDifference(topPercentStable(name, actual.find(entry => entry.name === name).result)),
+        expectedDifference(topPercentStable(name, run.find(item => item.name === name).result)),
+        name,
+      )
+    }
     const unexpected = differences.filter(name => !topPercentKnownDifferences.has(name))
     if (unexpected.length) {
       const name = unexpected[0]
@@ -1902,7 +1924,7 @@ test('SELECT TOP PERCENT and WITH TIES replay the retained SQL Server capture', 
         `first unexpected difference of ${unexpected.length}: ${unexpected.join(', ')}`,
       )
     }
-    assert.deepEqual(differences, [...topPercentKnownDifferences])
+    assert.deepEqual(differences, [...topPercentKnownDifferences.keys()])
   }
 })
 

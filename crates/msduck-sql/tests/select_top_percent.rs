@@ -164,7 +164,19 @@ fn unsupported_shapes_remain_explicit() {
         ),
         (
             "SELECT DISTINCT TOP (1) PERCENT a AS x, b AS x FROM t ORDER BY x",
-            "repeated",
+            "Ambiguous column name 'x'.",
+        ),
+        (
+            "SELECT TOP (1) WITH TIES nextval('calls') AS n FROM t ORDER BY n",
+            "volatile",
+        ),
+        (
+            "SELECT TOP (1) WITH TIES ROW_NUMBER() OVER (ORDER BY id) AS rn FROM t ORDER BY rn",
+            "window function",
+        ),
+        (
+            "SELECT TOP (1) WITH TIES id FROM t ORDER BY ROW_NUMBER() OVER (ORDER BY id)",
+            "window function",
         ),
         ("SELECT TOP (1) PERCENT * FROM t ORDER BY 1", "wildcard"),
         // Positions count expanded columns, which the AST does not have.
@@ -273,4 +285,21 @@ fn distinct_keys_match_qualified_and_unqualified_columns() {
         lower("SELECT DISTINCT TOP (50) PERCENT a.score FROM a, b ORDER BY b.score").unwrap_err(),
         top::DISTINCT_ORDER
     );
+}
+
+#[test]
+fn ambiguous_aliases_use_sql_server_error_209() {
+    let message = lower("SELECT TOP (1) WITH TIES a AS x, b AS x FROM t ORDER BY x").unwrap_err();
+    let error = top::diagnostic(&message).unwrap();
+    assert_eq!(
+        (
+            error.number,
+            error.state,
+            error.severity,
+            error.message.as_str()
+        ),
+        (209, 1, 16, "Ambiguous column name 'x'.")
+    );
+    // A repeated alias that the ORDER BY does not name is not ambiguous.
+    assert!(lower("SELECT TOP (1) WITH TIES a AS x, b AS x, c FROM t ORDER BY c").is_ok());
 }

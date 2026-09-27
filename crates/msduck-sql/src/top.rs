@@ -147,7 +147,7 @@ const VOLATILE_KEY: &str =
     "unsupported TOP PERCENT/WITH TIES ordering by a volatile select-list expression";
 /// Functions that return a different value on each evaluation. Ranking must
 /// not evaluate them separately from the projected value.
-const VOLATILE: [&str; 7] = [
+const VOLATILE: [&str; 9] = [
     "newid",
     "newsequentialid",
     "rand",
@@ -155,7 +155,11 @@ const VOLATILE: [&str; 7] = [
     "random",
     "gen_random_uuid",
     "uuid",
+    "nextval",
+    "setseed",
 ];
+const WINDOW_KEY: &str = "unsupported TOP PERCENT/WITH TIES ordering by a window function";
+const AMBIGUOUS_PREFIX: &str = "Ambiguous column name '";
 
 /// Diagnostics captured in reference/select-top-percent.json use class 15.
 pub fn diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
@@ -164,6 +168,9 @@ pub fn diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
         .unwrap_or(message);
     if message.starts_with(POSITION_PREFIX) {
         return Some(msduck_core::diagnostic::SqlError::new(108, 1, message));
+    }
+    if message.starts_with(AMBIGUOUS_PREFIX) {
+        return Some(msduck_core::diagnostic::SqlError::new(209, 1, message));
     }
     let number = match message {
         TIES_WITHOUT_ORDER => 1062,
@@ -364,13 +371,33 @@ fn same_column(projected: &Expr, key: &Expr) -> bool {
     }
 }
 
-fn alias(expr: &Expr, projection: &[SelectItem]) -> Option<usize> {
+/// A select-list alias named by an ORDER BY key. SQL Server rejects a name
+/// that more than one select-list alias defines.
+fn alias(expr: &Expr, projection: &[SelectItem]) -> Result<Option<usize>, String> {
     let Expr::Identifier(id) = expr else {
-        return None;
+        return Ok(None);
     };
-    projection.iter().position(|item| {
+    let mut matches = projection.iter().enumerate().filter(|(_, item)| {
         matches!(item, SelectItem::ExprWithAlias { alias, .. } if alias.value.eq_ignore_ascii_case(&id.value))
-    })
+    });
+    let first = matches.next().map(|(index, _)| index);
+    if matches.next().is_some() {
+        return Err(format!("{AMBIGUOUS_PREFIX}{}'.", id.value));
+    }
+    Ok(first)
+}
+
+/// A ranking window cannot order by another window function.
+fn windowed(expr: &Expr) -> bool {
+    let mut found = false;
+    let _ = visit_expressions(expr, |expr| {
+        if matches!(expr, Expr::Function(Function { over: Some(_), .. })) {
+            found = true;
+            return std::ops::ControlFlow::Break(());
+        }
+        std::ops::ControlFlow::Continue(())
+    });
+    found
 }
 
 /// Rank ORDER BY keys as SQL Server resolves them: select-list aliases and
@@ -384,7 +411,7 @@ fn source_keys(
             let mut key = key.clone();
             let index = match ordinal(&key.expr, projection)? {
                 Some(index) => Some(index),
-                None => alias(&key.expr, projection),
+                None => alias(&key.expr, projection)?,
             };
             if let Some(index) = index {
                 let expr = projected(&projection[index])?;
@@ -393,6 +420,9 @@ fn source_keys(
                     return Err(VOLATILE_KEY.into());
                 }
                 key.expr = expr.clone();
+            }
+            if windowed(&key.expr) {
+                return Err(WINDOW_KEY.into());
             }
             Ok(key)
         })
@@ -419,14 +449,16 @@ fn distinct_keys(
     }
     keys.iter()
         .map(|key| {
-            let index = ordinal(&key.expr, projection)?
-                .or_else(|| alias(&key.expr, projection))
-                .or_else(|| {
-                    projection.iter().position(|item| {
-                        same_column(projected(item).expect("checked projection"), &key.expr)
-                    })
+            let index = match ordinal(&key.expr, projection)? {
+                Some(index) => Some(index),
+                None => alias(&key.expr, projection)?,
+            }
+            .or_else(|| {
+                projection.iter().position(|item| {
+                    same_column(projected(item).expect("checked projection"), &key.expr)
                 })
-                .ok_or(DISTINCT_ORDER)?;
+            })
+            .ok_or(DISTINCT_ORDER)?;
             let name = output_name(&projection[index])
                 .ok_or("unsupported TOP DISTINCT ordering by an unnamed select-list item")?;
             let duplicates = projection
