@@ -288,6 +288,23 @@ fn distinct_keys_match_qualified_and_unqualified_columns() {
             "{sql}"
         );
     }
+    // Expressions match when their column references do.
+    for sql in [
+        "SELECT DISTINCT TOP (50) PERCENT t.score + 1 AS x FROM t ORDER BY score + 1",
+        "SELECT DISTINCT TOP (50) PERCENT len(T.Name) AS n FROM t ORDER BY LEN(name)",
+    ] {
+        assert!(lower(sql).is_ok(), "{sql}");
+    }
+    assert_eq!(
+        lower("SELECT DISTINCT TOP (50) PERCENT a.score + 1 AS x FROM a, b ORDER BY b.score + 1")
+            .unwrap_err(),
+        top::DISTINCT_ORDER
+    );
+    assert_eq!(
+        lower("SELECT DISTINCT TOP (50) PERCENT score + 1 AS x FROM t ORDER BY score + 2")
+            .unwrap_err(),
+        top::DISTINCT_ORDER
+    );
     // Different qualifiers name different columns.
     assert_eq!(
         lower("SELECT DISTINCT TOP (50) PERCENT a.score FROM a, b ORDER BY b.score").unwrap_err(),

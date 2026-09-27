@@ -348,6 +348,42 @@ fn volatile(expr: &Expr) -> bool {
     found
 }
 
+/// Whether an ORDER BY key is the same expression as a projected item: equal
+/// after column references are compared with [`same_column`] and function
+/// names without regard to case.
+fn same_expression(projected: &Expr, key: &Expr) -> bool {
+    fn shape(expr: &Expr) -> (String, Vec<Expr>) {
+        let mut columns = vec![];
+        let mut expr = expr.clone();
+        let _ = visit_expressions_mut(&mut expr, |expr| {
+            match expr {
+                Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
+                    columns.push(std::mem::replace(
+                        expr,
+                        Expr::Identifier(Ident::new("__msduck_column")),
+                    ));
+                }
+                Expr::Function(function) => {
+                    function.name = ObjectName::from(vec![Ident::new(
+                        function.name.to_string().to_uppercase(),
+                    )]);
+                }
+                _ => {}
+            }
+            std::ops::ControlFlow::<()>::Continue(())
+        });
+        (expr.to_string(), columns)
+    }
+    let (projected_shape, projected_columns) = shape(projected);
+    let (key_shape, key_columns) = shape(key);
+    projected_shape == key_shape
+        && projected_columns.len() == key_columns.len()
+        && projected_columns
+            .iter()
+            .zip(&key_columns)
+            .all(|(a, b)| same_column(a, b))
+}
+
 /// Whether an ORDER BY key names a projected column. An unqualified name
 /// matches a qualified column with that name; qualified names must agree.
 fn same_column(projected: &Expr, key: &Expr) -> bool {
@@ -454,7 +490,7 @@ fn distinct_keys(
             }
             .or_else(|| {
                 projection.iter().position(|item| {
-                    same_column(projected(item).expect("checked projection"), &key.expr)
+                    same_expression(projected(item).expect("checked projection"), &key.expr)
                 })
             })
             .ok_or(DISTINCT_ORDER)?;
