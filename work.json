@@ -4144,6 +4144,31 @@
       "dependencies": [],
       "issue": 415,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQTfL"
+    },
+    {
+      "id": "dateadd-bigint-v1",
+      "title": "Support SQL Server 2025 BIGINT DATEADD amounts",
+      "state": "ready",
+      "authorization": "Mirek's continuing compatibility goal; first-party code, owner-run fixture and Microsoft DATEADD documentation",
+      "scope": [
+        "src/dateadd.rs",
+        "src/datetime2_add.rs",
+        "src/time_add.rs",
+        "tests/dateadd_bigint.test.mjs",
+        "scripts/capture-dateadd-bigint.mjs",
+        "reference/dateadd-bigint.json",
+        "docs/dateadd.md"
+      ],
+      "acceptance": [
+        "Capture raw SQL Server rows, typed descriptors, diagnostics and DONE events for INT/BIGINT boundaries, fractional truncation, NULL and empty results, literal/stored/RPC forms across DATE, TIME, DATETIME2 and DATETIMEOFFSET; require exact agreement in four fresh databases across two pinned containers and independent replay.",
+        "Widen DATEADD amount binding/native arithmetic without narrowing before range checks or evaluating operands twice; preserve typed NULL/empty metadata, TIME wraparound, DATETIME2 precision, DATETIMEOFFSET local/UTC checks and unsupported dateparts.",
+        "Add focused native/client regressions with raw differences retained; run formatting, workspace tests, strict Clippy, independent clients and diagnostic audit at the final revision. Legacy DATETIME/SMALLDATETIME and literal return handling remain separate."
+      ],
+      "dependencies": [
+        "dateadd-legacy-reference-v1"
+      ],
+      "issue": 417,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQUkf"
     }
   ]
 }
