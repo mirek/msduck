@@ -3873,6 +3873,31 @@
       ],
       "issue": 394,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PP-Du"
+    },
+    {
+      "id": "worker-owned-merge-policy-v1",
+      "title": "Make each PR worker responsible for its gated merge",
+      "state": "backlog",
+      "authorization": "Direct owner 2026-09-27 instruction: responsible PR worker should merge after addressing review comments and green CI; first-party workflow policy change.",
+      "scope": [
+        ".agents/skills/contribute/SKILL.md",
+        "docs/parallel-collaboration.md",
+        "docs/agent-work.md",
+        "AGENTS.md"
+      ],
+      "acceptance": [
+        "Make the valid claim holder the default integrator only for its own owner-authored same-repository PR; verify exact head and scope, required CI, completed owner-initiated review, resolved relevant findings and branch protection, then merge with exact-head protection.",
+        "The same worker publishes Done in the protected registry/project after merge, verifies the linked issue and retains the immutable claim tag. Failures or conflicts stop the merge without weakening gates.",
+        "Respect explicit owner holds and owner reassignment; another worker integrates only under direct owner instruction, including the current owner-designated integration session for already-open PRs. Credential sharing alone grants no cross-worker authority.",
+        "Keep owner-only intake and exclusive claims unchanged; validate the skill and check all four documents for consistent role language."
+      ],
+      "dependencies": [
+        "agent-work-publish-v1",
+        "codex-review-policy-v1",
+        "duckdb-dev-opt-level-v1"
+      ],
+      "issue": 395,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PP-gr"
     }
   ]
 }
