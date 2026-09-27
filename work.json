@@ -3656,7 +3656,7 @@
     {
       "id": "select-top-percent-shapes-reference-v1",
       "title": "Capture SQL Server TOP PERCENT and WITH TIES query-shape behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's standing full SQL Server compatibility objective and owner-authored follow-up issue #376; first-party reference/select-top-percent.json and docs/select-top-percent-reference.md identify these gaps.",
       "scope": [
         "scripts/capture-select-top-percent.mjs",
