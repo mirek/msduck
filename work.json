@@ -2823,7 +2823,7 @@
     {
       "id": "smp-session-v1",
       "title": "Track deterministic SMP session flow control and lifecycle",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement a fully functional SQL Server compatible Rust/DuckDB server and request for independently claimable parallel work. First-party protocol gap in docs/smp.md and local TDS skill, checked against Microsoft MC-SMP; no external GitHub submission is approved.",
       "scope": [
         "crates/msduck-tds/src/smp_session.rs",
@@ -3321,7 +3321,7 @@
     {
       "id": "server-connection-admission-v1",
       "title": "Bound server connection admission before DuckDB clone and worker spawn",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction of 2026-09-26 to implement a production connection-admission resource bound under the continuing full SQL Server compatibility goal. Owner explicitly handed off src/server.rs from prior done aggregate-warning-integration-v1; its old receipt cannot resume. First-party source review only; no external submission is input.",
       "scope": [
         "src/server.rs",
@@ -3342,7 +3342,7 @@
     {
       "id": "ci-client-inventory-v1",
       "title": "Include the complete npm client inventory in full CI shards",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to make SQL Server compatibility verification accurate and faster, with owner-agent instruction of 2026-09-26 to correct the first-party full CI client inventory. Prior workflow claims are completed; this successor has a disjoint active scope. No external submission is input.",
       "scope": [
         ".github/workflows/ci.yml",
@@ -3381,7 +3381,7 @@
     {
       "id": "tls-handshake-deadline-v1",
       "title": "Bound PRELOGIN TLS handshake by an absolute deadline",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction to implement a disjoint owner-derived absolute TLS handshake deadline toward the continuing SQL Server compatible Rust server goal. No external submission is input.",
       "scope": [
         "src/tls.rs",
