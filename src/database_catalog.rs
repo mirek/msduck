@@ -90,14 +90,7 @@ impl Catalog {
     pub fn open(owner: &Connection, path: &str) -> Result<Self> {
         let primary: String = owner.query_row("SELECT current_database()", [], |row| row.get(0))?;
         let catalog = if path == ":memory:" {
-            let directory = std::env::temp_dir().join(format!(
-                "msduck-databases-{}-{}",
-                std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)?
-                    .as_nanos()
-            ));
-            std::fs::create_dir_all(&directory).context("create database directory")?;
+            let directory = temporary_directory()?;
             Self {
                 primary,
                 directory,
@@ -507,6 +500,31 @@ fn file_name(stem: &str, database_id: i32, name_key: &str) -> String {
     format!("{stem}.{database_id}.{fragment}.duckdb")
 }
 
+/// Create a fresh directory for an in-memory server's user databases. The
+/// process-wide counter keeps names unique within a process even when the
+/// clock repeats, and `create_dir` refuses a directory that already exists.
+fn temporary_directory() -> Result<PathBuf> {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let base = std::env::temp_dir();
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or_default();
+    for _ in 0..16 {
+        let directory = base.join(format!(
+            "msduck-databases-{}-{nanos}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        match std::fs::create_dir(&directory) {
+            Ok(()) => return Ok(directory),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error).context("create database directory"),
+        }
+    }
+    bail!("could not create a unique database directory")
+}
+
 /// 64-bit FNV-1a: stable across Rust releases, unlike `DefaultHasher`.
 fn fnv1a(bytes: &[u8]) -> u64 {
     bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
@@ -581,6 +599,15 @@ mod tests {
         let b = file_name(&format!("{}b", "s".repeat(64)), 5, "sales");
         assert_ne!(a, b);
         assert_eq!(fnv1a(b"a"), 0xaf63_dc4c_8601_ec8c);
+    }
+
+    #[test]
+    fn temporary_directories_are_distinct() {
+        let a = temporary_directory().unwrap();
+        let b = temporary_directory().unwrap();
+        assert_ne!(a, b);
+        std::fs::remove_dir(a).unwrap();
+        std::fs::remove_dir(b).unwrap();
     }
 
     #[test]
