@@ -163,6 +163,26 @@ const VOLATILE: [&str; 12] = [
 const WINDOW_KEY: &str = "unsupported TOP PERCENT/WITH TIES ordering by a window function";
 const AMBIGUOUS_PREFIX: &str = "Ambiguous column name '";
 const COLUMN_IN_TOP_PREFIX: &str = "The reference to column \"";
+const INVALID_TOP: &str = "Invalid expression in a TOP or OFFSET clause.";
+const WINDOW_IN_TOP: &str = "Windowed functions can only appear in the SELECT or ORDER BY clauses.";
+/// T-SQL aggregates; SQL Server rejects them in a TOP quantity.
+const AGGREGATES: [&str; 15] = [
+    "count",
+    "count_big",
+    "sum",
+    "avg",
+    "min",
+    "max",
+    "stdev",
+    "stdevp",
+    "var",
+    "varp",
+    "string_agg",
+    "checksum_agg",
+    "grouping",
+    "grouping_id",
+    "approx_count_distinct",
+];
 
 /// Diagnostics captured in reference/select-top-percent.json use class 15.
 pub fn diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
@@ -172,8 +192,14 @@ pub fn diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
     if message.starts_with(POSITION_PREFIX) {
         return Some(msduck_core::diagnostic::SqlError::new(108, 1, message));
     }
-    if message.starts_with(COLUMN_IN_TOP_PREFIX) {
-        let mut error = msduck_core::diagnostic::SqlError::new(4115, 1, message);
+    let class_15 = match message {
+        _ if message.starts_with(COLUMN_IN_TOP_PREFIX) => Some(4115),
+        INVALID_TOP => Some(162),
+        WINDOW_IN_TOP => Some(4108),
+        _ => None,
+    };
+    if let Some(number) = class_15 {
+        let mut error = msduck_core::diagnostic::SqlError::new(number, 1, message);
         error.severity = 15;
         return Some(error);
     }
@@ -441,9 +467,10 @@ fn alias(expr: &Expr, projection: &[SelectItem]) -> Result<Option<usize>, String
     Ok(first)
 }
 
-/// The first column reference in a TOP quantity outside any subquery.
-/// Variables (`@name`) are not columns.
-fn source_column(quantity: &Expr) -> Option<String> {
+/// The SQL Server compile error for the first column reference, aggregate or
+/// window function in a TOP quantity outside any subquery, as captured from
+/// SQL Server 2022. Variables (`@name`) are not columns.
+fn invalid_quantity(quantity: &Expr) -> Option<String> {
     struct Finder {
         depth: usize,
         found: Option<String>,
@@ -464,11 +491,27 @@ fn source_column(quantity: &Expr) -> Option<String> {
                 Expr::CompoundIdentifier(ids) => ids.last(),
                 _ => None,
             };
-            if self.depth == 0
-                && let Some(name) = name
-                && !name.value.starts_with('@')
-            {
-                self.found = Some(name.value.clone());
+            if self.depth > 0 {
+                return std::ops::ControlFlow::Continue(());
+            }
+            self.found = match expr {
+                Expr::Function(Function { over: Some(_), .. }) => Some(WINDOW_IN_TOP.into()),
+                Expr::Function(function)
+                    if function.name.0.len() == 1
+                        && AGGREGATES
+                            .iter()
+                            .any(|name| function.name.to_string().eq_ignore_ascii_case(name)) =>
+                {
+                    Some(INVALID_TOP.into())
+                }
+                _ => name.filter(|name| !name.value.starts_with('@')).map(|name| {
+                    format!(
+                        "{COLUMN_IN_TOP_PREFIX}{}\" is not allowed in an argument to a TOP, OFFSET, or FETCH clause. Only references to columns at an outer scope or standalone expressions and subqueries are allowed here.",
+                        name.value
+                    )
+                }),
+            };
+            if self.found.is_some() {
                 return std::ops::ControlFlow::Break(());
             }
             std::ops::ControlFlow::Continue(())
@@ -618,11 +661,9 @@ pub fn ranked(query: &mut Query) -> Result<(), String> {
         None => return Err("TOP requires a count".into()),
     };
     // The lowered quantity sits beside the source rows, where a column
-    // reference would bind per row instead of once per statement.
-    if let Some(column) = source_column(&quantity) {
-        return Err(format!(
-            "{COLUMN_IN_TOP_PREFIX}{column}\" is not allowed in an argument to a TOP, OFFSET, or FETCH clause. Only references to columns at an outer scope or standalone expressions and subqueries are allowed here."
-        ));
+    // reference would bind per row and an aggregate would see one row.
+    if let Some(error) = invalid_quantity(&quantity) {
+        return Err(error);
     }
     if select.qualify.is_some() {
         return Err("unsupported TOP PERCENT/WITH TIES with QUALIFY".into());
@@ -633,7 +674,10 @@ pub fn ranked(query: &mut Query) -> Result<(), String> {
         Some(_) => return Err("unsupported TOP PERCENT/WITH TIES DISTINCT form".into()),
     };
     let keys = if distinct {
-        let single_source = select.from.len() == 1 && select.from[0].joins.is_empty();
+        // A parenthesized join is one top-level relation with its own joins.
+        let single_source = select.from.len() == 1
+            && select.from[0].joins.is_empty()
+            && !matches!(select.from[0].relation, TableFactor::NestedJoin { .. });
         distinct_keys(&keys, &select.projection, single_source)?
     } else {
         source_keys(&keys, &select.projection)?

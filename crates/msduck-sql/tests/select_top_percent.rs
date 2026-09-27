@@ -311,6 +311,12 @@ fn distinct_keys_match_qualified_and_unqualified_columns() {
             .unwrap_err(),
         top::DISTINCT_ORDER
     );
+    // A parenthesized join is still two sources.
+    assert_eq!(
+        lower("SELECT DISTINCT TOP (50) PERCENT a.score + 1 AS x FROM (a CROSS JOIN b) ORDER BY score + 1")
+            .unwrap_err(),
+        top::DISTINCT_ORDER
+    );
     // Expressions match when their column references do.
     for sql in [
         "SELECT DISTINCT TOP (50) PERCENT t.score + 1 AS x FROM t ORDER BY score + 1",
@@ -382,6 +388,36 @@ fn column_references_in_top_quantities_use_sql_server_error_4115() {
         )
     );
     assert!(lower("SELECT TOP (t.id + 1) WITH TIES id FROM t ORDER BY id").is_err());
+    // Aggregates and window functions, captured from SQL Server 2022.
+    for (sql, number, message) in [
+        (
+            "SELECT TOP (COUNT(*)) PERCENT id FROM t ORDER BY id",
+            162,
+            "Invalid expression in a TOP or OFFSET clause.",
+        ),
+        (
+            "SELECT TOP (MAX(1)) WITH TIES id FROM t ORDER BY id",
+            162,
+            "Invalid expression in a TOP or OFFSET clause.",
+        ),
+        (
+            "SELECT TOP (ROW_NUMBER() OVER (ORDER BY (SELECT 1))) PERCENT id FROM t ORDER BY id",
+            4108,
+            "Windowed functions can only appear in the SELECT or ORDER BY clauses.",
+        ),
+    ] {
+        let error = top::diagnostic(&lower(sql).unwrap_err()).unwrap();
+        assert_eq!(
+            (
+                error.number,
+                error.state,
+                error.severity,
+                error.message.as_str()
+            ),
+            (number, 1, 15, message),
+            "{sql}"
+        );
+    }
     // Variables and self-contained subqueries are allowed.
     assert!(lower("SELECT TOP (@n) PERCENT id FROM t ORDER BY id").is_ok());
     assert!(
