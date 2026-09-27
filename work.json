@@ -3772,6 +3772,26 @@
       ],
       "issue": 385,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PP4VA"
+    },
+    {
+      "id": "rowversion-core-export-v1",
+      "title": "Export rowversion core module after lib.rs handoff",
+      "state": "backlog",
+      "authorization": "Mirek's standing SQL Server compatibility goal; owner-authored issue #388 and core PR #386. Backlog until the live legacy-datetime-export-v1 lib.rs claim and rowversion-core-v1 are complete.",
+      "scope": [
+        "crates/msduck-core/src/lib.rs"
+      ],
+      "acceptance": [
+        "Start only after rowversion-core-v1 and legacy-datetime-export-v1 merge and are marked done; never adopt or edit the live worker's lib.rs claim.",
+        "Export the existing rowversion module as msduck_core::rowversion without changing counter semantics or unrelated exports. Verify a library-only build and public downstream import compile.",
+        "Run formatting, full deterministic core tests and strict core Clippy on the exact export revision. Keep persistence, DML allocation, @@DBTS, catalog, diagnostics and TDS wiring as separate root work."
+      ],
+      "dependencies": [
+        "rowversion-core-v1",
+        "legacy-datetime-export-v1"
+      ],
+      "issue": 388,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PP6wO"
     }
   ]
 }
