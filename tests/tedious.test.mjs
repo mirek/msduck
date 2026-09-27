@@ -6642,7 +6642,9 @@ test('STRING_ESCAPE applies JSON rules with MAX metadata and error recovery', { 
   assert.deepEqual(await p.run({s:source,format:'json'}),[[escaped]])
   assert.deepEqual(await p.run({s:'/',format:'JSON'}),[['\\/']])
   assert.deepEqual(await p.run({s:null,format:'json'}),[[null]])
-  assert.deepEqual(await p.run({s:'x',format:null}),[[null]])
+  await assert.rejects(p.run({s:'x',format:null}), e =>
+    e.number === 8116 && e.state === 8 &&
+    e.message === 'Argument data type NULL is invalid for argument 2 of STRING_ESCAPE function.')
   await assert.rejects(p.run({s:'x',format:'xml'}),e=>e.number===13622 && e.message==='An invalid value was specified for argument 2.')
   assert.deepEqual(await p.run({s:'ok',format:'json'}),[['ok']])
   const long = '\0🦆/'.repeat(5000)
