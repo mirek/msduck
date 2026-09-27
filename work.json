@@ -4017,6 +4017,28 @@
       "dependencies": [],
       "issue": 404,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQL8A"
+    },
+    {
+      "id": "tvp-binding-reference-v1",
+      "title": "Capture SQL Server TVP type resolution and metadata rejection",
+      "state": "ready",
+      "authorization": "Direct owner continuing SQL Server-compatible Rust/DuckDB server goal; first-party TVP captures and official MS-TDS metadata specification. No external submission is input.",
+      "scope": [
+        "scripts/capture-tvp-binding.mjs",
+        "reference/tvp-binding.json",
+        "docs/tvp-binding-reference.md"
+      ],
+      "acceptance": [
+        "Capture bounded post-login Tedious 20 RPC bytes and complete SQL Server 2025 responses for qualified and empty procedure TVP type names, wrong type/schema and mismatched column metadata.",
+        "Require exact agreement across four fresh databases in two independent pinned containers and an independent replay against the retained fixture; refuse output aliases and overwrites, preserving exact rows/descriptors/errors/INFO/DONE differences.",
+        "Document accepted/rejected forms and exact errors/states, distinguishing procedure-side metadata resolution from ad-hoc SQL type-name requirements without claiming msduck runtime TVP support."
+      ],
+      "dependencies": [
+        "tvp-wire-reference-v1",
+        "tvp-default-reference-v1"
+      ],
+      "issue": 406,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQNfE"
     }
   ]
 }
