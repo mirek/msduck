@@ -54,7 +54,13 @@ new Connection({
 | `beginTransaction/commitTransaction/rollbackTransaction` | Transaction manager (0x0E) types 5/7/8 | engine transactions + ENVCHANGE 8/9/10 |
 | `newBulkLoad` + `execBulkLoad` | SQL batch `INSERT BULK`, then Bulk Load (0x07) | incremental decoder + atomic engine loader |
 | `cancel()` | Attention (0x06) | DONE with DONE_ATTN |
-| pooled reset | RPC `sp_reset_connection` | acknowledged no-op |
+| `connection.reset()` (tedious 20) | SQL batch (0x01), first packet `RESETCONNECTION` status (0x08) | The copied upstream mssqlite notes called reset a no-op; this is not an msduck or SQL Server behavior claim. |
+
+Tedious 20's `Connection.reset()` sets `resetConnectionOnNextRequest` and sends
+`getInitialSql()` through `execSqlBatch`; its packet writer maps the flag to
+status bit 0x08. The [msduck SQL Server 2025 capture](../../../docs/session-reset-reference.md)
+observes the outgoing Batch message and reset flag, callback, response events,
+and follow-up session state. It does not test `RESETCONNECTIONSKIPTRAN` (0x10).
 
 Tedious 20 does not expose MARS/SMP, so it cannot be the MARS-capable client
 ground truth. Use `System.Data.SqlClient` (or `Microsoft.Data.SqlClient`) with
