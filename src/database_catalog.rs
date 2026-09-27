@@ -45,6 +45,26 @@ impl Drop for Catalog {
     }
 }
 
+/// One registry row. Its values are ordinary SQL data.
+struct Row {
+    name: String,
+    name_key: String,
+    database_id: i32,
+    file: String,
+}
+
+impl Row {
+    /// Reads `name, name_key, database_id, file` from the first four columns.
+    fn read(row: &duckdb::Row) -> duckdb::Result<Self> {
+        Ok(Self {
+            name: row.get(0)?,
+            name_key: row.get(1)?,
+            database_id: row.get(2)?,
+            file: row.get(3)?,
+        })
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Attach {
     /// A new database whose file does not exist yet.
@@ -123,18 +143,17 @@ impl Catalog {
         ))?;
         let registered = {
             let mut query = owner.prepare(&format!(
-                "SELECT name,file FROM {} ORDER BY database_id",
+                "SELECT name,name_key,database_id,file FROM {} ORDER BY database_id",
                 catalog.registry()
             ))?;
             query
-                .query_map([], |row| {
-                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-                })?
+                .query_map([], Row::read)?
                 .collect::<duckdb::Result<Vec<_>>>()?
         };
-        for (name, file) in registered {
+        for row in registered {
+            let name = row.name.clone();
             let result = catalog
-                .attach(owner, &name, &file, Attach::Recover)
+                .attach(owner, &row, Attach::Recover)
                 .and_then(|()| catalog.publish(owner, &name));
             if let Err(error) = result {
                 // SQL Server keeps serving other databases when one cannot be
@@ -255,14 +274,20 @@ impl Catalog {
         if inserted == 0 {
             return Err(exists(name));
         }
+        let row = Row {
+            name: name.to_owned(),
+            name_key: name_key.clone(),
+            database_id,
+            file,
+        };
         let attached = self
-            .attach(db, name, &file, Attach::Create)
+            .attach(db, &row, Attach::Create)
             .and_then(|()| self.publish_all(db));
         if let Err(error) = attached {
             let _ = db.execute_batch(&format!("DETACH DATABASE IF EXISTS {}", quote(name)));
             // Forget the database only once its files are gone. Otherwise it
             // stays registered but unavailable, and DROP can finish the cleanup.
-            match self.delete_files(&file) {
+            match self.delete_files(&row) {
                 Ok(()) => {
                     let _ = db.execute(
                         &format!("DELETE FROM {} WHERE name_key=?", self.registry()),
@@ -296,25 +321,20 @@ impl Catalog {
         let registered = db
             .query_row(
                 &format!(
-                    "SELECT r.name,r.file,d.database_name IS NOT NULL FROM {} r \
-                     LEFT JOIN duckdb_databases() d ON d.database_name=r.name WHERE r.name_key=?",
+                    "SELECT r.name,r.name_key,r.database_id,r.file,d.database_name IS NOT NULL \
+                     FROM {} r LEFT JOIN duckdb_databases() d ON d.database_name=r.name \
+                     WHERE r.name_key=?",
                     self.registry()
                 ),
                 [&name_key],
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, bool>(2)?,
-                    ))
-                },
+                |row| Ok((Row::read(row)?, row.get::<_, bool>(4)?)),
             )
             .map(Some)
             .or_else(|error| match error {
                 duckdb::Error::QueryReturnedNoRows => Ok(None),
                 error => Err(error),
             })?;
-        let Some((alias, file, attached)) = registered else {
+        let Some((row, attached)) = registered else {
             let mut error = SqlError::new(
                 3701,
                 1,
@@ -325,12 +345,14 @@ impl Catalog {
             error.severity = 11;
             bail!(error)
         };
+        // Validate the stored file name before detaching anything.
+        self.path(&row)?;
         if attached {
-            db.execute_batch(&format!("DETACH DATABASE {}", quote(&alias)))?;
+            db.execute_batch(&format!("DETACH DATABASE {}", quote(&row.name)))?;
         }
         // Keep the registration until the files are gone, so a failed
         // deletion leaves a database that another DROP can finish removing.
-        self.delete_files(&file)?;
+        self.delete_files(&row)?;
         db.execute(
             &format!("DELETE FROM {} WHERE name_key=?", self.registry()),
             [&name_key],
@@ -338,8 +360,9 @@ impl Catalog {
         Ok(())
     }
 
-    fn attach(&self, db: &Connection, name: &str, file: &str, mode: Attach) -> Result<()> {
-        let path = self.path(file)?;
+    fn attach(&self, db: &Connection, row: &Row, mode: Attach) -> Result<()> {
+        let name = row.name.as_str();
+        let path = self.path(row)?;
         // DuckDB creates missing files; recovery must not replace lost data
         // with an empty database.
         if mode == Attach::Recover {
@@ -428,21 +451,25 @@ impl Catalog {
     }
 
     /// The registry is ordinary SQL data, so a stored file name is trusted
-    /// only if it is a single generated component inside the directory.
-    fn path(&self, file: &str) -> Result<PathBuf> {
+    /// only if it is a single component generated for this row's ID and name.
+    /// Any stem is accepted, so renaming the primary file keeps its databases.
+    fn path(&self, row: &Row) -> Result<PathBuf> {
+        let file = row.file.as_str();
+        let suffix = file_suffix(row.database_id, &row.name_key);
         let mut components = Path::new(file).components();
         ensure!(
             matches!(components.next(), Some(std::path::Component::Normal(_)))
                 && components.next().is_none()
-                && file.ends_with(".duckdb")
-                && !file.contains(['/', '\\']),
+                && !file.contains(['/', '\\'])
+                && file.len() > suffix.len()
+                && file.ends_with(&suffix),
             "invalid registered database file name '{file}'"
         );
         Ok(self.directory.join(file))
     }
 
-    fn delete_files(&self, file: &str) -> Result<()> {
-        let path = self.path(file)?;
+    fn delete_files(&self, row: &Row) -> Result<()> {
+        let path = self.path(row)?;
         let mut wal = path.clone().into_os_string();
         wal.push(".wal");
         for path in [path, PathBuf::from(wal)] {
@@ -503,6 +530,12 @@ fn file_name(stem: &str, database_id: i32, name_key: &str) -> String {
     } else {
         stem.to_owned()
     };
+    format!("{stem}{}", file_suffix(database_id, name_key))
+}
+
+/// The part of a file name that identifies its database: the unique ID and a
+/// bounded fragment of the encoded name.
+fn file_suffix(database_id: i32, name_key: &str) -> String {
     let mut fragment = String::new();
     for c in name_key.chars() {
         let encoded = encode(c.encode_utf8(&mut [0; 4]));
@@ -511,7 +544,7 @@ fn file_name(stem: &str, database_id: i32, name_key: &str) -> String {
         }
         fragment.push_str(&encoded);
     }
-    format!("{stem}.{database_id}.{fragment}.duckdb")
+    format!(".{database_id}.{fragment}.duckdb")
 }
 
 /// Create a fresh directory for an in-memory server's user databases. The
@@ -530,7 +563,11 @@ fn temporary_directory() -> Result<PathBuf> {
             std::process::id(),
             NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
-        match std::fs::create_dir(&directory) {
+        let mut builder = std::fs::DirBuilder::new();
+        // Only the server's account may read an in-memory server's files.
+        #[cfg(unix)]
+        std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+        match builder.create(&directory) {
             Ok(()) => return Ok(directory),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error).context("create database directory"),
@@ -620,6 +657,12 @@ mod tests {
         let a = temporary_directory().unwrap();
         let b = temporary_directory().unwrap();
         assert_ne!(a, b);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&a).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o700);
+        }
         std::fs::remove_dir(a).unwrap();
         std::fs::remove_dir(b).unwrap();
     }

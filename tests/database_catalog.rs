@@ -446,3 +446,54 @@ fn registered_file_names_cannot_leave_the_data_directory() {
     std::fs::remove_dir_all(&directory).unwrap();
     std::fs::remove_dir_all(&outside).unwrap();
 }
+
+#[test]
+fn registered_file_names_are_bound_to_their_rows() {
+    let directory = scratch_directory("rebind");
+    let primary = directory.join("msduck.duckdb");
+    let primary = primary.to_str().unwrap();
+    let keep = directory.join("msduck.6.keep.duckdb");
+    let server = Server::open(primary).unwrap();
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    catalog.create(&db, "a").unwrap();
+    catalog.create(&db, "keep").unwrap();
+    catalog.create(&db, "b").unwrap();
+    catalog.create(&db, "c").unwrap();
+    // Point rows at master's file and at another database's file.
+    db.execute(
+        "UPDATE main.__msduck_databases SET file = 'msduck.duckdb' WHERE name_key = 'a'",
+        [],
+    )
+    .unwrap();
+    db.execute(
+        "UPDATE main.__msduck_databases SET file = 'msduck.6.keep.duckdb' WHERE name_key = 'b'",
+        [],
+    )
+    .unwrap();
+    assert!(catalog.remove(&db, "a").is_err());
+    assert!(catalog.remove(&db, "b").is_err());
+    assert!(directory.join("msduck.duckdb").exists());
+    assert!(keep.exists());
+    // Refused drops leave the databases attached.
+    assert_eq!(catalog.list(&db).unwrap().len(), 5);
+    catalog.remove(&db, "keep").unwrap();
+    assert!(!keep.exists());
+    drop((db, server));
+    // A renamed primary keeps its databases: any stem is accepted.
+    let renamed = directory.join("renamed.duckdb");
+    std::fs::rename(directory.join("msduck.duckdb"), &renamed).unwrap();
+    let _ = std::fs::rename(
+        directory.join("msduck.duckdb.wal"),
+        directory.join("renamed.duckdb.wal"),
+    );
+    let server = Server::open(renamed.to_str().unwrap()).unwrap();
+    let db = server.connection().unwrap();
+    assert_eq!(db.databases().select(&db, "c").unwrap(), "c");
+    assert_eq!(
+        sql_error(db.databases().select(&db, "a").unwrap_err()).0,
+        911
+    );
+    drop((db, server));
+    std::fs::remove_dir_all(&directory).unwrap();
+}
