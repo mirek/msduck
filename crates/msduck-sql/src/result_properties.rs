@@ -97,6 +97,8 @@ pub fn expression_with(
                 name.as_str(),
                 "REPLICATE"
                     | "SPACE"
+                    | "STRING_ESCAPE"
+                    | "__MSDUCK_STRING_ESCAPE"
                     | "LOWER"
                     | "UPPER"
                     | "UNICODE"
@@ -321,6 +323,45 @@ pub(crate) fn literal_null(expr: &Expr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn string_escape_reference_cases_keep_nullable_computed_properties() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../reference/string-escape-format.json"))
+                .unwrap();
+        let mut inspected = 0;
+        for case in fixture["runs"][0].as_array().unwrap() {
+            let columns = case["result"]["sets"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|set| set["columns"].as_array().unwrap());
+            for column in columns {
+                inspected += 1;
+                let sql = case["sql"].as_str().unwrap();
+                assert_eq!(column["flags"], 33, "reference changed: {sql}");
+                assert_eq!(
+                    fields(&CatalogSnapshot::default(), sql),
+                    vec![Properties::expression(true)],
+                    "{sql}"
+                );
+            }
+        }
+        assert_eq!(inspected, 26);
+        for sql in [
+            "SELECT __msduck_string_escape('x','json')",
+            "SELECT STRING_ESCAPE(s,'json') FROM (VALUES(N'x')) t(s) WHERE 1=0",
+        ] {
+            assert_eq!(
+                fields(&CatalogSnapshot::default(), sql),
+                vec![Properties::expression(true)],
+                "{sql}"
+            );
+        }
+        assert_eq!(
+            fields(&CatalogSnapshot::default(), "SELECT unknown_scalar('x')"),
+            vec![Properties::default()]
+        );
+    }
     #[test]
     fn casing_is_nullable_computed_even_for_constants_and_empty_results() {
         for sql in [

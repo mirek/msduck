@@ -35,12 +35,9 @@ cases twice in fresh databases, including exact rows, descriptors, diagnostics
 and DONE-family events. Reproduce it with
 `node scripts/capture-string-escape-format.mjs`. The standalone public client
 replay is `node --test tests/string_escape_format.test.mjs`; it is not yet in
-the serial npm test inventory. All captured values, errors, type/length,
-collation and completion events currently match. SQL Server sets result column
-flags to 33, while msduck reports 1: the computed bit (32) is missing from
-the shared SQL result-properties inference. The fixture replay asserts this
-raw difference explicitly; a dependent metadata task will make it exact once
-the current result-properties worker finishes. The audit corpus records further
+the serial npm test inventory. Captured values, errors, descriptors including
+the nullable/computed flags, collation and completion events match exactly.
+The audit corpus records further
 results and diagnostics for comparison against SQL Server.
 
 References:
