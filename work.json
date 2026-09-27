@@ -4627,7 +4627,7 @@
     {
       "id": "isjson-depth-adapter-v1",
       "title": "Emit captured ISJSON depth error through the native adapter",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct continuing owner goal and first-party retained capture in isjson-depth-unicode-v1; owner-authored issue #454.",
       "scope": [
         "src/isjson.rs",
