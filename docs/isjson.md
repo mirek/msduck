@@ -63,8 +63,30 @@ and rejects it before runtime evaluation. Msduck's shared unresolved-column
 diagnostic still reports generic 50000 for these missing-column inputs; the
 replay asserts and reports that exact remaining number and message difference.
 
-Remaining work includes engine-specific depth and Unicode edge behavior,
-complete noncharacter source typing through column/alias binding, exact syntax diagnostic parity and the
+`reference/isjson-depth.json` retains 110 owner-run SQL Server 2025 ISJSON RPC
+requests, repeated in two fresh databases with identical raw rows, descriptors,
+diagnostics and completion tokens. Both array and object inputs with a scalar
+at nesting level 128 return 1; level 129 raises error 13606/state 1/class 16
+after the INT descriptor and before a row. An empty innermost container is
+accepted at level 129 but errors at level 130. Invalid syntax encountered before
+a valid deep value returns 0, whereas a valid value beyond the limit raises
+13606 even when a closing delimiter is missing or trailing text follows. Raw
+isolated UTF-16 surrogates, escaped surrogates, a raw supplementary pair, U+2028
+and U+FEFF inside a JSON string are accepted. Raw NUL inside a string, U+FEFF
+before the document and non-JSON whitespace before the document return 0.
+
+The deterministic core now exposes `json::isjson` and `json::isjson_utf16` with
+a distinct depth result, and its fixture-backed test covers every capture. The
+older unrestricted `prefix`, `root`, `valid` and `valid_utf16` APIs remain for
+other JSON consumers whose depth/error behavior has not been established.
+The root ISJSON native adapter still calls `valid`/`valid_utf16`: the standalone
+tedious replay records its raw differences for all 40 depth-error requests,
+along with the already known INT descriptor flags difference on every request.
+Wiring the depth result into native error 13606 and completion behavior is a
+separate root adapter task.
+
+Remaining work includes complete noncharacter source typing through
+column/alias binding, exact syntax diagnostic parity and the
 captured descriptor flags. Compatibility-level gating for the SQL Server 2022 type constraints is
 not implemented. OPENJSON remains unfinished. JSON_VALUE and JSON_QUERY now have a separate
 [extraction implementation](json-extraction.md) with its own documented limits.
