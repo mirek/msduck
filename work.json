@@ -4491,6 +4491,25 @@
       "dependencies": [],
       "issue": 442,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQ5Uu"
+    },
+    {
+      "id": "isjson-type-diagnostics-v1",
+      "title": "Map ISJSON binder type diagnostics to error 8116",
+      "state": "ready",
+      "authorization": "Direct owner continuing SQL Server compatibility goal; owner-run Codex review of PR #444 at 75dfe30 identified an adapter gap.",
+      "scope": [
+        "src/json_extract.rs"
+      ],
+      "acceptance": [
+        "Recognize complete ISJSON binder messages for every named SQL type currently emitted by src/isjson.rs, preserving error 8116, state 1 and the exact message; avoid substring false positives.",
+        "Keep non-SQL internal type names explicit rather than claiming SQL Server parity for them.",
+        "Add focused tests and pass formatting, strict workspace Clippy, workspace Rust tests, independent tedious tests and diagnostic audit at the exact PR revision."
+      ],
+      "dependencies": [
+        "isjson-diagnostic-adapter-v1"
+      ],
+      "issue": 445,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRBKw"
     }
   ]
 }
