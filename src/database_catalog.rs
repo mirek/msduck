@@ -452,11 +452,18 @@ impl Catalog {
 
 fn validate(name: &str) -> Result<()> {
     ensure!(!name.is_empty(), "database name cannot be empty");
-    ensure!(
-        name.chars().count() <= MAX_NAME,
-        "The identifier that starts with '{}' is too long. Maximum length is 128.",
-        name.chars().take(MAX_NAME).collect::<String>()
-    );
+    // SQL Server measures sysname in UTF-16 code units.
+    if name.encode_utf16().count() > MAX_NAME {
+        let mut units = 0;
+        let prefix: String = name
+            .chars()
+            .take_while(|c| {
+                units += c.len_utf16();
+                units <= MAX_NAME
+            })
+            .collect();
+        bail!("The identifier that starts with '{prefix}' is too long. Maximum length is 128.");
+    }
     ensure!(
         !name.chars().any(char::is_control),
         "database name contains a control character"
@@ -477,6 +484,13 @@ const FILE_NAME_FRAGMENT: usize = 64;
 /// The database ID makes the name unique; a bounded, readable fragment of the
 /// encoded name follows it.
 fn file_name(stem: &str, database_id: i32, name_key: &str) -> String {
+    // The primary stem is already a valid file name; only its length needs
+    // a bound so that the whole component fits.
+    let mut end = stem.len().min(FILE_NAME_FRAGMENT);
+    while !stem.is_char_boundary(end) {
+        end -= 1;
+    }
+    let stem = &stem[..end];
     let mut fragment = String::new();
     for c in name_key.chars() {
         let encoded = encode(c.encode_utf8(&mut [0; 4]));
@@ -545,6 +559,11 @@ mod tests {
         // Escapes are never split; the fragment stops at a whole character.
         assert_eq!(long, format!("msduck.32767.{}.duckdb", "%C3%A9".repeat(10)));
         assert!(long.len() < 100);
+        let stem = "s".repeat(246);
+        let bounded = file_name(&stem, 32767, &"é".repeat(128));
+        assert!(bounded.starts_with(&format!("{}.32767.", "s".repeat(64))));
+        assert!(bounded.len() < 160, "{}", bounded.len());
+        assert!(file_name(&"é".repeat(40), 5, "x").starts_with(&"é".repeat(32)));
     }
 
     #[test]
@@ -552,6 +571,16 @@ mod tests {
         assert!(validate("x").is_ok());
         assert!(validate("").is_err());
         assert!(validate(&"x".repeat(129)).is_err());
+        // Supplementary characters take two UTF-16 units each.
+        assert!(validate(&"🦆".repeat(64)).is_ok());
+        let error = validate(&"🦆".repeat(65)).unwrap_err().to_string();
+        assert_eq!(
+            error,
+            format!(
+                "The identifier that starts with '{}' is too long. Maximum length is 128.",
+                "🦆".repeat(64)
+            )
+        );
         assert!(validate("a\u{0}b").is_err());
     }
 }
