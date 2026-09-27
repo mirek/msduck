@@ -146,7 +146,7 @@ const WILDCARD_ORDINAL: &str = "unsupported TOP PERCENT/WITH TIES ordinal orderi
 const VOLATILE_KEY: &str = "unsupported TOP PERCENT/WITH TIES ordering by a volatile expression";
 /// Functions that return a different value on each evaluation. Ranking must
 /// not evaluate them separately from the projected value.
-const VOLATILE: [&str; 9] = [
+const VOLATILE: [&str; 11] = [
     "newid",
     "newsequentialid",
     "rand",
@@ -156,6 +156,8 @@ const VOLATILE: [&str; 9] = [
     "uuid",
     "nextval",
     "setseed",
+    "uuidv4",
+    "uuidv7",
 ];
 const WINDOW_KEY: &str = "unsupported TOP PERCENT/WITH TIES ordering by a window function";
 const AMBIGUOUS_PREFIX: &str = "Ambiguous column name '";
@@ -505,7 +507,13 @@ fn distinct_keys(
                 return Err("unsupported TOP DISTINCT ordering by a repeated output name".into());
             }
             let mut key = key.clone();
-            key.expr = Expr::Identifier(name.clone());
+            // Reference the derived column even when the alias was written as
+            // a T-SQL string literal (`AS 'x'`), which is not an identifier.
+            key.expr = Expr::Identifier(if name.quote_style == Some('\'') {
+                Ident::with_quote('"', name.value.clone())
+            } else {
+                name.clone()
+            });
             Ok(key)
         })
         .collect()

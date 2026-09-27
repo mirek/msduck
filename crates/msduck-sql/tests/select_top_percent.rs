@@ -179,6 +179,14 @@ fn unsupported_shapes_remain_explicit() {
             "volatile",
         ),
         (
+            "SELECT TOP (2) WITH TIES uuidv4() AS k, id FROM t ORDER BY k",
+            "volatile",
+        ),
+        (
+            "SELECT TOP (2) WITH TIES id FROM t ORDER BY uuidv7()",
+            "volatile",
+        ),
+        (
             "SELECT TOP (1) WITH TIES ROW_NUMBER() OVER (ORDER BY id) AS rn FROM t ORDER BY rn",
             "window function",
         ),
@@ -327,4 +335,14 @@ fn ambiguous_aliases_use_sql_server_error_209() {
     );
     // A repeated alias that the ORDER BY does not name is not ambiguous.
     assert!(lower("SELECT TOP (1) WITH TIES a AS x, b AS x, c FROM t ORDER BY c").is_ok());
+}
+
+#[test]
+fn distinct_string_literal_aliases_are_ranked_as_columns() {
+    let sql = lower("SELECT DISTINCT TOP (1) WITH TIES score AS 'x' FROM t ORDER BY x").unwrap();
+    assert!(
+        sql.contains("QUALIFY rank() OVER (ORDER BY \"x\")"),
+        "{sql}"
+    );
+    assert!(sql.ends_with("ORDER BY \"x\""), "{sql}");
 }
