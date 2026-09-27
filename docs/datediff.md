@@ -31,9 +31,32 @@ result to JavaScript Number. Rust retains integer precision and checks the
 required result width. The upstream implementation also handles offsets; that
 behavior remains pending here.
 
-Open work includes DATETIMEOFFSET, complete legacy DATETIME/SMALLDATETIME
-coercion, non-ISO/dateformat-sensitive text, fractional numeric legacy-date
-inputs, exact error state/message parity, and live SQL Server comparison.
+Numeric operands now follow the legacy DATETIME 1/300-second grid. The
+[38-observation SQL Server 2025 fixture](../reference/datediff-numeric.json)
+was captured in four fresh databases across two independent pinned containers
+and independently replayed. It covers literals, stored columns, RPC inputs,
+typed NULLs, BIT, integer, DECIMAL/NUMERIC, REAL/FLOAT, MONEY/SMALLMONEY,
+range failures and mixed numeric/DATETIME2 input. DATEDIFF retains the grid
+position through boundary counting: one legacy tick crosses 3,333,333
+nanoseconds, which cannot be represented by the DATETIME2 100ns carrier. Exact
+decimal tokens are bound without an intermediate floating-point conversion.
+The native regression covers 6,000 rows, NULL validity and one evaluation of
+each numeric operand per row.
+
+The standalone client replay is `node --test tests/datediff_numeric.test.mjs`.
+All 37 non-version cases match SQL Server rows and error numbers; two match
+complete captures. The raw replay in `artifacts/compatibility/datediff-numeric-replay.json`
+retains every difference. The remaining 35 cases expose shared result-column
+flags (`1` rather than SQL Server's `33`); the three overflow cases additionally
+have native wrapper prefixes and state `1` rather than SQL Server state `2`
+(numeric conversion) or `0` (DATEDIFF overflow). These are explicit metadata
+and diagnostic gaps, not full compatibility passes. The reference image is
+SQL Server `17.0.4065.4` at the pinned digest recorded in the fixture.
+
+Open work includes complete legacy DATETIME/SMALLDATETIME coercion,
+non-ISO/dateformat-sensitive text, broader mixed-type precedence, and the
+shared metadata/diagnostic differences above. DATETIMEOFFSET inputs use UTC
+boundaries; their focused tests remain separate from this numeric capture.
 
 Verification: 155 Rust tests and 243 client tests pass; formatting and Clippy are
 clean. All 139 local audit cases have complete captures. The new case records

@@ -33,7 +33,7 @@ fn decimal_literal_text(expr: &Expr) -> Option<String> {
     }
 }
 
-fn preserve_exact_decimal_cast(value: &mut Expr) {
+pub(crate) fn preserve_exact_decimal_cast(value: &mut Expr) {
     if let Expr::Nested(inner) | Expr::UnaryOp { expr: inner, .. } = value {
         preserve_exact_decimal_cast(inner);
     } else if let Expr::Cast {
@@ -52,7 +52,7 @@ fn preserve_exact_decimal_cast(value: &mut Expr) {
     }
 }
 
-fn preserve_bare_decimal_literal(value: &mut Expr) {
+pub(crate) fn preserve_bare_decimal_literal(value: &mut Expr) {
     let Some(text) = decimal_literal_text(value) else {
         return;
     };
@@ -145,7 +145,7 @@ fn extract(value: crate::datetime2::DateTime2, part: usize, first: i64) -> i32 {
 // Numeric SQL values are converted to legacy DATETIME's 1/300-second grid.
 // Keep the grid position: DATETIME2's 100ns representation cannot reproduce
 // DATEPART(nanosecond) for a legacy value (one grid tick is 3,333,333 ns).
-const LEGACY_TICKS_PER_DAY: i64 = 86_400 * 300;
+pub(crate) const LEGACY_TICKS_PER_DAY: i64 = 86_400 * 300;
 const DATE_TICKS_PER_DAY: i64 = 864_000_000_000;
 
 fn checked_legacy_ticks(ticks: i128) -> Result<i64, &'static str> {
@@ -206,7 +206,11 @@ fn floating_numeric_ticks(value: f64) -> Result<i64, &'static str> {
     checked_legacy_ticks((value * LEGACY_TICKS_PER_DAY as f64).round() as i128)
 }
 
-fn numeric_ticks(source: &FlatVector<'_>, row: usize, len: usize) -> Result<i64, &'static str> {
+pub(crate) fn numeric_ticks(
+    source: &FlatVector<'_>,
+    row: usize,
+    len: usize,
+) -> Result<i64, &'static str> {
     let logical = source.logical_type();
     macro_rules! read {
         ($ty:ty) => {
