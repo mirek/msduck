@@ -229,17 +229,22 @@ fn serve_login(
         tds::write_message(&mut stream, &out, login.packet_size)?;
         return Ok(());
     };
+    // An unused clone supplies fresh sessions for RESETCONNECTION requests.
+    let template = db.try_clone()?;
     let mut session = Session::new(db)?;
     session.original_login = authenticated_name;
     let mut rpc = crate::rpc::State::default();
     tds::write_message(&mut stream, &tds::login_response(&login), 4096)?;
     while let Some(message) = tds::read_message(&mut stream, login.packet_size)? {
+        let mut acknowledgement = vec![];
         let response = if message.status & 2 != 0 {
             let mut out = vec![];
             tds::done(&mut out, 0xfd, 2, 0, 0);
             Ok(out)
-        } else if message.status & 0x18 != 0 {
-            Err(anyhow::anyhow!("connection reset is not implemented"))
+        } else if message.status & 0x10 != 0 {
+            Err(anyhow::anyhow!(
+                "RESETCONNECTIONSKIPTRAN is not implemented"
+            ))
         } else {
             (|| -> Result<Vec<u8>> {
                 if matches!(message.kind, 1 | 3 | 14) {
@@ -248,6 +253,11 @@ fn serve_login(
                         descriptor.is_none_or(|value| value == session.transaction_descriptor),
                         "invalid transaction descriptor for this session"
                     );
+                }
+                // The headers name the transaction being reset, so reset after
+                // validating them and before running the request.
+                if message.status & 0x08 != 0 {
+                    reset_session(&template, &mut session, &mut rpc, &mut acknowledgement)?;
                 }
                 match message.kind {
                     1 => tds::batch_body(&message.payload)
@@ -280,9 +290,34 @@ fn serve_login(
             );
             out
         });
-        tds::write_message(&mut stream, &response, login.packet_size)?;
+        acknowledgement.extend(response);
+        tds::write_message(&mut stream, &acknowledgement, login.packet_size)?;
     }
     // Dropping the connection rolls back any outstanding DuckDB transaction.
+    Ok(())
+}
+
+/// RESETCONNECTION: roll back an open transaction, then replace the session
+/// with a fresh one on a new backend connection. Dropping the old connection
+/// discards connection-scoped settings and temporary objects; prepared handles
+/// are released. Only the authenticated login survives. Writes the rollback
+/// ENVCHANGE (if any) and the MS-TDS type 18 acknowledgement to `out`.
+fn reset_session(
+    template: &Connection,
+    session: &mut Session,
+    rpc: &mut crate::rpc::State,
+    out: &mut Vec<u8>,
+) -> Result<()> {
+    let mut fresh = Session::new(template.try_clone()?)?;
+    if session.transactions > 0 {
+        // Tell the client its transaction ended, as an explicit ROLLBACK does.
+        out.extend(session.rollback_transaction("")?);
+    }
+    fresh.original_login = std::mem::take(&mut session.original_login);
+    *session = fresh;
+    *rpc = crate::rpc::State::default();
+    // ENVCHANGE, length 3, type 18 (reset completion), empty new and old values.
+    out.extend([0xe3, 3, 0, 18, 0, 0]);
     Ok(())
 }
 
