@@ -4043,7 +4043,7 @@
     {
       "id": "temp-table-scope-reference-v1",
       "title": "Capture SQL Server temporary-table lifetime and scope",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server compatibility goal; first-party SQL Server 2025 captures and Microsoft CREATE TABLE/sp_executesql documentation. No external submission is input.",
       "scope": [
         "scripts/capture-temp-table-scope.mjs",
