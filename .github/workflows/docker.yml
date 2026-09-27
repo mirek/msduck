@@ -8,6 +8,11 @@ on:
       - Dockerfile
       - .dockerignore
       - 'docker/**'
+      - Cargo.toml
+      - Cargo.lock
+      - 'crates/**/Cargo.toml'
+      - 'crates/**/build.rs'
+      - 'vendor/**'
       - src/bin/msduck-container.rs
       - src/authentication.rs
       - src/tls.rs
