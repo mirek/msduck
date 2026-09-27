@@ -4584,7 +4584,7 @@
     {
       "id": "isjson-source-diagnostic-v1",
       "title": "Recognize captured ISJSON source-type diagnostic names",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuation of full SQL Server compatibility; owner-run pinned SQL Server capture from issue #448 proves exact 8116 messages for five additional source type names.",
       "scope": [
         "src/json_extract.rs"
