@@ -4003,7 +4003,7 @@
     {
       "id": "docker-pr-filter-v1",
       "title": "Limit PR Docker builds to packaging changes",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner request that PR CI not take more than an hour and that merge cycles be faster; owner-run Docker workflow is first-party input.",
       "scope": [
         ".github/workflows/docker.yml",
