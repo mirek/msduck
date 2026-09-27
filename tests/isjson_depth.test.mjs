@@ -37,24 +37,31 @@ function rpc(connection, sql, value) {
 test('ISJSON depth and Unicode retain raw reference differences', { timeout: 180000 }, async t => {
   assert.deepEqual(fixture.containers[0].runs[0], fixture.containers[0].runs[1])
   const connection = await start(t)
-  const failures = []
   for (const item of fixture.containers[0].runs[0]) {
     const actual = canonical(await rpc(connection, item.sql, valueFor(item.input)))
     const delta = differences(actual, item.result)
     const overDepth = item.result.errors[0]?.number === 13606
-    const allowed = overDepth
-      ? new Set(['/sets/0/columns/0/flags', '/sets/0/rows/0', '/done/0/kind', '/done/0/rowCount', '/done/0/more', '/done/1', '/errors/0', '/returnStatus', '/rowCount'])
-      : new Set(['/sets/0/columns/0/flags'])
+    const descriptorGap = { path: '/sets/0/columns/0/flags', local: 1, reference: 33 }
+    let expected = [descriptorGap]
     if (overDepth) {
       const localValue = ['unclosed-after-depth', 'trailing-after-depth'].includes(item.input.form) ? 0 : 1
-      assert.deepEqual(actual.sets[0]?.rows, [[localValue]], item.name)
-      assert.deepEqual(actual.errors, [], item.name)
-      assert.equal(item.result.errors[0].message, 'JSON text/path that has more than 128 nesting levels cannot be parsed.')
+      const missing = { kind: 'missing' }
+      const depthError = {
+        number: 13606, state: 1, class: 16, lineNumber: 1,
+        message: 'JSON text/path that has more than 128 nesting levels cannot be parsed.',
+      }
+      expected = [
+        descriptorGap,
+        { path: '/sets/0/rows/0', local: [localValue], reference: missing },
+        { path: '/done/0/kind', local: 'doneInProc', reference: 'doneProc' },
+        { path: '/done/0/rowCount', local: 1, reference: null },
+        { path: '/done/0/more', local: true, reference: false },
+        { path: '/done/1', local: { kind: 'doneProc', rowCount: null, more: false }, reference: missing },
+        { path: '/errors/0', local: missing, reference: depthError },
+        { path: '/returnStatus', local: 0, reference: missing },
+        { path: '/rowCount', local: 1, reference: 0 },
+      ]
     }
-    const paths = delta.map(entry => entry.path).sort()
-    if (JSON.stringify(paths) !== JSON.stringify([...allowed].sort())) {
-      failures.push({ name: item.name, mode: item.mode, differences: delta.slice(0, 12) })
-    }
+    assert.deepEqual(delta, expected, `${item.name} / ${item.mode}`)
   }
-  assert.equal(failures.length, 0, JSON.stringify(failures))
 })
