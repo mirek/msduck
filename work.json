@@ -4686,6 +4686,30 @@
       ],
       "issue": 458,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRZ3p"
+    },
+    {
+      "id": "json-extraction-root-runtime-v1",
+      "title": "Match scalar-root JSON extraction diagnostics and wire order",
+      "state": "backlog",
+      "authorization": "Mirek's continuing implementation goal, owner-run fixture from merged PR 457 and verified review finding on owner PR 459; no external submission is input.",
+      "scope": [
+        "src/json_extract.rs",
+        "src/result_metadata.rs",
+        "src/engine.rs",
+        "tests/json_extraction_roots.test.mjs",
+        "docs/json-extraction-root-runtime.md"
+      ],
+      "acceptance": [
+        "Replay the six scalar-root JSON_VALUE/JSON_QUERY requests in reference/json-extraction-boundaries.json and match exact 13609/state 1/class 16 messages with unexpected character and UTF-16 position, no fabricated descriptor, ERROR then final DONE, and connection reuse.",
+        "Preserve generic JSON and ISJSON behavior; retain raw metadata and event-order differences if full parity is not yet achieved.",
+        "Run formatting, workspace Rust tests, strict workspace Clippy, independent tedious clients and local audit at the final revision. Claim only after dependencies and reserved root-file handoffs are complete."
+      ],
+      "dependencies": [
+        "json-extraction-scalar-root-core-v1",
+        "result-alignment-v1"
+      ],
+      "issue": 460,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRbOk"
     }
   ]
 }
