@@ -3557,7 +3557,7 @@
     {
       "id": "string-escape-prepared-null-assertion-v1",
       "title": "Correct prepared STRING_ESCAPE typed NULL format expectation",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server compatibility goal and explicit integration-session request to preserve pinned SQL Server 2025 typed-NULL format behavior while tests/tedious.test.mjs remains reserved by another task. First-party follow-up to #362; no external submission is input.",
       "scope": [
         "tests/tedious.test.mjs"
@@ -3576,7 +3576,7 @@
     {
       "id": "string-escape-result-properties-v1",
       "title": "Preserve STRING_ESCAPE computed result metadata",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Direct owner continuing SQL Server compatibility goal and explicit integration-session direction to retain and later fix the first-party pinned 27-case STRING_ESCAPE descriptor difference. Shared result-properties file is held by task #360; no external submission is input.",
       "scope": [
         "crates/msduck-sql/src/result_properties.rs",
