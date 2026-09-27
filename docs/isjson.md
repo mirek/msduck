@@ -79,11 +79,13 @@ The deterministic core now exposes `json::isjson` and `json::isjson_utf16` with
 a distinct depth result, and its fixture-backed test covers every capture. The
 older unrestricted `prefix`, `root`, `valid` and `valid_utf16` APIs remain for
 other JSON consumers whose depth/error behavior has not been established.
-The root ISJSON native adapter still calls `valid`/`valid_utf16`: the standalone
-tedious replay records its raw differences for all 40 depth-error requests,
-along with the already known INT descriptor flags difference on every request.
-Wiring the depth result into native error 13606 and completion behavior is a
-separate root adapter task.
+The root ISJSON native adapter now calls the depth-aware functions and emits
+the captured runtime error. The diagnostic adapter recognizes only the exact
+native error text and restores SQL Server error 13606/state 1/class 16. The
+standalone tedious replay compares all 110 raw responses, including the 40
+depth errors and their descriptor and completion ordering. Only the already
+known INT descriptor flags difference (1 versus SQL Server's 33) remains in
+that capture.
 
 Remaining work includes complete noncharacter source typing through
 column/alias binding, exact syntax diagnostic parity and the

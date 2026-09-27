@@ -34,34 +34,13 @@ function rpc(connection, sql, value) {
   return capture(transport, sql)
 }
 
-test('ISJSON depth and Unicode retain raw reference differences', { timeout: 180000 }, async t => {
+test('ISJSON depth and Unicode match raw reference except recorded flags', { timeout: 180000 }, async t => {
   assert.deepEqual(fixture.containers[0].runs[0], fixture.containers[0].runs[1])
   const connection = await start(t)
   for (const item of fixture.containers[0].runs[0]) {
     const actual = canonical(await rpc(connection, item.sql, valueFor(item.input)))
     const delta = differences(actual, item.result)
-    const overDepth = item.result.errors[0]?.number === 13606
-    const descriptorGap = { path: '/sets/0/columns/0/flags', local: 1, reference: 33 }
-    let expected = [descriptorGap]
-    if (overDepth) {
-      const localValue = ['unclosed-after-depth', 'trailing-after-depth'].includes(item.input.form) ? 0 : 1
-      const missing = { kind: 'missing' }
-      const depthError = {
-        number: 13606, state: 1, class: 16, lineNumber: 1,
-        message: 'JSON text/path that has more than 128 nesting levels cannot be parsed.',
-      }
-      expected = [
-        descriptorGap,
-        { path: '/sets/0/rows/0', local: [localValue], reference: missing },
-        { path: '/done/0/kind', local: 'doneInProc', reference: 'doneProc' },
-        { path: '/done/0/rowCount', local: 1, reference: null },
-        { path: '/done/0/more', local: true, reference: false },
-        { path: '/done/1', local: { kind: 'doneProc', rowCount: null, more: false }, reference: missing },
-        { path: '/errors/0', local: missing, reference: depthError },
-        { path: '/returnStatus', local: 0, reference: missing },
-        { path: '/rowCount', local: 1, reference: 0 },
-      ]
-    }
+    const expected = [{ path: '/sets/0/columns/0/flags', local: 1, reference: 33 }]
     assert.deepEqual(delta, expected, `${item.name} / ${item.mode}`)
   }
 })

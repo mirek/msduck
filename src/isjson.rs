@@ -7,8 +7,11 @@ use std::{
     panic::{AssertUnwindSafe, catch_unwind},
 };
 
-use msduck_core::json::{valid, valid_utf16};
+use msduck_core::json::{isjson, isjson_utf16};
 use msduck_core::types::Type as SqlType;
+
+pub const DEPTH_ERROR: &CStr =
+    c"JSON text/path that has more than 128 nesting levels cannot be parsed.";
 
 pub fn lower(expr: &mut Expr) -> Result<(), String> {
     let Expr::Function(f) = expr else {
@@ -275,14 +278,14 @@ unsafe extern "C" fn invoke<const MODE: u8>(
                     .chunks_exact(2)
                     .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
                     .collect::<Vec<_>>();
-                i32::from(valid_utf16(&units, MODE))
+                i32::from(isjson_utf16(&units, MODE).map_err(|_| DEPTH_ERROR)?)
             } else {
                 let bytes = string_bytes(source, row)?;
                 if bytes.len() > remaining {
                     return Err(c"ISJSON input exceeds the configured chunk limit.");
                 }
                 remaining -= bytes.len();
-                i32::from(valid(&bytes, MODE))
+                i32::from(isjson(&bytes, MODE).map_err(|_| DEPTH_ERROR)?)
             };
             destination.add(row).write_unaligned(value);
             duckdb_validity_set_row_validity(validity, row as idx_t, true);
@@ -346,6 +349,35 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn depth_error_retains_native_text_for_sql_diagnostic() {
+        let db = Connection::open_in_memory().unwrap();
+        crate::scalar::register(&db).unwrap();
+        let within_limit = "[".repeat(128) + "0" + &"]".repeat(128);
+        let value: i32 = db
+            .query_row(
+                &format!("SELECT __msduck_isjson_0('{within_limit}')"),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(value, 1);
+        let deep = "[".repeat(129) + "0" + &"]".repeat(129);
+        let error = db
+            .query_row(&format!("SELECT __msduck_isjson_0('{deep}')"), [], |row| {
+                row.get::<_, i32>(0)
+            })
+            .unwrap_err();
+        assert_eq!(
+            crate::json_extract::diagnostic(&error.to_string()),
+            Some(msduck_core::diagnostic::SqlError::new(
+                13606,
+                1,
+                DEPTH_ERROR.to_str().unwrap(),
+            ))
+        );
+    }
 
     #[test]
     fn binding_rejects_noncharacter_inputs_including_typed_nulls() {
