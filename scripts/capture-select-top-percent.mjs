@@ -65,6 +65,16 @@ const cases = [
   ['float variable percent ties', `DECLARE @p FLOAT=25; SELECT TOP (@p) PERCENT WITH TIES id,score FROM ${source} ORDER BY score DESC`],
   ['nested percent', `SELECT id FROM (SELECT TOP (50) PERCENT id FROM ${source} ORDER BY id DESC) AS q ORDER BY id`],
   ['set branch percent', `SELECT id FROM (SELECT TOP (50) PERCENT id FROM ${source} ORDER BY id) AS q UNION ALL SELECT 99 ORDER BY id`],
+  ['distinct half percent', `SELECT DISTINCT TOP (50) PERCENT score FROM ${source} ORDER BY score DESC`],
+  ['distinct quarter peers', `SELECT DISTINCT TOP (25) PERCENT WITH TIES score FROM ${source} ORDER BY score DESC`],
+  ['distinct invalid order', `SELECT DISTINCT TOP (50) PERCENT id FROM ${source} ORDER BY score DESC`],
+  ['group half percent', `SELECT TOP (50) PERCENT score,COUNT(*) AS frequency FROM ${source} GROUP BY score ORDER BY score DESC`],
+  ['group having percent', `SELECT TOP (50) PERCENT score,COUNT(*) AS frequency FROM ${source} GROUP BY score HAVING COUNT(*)>1 ORDER BY score DESC`],
+  ['group percent peers', `SELECT TOP (60) PERCENT WITH TIES COUNT(*) AS frequency FROM ${source} GROUP BY score ORDER BY COUNT(*) DESC`],
+  ['nonprojected order', `SELECT TOP (2) WITH TIES id FROM ${source} ORDER BY score DESC,id`],
+  ['scalar subquery percent', `SELECT TOP ((SELECT CAST(25 AS FLOAT))) PERCENT id,score FROM ${source} ORDER BY id`],
+  ['double nested percent', `SELECT TOP (50) PERCENT id FROM (SELECT TOP (50) PERCENT id FROM ${source} ORDER BY id DESC) AS q ORDER BY id`],
+  ['set branch distinct percent', `SELECT id FROM (SELECT DISTINCT TOP (50) PERCENT score AS id FROM ${source} ORDER BY score DESC) AS q UNION ALL SELECT 99 ORDER BY id`],
 ]
 
 function rpc(connection, sql, parameters) {
@@ -160,6 +170,11 @@ function summary(run) {
     ['count two unique', 2], ['quarter percent ties', 3],
     ['half percent ties', 5], ['full percent ties', 7], ['empty ties', 0],
     ['prepared percent 0', 3], ['prepared percent 2', 5], ['prepared percent 3', 3],
+    ['distinct half percent', 3], ['distinct quarter peers', 2],
+    ['group half percent', 3], ['group having percent', 1],
+    ['group percent peers', 5], ['nonprojected order', 2],
+    ['scalar subquery percent', 2], ['double nested percent', 2],
+    ['set branch distinct percent', 4],
   ]) {
     const value = result(name)
     assert.deepEqual(value.errors, [], name)
@@ -174,6 +189,7 @@ function summary(run) {
     ['negative count ties', 127, 1, 15], ['null count ties', 1060, 1, 15],
     ['text percent', 8114, 5, 16], ['RPC percent null', 1014, 1, 15],
     ['prepared percent 1', 1014, 1, 15],
+    ['distinct invalid order', 145, 1, 15],
   ]) {
     const value = result(name)
     assert.deepEqual(value.errors.map(error => [error.number, error.state, error.class]), [[number, state, severity]], name)
@@ -186,6 +202,15 @@ function summary(run) {
   assert.deepEqual(result('count two ties').sets[0].rows.map(row => row[0]).sort(), [1, 2, 3])
   assert.deepEqual(result('quarter percent ties').sets[0].rows.map(row => row[0]).sort(), [1, 2, 3])
   assert.deepEqual(result('half percent ties').sets[0].rows.map(row => row[0]).sort(), [1, 2, 3, 4, 5])
+  assert.deepEqual(result('distinct half percent').sets[0].rows, [[10], [9], [8]])
+  assert.deepEqual(result('distinct quarter peers').sets[0].rows, [[10], [9]])
+  assert.deepEqual(result('group half percent').sets[0].rows, [[10, 1], [9, 2], [8, 2]])
+  assert.deepEqual(result('group having percent').sets[0].rows, [[9, 2]])
+  assert.deepEqual(result('group percent peers').sets[0].rows, [[2], [2], [1], [1], [1]])
+  assert.deepEqual(result('nonprojected order').sets[0].rows, [[1], [2]])
+  assert.deepEqual(result('scalar subquery percent').sets[0].rows.map(row => row[0]), [1, 2])
+  assert.deepEqual(result('double nested percent').sets[0].rows, [[4], [5]])
+  assert.deepEqual(result('set branch distinct percent').sets[0].rows, [[8], [9], [10], [99]])
   assert.deepEqual(stableResult('prepared percent 0', result('prepared percent 0')), stableResult('prepared percent 3', result('prepared percent 3')))
   return run.map(({ name, result }) => {
     assert(result.done.length > 0, `${name}: missing completion`)
@@ -273,7 +298,15 @@ if (selfTest) {
     catch (error) { if (error.code !== 'ENOENT') throw error }
     if (retained) {
       assert.equal(actual.image, retained.image)
-      assertSameCapture(summaries, retained.runs.map(summary), 'SELECT TOP behavior differs from retained fixture')
+      // A follow-up capture may append cases. Compare every retained observation
+      // before accepting the new evidence; never silently replace older facts.
+      const retainedNames = retained.runs[0].map(item => item.name)
+      for (const [index, priorRun] of retained.runs.entries()) {
+        const old = priorRun.map(({ name, result }) => ({ name, result: stableResult(name, result) }))
+        const current = runs[index].filter(item => retainedNames.includes(item.name))
+          .map(({ name, result }) => ({ name, result: stableResult(name, result) }))
+        assertSameCapture(current, old, 'SELECT TOP retained observations changed')
+      }
     }
     await writeFile(output, JSON.stringify(actual) + '\n')
     if (writeFixture) await writeNewFixture(fixture, actual)
