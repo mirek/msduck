@@ -102,3 +102,65 @@ impl Administrator {
         .then(|| credential.name.clone())
     }
 }
+
+/// Hash a password into the credential file format that `Administrator::load`
+/// accepts, so launchers never need to persist or forward the plaintext.
+pub fn credential_file(user_name: &str, password: &str) -> Result<String> {
+    ensure!(
+        !user_name.is_empty()
+            && user_name.encode_utf16().count() <= 128
+            && !user_name.contains('\0'),
+        "invalid administrator name"
+    );
+    ensure!(
+        password.encode_utf16().count() <= 128,
+        "password exceeds 128 UTF-16 code units"
+    );
+    let mut salt = [0; 32];
+    ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut salt)
+        .map_err(|_| anyhow::anyhow!("random salt generation failed"))?;
+    let mut digest = [0; 32];
+    pbkdf2::derive(
+        pbkdf2::PBKDF2_HMAC_SHA256,
+        ITERATIONS,
+        &salt,
+        password.as_bytes(),
+        &mut digest,
+    );
+    let hash = format!(
+        "msduck$pbkdf2-sha256$v1${}${}",
+        URL_SAFE_NO_PAD.encode(salt),
+        URL_SAFE_NO_PAD.encode(digest)
+    );
+    Ok(serde_json::json!({ "userName": user_name, "passwordHash": hash }).to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_credentials_authenticate_only_the_matching_password() {
+        let directory = std::env::temp_dir().join(format!(
+            "msduck-auth-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("admin.json");
+        std::fs::write(&path, credential_file("sa", "Duck P@ss 🦆1").unwrap()).unwrap();
+        let administrator = Administrator::load(&path).unwrap();
+        assert_eq!(
+            administrator.authenticate("SA", "Duck P@ss 🦆1").as_deref(),
+            Some("sa")
+        );
+        assert_eq!(administrator.authenticate("sa", "Duck P@ss 🦆2"), None);
+        assert_eq!(administrator.authenticate("other", "Duck P@ss 🦆1"), None);
+        std::fs::remove_dir_all(directory).unwrap();
+        assert!(credential_file("", "x").is_err());
+        assert!(credential_file("sa", &"x".repeat(129)).is_err());
+    }
+}
