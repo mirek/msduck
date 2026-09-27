@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // First-party SQL Server ROWVERSION/TIMESTAMP rows, descriptors and diagnostics.
 import assert from 'node:assert/strict'
-import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { TYPES } from 'tedious'
@@ -27,9 +27,12 @@ async function rejectFixtureOutput() {
   if (outputParent === fixtureParent && basename(output) === basename(fixturePath)) {
     throw new Error('output path must not be the retained fixture')
   }
-  const info = async path => {
-    try { return await stat(path) }
+  const info = async (path, inspect = stat) => {
+    try { return await inspect(path) }
     catch (error) { if (error.code === 'ENOENT') return null; throw error }
+  }
+  if ((await info(output, lstat))?.isSymbolicLink()) {
+    throw new Error('output path must not be a symlink')
   }
   const [outInfo, fixtureInfo] = await Promise.all([info(output), info(fixturePath)])
   if (outInfo && fixtureInfo && outInfo.dev === fixtureInfo.dev && outInfo.ino === fixtureInfo.ino) {
