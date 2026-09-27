@@ -4559,7 +4559,7 @@
     {
       "id": "isjson-source-types-v1",
       "title": "Capture and match additional ISJSON source types",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuation of the full SQL Server compatible server goal; first-party ISJSON capture in PR #444 and owner-run Codex-reviewed binder diagnostics in PR #446 expose unverified source declarations.",
       "scope": [
         "src/isjson.rs",
