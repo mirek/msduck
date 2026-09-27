@@ -77,7 +77,7 @@ pub fn lower(
         Expr::Cast {
             kind: CastKind::Cast,
             expr: Box::new(number.clone()),
-            data_type: DataType::Int(None),
+            data_type: DataType::BigInt(None),
             format: None,
         },
         scale
@@ -108,13 +108,13 @@ pub fn lower(
     Ok(())
 }
 
-pub(super) fn add(days: i32, number: i32, part: usize) -> Result<i32, &'static str> {
+pub(super) fn add(days: i32, number: i64, part: usize) -> Result<i32, &'static str> {
     let overflow = crate::eomonth::OVERFLOW;
     if !(-719162..=2932896).contains(&days) {
         return Err(overflow);
     }
     if part >= 3 {
-        let result = i64::from(days) + i64::from(number) * if part == 4 { 7 } else { 1 };
+        let result = i128::from(days) + i128::from(number) * if part == 4 { 7 } else { 1 };
         return if (-719162..=2932896).contains(&result) {
             Ok(result as i32)
         } else {
@@ -123,9 +123,9 @@ pub(super) fn add(days: i32, number: i32, part: usize) -> Result<i32, &'static s
     }
     // Plain value structs, after rejecting infinity and out-of-range dates.
     let date = unsafe { duckdb_from_date(duckdb_date { days }) };
-    let month = i64::from(date.year - 1) * 12
-        + i64::from(date.month - 1)
-        + i64::from(number) * [12, 3, 1][part];
+    let month = i128::from(date.year - 1) * 12
+        + i128::from(date.month - 1)
+        + i128::from(number) * [12, 3, 1][part];
     if !(0..9999 * 12).contains(&month) {
         return Err(overflow);
     }
@@ -175,12 +175,12 @@ impl<const PART: usize> VScalar for Add<PART> {
                 continue;
             }
             // INTEGER and DATE have i32 storage; only live non-NULL slots are read.
-            let (number, date) = unsafe {
-                (
-                    number.as_slice_with_len::<i32>(len)[row],
-                    date.as_slice_with_len::<i32>(len)[row],
-                )
+            let number = match number.logical_type().id() {
+                Id::Integer => i64::from(unsafe { number.as_slice_with_len::<i32>(len)[row] }),
+                Id::Bigint => unsafe { number.as_slice_with_len::<i64>(len)[row] },
+                _ => return Err("DATEADD amount requires INT or BIGINT".into()),
             };
+            let date = unsafe { date.as_slice_with_len::<i32>(len)[row] };
             let value = add(date, number, PART)?;
             unsafe {
                 result.as_mut_slice_with_len::<i32>(len)[row] = value;
@@ -189,10 +189,12 @@ impl<const PART: usize> VScalar for Add<PART> {
         Ok(())
     }
     fn signatures() -> Vec<ScalarFunctionSignature> {
-        vec![ScalarFunctionSignature::exact(
-            vec![Id::Integer.into(), Id::Any.into()],
-            Id::Date.into(),
-        )]
+        [Id::Integer, Id::Bigint]
+            .into_iter()
+            .map(|amount| {
+                ScalarFunctionSignature::exact(vec![amount.into(), Id::Any.into()], Id::Date.into())
+            })
+            .collect()
     }
 }
 
@@ -250,7 +252,14 @@ mod tests {
                 (i32::MAX, 0),
                 (i32::MIN, 0),
             ] {
-                assert!(super::add(day, n, part).is_err());
+                assert!(super::add(day, i64::from(n), part).is_err());
+            }
+        }
+        let day = crate::scalar::date_days(2024, 1, 1).unwrap();
+        assert_eq!(super::add(day, -1, 3).unwrap(), day - 1);
+        for n in [i64::MIN, -2_147_483_649, 2_147_483_648, i64::MAX] {
+            for part in 0..=4 {
+                assert!(super::add(day, n, part).is_err(), "part {part}, amount {n}");
             }
         }
     }

@@ -5,7 +5,7 @@ use duckdb::{
     vtab::arrow::WritableVector,
 };
 const DAY: i128 = 864_000_000_000;
-fn add(nanos: i64, number: i32, part: i32, scale: u8) -> Result<i64, &'static str> {
+fn add(nanos: i64, number: i64, part: i32, scale: u8) -> Result<i64, &'static str> {
     if !(0..86_400_000_000_000).contains(&nanos) {
         return Err("invalid TIME value");
     }
@@ -48,7 +48,11 @@ impl<const SCALE: u8> VScalar for Add<SCALE> {
             unsafe {
                 result.as_mut_slice_with_len::<i64>(len)[row] = add(
                     value.as_slice_with_len::<i64>(len)[row],
-                    number.as_slice_with_len::<i32>(len)[row],
+                    match number.logical_type().id() {
+                        Id::Integer => i64::from(number.as_slice_with_len::<i32>(len)[row]),
+                        Id::Bigint => number.as_slice_with_len::<i64>(len)[row],
+                        _ => return Err("DATEADD amount requires INT or BIGINT".into()),
+                    },
                     part.as_slice_with_len::<i32>(len)[row],
                     SCALE,
                 )?;
@@ -57,10 +61,15 @@ impl<const SCALE: u8> VScalar for Add<SCALE> {
         Ok(())
     }
     fn signatures() -> Vec<ScalarFunctionSignature> {
-        vec![ScalarFunctionSignature::exact(
-            vec![Id::Integer.into(), Id::TimeNs.into(), Id::Integer.into()],
-            Id::TimeNs.into(),
-        )]
+        [Id::Integer, Id::Bigint]
+            .into_iter()
+            .map(|amount| {
+                ScalarFunctionSignature::exact(
+                    vec![amount.into(), Id::TimeNs.into(), Id::Integer.into()],
+                    Id::TimeNs.into(),
+                )
+            })
+            .collect()
     }
 }
 pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
@@ -78,13 +87,30 @@ mod tests {
         assert_eq!(add(0, -50, 10, 7).unwrap(), 86_399_999_999_900);
         assert_eq!(add(0, 50, 10, 7).unwrap(), 100);
         assert_eq!(add(86_399_999_999_900, 50, 10, 7).unwrap(), 0);
-        assert_eq!(add(0, i32::MAX, 5, 7).unwrap(), 7 * 3_600_000_000_000);
-        assert_eq!(add(0, i32::MIN, 5, 7).unwrap(), 16 * 3_600_000_000_000);
+        assert_eq!(
+            add(0, i64::from(i32::MAX), 5, 7).unwrap(),
+            7 * 3_600_000_000_000
+        );
+        assert_eq!(
+            add(0, i64::from(i32::MIN), 5, 7).unwrap(),
+            16 * 3_600_000_000_000
+        );
         for scale in 0..=7 {
             let quantum = 10i64.pow(9 - u32::from(scale));
             let expected = ((123_456_700 + quantum / 2) / quantum) * quantum;
             assert_eq!(add(123_456_700, 0, 7, scale).unwrap(), expected);
         }
+        let base = 12 * 3_600_000_000_000 + 34 * 60_000_000_000 + 56_123_456_700;
+        assert_eq!(
+            add(base, 2_147_483_648, 10, 7).unwrap(),
+            base + 2_147_483_600
+        );
+        assert_eq!(
+            add(base, -2_147_483_649, 10, 7).unwrap(),
+            base - 2_147_483_600
+        );
+        assert!(add(base, i64::MAX, 10, 7).is_ok());
+        assert!(add(base, i64::MIN, 10, 7).is_ok());
     }
     #[test]
     fn chunks_preserve_nulls_and_single_evaluation() {

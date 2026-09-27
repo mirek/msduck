@@ -9,11 +9,17 @@ pub const OVERFLOW: &str = "Adding a value to a 'datetime2' column caused overfl
 pub const OFFSET_OVERFLOW: &str = "Adding a value to a 'datetimeoffset' column caused overflow.";
 const DAY: i64 = 864_000_000_000;
 
-fn add(value: DateTime2, number: i32, part: usize, scale: u8) -> Result<DateTime2, &'static str> {
-    let number = i64::from(number);
+fn add(value: DateTime2, number: i64, part: usize, scale: u8) -> Result<DateTime2, &'static str> {
+    // SQL Server 2025 treats the one unrepresentable positive magnitude as a
+    // no-op for DATETIME2/DATETIMEOFFSET nanoseconds. The TIME path still wraps
+    // the same amount; both literal and BIGINT RPC forms are retained in the
+    // reference fixture.
+    if part == 10 && number == i64::MIN {
+        return Ok(value);
+    }
     let ticks = if part <= 4 {
         let days = (value.ticks() / DAY - 719162) as i32;
-        let days = crate::dateadd::add(days, number as i32, part).map_err(|_| OVERFLOW)?;
+        let days = crate::dateadd::add(days, number, part).map_err(|_| OVERFLOW)?;
         (i64::from(days) + 719162) * DAY + value.ticks() % DAY
     } else {
         let number = i128::from(number);
@@ -81,7 +87,11 @@ impl<const SCALE: u8, const OFFSET: bool> VScalar for Add<SCALE, OFFSET> {
             // Exact signatures fix storage widths; only bounded live slots are accessed.
             let (n, t, p) = unsafe {
                 (
-                    number.as_slice_with_len::<i32>(len)[row],
+                    match number.logical_type().id() {
+                        Id::Integer => i64::from(number.as_slice_with_len::<i32>(len)[row]),
+                        Id::Bigint => number.as_slice_with_len::<i64>(len)[row],
+                        _ => return Err("DATEADD amount requires INT or BIGINT".into()),
+                    },
                     ticks.as_slice_with_len::<i64>(len)[row],
                     part.as_slice_with_len::<i32>(len)[row],
                 )
@@ -116,10 +126,15 @@ impl<const SCALE: u8, const OFFSET: bool> VScalar for Add<SCALE, OFFSET> {
         Ok(())
     }
     fn signatures() -> Vec<ScalarFunctionSignature> {
-        vec![ScalarFunctionSignature::exact(
-            vec![Id::Integer.into(), kind(SCALE, OFFSET), Id::Integer.into()],
-            kind(SCALE, OFFSET),
-        )]
+        [Id::Integer, Id::Bigint]
+            .into_iter()
+            .map(|amount| {
+                ScalarFunctionSignature::exact(
+                    vec![amount.into(), kind(SCALE, OFFSET), Id::Integer.into()],
+                    kind(SCALE, OFFSET),
+                )
+            })
+            .collect()
     }
 }
 pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
@@ -171,8 +186,8 @@ mod tests {
             assert_eq!(add(value, n, 10, 7).unwrap().ticks(), value.ticks() + ticks);
         }
         for part in 0..=5 {
-            assert!(add(value, i32::MAX, part, 7).is_err());
-            assert!(add(value, i32::MIN, part, 7).is_err());
+            assert!(add(value, i64::from(i32::MAX), part, 7).is_err());
+            assert!(add(value, i64::from(i32::MIN), part, 7).is_err());
         }
         let max = DateTime2::parse_iso("9999-12-31T23:59:59.9999999").unwrap();
         assert!(add(max, 50, 10, 7).is_err());
@@ -183,6 +198,17 @@ mod tests {
             half.ticks() + 10_000_000
         );
         assert_eq!(add(half, -500, 8, 0).unwrap().ticks(), half.ticks());
+        assert_eq!(
+            add(value, 2_147_483_648, 10, 7).unwrap().ticks(),
+            value.ticks() + 21_474_836
+        );
+        assert_eq!(
+            add(value, -2_147_483_649, 10, 7).unwrap().ticks(),
+            value.ticks() - 21_474_836
+        );
+        assert!(add(value, i64::MAX, 3, 7).is_err());
+        assert!(add(value, i64::MIN, 3, 7).is_err());
+        assert_eq!(add(value, i64::MIN, 10, 7).unwrap(), value);
     }
     #[test]
     fn typed_nulls_and_precision_across_chunks() {

@@ -1,6 +1,6 @@
 # DATEADD: DATE, TIME, DATETIME2 and DATETIMEOFFSET
 
-The current implementation accepts typed DATE/TIME/DATETIME2/DATETIMEOFFSET inputs and INT offsets. Year,
+The current implementation accepts typed DATE/TIME/DATETIME2/DATETIMEOFFSET inputs and signed BIGINT offsets on the SQL Server 2025 compatibility path. Year,
 quarter and month additions preserve the original day when possible and clamp
 to the target month's last day otherwise. Week adds seven days; day, weekday and
 dayofyear add calendar days. All documented aliases for these units are accepted.
@@ -17,8 +17,7 @@ The implementation follows the calendar, offset and return-type rules in the
 [Microsoft DATEADD reference](https://learn.microsoft.com/en-us/sql/t-sql/functions/dateadd-transact-sql?view=sql-server-2017).
 This is a bounded implementation, not complete DATEADD compatibility. String
 literals must eventually return legacy DATETIME; they currently reject explicitly.
-DATETIME, SMALLDATETIME and newer BIGINT offsets
-remain open. Error precedence involving unsupported units, NULLs and invalid
+DATETIME and SMALLDATETIME remain open. Error precedence involving unsupported units, NULLs and invalid
 numbers has not been compared against a live SQL Server.
 
 Validation covers month-end/leap-year examples, negative fractions, boundaries,
@@ -94,3 +93,31 @@ argument evaluation. Reduced-scale rounding, negative nanosecond ties and
 unsupported-unit error timing still require live SQL Server comparison. The
 upstream formatter defaults non-offset values to date/time text; TIME uses a
 separate native representation and cannot reuse that formatter directly.
+
+BIGINT amounts now bind through BIGINT rather than narrowing to INT. DATE
+calendar arithmetic checks wide intermediate day/month counts before converting
+to the output day range. DATETIME2 and DATETIMEOFFSET subday arithmetic uses
+i128 intermediates before checked timestamp conversion; TIME wraps within a day
+without narrowing the amount. Native functions retain their INT signatures for
+previously stored views and defaults while accepting new BIGINT calls. Typed
+NULL and empty result metadata retains the input date/time family.
+
+The [55-observation SQL Server 2025 fixture](../reference/dateadd-bigint.json)
+was captured twice in two pinned independent containers with four fresh
+databases per capture; an independent replay matched the fixture byte-for-byte.
+It covers INT/BIGINT boundaries, DATE range and unsupported-unit errors, TIME
+wraparound, DATETIME2/DATETIMEOFFSET scale 7, stored BIGINT amounts and bound
+BIGINT RPCs. SQL Server `17.0.4065.4` treats the minimum signed BIGINT amount
+as a no-op for DATETIME2/DATETIMEOFFSET nanosecond additions, in both literal
+and RPC forms; TIME still wraps it. The native adapter preserves this observed
+case without generalizing it to other amounts or dateparts.
+
+The standalone client replay is `node --test tests/dateadd_bigint.test.mjs`.
+All 54 non-version cases match SQL Server rows and error numbers; the result
+type, width and scale also match wherever both servers emit a result set. Five
+complete raw captures are exact. The remaining raw differences are preserved in
+`artifacts/compatibility/dateadd-bigint-replay.json`: 44 result-column flags are
+`1` rather than SQL Server's `33`; nine error states/messages differ; four
+errors lack SQL Server's empty typed result set; and three failing RPCs have
+different DONE and return-status envelopes. These shared wire/diagnostic gaps
+remain open, so the replay is not a full compatibility pass.
