@@ -4735,6 +4735,29 @@
       ],
       "issue": 461,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRb0E"
+    },
+    {
+      "id": "json-extraction-array-range-v1",
+      "title": "Capture and implement JSON extraction array ranges",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server-compatible Rust/DuckDB goal and owner-run JSON wildcard fixture from merged PR 462; no external submission is input.",
+      "scope": [
+        "scripts/capture-json-advanced-path.mjs",
+        "reference/json-advanced-path.json",
+        "crates/msduck-core/src/json_path.rs",
+        "crates/msduck-core/tests/json_advanced_path.rs",
+        "docs/json-advanced-path.md"
+      ],
+      "acceptance": [
+        "Expand pinned SQL Server 2025 evidence across array ranges, endpoints, empty/single/multiple arrays, strict/lax modes, nested selectors, scalar/container/NULL results, malformed documents and [last]/list diagnostics. Retain raw descriptors, errors and ordered events across two fresh databases and an independent replay.",
+        "Implement captured deterministic range selection with source slices, verified validation order, UTF-16 parity and bounded iterative traversal. Preserve distinct captured 13660 states/messages for unsupported last/list operators. Do not change ordinary path or JSON_PATH_EXISTS without evidence.",
+        "Replay applicable fixture outcomes in core tests, retain remaining adapter/metadata differences, and run formatting, workspace Rust, strict Clippy, independent clients and local audit at exact head."
+      ],
+      "dependencies": [
+        "json-extraction-wildcard-core-v1"
+      ],
+      "issue": 463,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PReAS"
     }
   ]
 }
