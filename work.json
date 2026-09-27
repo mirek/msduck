@@ -4125,6 +4125,25 @@
       "dependencies": [],
       "issue": 412,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQSZV"
+    },
+    {
+      "id": "dateadd-legacy-reference-v1",
+      "title": "Capture SQL Server legacy DATEADD and string-literal behavior",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server compatibility goal; first-party source and Microsoft documentation, no external submission",
+      "scope": [
+        "scripts/capture-dateadd-legacy.mjs",
+        "reference/dateadd-legacy.json",
+        "docs/dateadd-legacy-reference.md"
+      ],
+      "acceptance": [
+        "Capture typed DATETIME and SMALLDATETIME, string-literal returns, month-end/calendar and subsecond thresholds, NULL and empty descriptors, supported/unsupported dateparts, range/argument errors and prepared RPC forms.",
+        "Retain raw rows, descriptors, diagnostics, information and DONE tokens with exact agreement across four fresh databases in two independent pinned SQL Server containers and independent replay against the fixture; refuse output aliases and overwrites.",
+        "Document exact observations and inspected mirek/mssqlite paths; identify bounded follow-up runtime implementation without claiming parity."
+      ],
+      "dependencies": [],
+      "issue": 415,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQTfL"
     }
   ]
 }
