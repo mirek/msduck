@@ -930,3 +930,26 @@ fn pinned_reference_width_conversion_overflow() {
         .unwrap();
     assert_eq!(datetrunc::text(valid, ty).unwrap(), "1900-01-01");
 }
+
+#[test]
+fn pinned_reference_time_origin_wrap_and_range() {
+    let ty = TemporalType::Time(0);
+    let bound = datetrunc::bind_bucket("hour", ty, Some(ty)).unwrap();
+    let input = Some(value(1, 1, 1, 1, 0, 0, 0, 0));
+    let origin = Some(value(1, 1, 1, 2, 0, 0, 0, 0));
+    let previous_day = datetrunc::bucket(bound, Some(5), input, origin)
+        .unwrap()
+        .unwrap();
+    assert_eq!(datetrunc::text(previous_day, ty).unwrap(), "21:00:00");
+    let large = datetrunc::bucket(bound, Some(i64::from(i32::MAX)), input, origin);
+    assert_eq!(
+        large,
+        Err(RuleError::Sql {
+            number: 9835,
+            state: 1,
+            class: 16,
+            phase: Phase::Execution,
+            message: "Calculating date bucket for 'time' column caused an overflow.".to_owned(),
+        })
+    );
+}

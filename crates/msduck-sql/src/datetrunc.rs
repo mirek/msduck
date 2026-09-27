@@ -719,11 +719,19 @@ pub fn bucket(
         let origin_absolute = origin.absolute() - i128::from(origin.offset_minutes) * MINUTE;
         let result_absolute =
             origin_absolute + (input_absolute - origin_absolute).div_euclid(size) * size;
-        Value::from_absolute(
-            result_absolute + i128::from(value.offset_minutes) * MINUTE,
-            value.offset_minutes,
-            ty,
-        )?
+        if matches!(ty, TemporalType::Time(_)) {
+            // SQL Server anchors TIME arithmetic at 1900-01-01. A bucket may
+            // cross midnight, but a shift beyond the calendar range overflows.
+            let anchored = default_origin(TemporalType::Date).absolute() + result_absolute;
+            let result = Value::from_absolute(anchored, 0, ty)?;
+            Value { day: 0, ..result }
+        } else {
+            Value::from_absolute(
+                result_absolute + i128::from(value.offset_minutes) * MINUTE,
+                value.offset_minutes,
+                ty,
+            )?
+        }
     };
     let out = quantize(out, ty)?;
     Ok(Some(range_check(out, ty, "date_bucket")?))
