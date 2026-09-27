@@ -3637,7 +3637,7 @@
     {
       "id": "select-top-percent-reference-v1",
       "title": "Capture SQL Server SELECT TOP PERCENT and WITH TIES behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner standing full SQL Server compatibility objective. First-party inspection of src/engine.rs, existing reference captures and Microsoft's TOP documentation; no third-party issue, review or comment is input.",
       "scope": [
         "scripts/capture-select-top-percent.mjs",
