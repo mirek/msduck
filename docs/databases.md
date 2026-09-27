@@ -19,12 +19,17 @@ any remaining files.
 
 ## Storage
 
-A user database named `Sales` lives next to the primary file as
-`<primary stem>.sales.duckdb`, for example `msduck.sales.duckdb`. File names use
-the lower-case name. ASCII letters, digits, `_` and `-` are kept and every other
-UTF-8 byte becomes `%XX`, so `My App` is stored as `msduck.my%20app.duckdb`.
+A user database lives next to the primary file as
+`<primary stem>.<database_id>.<name fragment>.duckdb`, for example
+`msduck.5.sales.duckdb`. The ID makes the name unique. The fragment is the
+lower-case name with ASCII letters, digits, `_` and `-` kept and every other
+UTF-8 byte written as `%XX`. It is cut at a whole character after 64 bytes, so
+long non-ASCII names stay within file-name limits. `My App` is stored as
+`msduck.5.my%20app.duckdb`. The registry records the file name.
 Creation refuses to adopt an existing file with that name. Dropping a database
-detaches it and deletes its file and WAL.
+detaches it and deletes its file and WAL before the registration. If a deletion
+fails, the database stays registered and DROP reports the error, so a retry can
+finish. A CREATE that fails after its file exists cleans up the same way.
 
 An in-memory server keeps its user databases in a temporary directory, which is
 removed when the server is dropped. A process that crashes can leave this
@@ -60,7 +65,10 @@ user database:
 | `state`, `state_desc` | tinyint, nvarchar | 0, `ONLINE` |
 | `recovery_model`, `recovery_model_desc` | tinyint, nvarchar | 3, `SIMPLE` |
 
-The other SQL Server columns are not provided. Each database also has the
+The other SQL Server columns are not provided. Result metadata comes from these
+DuckDB types (`nvarchar(max)`, `datetime2`), not from SQL Server's `sysname`,
+bounded `nvarchar` and `datetime` declarations. Task
+`sys-databases-descriptors-v1` adds pinned descriptors. Each database also has the
 macros `__msduck_db_id(name)`, `__msduck_db_name(id)` and
 `__msduck_current_db_name()`, which the engine can use for `DB_ID` and
 `DB_NAME`.

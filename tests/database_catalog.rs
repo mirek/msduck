@@ -169,7 +169,7 @@ fn file_backed_databases_persist_across_restart() {
     std::fs::create_dir_all(&directory).unwrap();
     let primary = directory.join("msduck.duckdb");
     let primary = primary.to_str().unwrap();
-    let file = directory.join("msduck.my%20app.duckdb");
+    let file = directory.join("msduck.5.my%20app.duckdb");
     {
         let server = Server::open(primary).unwrap();
         let db = server.connection().unwrap();
@@ -182,7 +182,7 @@ fn file_backed_databases_persist_across_restart() {
             .unwrap();
         catalog.select(&db, "master").unwrap();
         catalog.remove(&db, "scratch").unwrap();
-        assert!(!directory.join("msduck.scratch.duckdb").exists());
+        assert!(!directory.join("msduck.6.scratch.duckdb").exists());
     }
     {
         let server = Server::open(primary).unwrap();
@@ -216,7 +216,7 @@ fn an_existing_file_is_not_adopted() {
             .as_nanos()
     ));
     std::fs::create_dir_all(&directory).unwrap();
-    std::fs::write(directory.join("msduck.stale.duckdb"), b"not a database").unwrap();
+    std::fs::write(directory.join("msduck.5.stale.duckdb"), b"not a database").unwrap();
     let primary = directory.join("msduck.duckdb");
     let server = Server::open(primary.to_str().unwrap()).unwrap();
     let db = server.connection().unwrap();
@@ -301,8 +301,8 @@ fn unavailable_registered_databases_are_not_recreated_and_can_be_dropped() {
     std::fs::create_dir_all(&directory).unwrap();
     let primary = directory.join("msduck.duckdb");
     let primary = primary.to_str().unwrap();
-    let lost = directory.join("msduck.lost.duckdb");
-    let corrupt = directory.join("msduck.corrupt.duckdb");
+    let lost = directory.join("msduck.5.lost.duckdb");
+    let corrupt = directory.join("msduck.6.corrupt.duckdb");
     {
         let server = Server::open(primary).unwrap();
         let db = server.connection().unwrap();
@@ -357,7 +357,7 @@ fn a_partially_recovered_database_is_detached() {
     }
     {
         // A conflicting object makes publication fail after the attach.
-        let db = duckdb::Connection::open(directory.join("msduck.old.duckdb")).unwrap();
+        let db = duckdb::Connection::open(directory.join("msduck.5.old.duckdb")).unwrap();
         db.execute_batch("DROP VIEW sys.databases; CREATE TABLE sys.databases(x INT)")
             .unwrap();
     }
@@ -398,13 +398,13 @@ fn a_failed_file_deletion_keeps_the_registration() {
     if enforced {
         // Permissions do not apply to a privileged user.
         assert!(result.is_err());
-        assert!(directory.join("msduck.kept.duckdb").exists());
+        assert!(directory.join("msduck.5.kept.duckdb").exists());
         assert_eq!(sql_error(catalog.create(&db, "kept").unwrap_err()).0, 1801);
         catalog.remove(&db, "kept").unwrap();
     } else {
         result.unwrap();
     }
-    assert!(!directory.join("msduck.kept.duckdb").exists());
+    assert!(!directory.join("msduck.5.kept.duckdb").exists());
     assert_eq!(catalog.list(&db).unwrap(), [database("master", 1)]);
     drop((db, server));
     std::fs::remove_dir_all(&directory).unwrap();

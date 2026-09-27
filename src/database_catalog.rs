@@ -237,7 +237,12 @@ impl Catalog {
             !BACKEND_RESERVED.contains(&name_key.as_str()) && name_key != key(&self.primary),
             "database name '{name}' is reserved by msduck"
         );
-        let file = format!("{}.{}.duckdb", self.stem, encode(&name_key));
+        let database_id: i32 = db.query_row(
+            &format!("SELECT CAST(nextval({}) AS INTEGER)", literal(&self.ids())),
+            [],
+            |row| row.get(0),
+        )?;
+        let file = file_name(&self.stem, database_id, &name_key);
         let path = self.directory.join(&file);
         ensure!(
             !path.exists(),
@@ -248,12 +253,11 @@ impl Catalog {
         let inserted = db.execute(
             &format!(
                 "INSERT INTO {}(name_key,name,database_id,file,create_date)
-                 VALUES (?,?,CAST(nextval({}) AS INTEGER),?,CAST(now() AS TIMESTAMP))
+                 VALUES (?,?,?,?,CAST(now() AS TIMESTAMP))
                  ON CONFLICT DO NOTHING",
-                self.registry(),
-                literal(&self.ids())
+                self.registry()
             ),
-            duckdb::params![name_key, name, file],
+            duckdb::params![name_key, name, database_id, file],
         )?;
         if inserted == 0 {
             return Err(exists(name));
@@ -263,21 +267,21 @@ impl Catalog {
             .and_then(|()| self.publish_all(db));
         if let Err(error) = attached {
             let _ = db.execute_batch(&format!("DETACH DATABASE IF EXISTS {}", quote(name)));
-            let _ = db.execute(
-                &format!("DELETE FROM {} WHERE name_key=?", self.registry()),
-                [&name_key],
-            );
-            self.remove_files(&file);
+            // Forget the database only once its files are gone. Otherwise it
+            // stays registered but unavailable, and DROP can finish the cleanup.
+            match self.delete_files(&file) {
+                Ok(()) => {
+                    let _ = db.execute(
+                        &format!("DELETE FROM {} WHERE name_key=?", self.registry()),
+                        [&name_key],
+                    );
+                }
+                Err(cleanup) => {
+                    eprintln!("msduck: database {name} stays registered: {cleanup:#}")
+                }
+            }
             return Err(error);
         }
-        let database_id = db.query_row(
-            &format!(
-                "SELECT database_id FROM {} WHERE name_key=?",
-                self.registry()
-            ),
-            [&name_key],
-            |row| row.get(0),
-        )?;
         Ok(Database {
             name: name.to_owned(),
             database_id,
@@ -430,11 +434,6 @@ impl Catalog {
         format!("{}.main.__msduck_database_ids", quote(&self.primary))
     }
 
-    /// Best-effort cleanup after a failed CREATE.
-    fn remove_files(&self, file: &str) {
-        let _ = self.delete_files(file);
-    }
-
     fn delete_files(&self, file: &str) -> Result<()> {
         let path = self.directory.join(file);
         let mut wal = path.clone().into_os_string();
@@ -469,6 +468,24 @@ fn validate(name: &str) -> Result<()> {
 /// server collation; the registry keys on the lower-case form.
 fn key(name: &str) -> String {
     name.to_lowercase()
+}
+
+/// Longest encoded name kept in a file name. With the stem, the ID and the
+/// suffix, the component stays well inside common 255-byte limits.
+const FILE_NAME_FRAGMENT: usize = 64;
+
+/// The database ID makes the name unique; a bounded, readable fragment of the
+/// encoded name follows it.
+fn file_name(stem: &str, database_id: i32, name_key: &str) -> String {
+    let mut fragment = String::new();
+    for c in name_key.chars() {
+        let encoded = encode(c.encode_utf8(&mut [0; 4]));
+        if fragment.len() + encoded.len() > FILE_NAME_FRAGMENT {
+            break;
+        }
+        fragment.push_str(&encoded);
+    }
+    format!("{stem}.{database_id}.{fragment}.duckdb")
 }
 
 /// A portable file-name fragment: ASCII letters, digits, `_` and `-` are kept,
@@ -519,6 +536,15 @@ mod tests {
     fn file_names_are_portable() {
         assert_eq!(encode("sales_2026-q3"), "sales_2026-q3");
         assert_eq!(encode("a b/c.é"), "a%20b%2Fc%2E%C3%A9");
+    }
+
+    #[test]
+    fn file_names_are_bounded_and_unique_by_id() {
+        assert_eq!(file_name("msduck", 5, "my app"), "msduck.5.my%20app.duckdb");
+        let long = file_name("msduck", 32767, &"é".repeat(128));
+        // Escapes are never split; the fragment stops at a whole character.
+        assert_eq!(long, format!("msduck.32767.{}.duckdb", "%C3%A9".repeat(10)));
+        assert!(long.len() < 100);
     }
 
     #[test]
