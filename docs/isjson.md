@@ -86,6 +86,13 @@ standalone tedious replay compares all 110 raw responses, including the 40
 depth errors and their descriptor and completion ordering. Only the already
 known INT descriptor flags difference (1 versus SQL Server's 33) remains in
 that capture.
+An owner-run fresh-database SQL Server 2025 probe also checked a literal INSERT
+and column-based INSERT, UPDATE and DELETE batches with a deep ISJSON predicate
+followed by SELECT statements. Each emitted only error 13606 and a final DONE,
+without 3621, a DML command token or results from later statements. The
+companion client regression asserts those exact batch responses and that the
+stored row remains unchanged; this depth error is batch-ending in the captured
+contexts.
 
 Remaining work includes complete noncharacter source typing through
 column/alias binding, exact syntax diagnostic parity and the
