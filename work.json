@@ -3923,6 +3923,27 @@
       "dependencies": [],
       "issue": 396,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PP-kY"
+    },
+    {
+      "id": "tvp-default-reference-v1",
+      "title": "Capture SQL Server default and null TVP RPC behavior",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility goal; owner-run reference/tvp-wire.json and docs/tvp-wire.md identify the missing default-status/null-TVP distinction. Owner-authored issue #399; no third-party intake.",
+      "scope": [
+        "scripts/capture-tvp-default.mjs",
+        "reference/tvp-default.json",
+        "docs/tvp-default.md"
+      ],
+      "acceptance": [
+        "Capture tedious 20 default/omitted and explicit null TVP RPC status plus a valid empty-TVP control against the pinned SQL Server 2025 image; retain raw request bytes, parsed status/type metadata and exact response observations.",
+        "Use two independent containers and two fresh databases each; require exact agreement across all four runs before writing the fixture. Bound reads/memory, preserve raw error and completion differences, and refuse to overwrite a retained fixture.",
+        "Document source version, verified findings and uncaptured gaps. Run syntax, independent replay, bounded comparison and diff checks at an exact revision. Edit only scoped files and open a focused owner PR; do not claim runtime TVP support."
+      ],
+      "dependencies": [
+        "tvp-wire-reference-v1"
+      ],
+      "issue": 399,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQBm6"
     }
   ]
 }
