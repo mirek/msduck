@@ -654,6 +654,15 @@ pub fn bucket(
     let Some(width) = width else {
         return Ok(None);
     };
+    if i32::try_from(width).is_err() {
+        return Err(sql(
+            8115,
+            2,
+            16,
+            Phase::Execution,
+            "Arithmetic overflow error converting expression to data type int.".to_owned(),
+        ));
+    }
     let Some(value) = value else {
         return Ok(None);
     };

@@ -909,3 +909,24 @@ fn pinned_reference_precision_grid_and_typed_overflow() {
         })
     );
 }
+
+#[test]
+fn pinned_reference_width_conversion_overflow() {
+    let ty = TemporalType::Date;
+    let bound = datetrunc::bind_bucket("day", ty, None).unwrap();
+    let input = Some(value(2024, 5, 15, 0, 0, 0, 0, 0));
+    let expected = Err(RuleError::Sql {
+        number: 8115,
+        state: 2,
+        class: 16,
+        phase: Phase::Execution,
+        message: "Arithmetic overflow error converting expression to data type int.".to_owned(),
+    });
+    for width in [2_147_483_648, -2_147_483_649, i64::MAX] {
+        assert_eq!(datetrunc::bucket(bound, Some(width), input, None), expected);
+    }
+    let valid = datetrunc::bucket(bound, Some(i64::from(i32::MAX)), input, None)
+        .unwrap()
+        .unwrap();
+    assert_eq!(datetrunc::text(valid, ty).unwrap(), "1900-01-01");
+}
