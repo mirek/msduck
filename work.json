@@ -2900,7 +2900,7 @@
     {
       "id": "soundex-difference-reference-v1",
       "title": "Capture SQL Server SOUNDEX and DIFFERENCE reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
       "scope": [
         "scripts/capture-soundex-difference.mjs",
@@ -2996,7 +2996,7 @@
     {
       "id": "parse-try-parse-reference-v1",
       "title": "Capture SQL Server PARSE and TRY_PARSE reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party source audit found no implementation, tests, fixture or task for these functions; no external submission is input.",
       "scope": [
         "scripts/capture-parse-try-parse.mjs",
@@ -3241,7 +3241,7 @@
     {
       "id": "cursor-reference-v1",
       "title": "Capture SQL Server T-SQL cursor reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party ROADMAP.md and docs/transaction-manager.md list this area as open; no external submission is input.",
       "scope": [
         "scripts/capture-cursor.mjs",
