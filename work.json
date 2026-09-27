@@ -3792,6 +3792,23 @@
       ],
       "issue": 388,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PP6wO"
+    },
+    {
+      "id": "tds-status-reference-v1",
+      "title": "Correct TDS reset packet status reference",
+      "state": "ready",
+      "authorization": "Mirek's standing SQL Server-compatible Rust server goal; owner-authored issue #389. The copied skill masks conflict with the primary Microsoft MS-TDS Status specification.",
+      "scope": [
+        ".agents/skills/tds-protocol/packet-framing.md"
+      ],
+      "acceptance": [
+        "Correct EOM, client-to-server IGNORE, RESETCONNECTION 0x08 and RESETCONNECTIONSKIPTRAN 0x10 masks, directions, version applicability, first-packet and mutual-exclusion rules against the official MS-TDS Status table.",
+        "Describe these as TDS packet pooling-reset bits rather than SMP flags or MARS-only features; preserve ordinary reset versus transaction-preserving reset and cite the exact primary source.",
+        "Edit only packet-framing.md; the conflicting MARS note in state-machines-and-notes.md is held by smp-window-doc-v1. Verify the corrected reference and report that follow-up without changing Rust behavior or claiming runtime reset support."
+      ],
+      "dependencies": [],
+      "issue": 389,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PP7OA"
     }
   ]
 }
