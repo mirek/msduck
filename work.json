@@ -4478,7 +4478,7 @@
     {
       "id": "isjson-diagnostic-adapter-v1",
       "title": "Preserve ISJSON binder error identity",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server compatibility goal; owner-run SQL Server reference from issue #441, no external submissions.",
       "scope": [
         "src/json_extract.rs"
