@@ -3145,7 +3145,7 @@
     {
       "id": "smp-window-doc-v1",
       "title": "Correct copied SMP WNDW inclusive-window wording",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction in this session to publish and correct the copied MC-SMP WNDW note under the continuing full SQL Server compatibility and copied-skill accuracy goal. First-party protocol review; no external submission approved.",
       "scope": [
         ".agents/skills/tds-protocol/state-machines-and-notes.md"
