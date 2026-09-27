@@ -3713,7 +3713,7 @@
     {
       "id": "rowversion-reference-v1",
       "title": "Capture SQL Server rowversion and timestamp contract",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's standing full SQL Server-compatible Rust server objective and owner-authored issue #382, based on first-party source inspection and Microsoft Learn rowversion documentation.",
       "scope": [
         "scripts/capture-rowversion.mjs",
