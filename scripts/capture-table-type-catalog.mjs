@@ -123,7 +123,18 @@ async function observe(connection){
   observations.push({name,sql,result})
  }
  check(observations)
- return {setup,rejected,observations}
+ const collation=[]
+ for(const sql of [
+  'CREATE TYPE dbo.CanonicalCollationProbe AS TABLE (label NVARCHAR(12) COLLATE latin1_general_100_ci_as)',
+  "SELECT c.collation_name FROM sys.columns c JOIN sys.table_types t ON t.type_table_object_id=c.object_id WHERE t.name='CanonicalCollationProbe'",
+  'DROP TYPE dbo.CanonicalCollationProbe'
+ ]){
+  const result=canonical(await capture(connection,sql))
+  assert.equal(result.errors.length,0,`reference collation: ${sql}`)
+  collation.push({sql,result})
+ }
+ assert.equal(collation[1].result.sets[0].rows[0][0],'Latin1_General_100_CI_AS')
+ return {setup,rejected,observations,collation}
 }
 
 const runContainer=()=>withReferenceContainer(async(config,container)=>({

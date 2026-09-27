@@ -41,6 +41,22 @@ fn type_object_name(name: &str, object_id: i32) -> String {
     format!("TT_{prefix}_{object_id:08X}")
 }
 
+#[allow(dead_code)]
+fn canonical_collation_name(name: &str) -> Option<&'static str> {
+    const SUPPORTED: [&str; 7] = [
+        "SQL_Latin1_General_CP1_CI_AS",
+        "Latin1_General_CI_AS_KS_WS",
+        "Latin1_General_100_CI_AS",
+        "Latin1_General_100_CS_AS",
+        "Latin1_General_100_CI_AI",
+        "Latin1_General_100_CS_AI",
+        "Latin1_General_100_BIN2",
+    ];
+    SUPPORTED
+        .into_iter()
+        .find(|canonical| canonical.eq_ignore_ascii_case(name))
+}
+
 /// Writes all catalog rows in the caller's transaction. With `autocommit=true`,
 /// the adapter owns a single transaction and rolls it back on any error.
 #[allow(dead_code)]
@@ -141,13 +157,14 @@ pub(crate) fn create_table_type(
                 column.collation_name.is_none() || character,
                 "COLLATE requires a character column"
             );
-            if let Some(collation) = column.collation_name {
-                ensure!(
-                    crate::tds::collation::Collation::for_name(collation).is_some(),
-                    "unsupported table type column collation"
-                );
-            }
-            let collation = column.collation_name.map(str::to_owned).or(builtin.5);
+            let collation = match column.collation_name {
+                Some(name) => Some(
+                    canonical_collation_name(name)
+                        .context("unsupported table type column collation")?
+                        .to_owned(),
+                ),
+                None => builtin.5,
+            };
             let ansi_padded = matches!(builtin.0, 98 | 165 | 167 | 173 | 175 | 231 | 239);
             prepared.push((
                 column.name,
@@ -681,6 +698,37 @@ mod tests {
             .unwrap(),
             0
         );
+        let label = TableColumn {
+            name: "label",
+            data_type: &definitions[1].data_type,
+            nullable: true,
+            collation_name: Some("latin1_general_100_ci_as"),
+        };
+        let (_, object_id) =
+            create_table_type(&db, "dbo", "CanonicalCollationProbe", &[label], true).unwrap();
+        let name: String = db
+            .query_row(
+                "SELECT collation_name FROM sys.columns WHERE object_id=?",
+                [object_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(name, "Latin1_General_100_CI_AS");
+        for supported in [
+            "SQL_Latin1_General_CP1_CI_AS",
+            "Latin1_General_CI_AS_KS_WS",
+            "Latin1_General_100_CI_AS",
+            "Latin1_General_100_CS_AS",
+            "Latin1_General_100_CI_AI",
+            "Latin1_General_100_CS_AI",
+            "Latin1_General_100_BIN2",
+        ] {
+            assert!(crate::tds::collation::Collation::for_name(supported).is_some());
+            assert_eq!(
+                super::canonical_collation_name(&supported.to_lowercase()),
+                Some(supported)
+            );
+        }
     }
 
     #[test]
