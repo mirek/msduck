@@ -4193,7 +4193,7 @@
     {
       "id": "worker-owned-merge-status-v1",
       "title": "Align claim helper output with claiming-worker completion",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction for worker-owned PR merge and completion, plus verified Codex review of the owner PR #421",
       "scope": [
         "scripts/agent-work.mjs"
