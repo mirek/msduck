@@ -4271,6 +4271,26 @@
       ],
       "issue": 428,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQdWF"
+    },
+    {
+      "id": "table-variable-reference-v1",
+      "title": "Capture SQL Server table-variable behavior for runtime integration",
+      "state": "ready",
+      "authorization": "Owner's continuing SQL Server compatibility goal and owner-authored issue #430. First-party README gap and copied mssqlite T-SQL skill hypotheses; no external submission is input.",
+      "scope": [
+        "scripts/capture-table-variable.mjs",
+        "reference/table-variable.json",
+        "docs/table-variable.md"
+      ],
+      "acceptance": [
+        "Capture SQL Server DECLARE @t TABLE declaration syntax, data types, defaults, constraints, duplicate names and error precedence; preserve exact errors and completion tokens.",
+        "Capture typed metadata and row behavior for SELECT, INSERT, UPDATE, DELETE, OUTPUT, empty results and multi-statement reuse; test batch, sp_executesql, procedure and prepared/RPC scope plus ordinary table and temp-table name isolation.",
+        "Capture transaction and savepoint behavior, including rollback effects on table-variable rows versus ordinary table rows and identity allocation where supported. Use a pinned owner-run SQL Server image, bounded capture, UTC, explicit object names and four fresh databases across two containers; retain raw differences.",
+        "Add a generator that refuses fixture overwrite and output aliases, validates replay against the retained fixture and reports bounded mismatches. Document observations, uncaptured gaps and deterministic/root implementation successors. Use only the three scoped new files; run Node syntax and fixture checks at an exact revision and open a focused PR."
+      ],
+      "dependencies": [],
+      "issue": 430,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQqeg"
     }
   ]
 }
