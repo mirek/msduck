@@ -39,6 +39,9 @@ reuse after repeated resets. All three tests failed before this change with
 - **ENVCHANGE ordering.** The reference records events, not packet bytes. The
   rollback-then-acknowledgement ENVCHANGE order follows MS-TDS and keeps
   Tedious's descriptor consistent. It is not a byte-level SQL Server capture.
+- **Other message types.** MS-TDS defines the bit only for SQL batch, RPC and
+  transaction manager requests. On any other message, such as Attention, it
+  is rejected with an explicit error and the session is left untouched.
 - **RPC `sp_reset_connection`.** It still falls through unsupported dispatch.
 - **Packet-level status.** Detection uses the assembled message status.
   First-packet-only handling is `tds-first-packet-reset-status-v1`.

@@ -247,6 +247,7 @@ fn serve_login(
             ))
         } else {
             (|| -> Result<Vec<u8>> {
+                let reset = reset_requested(message.kind, message.status)?;
                 if matches!(message.kind, 1 | 3 | 14) {
                     let (_, descriptor) = tds::request_headers(&message.payload)?;
                     ensure!(
@@ -256,7 +257,7 @@ fn serve_login(
                 }
                 // The headers name the transaction being reset, so reset after
                 // validating them and before running the request.
-                if message.status & 0x08 != 0 {
+                if reset {
                     reset_session(&template, &mut session, &mut rpc, &mut acknowledgement)?;
                 }
                 match message.kind {
@@ -297,6 +298,20 @@ fn serve_login(
     Ok(())
 }
 
+/// Whether a message asks for RESETCONNECTION (0x08). MS-TDS defines the bit
+/// only for SQL batch, RPC and transaction manager requests; on any other
+/// message it is rejected before the session is touched.
+fn reset_requested(kind: u8, status: u8) -> Result<bool> {
+    if status & 0x08 == 0 {
+        return Ok(false);
+    }
+    ensure!(
+        matches!(kind, 1 | 3 | 14),
+        "RESETCONNECTION is only valid on SQL batch, RPC and transaction manager requests"
+    );
+    Ok(true)
+}
+
 /// RESETCONNECTION: roll back an open transaction, then replace the session
 /// with a fresh one on a new backend connection. Dropping the old connection
 /// discards connection-scoped settings and temporary objects; prepared handles
@@ -332,6 +347,23 @@ fn login_failure(out: &mut Vec<u8>) {
             message_utf16: None,
         },
     );
+}
+
+#[cfg(test)]
+mod reset_tests {
+    use super::reset_requested;
+
+    #[test]
+    fn reset_applies_only_to_request_messages() {
+        for kind in [1, 3, 14] {
+            assert!(reset_requested(kind, 0x09).unwrap());
+            assert!(!reset_requested(kind, 0x01).unwrap());
+        }
+        for kind in [6, 7, 0x12, 0x10] {
+            assert!(reset_requested(kind, 0x08).is_err());
+            assert!(!reset_requested(kind, 0x01).unwrap());
+        }
+    }
 }
 
 #[cfg(test)]
