@@ -43,10 +43,16 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
     };
     let part =
         crate::dateadd::datepart(&part.value).ok_or_else(|| format!("invalid {name} datepart"))?;
+    let mut start = start.clone();
+    let mut end = end.clone();
+    for value in [&mut start, &mut end] {
+        crate::datepart::preserve_exact_decimal_cast(value);
+        crate::datepart::preserve_bare_decimal_literal(value);
+    }
     let call = crate::engine::binary_function(
         &format!("__msduck_{name}_{part}"),
-        crate::engine::unary_function("__msduck_datediff_input", start.clone()),
-        crate::engine::unary_function("__msduck_datediff_input", end.clone()),
+        crate::engine::unary_function("__msduck_datediff_input", start),
+        crate::engine::unary_function("__msduck_datediff_input", end),
     );
     *expr = Expr::Cast {
         kind: CastKind::Cast,
@@ -61,12 +67,49 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
     Ok(())
 }
 
-fn difference(start: DateTime2, end: DateTime2, part: usize) -> i128 {
-    let boundary = |value: DateTime2| -> i128 {
-        let ticks = value.ticks();
-        match part {
+#[derive(Clone, Copy)]
+struct ExactTime {
+    day: i64,
+    nanos: i64,
+}
+
+impl ExactTime {
+    fn from_datetime2(value: DateTime2) -> Self {
+        Self {
+            day: value.ticks() / DAY,
+            nanos: value.ticks() % DAY * 100,
+        }
+    }
+
+    fn from_numeric_ticks(ticks: i64, base_day: i64) -> Self {
+        let per_day = crate::datepart::LEGACY_TICKS_PER_DAY;
+        Self {
+            day: base_day + ticks.div_euclid(per_day),
+            // SQL Server exposes integer nanoseconds for a legacy 1/300s tick:
+            // one tick is 3,333,333 ns, not a rounded DATETIME2 100ns value.
+            nanos: ticks.rem_euclid(per_day) * 1_000_000_000 / 300,
+        }
+    }
+}
+
+fn difference_exact(
+    start: ExactTime,
+    end: ExactTime,
+    part: usize,
+) -> Result<i128, Box<dyn std::error::Error>> {
+    let boundary = |value: ExactTime| -> Result<i128, Box<dyn std::error::Error>> {
+        if !(0..DAY * 100).contains(&value.nanos) {
+            return Err("invalid DATEDIFF nanosecond boundary".into());
+        }
+        let day = value.day;
+        let nanos = value.nanos;
+        let day_ticks = day
+            .checked_mul(DAY)
+            .ok_or("invalid DATEDIFF calendar day")?;
+        DateTime2::from_ticks(day_ticks)?;
+        Ok(match part {
             0..=2 => {
-                let p = value.parts();
+                let p = DateTime2::from_ticks(day_ticks)?.parts();
                 let year = i128::from(p.year);
                 let month = i128::from(p.month - 1);
                 match part {
@@ -75,23 +118,38 @@ fn difference(start: DateTime2, end: DateTime2, part: usize) -> i128 {
                     _ => year * 12 + month,
                 }
             }
-            3 => i128::from(ticks / DAY),
+            3 => i128::from(day),
             // Day zero (0001-01-01) is Monday; Sundays start a new week.
-            4 => i128::from((ticks / DAY + 1) / 7),
-            5 => i128::from(ticks / 36_000_000_000),
-            6 => i128::from(ticks / 600_000_000),
-            7 => i128::from(ticks / 10_000_000),
-            8 => i128::from(ticks / 10_000),
-            9 => i128::from(ticks / 10),
-            10 => i128::from(ticks) * 100,
+            4 => i128::from((day + 1) / 7),
+            5 => i128::from(day) * 24 + i128::from(nanos / 3_600_000_000_000),
+            6 => i128::from(day) * 1_440 + i128::from(nanos / 60_000_000_000),
+            7 => i128::from(day) * 86_400 + i128::from(nanos / 1_000_000_000),
+            8 => i128::from(day) * 86_400_000 + i128::from(nanos / 1_000_000),
+            9 => i128::from(day) * 86_400_000_000 + i128::from(nanos / 1_000),
+            10 => i128::from(day) * 86_400_000_000_000 + i128::from(nanos),
             _ => unreachable!("datepart is validated before registration"),
-        }
+        })
     };
-    boundary(end) - boundary(start)
+    Ok(boundary(end)? - boundary(start)?)
+}
+#[cfg(test)]
+fn difference(start: DateTime2, end: DateTime2, part: usize) -> i128 {
+    difference_exact(
+        ExactTime::from_datetime2(start),
+        ExactTime::from_datetime2(end),
+        part,
+    )
+    .unwrap()
 }
 struct Diff<const PART: usize, const BIG: bool>;
-fn kind() -> LogicalTypeHandle {
+fn datetime_kind() -> LogicalTypeHandle {
     LogicalTypeHandle::struct_type(&[("__msduck_datetime2_7", Id::Bigint.into())])
+}
+fn exact_kind() -> LogicalTypeHandle {
+    LogicalTypeHandle::struct_type(&[
+        ("__msduck_day", Id::Bigint.into()),
+        ("__msduck_nanos", Id::Bigint.into()),
+    ])
 }
 impl<const PART: usize, const BIG: bool> VScalar for Diff<PART, BIG> {
     type State = ();
@@ -105,25 +163,37 @@ impl<const PART: usize, const BIG: bool> VScalar for Diff<PART, BIG> {
         let b = input.flat_vector(1);
         let sa = input.struct_vector(0);
         let sb = input.struct_vector(1);
-        let ta = sa.child(0, len);
-        let tb = sb.child(0, len);
+        let ad = sa.child(0, len);
+        let an = sa.child(1, len);
+        let bd = sb.child(0, len);
+        let bn = sb.child(1, len);
         let mut out = output.flat_vector();
         for row in 0..len {
             if a.row_is_null(row as u64) || b.row_is_null(row as u64) {
                 out.set_null(row);
                 continue;
             }
-            if ta.row_is_null(row as u64) || tb.row_is_null(row as u64) {
-                return Err("invalid DATETIME2 ticks".into());
+            if ad.row_is_null(row as u64)
+                || an.row_is_null(row as u64)
+                || bd.row_is_null(row as u64)
+                || bn.row_is_null(row as u64)
+            {
+                return Err("invalid DATEDIFF boundary input".into());
             }
-            // Exact signatures fix each child to BIGINT; only live non-NULL slots are read.
+            // Fixed child types and validity checks bound every native read.
             let (a, b) = unsafe {
                 (
-                    ta.as_slice_with_len::<i64>(len)[row],
-                    tb.as_slice_with_len::<i64>(len)[row],
+                    ExactTime {
+                        day: ad.as_slice_with_len::<i64>(len)[row],
+                        nanos: an.as_slice_with_len::<i64>(len)[row],
+                    },
+                    ExactTime {
+                        day: bd.as_slice_with_len::<i64>(len)[row],
+                        nanos: bn.as_slice_with_len::<i64>(len)[row],
+                    },
                 )
             };
-            let n = difference(DateTime2::from_ticks(a)?, DateTime2::from_ticks(b)?, PART);
+            let n = difference_exact(a, b, PART)?;
             if BIG {
                 let n = i64::try_from(n).map_err(|_| OVERFLOW)?;
                 unsafe {
@@ -140,7 +210,7 @@ impl<const PART: usize, const BIG: bool> VScalar for Diff<PART, BIG> {
     }
     fn signatures() -> Vec<ScalarFunctionSignature> {
         vec![ScalarFunctionSignature::exact(
-            vec![kind(), kind()],
+            vec![exact_kind(), exact_kind()],
             if BIG {
                 Id::Bigint.into()
             } else {
@@ -149,6 +219,86 @@ impl<const PART: usize, const BIG: bool> VScalar for Diff<PART, BIG> {
         )]
     }
 }
+struct NumericExact;
+impl VScalar for NumericExact {
+    type State = ();
+    fn invoke(
+        _: &(),
+        input: &mut DataChunkHandle,
+        output: &mut dyn WritableVector,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let len = input.len();
+        let source = input.flat_vector(0);
+        let mut result = output.struct_vector();
+        let mut days = result.child(0, len);
+        let mut nanos = result.child(1, len);
+        let base_day = DateTime2::parse_iso("1900-01-01T00:00:00")?.ticks() / DAY;
+        for row in 0..len {
+            if source.row_is_null(row as u64) {
+                result.set_null(row);
+                days.set_null(row);
+                nanos.set_null(row);
+                continue;
+            }
+            let ticks = crate::datepart::numeric_ticks(&source, row, len)?;
+            let value = ExactTime::from_numeric_ticks(ticks, base_day);
+            unsafe {
+                days.as_mut_slice_with_len::<i64>(len)[row] = value.day;
+                nanos.as_mut_slice_with_len::<i64>(len)[row] = value.nanos;
+            }
+        }
+        Ok(())
+    }
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        vec![ScalarFunctionSignature::exact(
+            vec![Id::Any.into()],
+            exact_kind(),
+        )]
+    }
+}
+
+struct DatetimeExact;
+impl VScalar for DatetimeExact {
+    type State = ();
+    fn invoke(
+        _: &(),
+        input: &mut DataChunkHandle,
+        output: &mut dyn WritableVector,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let len = input.len();
+        let source = input.flat_vector(0);
+        let structure = input.struct_vector(0);
+        let ticks = structure.child(0, len);
+        let mut result = output.struct_vector();
+        let mut days = result.child(0, len);
+        let mut nanos = result.child(1, len);
+        for row in 0..len {
+            if source.row_is_null(row as u64) {
+                result.set_null(row);
+                days.set_null(row);
+                nanos.set_null(row);
+                continue;
+            }
+            if ticks.row_is_null(row as u64) {
+                return Err("invalid DATETIME2 ticks".into());
+            }
+            let ticks = unsafe { ticks.as_slice_with_len::<i64>(len)[row] };
+            let value = ExactTime::from_datetime2(DateTime2::from_ticks(ticks)?);
+            unsafe {
+                days.as_mut_slice_with_len::<i64>(len)[row] = value.day;
+                nanos.as_mut_slice_with_len::<i64>(len)[row] = value.nanos;
+            }
+        }
+        Ok(())
+    }
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        vec![ScalarFunctionSignature::exact(
+            vec![datetime_kind()],
+            exact_kind(),
+        )]
+    }
+}
+
 // A separate UTC adapter keeps DATEDIFF semantics independent of local-clock casts.
 struct OffsetUtc;
 impl VScalar for OffsetUtc {
@@ -192,18 +342,20 @@ impl VScalar for OffsetUtc {
                 ("__msduck_datetimeoffset_7", Id::Bigint.into()),
                 ("__msduck_offset_minutes", Id::Smallint.into()),
             ])],
-            kind(),
+            datetime_kind(),
         )]
     }
 }
 
 pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
     db.register_scalar_function::<OffsetUtc>("__msduck_datediff_offset_utc")?;
+    db.register_scalar_function::<NumericExact>("__msduck_datediff_numeric_exact")?;
+    db.register_scalar_function::<DatetimeExact>("__msduck_datediff_datetime_exact")?;
     let offsets = (0..=7)
         .map(|s| format!("'{}'", crate::datetimeoffset_cast::storage_type(s)))
         .collect::<Vec<_>>()
         .join(",");
-    db.execute_batch(&format!("CREATE OR REPLACE MACRO main.__msduck_datediff_input(value) AS CASE WHEN typeof(value) IN ({offsets}) THEN __msduck_datediff_offset_utc(__msduck_datetimeoffset_cast_7(value)) WHEN typeof(value) IN ('TINYINT','UTINYINT','SMALLINT','INTEGER','BIGINT') THEN __msduck_datetime2_cast_7(__msduck_integer_date(CAST(CAST(value AS VARCHAR) AS BIGINT))) ELSE __msduck_datetime2_cast_7(value) END"))?;
+    db.execute_batch(&format!("CREATE OR REPLACE MACRO main.__msduck_datediff_input(value) AS CASE WHEN typeof(value) IN ({offsets}) THEN __msduck_datediff_datetime_exact(__msduck_datediff_offset_utc(__msduck_datetimeoffset_cast_7(value))) WHEN typeof(value) IN ('TINYINT','UTINYINT','SMALLINT','INTEGER','BIGINT') THEN __msduck_datediff_datetime_exact(__msduck_datetime2_cast_7(__msduck_integer_date(CAST(CAST(value AS VARCHAR) AS BIGINT)))) WHEN typeof(value) IN ('BOOLEAN','FLOAT','DOUBLE') OR typeof(value) LIKE 'DECIMAL%' THEN __msduck_datediff_numeric_exact(value) ELSE __msduck_datediff_datetime_exact(__msduck_datetime2_cast_7(value)) END"))?;
     macro_rules! register { ($($p:literal),*) => { $(
         db.register_scalar_function::<Diff<$p,false>>(concat!("__msduck_datediff_",stringify!($p)))?;
         db.register_scalar_function::<Diff<$p,true>>(concat!("__msduck_datediff_big_",stringify!($p)))?;
@@ -268,6 +420,48 @@ mod tests {
         assert_eq!(difference(first, last, 10), 315537897599999999900);
         assert_eq!(difference(first, last, 0), 9998);
     }
+
+    #[test]
+    fn numeric_legacy_ticks_keep_exact_nanoseconds_and_one_evaluation() {
+        let db = duckdb::Connection::open_in_memory().unwrap();
+        crate::scalar::register(&db).unwrap();
+        let nanos = |value: &str| -> i64 {
+            db.query_row(
+                &format!("SELECT __msduck_datediff_big_10(__msduck_datediff_input(CAST(0 AS DECIMAL(20,10))),__msduck_datediff_input(CAST({value} AS DECIMAL(20,10))))"),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap()
+        };
+        assert_eq!(nanos("0.0000000192"), 0);
+        assert_eq!(nanos("0.0000000194"), 3_333_333);
+        assert_eq!(nanos("0.0000000386"), 3_333_333);
+        let null: Option<i64> = db
+            .query_row(
+                "SELECT __msduck_datediff_big_10(__msduck_datediff_input(CAST(NULL AS DECIMAL(10,4))),__msduck_datediff_input(CAST(0.5 AS DECIMAL(10,4))))",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(null, None);
+        db.execute_batch("CREATE SEQUENCE numeric_diff_a; CREATE SEQUENCE numeric_diff_b")
+            .unwrap();
+        let wrong: i64 = db.query_row(
+            "SELECT count(*) FROM range(6000) WHERE __msduck_datediff_3(__msduck_datediff_input(CAST(nextval('numeric_diff_a') AS DECIMAL(10,4))),__msduck_datediff_input(CAST(nextval('numeric_diff_b') AS DECIMAL(10,4)))) <> 0",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        assert_eq!(wrong, 0);
+        let counts: (i64, i64) = db
+            .query_row(
+                "SELECT currval('numeric_diff_a'),currval('numeric_diff_b')",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(counts, (6000, 6000));
+    }
+
     #[test]
     fn chunks_nulls_and_single_evaluation() {
         let db = duckdb::Connection::open_in_memory().unwrap();
