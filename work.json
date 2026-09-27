@@ -2437,7 +2437,7 @@
     {
       "id": "datetrunc-bucket-reference-v1",
       "title": "Capture SQL Server DATETRUNC and DATE_BUCKET reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing implementation goal and 2026-09-26 owner request to utilize this host with parallel independent agents. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
       "scope": [
         "scripts/capture-datetrunc-bucket.mjs",
@@ -2919,7 +2919,7 @@
     {
       "id": "json-aggregates-reference-v1",
       "title": "Capture SQL Server JSON_OBJECTAGG and JSON_ARRAYAGG reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
       "scope": [
         "scripts/capture-json-aggregates.mjs",
@@ -2977,7 +2977,7 @@
     {
       "id": "format-reference-v1",
       "title": "Capture SQL Server FORMAT reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party source audit found no implementation, tests, fixture or task for these functions; no external submission is input.",
       "scope": [
         "scripts/capture-format.mjs",
@@ -3015,7 +3015,7 @@
     {
       "id": "compress-decompress-reference-v1",
       "title": "Capture SQL Server COMPRESS and DECOMPRESS reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party source audit found no implementation, tests, fixture or task for these functions; no external submission is input.",
       "scope": [
         "scripts/capture-compress-decompress.mjs",
