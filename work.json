@@ -3944,6 +3944,35 @@
       ],
       "issue": 399,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQBm6"
+    },
+    {
+      "id": "table-type-catalog-v1",
+      "title": "Persist user-defined table-type catalog identities for TVP binding",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal to implement the full SQL Server compatible Rust/DuckDB server; first-party current catalog and owner TVP evidence. No external submission is input.",
+      "scope": [
+        "src/type_catalog.rs",
+        "src/type_catalog.sql",
+        "src/object_catalog.rs",
+        "src/column_catalog.rs",
+        "src/columns.sql",
+        "tests/table_type_catalog.rs",
+        "scripts/capture-table-type-catalog.mjs",
+        "reference/table-type-catalog.json",
+        "docs/table-type-catalog.md"
+      ],
+      "acceptance": [
+        "Capture a reproducible SQL Server 2025 table-type fixture from at least two fresh databases in two independent pinned containers, preserving exact rows and descriptors for sys.types, sys.table_types, sys.objects, sys.columns and identity lookup functions; document product version and gaps.",
+        "Implement a transactional persistent catalog API for ordinary disk-backed table types with exact type/object/column links, schema identity, duplicate-name validation, rollback, restart and drop cleanup; make the existing sys catalog views and lookup macros reflect registered types without fabricating CREATE TYPE/PROC or live TVP execution.",
+        "Test catalog relationships and type metadata against retained reference evidence and verify ordinary table/view catalogs remain intact; keep values bound and all changed files within the claim.",
+        "Run formatting, full workspace Rust tests, strict workspace Clippy, independent clients and diagnostic audit at the exact PR revision; open a focused owner PR and document the remaining CREATE TYPE/PROC and RPC integration gates."
+      ],
+      "dependencies": [
+        "tvp-codec-v1",
+        "tvp-default-reference-v1"
+      ],
+      "issue": 401,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQDeU"
     }
   ]
 }
