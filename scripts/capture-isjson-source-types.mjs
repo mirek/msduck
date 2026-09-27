@@ -3,7 +3,7 @@
 process.env.TZ = 'UTC'
 if (new Date(0).getTimezoneOffset() !== 0) throw new Error('UTC client time zone is required')
 
-import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { canonical, capture } from './lib/compatibility.mjs'
@@ -28,7 +28,11 @@ async function identity(path) {
   catch (error) { if (error.code === 'ENOENT') return null; throw error }
 }
 const fixturePath = fileURLToPath(fixture)
-if (await canonicalPath(output) === await canonicalPath(fixturePath) ||
+let outputIsSymlink = false
+try { outputIsSymlink = (await lstat(output)).isSymbolicLink() }
+catch (error) { if (error.code !== 'ENOENT') throw error }
+if (outputIsSymlink ||
+    await canonicalPath(output) === await canonicalPath(fixturePath) ||
     (await identity(fixturePath) !== null && await identity(output) === await identity(fixturePath))) {
   throw new Error('refusing to overwrite retained fixture ' + fixturePath)
 }
