@@ -2,6 +2,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use duckdb::Connection;
 use sqlparser::ast::*;
+use std::collections::HashSet;
 
 pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
     db.execute_batch(
@@ -58,12 +59,11 @@ pub(crate) fn create_table_type(
         !columns.is_empty() && columns.len() <= 1024,
         "table type needs 1 to 1024 columns"
     );
-    for (index, column) in columns.iter().enumerate() {
+    let mut column_names = HashSet::with_capacity(columns.len());
+    for column in columns {
         ensure!(valid_name(column.name), "invalid table type column name");
         ensure!(
-            columns[..index]
-                .iter()
-                .all(|previous| !previous.name.eq_ignore_ascii_case(column.name)),
+            column_names.insert(column.name.to_lowercase()),
             "duplicate table type column name"
         );
     }
@@ -99,6 +99,12 @@ pub(crate) fn create_table_type(
         // when the caller owns an outer transaction and DuckDB has no savepoint.
         let mut prepared = Vec::with_capacity(columns.len());
         for column in columns {
+            if let DataType::Float(ExactNumberInfo::Precision(bits)) = column.data_type {
+                ensure!(
+                    (1..=53).contains(bits),
+                    "FLOAT table type column precision must be 1 to 53"
+                );
+            }
             let shape = msduck_sql::catalog_shape::declaration(column.data_type)
                 .context("unsupported table type column declaration")?;
             let builtin: (u8, i32, i16, u8, u8, Option<String>) = db.query_row(
@@ -291,7 +297,7 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{TableColumn, create_table_type, drop_table_type};
-    use sqlparser::ast::Statement;
+    use sqlparser::ast::{DataType, ExactNumberInfo, Statement};
 
     fn columns() -> Vec<sqlparser::ast::ColumnDef> {
         let statement = sqlparser::parser::Parser::parse_sql(
@@ -632,6 +638,48 @@ mod tests {
             )
             .unwrap(),
             1
+        );
+    }
+
+    #[test]
+    fn table_type_rejects_unicode_duplicate_columns_and_invalid_float_precision() {
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let db = server.connection().unwrap();
+        let definitions = columns();
+        let column = |name| TableColumn {
+            name,
+            data_type: &definitions[0].data_type,
+            nullable: true,
+            collation_name: None,
+        };
+        assert!(
+            create_table_type(
+                &db,
+                "dbo",
+                "BadUnicodeCase",
+                &[column("Ä"), column("ä")],
+                true
+            )
+            .is_err()
+        );
+        for (name, bits) in [("BadFloatZero", 0), ("BadFloatHigh", 54)] {
+            let declaration = DataType::Float(ExactNumberInfo::Precision(bits));
+            let invalid = TableColumn {
+                name: "bad",
+                data_type: &declaration,
+                nullable: true,
+                collation_name: None,
+            };
+            assert!(create_table_type(&db, "dbo", name, &[invalid], true).is_err());
+        }
+        assert_eq!(
+            db.query_row(
+                "SELECT count(*) FROM sys.table_types WHERE name IN ('BadUnicodeCase','BadFloatZero','BadFloatHigh')",
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .unwrap(),
+            0
         );
     }
 

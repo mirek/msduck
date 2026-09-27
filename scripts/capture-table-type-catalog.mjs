@@ -102,7 +102,10 @@ async function observe(connection){
  const rejected=[]
  for(const sql of [
   'CREATE TYPE dbo.[int] AS TABLE (x INT NOT NULL)',
-  'CREATE TYPE dbo.BadDecimal AS TABLE (bad DECIMAL(2,3))'
+  'CREATE TYPE dbo.BadDecimal AS TABLE (bad DECIMAL(2,3))',
+  'CREATE TYPE dbo.BadUnicodeCase AS TABLE ([Ä] INT, [ä] INT)',
+  'CREATE TYPE dbo.BadFloatZero AS TABLE (bad FLOAT(0))',
+  'CREATE TYPE dbo.BadFloatHigh AS TABLE (bad FLOAT(54))'
  ]){
   const result=canonical(await capture(connection,sql))
   assert.ok(result.errors.length>0,`reference should reject: ${sql}`)
@@ -110,6 +113,9 @@ async function observe(connection){
  }
  assert.equal(rejected[0].result.errors[0]?.number,219,'built-in type name collision')
  assert.equal(rejected[1].result.errors[0]?.number,183,'decimal scale above precision')
+ assert.equal(rejected[2].result.errors[0]?.number,2705,'Unicode case duplicate column')
+ assert.equal(rejected[3].result.errors[0]?.number,1001,'FLOAT(0) precision')
+ assert.equal(rejected[4].result.errors[0]?.number,2750,'FLOAT(54) precision')
  const observations=[]
  for(const [name,sql] of queries){
   const result=canonical(await capture(connection,sql))
