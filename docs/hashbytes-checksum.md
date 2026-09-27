@@ -159,3 +159,92 @@ Suggested scope:
 
 Shared parser, engine, catalog, metadata and client-test files were outside
 this reference task's scope.
+
+## Implementation: deterministic HASHBYTES core
+
+`crates/msduck-core/src/hashbytes.rs` implements the HASHBYTES rules with only
+`std`. It is not yet registered in `crates/msduck-core/src/lib.rs`, and nothing
+at runtime calls it. Its test, `crates/msduck-core/tests/hashbytes.rs`, compiles
+the module with `#[path]`. Registration, msduck-sql binding and root lowering
+are separate successors. Until then, msduck still does not evaluate these
+functions.
+
+The module provides:
+
+- `resolve_algorithm`. ASCII letters match case-insensitively and trailing
+  spaces are ignored. `MD4`, `MD5`, `SHA`/`SHA1`, `SHA2_256` and `SHA2_512`
+  resolve. `MD2`, unknown names and names with a leading space give NULL
+  (`Ok(None)`). Names containing control or non-ASCII characters were not
+  captured and return `Unsupported`.
+- `hashbytes(algorithm, input)`. A NULL algorithm or input gives NULL. Otherwise
+  it returns the digest of the given input bytes, or NULL when the algorithm
+  does not resolve.
+- `md4`, `md5`, `sha1`, `sha256` and `sha512`, implemented from RFC 1320,
+  RFC 1321 and FIPS 180-4, and `Algorithm::digest_len` (16, 16, 20, 32, 64).
+- `bind` and `RESULT_TYPE`. Two accepted arguments give nullable
+  VARBINARY(8000). The algorithm must be VARCHAR or NVARCHAR. The input must be
+  CHAR, VARCHAR, NCHAR, NVARCHAR or VARBINARY, including the MAX forms. The
+  following arguments raise 8116, state 1, class 16 with the captured
+  "Argument data type T is invalid for argument N of hashbytes function." text:
+  an untyped NULL or INT algorithm, and an untyped NULL, INT, numeric literal,
+  DATETIME, UNIQUEIDENTIFIER, XML or TEXT input. One or three VARCHAR arguments
+  raise 174, state 1, class 15.
+  The following cases return `Unsupported` because their diagnostics were not
+  captured:
+  - every other type, including BINARY, CHAR or NCHAR algorithms, and DECIMAL;
+  - two invalid arguments at once;
+  - zero arguments;
+  - a wrong arity with non-VARCHAR arguments.
+
+The caller supplies the exact bytes SQL Server hashes, and the module does not
+encode text:
+
+- VARCHAR and CHAR use code-page bytes under their collation. The captured
+  default, SQL_Latin1_General_CP1_CI_AS, is code page 1252.
+- VARCHAR under a `_UTF8` collation uses UTF-8 bytes.
+- NVARCHAR and NCHAR use UTF-16LE, including surrogate pairs.
+- VARBINARY uses its raw bytes.
+- CHAR and NCHAR padding is kept.
+
+The test encodes fixture text in the same way. Two rows need UTF-8 bytes rather
+than code page 1252: `hashbytes utf8 collation` and `hashbytes utf8 column`.
+TDS column flags (33, or 1 for the two-column case) remain a root adapter
+concern.
+
+### Verification
+
+The test checks the following against the fixture:
+
+- the RFC 1320 and RFC 1321 appendix vectors;
+- the FIPS 180 one-block, two-block and one-million-`a` examples, plus the
+  empty-input digests;
+- each of the 79 HASHBYTES records in all four retained runs, which is 83
+  evaluated statements:
+  - 67 batches, compared by rows, VarBinary 8000 descriptors and error
+    number, state, class and text;
+  - 11 sp_executesql calls, with inputs taken from the recorded parameter types
+    and values;
+  - the HASHBYTES column of the five prepared executions and the prepare
+    descriptor.
+
+The DATALENGTH row and the SELECT INTO row are checked against `digest_len` and
+`RESULT_TYPE`. During development, the digests for 300 input lengths (0 to 299
+bytes) also matched Python hashlib (MD5 and SHA) and OpenSSL's legacy MD4.
+
+### CHECKSUM and BINARY_CHECKSUM: unsupported
+
+Neither function is implemented. No implementation derived from the fixture
+reproduces every captured row, and the task forbids guesses:
+
+- CHECKSUM over character data depends on collation sort keys. Examples are
+  Latin1_General_CS_AS giving the same value for 'abc' and 'ABC', 81 for both
+  N'é' and N'e', and SQL_Latin1_General_CP1_CS_AS giving 169824. msduck-core
+  has no Windows sort-key tables.
+- The fixture records only values for the per-type encodings of DATETIME,
+  SMALLDATETIME, DATETIME2, TIME, DATETIMEOFFSET, UNIQUEIDENTIFIER, DECIMAL,
+  MONEY, FLOAT, SQL_VARIANT and the typed-NULL combinations. It also records
+  only values for the long-input zero results, such as BINARY_CHECKSUM over 256
+  characters. Each encoding would have to be inferred beyond the evidence.
+
+A successor would need targeted captures that isolate each type's byte image
+and the character sort-key input before it could make any claim.
