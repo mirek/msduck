@@ -54,4 +54,6 @@ The script creates and removes its own pinned container and fresh databases,
 compares against the retained fixture, and refuses to overwrite that fixture.
 The output path must be separate from the fixture, including symlink and hard-link
 aliases.
+`--self-test` checks that stability comparison permits equal-score swaps but
+detects a changed score-group order without starting a container.
 `--write-fixture` is for initial creation only when the file is absent.

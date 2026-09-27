@@ -12,8 +12,10 @@ import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFi
 const fixture = new URL('../reference/select-top-percent.json', import.meta.url)
 const args = process.argv.slice(2)
 const writeFixture = args.includes('--write-fixture')
-const positional = args.filter(arg => arg !== '--write-fixture')
+const selfTest = args.includes('--self-test')
+const positional = args.filter(arg => !['--write-fixture', '--self-test'].includes(arg))
 if (positional.length > 1) throw new Error('expected at most one output path')
+if (selfTest && (writeFixture || positional.length)) throw new Error('--self-test takes no other arguments')
 const output = resolve(positional[0] ?? 'artifacts/compatibility/select-top-percent/capture.json')
 const fixturePath = fileURLToPath(fixture)
 
@@ -187,16 +189,40 @@ function summary(run) {
   assert.deepEqual(stableResult('prepared percent 0', result('prepared percent 0')), stableResult('prepared percent 3', result('prepared percent 3')))
   return run.map(({ name, result }) => {
     assert(result.done.length > 0, `${name}: missing completion`)
+    if (hasUnspecifiedTies(name)) {
+      for (const set of result.sets) {
+        let previous = Infinity
+        let seenNull = false
+        for (const [, score] of set.rows) {
+          if (score === null) { seenNull = true; continue }
+          assert(!seenNull && score <= previous, `${name}: score groups are not descending`)
+          previous = score
+        }
+      }
+    }
     return { name, result: stableResult(name, result) }
   })
 }
 
+function hasUnspecifiedTies(name) {
+  return (name.includes('ties') && !name.includes('unique')) || name.startsWith('prepared percent ')
+}
+
 function stableResult(name, result) {
   // SQL Server does not specify order among equal ORDER BY keys. Raw captures
-  // retain their order; only the stability/replay comparisons sort those rows.
+  // retain their order; only the stability/replay comparisons sort each
+  // contiguous equal-score group, leaving the order of score groups intact.
   const stable = structuredClone(result)
-  if ((name.includes('ties') && !name.includes('unique')) || name.startsWith('prepared percent ')) {
-    for (const set of stable.sets) set.rows.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+  if (hasUnspecifiedTies(name)) {
+    for (const set of stable.sets) {
+      for (let start = 0; start < set.rows.length;) {
+        let end = start + 1
+        while (end < set.rows.length && Object.is(set.rows[end][1], set.rows[start][1])) ++end
+        const group = set.rows.slice(start, end).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+        set.rows.splice(start, end - start, ...group)
+        start = end
+      }
+    }
   }
   return stable
 }
@@ -224,23 +250,33 @@ async function observe(connection) {
   return run
 }
 
-await rejectFixtureOutput()
-if (writeFixture) await refuseExistingFixture(fixture)
-await mkdir(resolve(output, '..'), { recursive: true })
-await withReferenceContainer(async (config, container) => {
-  const runs = []
-  for (let repeat = 0; repeat < 2; ++repeat) runs.push(await isolatedReference(config, observe))
-  const actual = { image: container.image, runs }
-  const summaries = runs.map(summary)
-  assertSameCapture(summaries[0], summaries[1], 'SELECT TOP behavior differs across fresh databases')
-  let retained
-  try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
-  catch (error) { if (error.code !== 'ENOENT') throw error }
-  if (retained) {
-    assert.equal(actual.image, retained.image)
-    assertSameCapture(summaries, retained.runs.map(summary), 'SELECT TOP behavior differs from retained fixture')
-  }
-  await writeFile(output, JSON.stringify(actual) + '\n')
-  if (writeFixture) await writeNewFixture(fixture, actual)
-  console.log(`Captured ${runs[0].length} SELECT TOP observations in two fresh databases${retained ? ' and matched retained invariants' : ''}`)
-})
+if (selfTest) {
+  const result = rows => ({ sets: [{ rows }] })
+  const expected = stableResult('prepared percent 0', result([[1, 10], [2, 9], [3, 9], [4, 8], [5, 8]]))
+  const tieSwap = stableResult('prepared percent 0', result([[1, 10], [3, 9], [2, 9], [5, 8], [4, 8]]))
+  const groupSwap = stableResult('prepared percent 0', result([[3, 9], [2, 9], [1, 10], [4, 8], [5, 8]]))
+  assert.deepEqual(tieSwap, expected, 'equal-score order is unspecified')
+  assert.notDeepEqual(groupSwap, expected, 'score-group order must remain visible')
+  console.log('Tie stability comparisons preserve score-group order')
+} else {
+  await rejectFixtureOutput()
+  if (writeFixture) await refuseExistingFixture(fixture)
+  await mkdir(resolve(output, '..'), { recursive: true })
+  await withReferenceContainer(async (config, container) => {
+    const runs = []
+    for (let repeat = 0; repeat < 2; ++repeat) runs.push(await isolatedReference(config, observe))
+    const actual = { image: container.image, runs }
+    const summaries = runs.map(summary)
+    assertSameCapture(summaries[0], summaries[1], 'SELECT TOP behavior differs across fresh databases')
+    let retained
+    try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
+    catch (error) { if (error.code !== 'ENOENT') throw error }
+    if (retained) {
+      assert.equal(actual.image, retained.image)
+      assertSameCapture(summaries, retained.runs.map(summary), 'SELECT TOP behavior differs from retained fixture')
+    }
+    await writeFile(output, JSON.stringify(actual) + '\n')
+    if (writeFixture) await writeNewFixture(fixture, actual)
+    console.log(`Captured ${runs[0].length} SELECT TOP observations in two fresh databases${retained ? ' and matched retained invariants' : ''}`)
+  })
+}
