@@ -3834,7 +3834,7 @@
     {
       "id": "session-reset-skiptran-reference-v1",
       "title": "Capture SQL Server RESETCONNECTIONSKIPTRAN behavior",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Direct owner full SQL Server compatibility goal; first-party Tedious reset source, owner-authored ordinary reset capture and MS-TDS status reference identify an unmeasured 0x10 transaction-preserving reset variant.",
       "scope": [
         "scripts/capture-session-reset-skiptran.mjs",
