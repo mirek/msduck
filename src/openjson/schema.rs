@@ -63,9 +63,9 @@ fn varchar_column(
     if value.len() > crate::unicode_carrier::CELL_LIMIT {
         return Err(OUTPUT_LIMIT);
     }
-    // The selected String remains alive while DuckDB copies it to the output.
-    let size = value.len().checked_mul(2).ok_or(OUTPUT_LIMIT)?;
-    *remaining = remaining.checked_sub(size).ok_or(OUTPUT_LIMIT)?;
+    // DuckDB retains one copy. This String is per-row scratch and is dropped
+    // immediately after insertion; the cell limit bounds that transient copy.
+    *remaining = remaining.checked_sub(value.len()).ok_or(OUTPUT_LIMIT)?;
     Ok(Some(value))
 }
 struct Sources;
@@ -334,11 +334,13 @@ mod tests {
             varchar_sources("[]", "$", &mut 0).unwrap(),
             Vec::<String>::new()
         );
-        let mut remaining = 2;
-        assert_eq!(
-            varchar_column(r#""x""#, "$", false, &mut remaining).unwrap(),
-            Some("x".into())
-        );
+        let mut remaining = 3;
+        for _ in 0..3 {
+            assert_eq!(
+                varchar_column(r#""x""#, "$", false, &mut remaining).unwrap(),
+                Some("x".into())
+            );
+        }
         assert_eq!(remaining, 0);
         assert_eq!(
             varchar_column(r#""x""#, "$", false, &mut remaining),
