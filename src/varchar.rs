@@ -273,6 +273,24 @@ mod tests {
         );
     }
     #[test]
+    fn captured_decimal_avg_uses_explicit_varchar_conversion() {
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let mut session = crate::engine::Session::new(server.connection().unwrap()).unwrap();
+        let sql = "SELECT CONVERT(VARCHAR(100),AVG(d)) AS exact_value INTO dbo.decimal_display FROM (VALUES (CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38)))) t(d)";
+        assert!(
+            session
+                .batch_response(sql, &Default::default(), false, None)
+                .1
+        );
+        let displayed: String = session
+            .db
+            .query_row("SELECT exact_value FROM dbo.decimal_display", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(displayed, format!("0.{}", "0".repeat(38)));
+    }
+    #[test]
     fn varchar_max_uses_plp_for_values_empty_and_null() {
         use crate::tds::Type;
         use duckdb::types::Value;
