@@ -4433,6 +4433,25 @@
       ],
       "issue": 437,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQzan"
+    },
+    {
+      "id": "soundex-byte-core-v1",
+      "title": "Implement deterministic SQL Server SOUNDEX byte core",
+      "state": "ready",
+      "authorization": "Direct owner continuing SQL Server compatibility goal; first-party evidence in reference/soundex-difference.json and docs/soundex-difference.md.",
+      "scope": [
+        "crates/msduck-core/src/soundex.rs",
+        "crates/msduck-core/tests/soundex.rs"
+      ],
+      "acceptance": [
+        "Implement a byte-level SOUNDEX encoder for explicit CP1252-like input bytes and an explicit compatibility mode for level 100 versus 110 and later, with no ambient session or database state.",
+        "Preserve owner-captured first-letter uppercasing, letter classification, code groups, uppercase-only transparent H/W, duplicate suppression, nonletter termination, and four-character output; do not approximate DIFFERENCE or Unicode best-fit conversion.",
+        "Compare all captured VARCHAR byte classifications and source-word codes at both levels against the retained SQL Server fixture, plus boundary tests for empty/long inputs and malformed assumptions.",
+        "Run formatting, strict Clippy, workspace Rust tests, independent tedious tests and diagnostic audit at the exact revision; document the later binding/adapter gap in the PR."
+      ],
+      "dependencies": [],
+      "issue": 439,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQ18P"
     }
   ]
 }
