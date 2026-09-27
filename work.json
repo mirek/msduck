@@ -2649,7 +2649,7 @@
     {
       "id": "duckdb-dev-opt-level-v1",
       "title": "Optimize bundled DuckDB in dev/test builds to cut native and client test time",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction of 2026-09-26 that CI over one hour is unacceptable and PR flow must be faster; first-party measurements on an owner host (issue body). No external submission is input.",
       "scope": [
         "Cargo.toml",
