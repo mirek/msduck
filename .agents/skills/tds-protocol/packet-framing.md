@@ -127,7 +127,7 @@ not require MARS.
 
 | Bit | Mask | Name | Description |
 |-----|------|------|-------------|
-| 0 | 0x01 | EOM | Last packet of the request message |
+| 0 | 0x01 | EOM | Last packet of the current TDS message |
 | 1 | 0x02 | IGNORE | Client→server; ignore this event; EOM must also be set |
 | 2 | 0x04 | Unused | No status flag is assigned; receivers must ignore unused bits |
 | 3 | 0x08 | RESETCONNECTION | Client→server, TDS 7.1+; reset the connection environment before processing the event for connection pooling |
