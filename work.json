@@ -4173,7 +4173,7 @@
     {
       "id": "worker-owned-merge-skill-v1",
       "title": "Assign PR merge and task completion to the claiming worker",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction on 2026-09-27 to make each PR worker responsible for merging after review comments and green CI",
       "scope": [
         ".agents/skills/contribute/SKILL.md",
