@@ -31,10 +31,29 @@ pub(super) fn resolve<'a>(
 }
 /// Produce source text for explicit-schema rows without coercing column types.
 pub fn sources(source: &str, path_text: &str) -> Result<Vec<String>, &'static str> {
+    let mut remaining = usize::MAX;
+    sources_with_limit(source, path_text, &mut remaining)
+}
+
+/// Bound retained source-row structures and UTF-8 bytes during expansion.
+/// A caller may share `remaining` across documents in one output chunk.
+pub fn sources_with_limit(
+    source: &str,
+    path_text: &str,
+    remaining: &mut usize,
+) -> Result<Vec<String>, &'static str> {
+    let mut reserve = |length: usize| -> Result<(), &'static str> {
+        let size = length
+            .checked_add(std::mem::size_of::<String>())
+            .ok_or(OUTPUT_LIMIT)?;
+        *remaining = remaining.checked_sub(size).ok_or(OUTPUT_LIMIT)?;
+        Ok(())
+    };
     let Some(value) = resolve(source, path_text, true)? else {
         return Ok(vec![]);
     };
     if value.starts_with('{') {
+        reserve(value.len())?;
         return Ok(vec![value.into()]);
     }
     if !value.starts_with('[') {
@@ -44,6 +63,7 @@ pub fn sources(source: &str, path_text: &str) -> Result<Vec<String>, &'static st
     let mut rows = Vec::new();
     while !rest.is_empty() {
         let (_, end) = prefix(rest.as_bytes()).ok_or(DOCUMENT)?;
+        reserve(end)?;
         rows.push(rest[..end].to_owned());
         rest = trim(&rest[end..]);
         if let Some(tail) = rest.strip_prefix(',') {
@@ -204,6 +224,38 @@ mod tests {
                 .encode_utf16()
                 .count(),
             6000
+        );
+    }
+
+    #[test]
+    fn varchar_sources_charge_exact_bytes_and_share_the_budget() {
+        let size = std::mem::size_of::<String>() + 3;
+        let mut remaining = size;
+        assert_eq!(
+            sources_with_limit(r#"["x"]"#, "$", &mut remaining).unwrap(),
+            vec![r#""x""#]
+        );
+        assert_eq!(remaining, 0);
+        assert_eq!(
+            sources_with_limit("[null]", "$", &mut remaining),
+            Err(OUTPUT_LIMIT)
+        );
+        let mut remaining = size - 1;
+        assert_eq!(
+            sources_with_limit(r#"["x"]"#, "$", &mut remaining),
+            Err(OUTPUT_LIMIT)
+        );
+        let mut remaining = std::mem::size_of::<String>() + 8;
+        assert_eq!(
+            sources_with_limit(r#"{"a": 1}"#, "$", &mut remaining).unwrap(),
+            vec![r#"{"a": 1}"#]
+        );
+        assert_eq!(remaining, 0);
+        let many = format!("[{}]", vec!["null"; 1000].join(","));
+        assert_eq!(sources_with_limit(&many, "$", &mut 1024), Err(OUTPUT_LIMIT));
+        assert_eq!(
+            sources_with_limit("[]", "$", &mut 0).unwrap(),
+            Vec::<String>::new()
         );
     }
 }

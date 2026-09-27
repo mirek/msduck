@@ -1,6 +1,6 @@
 //! Explicit-schema source rows and scalar/fragment column extraction.
 use super::*;
-use msduck_core::openjson::schema::{column, sources};
+use msduck_core::openjson::schema::{column, sources_with_limit};
 const FORBIDDEN_TYPE: &str = "TEXT, NTEXT, SQL_VARIANT and IMAGE types cannot be used as column types in OPENJSON function with explicit schema. These types are not supported in WITH clause.";
 const AS_JSON_TYPE: &str =
     "AS JSON option can be specified only for column of nvarchar(max) type in WITH clause.";
@@ -30,9 +30,43 @@ pub(super) fn texts(
                 duckdb::ffi::duckdb_string_t_length(value) as usize,
             )
         };
-        *text = std::str::from_utf8(bytes)?.to_owned();
+        *text = checked_varchar(bytes, crate::unicode_carrier::CELL_LIMIT)?.to_owned();
     }
     Ok(Some(texts))
+}
+fn varchar_sources(
+    source: &str,
+    path: &str,
+    remaining: &mut usize,
+) -> Result<Vec<String>, &'static str> {
+    let rows = sources_with_limit(source, path, remaining)?;
+    // The list vector copies these bytes while the decoded rows remain alive.
+    let mut output_bytes = 0usize;
+    for value in &rows {
+        if value.len() > crate::unicode_carrier::CELL_LIMIT {
+            return Err(OUTPUT_LIMIT);
+        }
+        output_bytes = output_bytes.checked_add(value.len()).ok_or(OUTPUT_LIMIT)?;
+    }
+    *remaining = remaining.checked_sub(output_bytes).ok_or(OUTPUT_LIMIT)?;
+    Ok(rows)
+}
+fn varchar_column(
+    source: &str,
+    path: &str,
+    fragment: bool,
+    remaining: &mut usize,
+) -> Result<Option<String>, &'static str> {
+    let Some(value) = column(source, path, fragment)? else {
+        return Ok(None);
+    };
+    if value.len() > crate::unicode_carrier::CELL_LIMIT {
+        return Err(OUTPUT_LIMIT);
+    }
+    // The selected String remains alive while DuckDB copies it to the output.
+    let size = value.len().checked_mul(2).ok_or(OUTPUT_LIMIT)?;
+    *remaining = remaining.checked_sub(size).ok_or(OUTPUT_LIMIT)?;
+    Ok(Some(value))
 }
 struct Sources;
 impl VScalar for Sources {
@@ -47,10 +81,11 @@ impl VScalar for Sources {
         }
         let mut result = output.list_vector();
         let mut all = Vec::new();
+        let mut remaining = crate::unicode_carrier::CHUNK_LIMIT;
         for row in 0..input.len() {
             let offset = all.len();
             if let Some([source, path]) = texts(input, row)? {
-                all.extend(sources(&source, &path)?);
+                all.extend(varchar_sources(&source, &path, &mut remaining)?);
             }
             result.set_entry(row, offset, all.len() - offset);
         }
@@ -113,9 +148,10 @@ impl<const FRAGMENT: bool, const TEXT: bool> VScalar for Column<FRAGMENT, TEXT> 
             return unicode_column::<FRAGMENT>(input, output);
         }
         let mut result = output.flat_vector();
+        let mut remaining = crate::unicode_carrier::CHUNK_LIMIT;
         for row in 0..input.len() {
             if let Some([source, path]) = texts(input, row)?
-                && let Some(value) = column(&source, &path, FRAGMENT)?
+                && let Some(value) = varchar_column(&source, &path, FRAGMENT, &mut remaining)?
             {
                 result.insert(row, value.as_str());
             } else {
@@ -277,6 +313,47 @@ pub(super) fn projection(columns: &[OpenJsonTableColumn]) -> Result<Vec<SelectIt
 mod tests {
     use super::*;
     #[test]
+    fn varchar_schema_budgets_source_rows_and_selected_columns() {
+        let source = r#"["x"]"#;
+        let size = std::mem::size_of::<String>() + 3 + 3;
+        let mut remaining = size;
+        assert_eq!(
+            varchar_sources(source, "$", &mut remaining).unwrap(),
+            vec![r#""x""#]
+        );
+        assert_eq!(remaining, 0);
+        assert_eq!(
+            varchar_sources(source, "$", &mut remaining),
+            Err(OUTPUT_LIMIT)
+        );
+        assert_eq!(
+            varchar_sources(source, "$", &mut (size - 1)),
+            Err(OUTPUT_LIMIT)
+        );
+        assert_eq!(
+            varchar_sources("[]", "$", &mut 0).unwrap(),
+            Vec::<String>::new()
+        );
+        let mut remaining = 2;
+        assert_eq!(
+            varchar_column(r#""x""#, "$", false, &mut remaining).unwrap(),
+            Some("x".into())
+        );
+        assert_eq!(remaining, 0);
+        assert_eq!(
+            varchar_column(r#""x""#, "$", false, &mut remaining),
+            Err(OUTPUT_LIMIT)
+        );
+        assert_eq!(
+            varchar_column("null", "$", false, &mut remaining).unwrap(),
+            None
+        );
+        assert_eq!(
+            varchar_column("{}", "strict $.missing", false, &mut remaining),
+            Err("OPENJSON: missing column path")
+        );
+    }
+    #[test]
     fn source_vectors_and_column_evaluation() {
         let db = duckdb::Connection::open_in_memory().unwrap();
         register(&db).unwrap();
@@ -284,6 +361,11 @@ mod tests {
             .unwrap();
         let n:i64=db.query_row("SELECT count(*) FROM (SELECT unnest(__msduck_openjson_sources(printf('[%d,null]',nextval('source_calls')),'$')) s FROM range(6000))",[],|r|r.get(0)).unwrap();
         assert_eq!(n, 12000);
+        let n: i64 = db.query_row("SELECT count(*) FROM (SELECT unnest(__msduck_openjson_sources(CASE WHEN i%17=0 THEN NULL ELSE '[1]' END, CASE WHEN i%19=0 THEN NULL ELSE '$' END)) FROM range(6000) t(i))", [], |r| r.get(0)).unwrap();
+        assert_eq!(
+            n,
+            (0..6000).filter(|i| i % 17 != 0 && i % 19 != 0).count() as i64
+        );
         let n:i64=db.query_row("SELECT count(*) FROM (SELECT __msduck_openjson_scalar(printf('%d',nextval('column_calls')),CASE WHEN i%17=0 THEN NULL ELSE '$' END) v FROM range(6000) t(i)) WHERE v IS NOT NULL",[],|r|r.get(0)).unwrap();
         assert_eq!(n, 6000 - (5999 / 17 + 1));
         for name in ["source_calls", "column_calls"] {
