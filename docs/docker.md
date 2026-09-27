@@ -83,8 +83,14 @@ requires TLS and `sa` password authentication:
 
 `.github/workflows/docker.yml` builds each platform, runs
 `scripts/docker-smoke.mjs` against the built image, pushes by digest, and then
-merges the digests into one tagged manifest. Pull requests that touch any file
-the image is built from build and smoke-test it without pushing. Runs require the owner as actor, like CI.
+merges the digests into one tagged manifest. For pull requests, its two Docker
+builds run only when packaging, Rust manifests/lockfile/vendor build inputs,
+the smoke test, the container entrypoint, authentication/TLS, Node package
+dependencies, or this workflow changes. Ordinary SQL/Rust source PRs use the
+fast required CI check and do not wait on optional
+Docker builds. Every push to `main` still builds and publishes both platforms,
+so merged source changes receive image coverage; version tags and manual runs
+also keep their existing behavior. Runs require the owner as actor, like CI.
 
 The workflow needs two repository secrets: the Docker Hub account name and a
 Docker Hub access token with read/write scope for `mirek/msduck`:

@@ -10,9 +10,13 @@ on:
       - 'docker/**'
       - Cargo.toml
       - Cargo.lock
-      - 'crates/**'
+      - 'crates/**/Cargo.toml'
+      - 'crates/**/build.rs'
       - 'vendor/**'
-      - 'src/**'
+      - src/bin/msduck-container.rs
+      - src/authentication.rs
+      - src/server.rs
+      - src/tls.rs
       - scripts/docker-smoke.mjs
       - package.json
       - package-lock.json
