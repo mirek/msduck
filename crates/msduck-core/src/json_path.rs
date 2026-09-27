@@ -13,6 +13,13 @@ pub const CONTAINER: &str = "Object or array cannot be found in the specified JS
 // the wire diagnostic retains CONTAINER's canonical message.
 pub const CONTAINER_MULTIPLE: &str =
     "Object or array cannot be found in the specified JSON path. [multiple wildcard matches]";
+pub const RANGE_REVERSED: &str =
+    "Reversed indexing not yet supported for advanced JSON array accessors.";
+pub const RANGE_LAST: &str = "Last operator not yet supported for advanced JSON array accessors.";
+pub const RANGE_LIST: &str = "Comma operator not yet supported for advanced JSON array accessors.";
+// The current static error contract cannot carry SQL Server's index and UTF-16
+// position in the 13659 message. Keep its identity distinct for the adapter.
+pub const RANGE_PARTIAL: &str = "Advanced JSON array range exceeds the available elements.";
 pub const WIDTH: &str = "String value in the specified JSON path would be truncated.";
 
 pub const NULL_VALUE_LITERAL: &str =
@@ -33,6 +40,10 @@ pub fn diagnostic(message: &str) -> Option<SqlError> {
         (SCALAR, 13623, 2),
         (CONTAINER, 13624, 2),
         (CONTAINER_MULTIPLE, 13624, 3),
+        (RANGE_REVERSED, 13660, 1),
+        (RANGE_LAST, 13660, 2),
+        (RANGE_LIST, 13660, 5),
+        (RANGE_PARTIAL, 13659, 1),
         (WIDTH, 13625, 1),
         (NULL_VALUE_LITERAL, 8116, 1),
     ]
@@ -65,14 +76,46 @@ pub fn decode(s: &str) -> Result<String, &'static str> {
 pub enum Step {
     Key(String),
     Index(usize),
-    /// Array wildcard, accepted only by the existence predicate.
+    /// Array wildcard, accepted by existence and extraction.
     All,
+    /// Inclusive advanced array range, accepted only by extraction.
+    Range {
+        first: usize,
+        last: usize,
+    },
 }
 /// Parse optional lax/strict mode and property/index steps.
 pub fn path(text: &str) -> Result<(bool, Vec<Step>), &'static str> {
-    parse_path(text, false)
+    parse_path(text, false, false)
 }
-fn parse_path(text: &str, wildcard: bool) -> Result<(bool, Vec<Step>), &'static str> {
+fn range_selector(text: &[u8]) -> Result<Option<(usize, usize)>, &'static str> {
+    let text = std::str::from_utf8(text)
+        .map_err(|_| PATH)?
+        .trim_matches(' ');
+    if text == "last" || text.ends_with(" to last") {
+        return Err(RANGE_LAST);
+    }
+    if text.contains(',') {
+        return Err(RANGE_LIST);
+    }
+    let Some((first, last)) = text.split_once(" to ") else {
+        return Ok(None);
+    };
+    if first.is_empty()
+        || last.is_empty()
+        || !first.bytes().all(|b| b.is_ascii_digit())
+        || !last.bytes().all(|b| b.is_ascii_digit())
+    {
+        return Err(PATH);
+    }
+    let first = first.parse::<usize>().map_err(|_| PATH)?;
+    let last = last.parse::<usize>().map_err(|_| PATH)?;
+    if first > last {
+        return Err(RANGE_REVERSED);
+    }
+    Ok(Some((first, last)))
+}
+fn parse_path(text: &str, wildcard: bool, range: bool) -> Result<(bool, Vec<Step>), &'static str> {
     let text = trim(text);
     let (strict, mut rest) = if let Some((mode, tail)) = text.split_once(char::is_whitespace) {
         if mode.eq_ignore_ascii_case("strict") {
@@ -114,6 +157,8 @@ fn parse_path(text: &str, wildcard: bool) -> Result<(bool, Vec<Step>), &'static 
             let index = &tail[..end];
             if wildcard && index == "*" {
                 steps.push(Step::All);
+            } else if range && let Some((first, last)) = range_selector(index.as_bytes())? {
+                steps.push(Step::Range { first, last });
             } else {
                 if index.is_empty() || !index.bytes().all(|c| c.is_ascii_digit()) {
                     return Err(PATH);
@@ -136,7 +181,7 @@ pub fn selected<'a>(source: &'a str, steps: &[Step]) -> Result<Option<&'a str>, 
     for step in steps {
         let mut found = None;
         match step {
-            Step::All => return Err(PATH),
+            Step::All | Step::Range { .. } => return Err(PATH),
             Step::Key(wanted) if current.starts_with('{') => {
                 let mut rest = trim(&current[1..]);
                 while !rest.starts_with('}') {
@@ -196,7 +241,7 @@ pub fn exists(source: &str, path_text: &str) -> bool {
 }
 fn exists_inner(source: &str, path_text: &str) -> Option<bool> {
     root(source.as_bytes())?;
-    let (_, steps) = parse_path(path_text, true).ok()?;
+    let (_, steps) = parse_path(path_text, true, false).ok()?;
     let mut pending = vec![(trim(source), 0)];
     while let Some((value, at)) = pending.pop() {
         let Some(step) = steps.get(at) else {
@@ -226,8 +271,11 @@ fn exists_inner(source: &str, path_text: &str) -> Option<bool> {
 /// Extract JSON_VALUE (`query = false`) or JSON_QUERY (`query = true`).
 /// Preserves lexical numbers and container text; enforces the scalar UTF-16 limit.
 pub fn extract(source: &str, path_text: &str, query: bool) -> Result<Option<String>, &'static str> {
-    let (strict, steps) = parse_path(path_text, true)?;
-    if steps.iter().any(|step| matches!(step, Step::All)) {
+    let (strict, steps) = parse_path(path_text, true, true)?;
+    if steps
+        .iter()
+        .any(|step| matches!(step, Step::All | Step::Range { .. }))
+    {
         let source_units = source.encode_utf16().collect::<Vec<_>>();
         let path_units = path_text.encode_utf16().collect::<Vec<_>>();
         return extract_utf16(&source_units, &path_units, query)?
@@ -354,10 +402,18 @@ pub(crate) enum Utf16Step {
     Key(Vec<u16>),
     Index(usize),
     All,
+    Range { first: usize, last: usize },
 }
 pub(crate) fn path_utf16(
     text: &[u16],
     wildcard: bool,
+) -> Result<(bool, Vec<Utf16Step>), &'static str> {
+    parse_path_utf16(text, wildcard, false)
+}
+fn parse_path_utf16(
+    text: &[u16],
+    wildcard: bool,
+    range: bool,
 ) -> Result<(bool, Vec<Utf16Step>), &'static str> {
     let syntax = json_syntax(text);
     let mut at = skip_ws(&syntax, 0, syntax.len());
@@ -427,6 +483,8 @@ pub(crate) fn path_utf16(
                 }
                 if wildcard && &syntax[start..at] == b"*" {
                     steps.push(Utf16Step::All);
+                } else if range && let Some((first, last)) = range_selector(&syntax[start..at])? {
+                    steps.push(Utf16Step::Range { first, last });
                 } else {
                     if start == at {
                         return Err(PATH);
@@ -476,7 +534,7 @@ impl<'a> Utf16Document<'a> {
         for step in steps {
             let mut found = None;
             match step {
-                Utf16Step::All => return Err(PATH),
+                Utf16Step::All | Utf16Step::Range { .. } => return Err(PATH),
                 Utf16Step::Key(wanted) if self.syntax.get(current) == Some(&b'{') => {
                     let mut at = skip_ws(&self.syntax, current + 1, end);
                     while self.syntax.get(at) != Some(&b'}') {
@@ -530,16 +588,16 @@ impl<'a> Utf16Document<'a> {
     }
 }
 
-fn extract_wildcard_utf16(
+fn extract_advanced_utf16(
     document: &Utf16Document<'_>,
     steps: &[Utf16Step],
     strict: bool,
     query: bool,
 ) -> Result<Option<Vec<u16>>, &'static str> {
-    // Wildcard selection examines the complete document, including text after
-    // an early match. Keep one array iterator frame per wildcard level rather
-    // than collecting every element or selected value.
+    // Wildcard and multi-index range selection examine the complete document.
+    // Keep one array iterator per active selector rather than collecting rows.
     root(&document.syntax).ok_or(DOCUMENT)?;
+    let has_wildcard = steps.iter().any(|step| matches!(step, Utf16Step::All));
     enum Work {
         Node {
             at: usize,
@@ -550,6 +608,9 @@ fn extract_wildcard_utf16(
             next: usize,
             close: usize,
             step: usize,
+            index: usize,
+            first: usize,
+            last: usize,
         },
     }
     let mut work = vec![Work::Node {
@@ -560,6 +621,7 @@ fn extract_wildcard_utf16(
     let mut count = 0u8;
     let mut selected = None;
     let mut saw_null = false;
+    let mut partial_range = false;
     while let Some(item) = work.pop() {
         match item {
             Work::Node { at, end, step } if step == steps.len() => {
@@ -570,19 +632,28 @@ fn extract_wildcard_utf16(
                 selected.get_or_insert((at, end));
             }
             Work::Node { at, end, step } => match &steps[step] {
-                Utf16Step::All if document.syntax.get(at) == Some(&b'[') => {
+                Utf16Step::All | Utf16Step::Range { .. }
+                    if document.syntax.get(at) == Some(&b'[') =>
+                {
                     let (_, array_end) = document.prefix(at, end)?;
                     let close = array_end - 1;
                     let next = skip_ws(&document.syntax, at + 1, close);
                     if next < close {
+                        let (first, last) = match &steps[step] {
+                            Utf16Step::Range { first, last } => (*first, *last),
+                            _ => (0, usize::MAX),
+                        };
                         work.push(Work::Array {
                             next,
                             close,
                             step: step + 1,
+                            index: 0,
+                            first,
+                            last,
                         });
                     }
                 }
-                Utf16Step::All => {}
+                Utf16Step::All | Utf16Step::Range { .. } => {}
                 ordinary => {
                     if let Some(next) =
                         document.selected(at, end, std::slice::from_ref(ordinary))?
@@ -596,29 +667,46 @@ fn extract_wildcard_utf16(
                     }
                 }
             },
-            Work::Array { next, close, step } => {
+            Work::Array {
+                next,
+                close,
+                step,
+                index,
+                first,
+                last,
+            } => {
                 let (_, value_end) = document.prefix(next, close)?;
                 let separator = skip_ws(&document.syntax, value_end, close);
                 if document.syntax.get(separator) == Some(&b',') {
                     let following = skip_ws(&document.syntax, separator + 1, close);
-                    if following < close {
+                    if following < close && index < last {
                         work.push(Work::Array {
                             next: following,
                             close,
                             step,
+                            index: index.saturating_add(1),
+                            first,
+                            last,
                         });
                     }
+                } else if index >= first && index < last && last != usize::MAX {
+                    partial_range = true;
                 }
-                work.push(Work::Node {
-                    at: next,
-                    end: value_end,
-                    step,
-                });
+                if index >= first && index <= last {
+                    work.push(Work::Node {
+                        at: next,
+                        end: value_end,
+                        step,
+                    });
+                }
             }
         }
     }
     if saw_null {
         return Ok(None);
+    }
+    if strict && count > 0 && partial_range {
+        return Err(RANGE_PARTIAL);
     }
     if count != 1 {
         return if strict {
@@ -639,13 +727,17 @@ fn extract_wildcard_utf16(
         return if container {
             Ok(Some(value.to_vec()))
         } else if strict {
-            Err(MISSING)
+            Err(if has_wildcard { MISSING } else { CONTAINER })
         } else {
             Ok(None)
         };
     }
     if container {
-        return if strict { Err(MISSING) } else { Ok(None) };
+        return if strict {
+            Err(if has_wildcard { MISSING } else { SCALAR })
+        } else {
+            Ok(None)
+        };
     }
     let value = if kind == Kind::String {
         decode_utf16(value)?
@@ -664,14 +756,25 @@ pub fn extract_utf16(
     path: &[u16],
     query: bool,
 ) -> Result<Option<Vec<u16>>, &'static str> {
-    let (strict, steps) = path_utf16(path, true)?;
+    let (strict, mut steps) = parse_path_utf16(path, true, true)?;
     let document = Utf16Document::new(source);
     let opening = skip_ws(&document.syntax, 0, source.len());
     if !matches!(document.syntax.get(opening), Some(b'{' | b'[')) {
         return Err(DOCUMENT);
     }
-    if steps.iter().any(|step| matches!(step, Utf16Step::All)) {
-        return extract_wildcard_utf16(&document, &steps, strict, query);
+    if steps.iter().any(|step| {
+        matches!(step, Utf16Step::All)
+            || matches!(step, Utf16Step::Range { first, last } if first != last)
+    }) {
+        return extract_advanced_utf16(&document, &steps, strict, query);
+    }
+    let singleton_range = steps
+        .iter()
+        .any(|step| matches!(step, Utf16Step::Range { .. }));
+    for step in &mut steps {
+        if let Utf16Step::Range { first, .. } = step {
+            *step = Utf16Step::Index(*first);
+        }
     }
     if steps.is_empty() {
         root(&document.syntax).ok_or(DOCUMENT)?;
@@ -689,6 +792,9 @@ pub fn extract_utf16(
         return Err(DOCUMENT);
     }
     let value = &source[at..end];
+    if singleton_range && &document.syntax[at..end] == b"null" {
+        return Ok(None);
+    }
     let container = matches!(kind, Kind::Array | Kind::Object);
     if query {
         return if container {
