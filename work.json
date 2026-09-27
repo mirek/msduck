@@ -3633,6 +3633,25 @@
       "dependencies": [],
       "issue": 368,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPYot"
+    },
+    {
+      "id": "select-top-percent-reference-v1",
+      "title": "Capture SQL Server SELECT TOP PERCENT and WITH TIES behavior",
+      "state": "ready",
+      "authorization": "Direct owner standing full SQL Server compatibility objective. First-party inspection of src/engine.rs, existing reference captures and Microsoft's TOP documentation; no third-party issue, review or comment is input.",
+      "scope": [
+        "scripts/capture-select-top-percent.mjs",
+        "reference/select-top-percent.json",
+        "docs/select-top-percent-reference.md"
+      ],
+      "acceptance": [
+        "Capture raw SQL Server client observations for SELECT TOP PERCENT and WITH TIES across rounding boundaries, empty input, NULL/negative/over-100 counts, ties, ORDER BY requirements, bounded and prepared argument forms, and nested query scopes. Keep row order where SQL Server specifies it, descriptors, errors, information and DONE counts; do not normalize differences.",
+        "Use the pinned SQL Server reference container with two fresh databases, validate stable behavior, and retain a non-overwriting fixture. Repeat against a second fresh container when possible. Record the exact image/product version, fixture hash, tested revision, observed rules and untested cases.",
+        "Do not change runtime behavior in this task. A successor implementation must use this evidence and preserve the unsupported behavior until it is correct."
+      ],
+      "dependencies": [],
+      "issue": 374,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPprv"
     }
   ]
 }
