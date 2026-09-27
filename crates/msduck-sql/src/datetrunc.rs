@@ -576,6 +576,11 @@ pub fn truncate(
             return Err(RuleError::Unsupported("unsupported datepart was not bound"));
         }
     }
+    let value = if bound.result_type == TemporalType::DateTime {
+        datetime_grid(value)?
+    } else {
+        value
+    };
     Ok(Some(range_check(value, bound.result_type, "datetrunc")?))
 }
 
