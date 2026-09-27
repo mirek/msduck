@@ -4714,7 +4714,7 @@
     {
       "id": "json-extraction-wildcard-core-v1",
       "title": "Capture and implement JSON extraction wildcard rules",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server-compatible Rust/DuckDB goal and owner-run extraction fixture from merged PR 457; no external submission is input.",
       "scope": [
         "scripts/capture-json-extraction-wildcard.mjs",
