@@ -76,9 +76,10 @@ msduck currently does not implement table variables.
   with caught diagnostic 515/state 2/class 16. The earlier row `7` remained;
   neither other row from the failed statement appeared. The caught
   `XACT_STATE()` and `@@TRANCOUNT` were both 0.
-- A two-row `UPDATE` that would violate a `CHECK` constraint failed with
-  caught diagnostic 547/state 0/class 16. Both original rows `(1,10)` and
-  `(2,20)` remained, with no partially updated row. The generated constraint
+- A two-row `UPDATE` with one valid candidate (`3` to `1`) and one invalid
+  candidate (`1` to `-1`) failed a `CHECK` constraint with caught diagnostic
+  547/state 0/class 16. Both original rows `(1,20)` and `(3,10)` remained,
+  with no partially updated row. The generated constraint
   name is kept out of the stable probe by catching the error; the fixture
   retains the diagnostic identity, typed result descriptors and DONE tokens.
 - Inside an explicit transaction, a failed three-row `INSERT` reported
