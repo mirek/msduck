@@ -1202,7 +1202,7 @@
     {
       "id": "legacy-datetime-reference-v1",
       "title": "Capture legacy datetime conversion boundaries and exact diagnostics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal. Verified owner-origin catalog/RPC work exposed accepted seven-digit string-to-SMALLDATETIME conversions that SQL Server rejects with 295/state3/class16; extend first-party evidence before implementing conversion rules. No third-party activity consumed.",
       "scope": [
         "scripts/capture-legacy-datetime.mjs",
