@@ -4758,6 +4758,23 @@
       ],
       "issue": 463,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PReAS"
+    },
+    {
+      "id": "json-wildcard-test-boundary-v1",
+      "title": "Keep wildcard fixture test scoped to wildcard behavior",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server-compatible Rust/DuckDB goal; owner-origin fixture and locally observed stale test when implementing owner task #463.",
+      "scope": [
+        "crates/msduck-core/tests/json_extraction_wildcard.rs"
+      ],
+      "acceptance": [
+        "Preserve wildcard fixture replay and UTF-16 parity for wildcard cases.",
+        "Do not assert that extraction rejects advanced range, last or list paths; ordinary public path parser rejection may remain tested.",
+        "Run core tests and formatting; link issue #464."
+      ],
+      "dependencies": [],
+      "issue": 464,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRfOE"
     }
   ]
 }
