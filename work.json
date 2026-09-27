@@ -4189,6 +4189,22 @@
       "dependencies": [],
       "issue": 420,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQYLo"
+    },
+    {
+      "id": "worker-owned-merge-status-v1",
+      "title": "Align claim helper output with claiming-worker completion",
+      "state": "ready",
+      "authorization": "Direct owner instruction for worker-owned PR merge and completion, plus verified Codex review of the owner PR #421",
+      "scope": [
+        "scripts/agent-work.mjs"
+      ],
+      "acceptance": [
+        "The status command tells a claiming worker to publish task completion after merging, or an explicitly owner-designated integrator to do so.",
+        "Leave claim and registry behavior unchanged; verify syntax and the existing agent-work tests."
+      ],
+      "dependencies": [],
+      "issue": 422,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQY2r"
     }
   ]
 }
