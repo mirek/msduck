@@ -12,6 +12,14 @@ pub fn diagnostic(message: &str) -> Option<SqlError> {
     if let Some(error) = isjson_bind_diagnostic(message) {
         return Some(error);
     }
+    if let Some(native) = message.strip_prefix("Invalid Input Error: ")
+        && native
+            == crate::isjson::DEPTH_ERROR
+                .to_str()
+                .expect("static SQL error text")
+    {
+        return Some(SqlError::new(13606, 1, native));
+    }
     let message = message
         .strip_prefix("Invalid Input Error: ")
         .unwrap_or(message);
@@ -274,6 +282,31 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn isjson_depth_error_requires_exact_native_message() {
+        let message = format!(
+            "Invalid Input Error: {}",
+            crate::isjson::DEPTH_ERROR.to_str().unwrap()
+        );
+        assert_eq!(
+            diagnostic(&message),
+            Some(SqlError::new(
+                13606,
+                1,
+                crate::isjson::DEPTH_ERROR.to_str().unwrap()
+            ))
+        );
+        for altered in [
+            format!("prefix {message}"),
+            format!("{message} trailing"),
+            message.replace("128", "129"),
+            message.replace("Invalid Input Error: ", "Binder Error: "),
+            crate::isjson::DEPTH_ERROR.to_str().unwrap().to_owned(),
+        ] {
+            assert!(diagnostic(&altered).is_none(), "{altered}");
+        }
+    }
 
     #[test]
     fn isjson_bind_error_identity_requires_the_complete_message() {
