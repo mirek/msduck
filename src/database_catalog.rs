@@ -485,12 +485,17 @@ const FILE_NAME_FRAGMENT: usize = 64;
 /// encoded name follows it.
 fn file_name(stem: &str, database_id: i32, name_key: &str) -> String {
     // The primary stem is already a valid file name; only its length needs
-    // a bound so that the whole component fits.
-    let mut end = stem.len().min(FILE_NAME_FRAGMENT);
-    while !stem.is_char_boundary(end) {
-        end -= 1;
-    }
-    let stem = &stem[..end];
+    // a bound so that the whole component fits. A shortened stem keeps a hash
+    // of the full stem, so servers whose stems share a prefix do not collide.
+    let stem = if stem.len() > FILE_NAME_FRAGMENT {
+        let mut end = FILE_NAME_FRAGMENT;
+        while !stem.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}~{:016x}", &stem[..end], fnv1a(stem.as_bytes()))
+    } else {
+        stem.to_owned()
+    };
     let mut fragment = String::new();
     for c in name_key.chars() {
         let encoded = encode(c.encode_utf8(&mut [0; 4]));
@@ -500,6 +505,13 @@ fn file_name(stem: &str, database_id: i32, name_key: &str) -> String {
         fragment.push_str(&encoded);
     }
     format!("{stem}.{database_id}.{fragment}.duckdb")
+}
+
+/// 64-bit FNV-1a: stable across Rust releases, unlike `DefaultHasher`.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, byte| {
+        (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3)
+    })
 }
 
 /// A portable file-name fragment: ASCII letters, digits, `_` and `-` are kept,
@@ -561,9 +573,14 @@ mod tests {
         assert!(long.len() < 100);
         let stem = "s".repeat(246);
         let bounded = file_name(&stem, 32767, &"é".repeat(128));
-        assert!(bounded.starts_with(&format!("{}.32767.", "s".repeat(64))));
-        assert!(bounded.len() < 160, "{}", bounded.len());
-        assert!(file_name(&"é".repeat(40), 5, "x").starts_with(&"é".repeat(32)));
+        assert!(bounded.starts_with(&format!("{}~", "s".repeat(64))));
+        assert!(bounded.len() < 180, "{}", bounded.len());
+        assert!(file_name(&"é".repeat(40), 5, "x").starts_with(&format!("{}~", "é".repeat(32))));
+        // Stems sharing their first 64 bytes still produce different names.
+        let a = file_name(&format!("{}a", "s".repeat(64)), 5, "sales");
+        let b = file_name(&format!("{}b", "s".repeat(64)), 5, "sales");
+        assert_ne!(a, b);
+        assert_eq!(fnv1a(b"a"), 0xaf63_dc4c_8601_ec8c);
     }
 
     #[test]
