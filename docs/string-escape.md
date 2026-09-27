@@ -14,19 +14,34 @@ views/CTEs and stored defaults. LEN and DATALENGTH recognize the result as
 NVARCHAR(MAX), so they report BIGINT character/byte counts. The protocol uses
 its existing `Type::Text` descriptor for NVARCHAR(MAX) and PLP framing.
 
-The implementation accepts ASCII case variants of `json`, rejects other format
-values with 13622, and preserves that error through TRY/CATCH. Wrong arity reports
-174; an untyped literal NULL format argument reports 8116. NULL text and typed
-NULL format values propagate NULL. These argument-policy details, padding and
-collation behavior, error states/precedence, and noncharacter coercion still need
-live SQL Server comparison; local tests are not proof of exact compatibility.
-Isolated UTF-16 surrogate units remain outside the server's string representation.
+The implementation accepts ASCII case variants of `json` followed by ordinary
+U+0020 spaces, including CHAR/NCHAR padding. Leading spaces and trailing tabs,
+newlines, nonbreaking spaces or other characters return 13622/state 1. Format
+validation precedes NULL-text propagation: a NULL source with `xml` still raises
+13622, while a NULL source with `json ` returns NULL. Wrong arity reports 174.
+An untyped literal NULL format reports 8116/state 1; a typed NULL character
+format, including an RPC parameter, reports 8116/state 8. SQL Server's error
+message uses uppercase `STRING_ESCAPE` only in the typed case. Noncharacter
+coercion and collation behavior still need live comparison. Isolated UTF-16
+surrogate units remain outside the server's string representation.
 
 Pure tests cover the special/control character matrix, Unicode, decoding round
 trips and large expansion. Native 6000-row tests cover chunk boundaries, NULLs
 and volatile arguments. Client tests cover MAX metadata, prepared recovery after
 invalid formats, long outputs, TRY/CATCH, views/CTEs, defaults and empty results.
-The audit corpus records results and diagnostics for comparison against SQL Server.
+The pinned SQL Server 2025 capture in
+`reference/string-escape-format.json` records 27 literal, typed and RPC format
+cases twice in fresh databases, including exact rows, descriptors, diagnostics
+and DONE-family events. Reproduce it with
+`node scripts/capture-string-escape-format.mjs`. The standalone public client
+replay is `node --test tests/string_escape_format.test.mjs`; it is not yet in
+the serial npm test inventory. All captured values, errors, type/length,
+collation and completion events currently match. SQL Server sets result column
+flags to 33, while msduck reports 1: the computed bit (32) is missing from
+the shared SQL result-properties inference. The fixture replay asserts this
+raw difference explicitly; a dependent metadata task will make it exact once
+the current result-properties worker finishes. The audit corpus records further
+results and diagnostics for comparison against SQL Server.
 
 References:
 
