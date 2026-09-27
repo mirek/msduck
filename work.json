@@ -3728,6 +3728,25 @@
       "dependencies": [],
       "issue": 382,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PP2hc"
+    },
+    {
+      "id": "rowversion-core-v1",
+      "title": "Implement deterministic rowversion counter and byte rules",
+      "state": "ready",
+      "authorization": "Mirek's standing full SQL Server compatibility goal; owner-authored issue #384 and the exact owner-authored rowversion capture at PR #383 revision 5b3bd8fdbee0619ae513466019400c7fc5660558.",
+      "scope": [
+        "crates/msduck-core/src/rowversion.rs",
+        "crates/msduck-core/tests/rowversion.rs"
+      ],
+      "acceptance": [
+        "Represent rowversion as exactly eight big-endian bytes and a database counter as explicit caller-supplied state. Provide checked successor allocation without I/O, hidden state, clocks, backend types or implicit initial values.",
+        "Test the captured 07D0 through 07D8 sequence: reads, DDL and zero-row UPDATE preserve state; inserts and no-op UPDATE consume values; rollback does not restore the supplied counter; copied bytes do not allocate. Caller controls which operations request allocation.",
+        "Reject short/long byte input and arithmetic overflow explicitly; do not claim SQL Server overflow semantics from the uncaptured case.",
+        "Use only the two new scoped files; test-import the module by path while msduck-core lib.rs is claimed. Run formatting, focused and full deterministic crate tests, and strict Clippy on the owning crate. State that storage, DML, @@DBTS, catalog and wire integration remain separate."
+      ],
+      "dependencies": [],
+      "issue": 384,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PP4EB"
     }
   ]
 }
