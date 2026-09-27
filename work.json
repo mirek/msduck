@@ -3709,6 +3709,25 @@
       "dependencies": [],
       "issue": 380,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPyBx"
+    },
+    {
+      "id": "rowversion-reference-v1",
+      "title": "Capture SQL Server rowversion and timestamp contract",
+      "state": "ready",
+      "authorization": "Mirek's standing full SQL Server-compatible Rust server objective and owner-authored issue #382, based on first-party source inspection and Microsoft Learn rowversion documentation.",
+      "scope": [
+        "scripts/capture-rowversion.mjs",
+        "reference/rowversion.json",
+        "docs/rowversion-reference.md"
+      ],
+      "acceptance": [
+        "Capture exact SQL Server 2025 rows, descriptors, errors and DONE tokens for ROWVERSION/TIMESTAMP DDL, INSERT, UPDATE including no-op, NULL/explicit assignment, transaction rollback, cross-table ordering, @@DBTS and SELECT INTO where relevant.",
+        "Run the pinned image in two fresh databases and independently a second fresh container; compare all four raw captures, preserve the fixture and refuse silent overwrite. Retain nondeterministic differences explicitly if found instead of normalizing them.",
+        "Document verified behavior and bounded follow-up implementation scopes; edit only the new capture script, fixture and reference notes, not parser/runtime/transport."
+      ],
+      "dependencies": [],
+      "issue": 382,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PP2hc"
     }
   ]
 }
