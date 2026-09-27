@@ -146,7 +146,7 @@ const WILDCARD_ORDINAL: &str = "unsupported TOP PERCENT/WITH TIES ordinal orderi
 const VOLATILE_KEY: &str = "unsupported TOP PERCENT/WITH TIES ordering by a volatile expression";
 /// Functions that return a different value on each evaluation. Ranking must
 /// not evaluate them separately from the projected value.
-const VOLATILE: [&str; 11] = [
+const VOLATILE: [&str; 12] = [
     "newid",
     "newsequentialid",
     "rand",
@@ -158,9 +158,11 @@ const VOLATILE: [&str; 11] = [
     "setseed",
     "uuidv4",
     "uuidv7",
+    "currval",
 ];
 const WINDOW_KEY: &str = "unsupported TOP PERCENT/WITH TIES ordering by a window function";
 const AMBIGUOUS_PREFIX: &str = "Ambiguous column name '";
+const COLUMN_IN_TOP_PREFIX: &str = "The reference to column \"";
 
 /// Diagnostics captured in reference/select-top-percent.json use class 15.
 pub fn diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
@@ -169,6 +171,11 @@ pub fn diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
         .unwrap_or(message);
     if message.starts_with(POSITION_PREFIX) {
         return Some(msduck_core::diagnostic::SqlError::new(108, 1, message));
+    }
+    if message.starts_with(COLUMN_IN_TOP_PREFIX) {
+        let mut error = msduck_core::diagnostic::SqlError::new(4115, 1, message);
+        error.severity = 15;
+        return Some(error);
     }
     if message.starts_with(AMBIGUOUS_PREFIX) {
         return Some(msduck_core::diagnostic::SqlError::new(209, 1, message));
@@ -351,9 +358,16 @@ fn volatile(expr: &Expr) -> bool {
 }
 
 /// Whether an ORDER BY key is the same expression as a projected item: equal
-/// after column references are compared with [`same_column`] and function
-/// names without regard to case.
-fn same_expression(projected: &Expr, key: &Expr) -> bool {
+/// after column references are compared and function names are compared
+/// without regard to case. A bare column matches by output name, as in SQL
+/// Server. Inside an expression, an unqualified reference can match a
+/// qualified one only with a single source; with several sources SQL Server
+/// reports it as ambiguous, and the key is left unmatched.
+fn same_expression(projected: &Expr, key: &Expr, single_source: bool) -> bool {
+    let column = |expr: &Expr| matches!(expr, Expr::Identifier(_) | Expr::CompoundIdentifier(_));
+    if column(projected) && column(key) {
+        return same_column(projected, key);
+    }
     fn shape(expr: &Expr) -> (String, Vec<Expr>) {
         let mut columns = vec![];
         let mut expr = expr.clone();
@@ -380,10 +394,13 @@ fn same_expression(projected: &Expr, key: &Expr) -> bool {
     let (key_shape, key_columns) = shape(key);
     projected_shape == key_shape
         && projected_columns.len() == key_columns.len()
-        && projected_columns
-            .iter()
-            .zip(&key_columns)
-            .all(|(a, b)| same_column(a, b))
+        && projected_columns.iter().zip(&key_columns).all(|(a, b)| {
+            if single_source {
+                same_column(a, b)
+            } else {
+                a.to_string().to_lowercase() == b.to_string().to_lowercase()
+            }
+        })
 }
 
 /// Whether an ORDER BY key names a projected column. An unqualified name
@@ -422,6 +439,47 @@ fn alias(expr: &Expr, projection: &[SelectItem]) -> Result<Option<usize>, String
         return Err(format!("{AMBIGUOUS_PREFIX}{}'.", id.value));
     }
     Ok(first)
+}
+
+/// The first column reference in a TOP quantity outside any subquery.
+/// Variables (`@name`) are not columns.
+fn source_column(quantity: &Expr) -> Option<String> {
+    struct Finder {
+        depth: usize,
+        found: Option<String>,
+    }
+    impl Visitor for Finder {
+        type Break = ();
+        fn pre_visit_query(&mut self, _: &Query) -> std::ops::ControlFlow<()> {
+            self.depth += 1;
+            std::ops::ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &Query) -> std::ops::ControlFlow<()> {
+            self.depth -= 1;
+            std::ops::ControlFlow::Continue(())
+        }
+        fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
+            let name = match expr {
+                Expr::Identifier(id) => Some(id),
+                Expr::CompoundIdentifier(ids) => ids.last(),
+                _ => None,
+            };
+            if self.depth == 0
+                && let Some(name) = name
+                && !name.value.starts_with('@')
+            {
+                self.found = Some(name.value.clone());
+                return std::ops::ControlFlow::Break(());
+            }
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    let mut finder = Finder {
+        depth: 0,
+        found: None,
+    };
+    let _ = quantity.visit(&mut finder);
+    finder.found
 }
 
 /// A ranking window cannot order by another window function.
@@ -480,6 +538,7 @@ fn output_name(item: &SelectItem) -> Option<&Ident> {
 fn distinct_keys(
     keys: &[OrderByExpr],
     projection: &[SelectItem],
+    single_source: bool,
 ) -> Result<Vec<OrderByExpr>, String> {
     for item in projection {
         projected(item)?;
@@ -492,7 +551,11 @@ fn distinct_keys(
             }
             .or_else(|| {
                 projection.iter().position(|item| {
-                    same_expression(projected(item).expect("checked projection"), &key.expr)
+                    same_expression(
+                        projected(item).expect("checked projection"),
+                        &key.expr,
+                        single_source,
+                    )
                 })
             })
             .ok_or(DISTINCT_ORDER)?;
@@ -554,6 +617,13 @@ pub fn ranked(query: &mut Query) -> Result<(), String> {
         Some(TopQuantity::Expr(expr)) => expr,
         None => return Err("TOP requires a count".into()),
     };
+    // The lowered quantity sits beside the source rows, where a column
+    // reference would bind per row instead of once per statement.
+    if let Some(column) = source_column(&quantity) {
+        return Err(format!(
+            "{COLUMN_IN_TOP_PREFIX}{column}\" is not allowed in an argument to a TOP, OFFSET, or FETCH clause. Only references to columns at an outer scope or standalone expressions and subqueries are allowed here."
+        ));
+    }
     if select.qualify.is_some() {
         return Err("unsupported TOP PERCENT/WITH TIES with QUALIFY".into());
     }
@@ -563,7 +633,8 @@ pub fn ranked(query: &mut Query) -> Result<(), String> {
         Some(_) => return Err("unsupported TOP PERCENT/WITH TIES DISTINCT form".into()),
     };
     let keys = if distinct {
-        distinct_keys(&keys, &select.projection)?
+        let single_source = select.from.len() == 1 && select.from[0].joins.is_empty();
+        distinct_keys(&keys, &select.projection, single_source)?
     } else {
         source_keys(&keys, &select.projection)?
     };

@@ -101,17 +101,25 @@ the two-column metadata token, and reusing the handle then succeeds.
   rejected explicitly, because positions count expanded columns. A position
   outside the select list raises error 108, and an ORDER BY alias that more than
   one select-list item defines raises error 209.
+- A column reference in a TOP PERCENT/WITH TIES quantity outside a subquery
+  raises error 4115 (class 15, state 1), as captured from SQL Server 2022.
+  Variables and self-contained subqueries are accepted.
+- DISTINCT matches a bare ORDER BY column to a qualified select-list column by
+  output name, as SQL Server does. Inside an expression, an unqualified
+  reference matches a qualified one only when the query has a single source.
+  With several sources, SQL Server 2022 reports 209 and then 145; msduck
+  reports 145 only.
 - ORDER BY keys that are, or resolve to, a window function are rejected
   explicitly. The ranking window cannot nest another window.
 - Percentages are computed in double precision. Every captured boundary is
   matched, but SQL Server's internal arithmetic at other extreme precisions has
   not been compared.
 - ORDER BY keys with a volatile function (`NEWID`, `NEWSEQUENTIALID`, `RAND`,
-  `CRYPT_GEN_RANDOM`, or DuckDB `random`, `uuid`, `gen_random_uuid`, `nextval`,
-  `setseed`) are rejected explicitly, whether written directly or through an
-  alias or position. The ranking window would evaluate them separately from the
-  projection and the final sort. This includes the random-sample idiom
-  `TOP (n) PERCENT ... ORDER BY NEWID()`; plain `TOP (n) ... ORDER BY NEWID()`
-  is not affected.
+  `CRYPT_GEN_RANDOM`, or DuckDB `random`, `uuid`, `uuidv4`, `uuidv7`,
+  `gen_random_uuid`, `nextval`, `currval`, `setseed`) are rejected explicitly,
+  whether written directly or through an alias or position. The ranking window
+  would evaluate them separately from the projection and the final sort. This
+  includes the random-sample idiom `TOP (n) PERCENT ... ORDER BY NEWID()`;
+  plain `TOP (n) ... ORDER BY NEWID()` is not affected.
 - DML `TOP` (INSERT/UPDATE/DELETE) and collation-sensitive tie comparison of
   character keys are not covered.

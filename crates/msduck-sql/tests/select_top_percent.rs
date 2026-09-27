@@ -187,6 +187,10 @@ fn unsupported_shapes_remain_explicit() {
             "volatile",
         ),
         (
+            "SELECT TOP (1) WITH TIES nextval('s') AS n, currval('s') AS c FROM t ORDER BY c",
+            "volatile",
+        ),
+        (
             "SELECT TOP (1) WITH TIES ROW_NUMBER() OVER (ORDER BY id) AS rn FROM t ORDER BY rn",
             "window function",
         ),
@@ -296,6 +300,17 @@ fn distinct_keys_match_qualified_and_unqualified_columns() {
             "{sql}"
         );
     }
+    // SQL Server matches a bare column by output name even with two sources,
+    // but reports an unqualified reference inside an expression as ambiguous.
+    assert!(
+        lower("SELECT DISTINCT TOP (50) PERCENT a.score FROM a CROSS JOIN b ORDER BY score")
+            .is_ok()
+    );
+    assert_eq!(
+        lower("SELECT DISTINCT TOP (50) PERCENT a.score + 1 AS x FROM a CROSS JOIN b ORDER BY score + 1")
+            .unwrap_err(),
+        top::DISTINCT_ORDER
+    );
     // Expressions match when their column references do.
     for sql in [
         "SELECT DISTINCT TOP (50) PERCENT t.score + 1 AS x FROM t ORDER BY score + 1",
@@ -345,4 +360,34 @@ fn distinct_string_literal_aliases_are_ranked_as_columns() {
         "{sql}"
     );
     assert!(sql.ends_with("ORDER BY \"x\""), "{sql}");
+}
+
+#[test]
+fn column_references_in_top_quantities_use_sql_server_error_4115() {
+    // Captured from SQL Server 2022: Msg 4115, Level 15, State 1.
+    let message = lower("SELECT TOP (score) PERCENT id FROM t ORDER BY id").unwrap_err();
+    let error = top::diagnostic(&message).unwrap();
+    assert_eq!(
+        (
+            error.number,
+            error.state,
+            error.severity,
+            error.message.as_str()
+        ),
+        (
+            4115,
+            1,
+            15,
+            "The reference to column \"score\" is not allowed in an argument to a TOP, OFFSET, or FETCH clause. Only references to columns at an outer scope or standalone expressions and subqueries are allowed here."
+        )
+    );
+    assert!(lower("SELECT TOP (t.id + 1) WITH TIES id FROM t ORDER BY id").is_err());
+    // Variables and self-contained subqueries are allowed.
+    assert!(lower("SELECT TOP (@n) PERCENT id FROM t ORDER BY id").is_ok());
+    assert!(
+        lower(
+            "SELECT TOP ((SELECT count(*) FROM u WHERE u.k = 1)) WITH TIES id FROM t ORDER BY id"
+        )
+        .is_ok()
+    );
 }
