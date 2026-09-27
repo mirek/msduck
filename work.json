@@ -3927,7 +3927,7 @@
     {
       "id": "tvp-default-reference-v1",
       "title": "Capture SQL Server default and null TVP RPC behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server compatibility goal; owner-run reference/tvp-wire.json and docs/tvp-wire.md identify the missing default-status/null-TVP distinction. Owner-authored issue #399; no third-party intake.",
       "scope": [
         "scripts/capture-tvp-default.mjs",
