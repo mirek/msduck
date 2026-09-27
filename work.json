@@ -4452,6 +4452,28 @@
       "dependencies": [],
       "issue": 439,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQ18P"
+    },
+    {
+      "id": "isjson-coercion-v1",
+      "title": "Match SQL Server ISJSON input coercion and diagnostics",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal; first-party current adapter and owner-run SQL Server capture.",
+      "scope": [
+        "src/isjson.rs",
+        "scripts/capture-isjson-coercion.mjs",
+        "reference/isjson-coercion.json",
+        "tests/isjson_coercion.test.mjs",
+        "docs/isjson.md"
+      ],
+      "acceptance": [
+        "Capture noncharacter numeric, bit, date, binary, typed NULL, ordinary character and unsupported ISJSON input expressions in two fresh databases on the pinned SQL Server image, preserving unnormalized rows, descriptors, diagnostics and completion events.",
+        "Implement only evidenced ISJSON coercion and diagnostic behavior in the existing lowering/native adapter without editing shared engine, parser, scalar registration or library files; preserve one evaluation per input and bounded vector reads.",
+        "Add focused native and standalone tedious replay against the retained capture for supported cases, report unsupported cases explicitly rather than fabricating parity.",
+        "Run formatting, strict workspace Clippy, workspace Rust tests, independent tedious tests, diagnostic audit and focused replay at the exact PR revision."
+      ],
+      "dependencies": [],
+      "issue": 441,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQ4Cy"
     }
   ]
 }
