@@ -3973,6 +3973,32 @@
       ],
       "issue": 401,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQDeU"
+    },
+    {
+      "id": "tvp-catalog-binding-v1",
+      "title": "Bind decoded RPC TVPs to registered table types",
+      "state": "backlog",
+      "authorization": "Direct owner continuing SQL Server-compatible Rust/DuckDB server goal; owner-run TVP and table-type catalog captures. No external submission is input.",
+      "scope": [
+        "crates/msduck-tds/src/lib.rs",
+        "src/lib.rs",
+        "src/tvp_binding.rs",
+        "docs/tvp-binding.md"
+      ],
+      "acceptance": [
+        "Export the existing deterministic TVP codec and add a root adapter resolving qualified decoded type names against registered table-type and column catalog metadata through bound queries and explicit inputs.",
+        "Validate the captured INT/NVARCHAR/VARBINARY shape and limits; turn cells into owned typed values preserving NULL, empty binary and raw UTF-16 units. Keep explicit null and default-status empty TVP distinct as recorded by owner-run reference captures; reject unsupported shapes before any write.",
+        "Test against decoded raw requests from reference/tvp-wire.json and reference/tvp-default.json, and cover catalog rollback/reopen plus malformed or mismatched metadata; do not claim live procedure RPC support.",
+        "Run formatting, full workspace Rust tests, strict Clippy, independent clients and diagnostic audit at the exact PR revision; document remaining src/rpc.rs and procedure execution gates."
+      ],
+      "dependencies": [
+        "tvp-codec-v1",
+        "tvp-default-reference-v1",
+        "table-type-catalog-v1",
+        "returnvalue-codec-v1"
+      ],
+      "issue": 403,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQL15"
     }
   ]
 }
