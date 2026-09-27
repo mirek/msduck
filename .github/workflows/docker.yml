@@ -15,6 +15,7 @@ on:
       - 'vendor/**'
       - src/bin/msduck-container.rs
       - src/authentication.rs
+      - src/server.rs
       - src/tls.rs
       - scripts/docker-smoke.mjs
       - package.json
