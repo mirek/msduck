@@ -4275,7 +4275,7 @@
     {
       "id": "table-variable-reference-v1",
       "title": "Capture SQL Server table-variable behavior for runtime integration",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner's continuing SQL Server compatibility goal and owner-authored issue #430. First-party README gap and copied mssqlite T-SQL skill hypotheses; no external submission is input.",
       "scope": [
         "scripts/capture-table-variable.mjs",
