@@ -36,8 +36,13 @@ fn isjson_bind_diagnostic(message: &str) -> Option<SqlError> {
             | "bigint"
             | "decimal"
             | "float"
+            | "real"
+            | "money"
+            | "smallmoney"
             | "date"
             | "time"
+            | "datetime"
+            | "smalldatetime"
             | "datetime2"
             | "datetimeoffset"
             | "uniqueidentifier"
@@ -287,7 +292,18 @@ mod tests {
         ] {
             assert!(diagnostic(&altered).is_none(), "{altered}");
         }
-        for kind in ["tinyint", "smallint", "bigint", "time", "datetimeoffset"] {
+        for kind in [
+            "tinyint",
+            "smallint",
+            "bigint",
+            "real",
+            "money",
+            "smallmoney",
+            "time",
+            "datetime",
+            "smalldatetime",
+            "datetimeoffset",
+        ] {
             let message = format!(
                 "Binder Error: Argument data type {kind} is invalid for argument 1 of isjson function."
             );
@@ -297,7 +313,7 @@ mod tests {
                 "{kind}"
             );
         }
-        for kind in ["struct", "unknown", "BIGINT", "bigint "] {
+        for kind in ["struct", "unknown", "BIGINT", "bigint ", "REAL", "real "] {
             let message = format!(
                 "Binder Error: Argument data type {kind} is invalid for argument 1 of isjson function."
             );
