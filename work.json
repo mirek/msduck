@@ -4084,7 +4084,7 @@
     {
       "id": "docker-sqlcmd-v1",
       "title": "Bundle sqlcmd in the Docker image and publish only on release tags",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction 2026-09-27 after PR 397: add sqlcmd so SQL Server image health checks work unchanged; publishing :edge on every main push is excessive compute, publish on v* tags only.",
       "scope": [
         "Dockerfile",
