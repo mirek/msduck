@@ -6,6 +6,20 @@ use duckdb::{
 };
 use msduck_core::character::{CastInput, CharacterType, Error, Family, Length};
 use sqlparser::ast::*;
+use std::borrow::Cow;
+
+// DuckDB renders DECIMAL(38,38) values below one as `.123` or `-.123`.
+// SQL Server includes the zero, and it counts toward the target width.
+fn decimal_display(text: &str) -> Cow<'_, str> {
+    if text.starts_with('.') {
+        Cow::Owned(format!("0{text}"))
+    } else if let Some(fraction) = text.strip_prefix("-.") {
+        Cow::Owned(format!("-0.{fraction}"))
+    } else {
+        Cow::Borrowed(text)
+    }
+}
+
 struct Limit<const TRY: bool, const FIXED: bool>;
 impl<const TRY: bool, const FIXED: bool> VScalar for Limit<TRY, FIXED> {
     type State = ();
@@ -46,12 +60,17 @@ impl<const TRY: bool, const FIXED: bool> VScalar for Limit<TRY, FIXED> {
             };
             let text = std::str::from_utf8(bytes)?;
             let mode = unsafe { modes.as_slice_with_len::<i32>(len)[row] };
+            let formatted = if mode == 3 {
+                decimal_display(text)
+            } else {
+                Cow::Borrowed(text)
+            };
             let source = match mode {
                 1 => CastInput::SmallInteger,
-                2 => CastInput::OtherNumeric,
+                2 | 3 => CastInput::OtherNumeric,
                 _ => CastInput::Text,
             };
-            match target.cast(text, source) {
+            match target.cast(&formatted, source) {
                 Ok(value) => out.insert(row, value.as_ref()),
                 Err(Error::NumericOverflow(_)) if TRY => out.set_null(row),
                 Err(error) => return Err(error.into()),
@@ -75,13 +94,13 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
         ("cast", "__msduck_varchar_limit", "CAST"),
         ("try", "__msduck_varchar_try_limit", "TRY_CAST"),
     ] {
-        db.execute_batch(&format!("CREATE OR REPLACE MACRO main.__msduck_{name}_varchar(value,width) AS {function}({cast}(value AS VARCHAR),width,CASE WHEN typeof(value) IN ('TINYINT','UTINYINT','SMALLINT','INTEGER') THEN 1 WHEN typeof(value) IN ('BIGINT','FLOAT','DOUBLE') OR starts_with(typeof(value),'DECIMAL(') THEN 2 ELSE 0 END)"))?;
+        db.execute_batch(&format!("CREATE OR REPLACE MACRO main.__msduck_{name}_varchar(value,width) AS {function}({cast}(value AS VARCHAR),width,CASE WHEN typeof(value) IN ('TINYINT','UTINYINT','SMALLINT','INTEGER') THEN 1 WHEN starts_with(typeof(value),'DECIMAL(') THEN 3 WHEN typeof(value) IN ('BIGINT','FLOAT','DOUBLE') THEN 2 ELSE 0 END)"))?;
     }
     for (name, function, cast) in [
         ("cast", "__msduck_char_limit", "CAST"),
         ("try", "__msduck_char_try_limit", "TRY_CAST"),
     ] {
-        db.execute_batch(&format!("CREATE OR REPLACE MACRO main.__msduck_{name}_char(value,width) AS {function}({cast}(value AS VARCHAR),width,CASE WHEN typeof(value) IN ('TINYINT','UTINYINT','SMALLINT','INTEGER') THEN 1 WHEN typeof(value) IN ('BIGINT','FLOAT','DOUBLE') OR starts_with(typeof(value),'DECIMAL(') THEN 2 ELSE 0 END)"))?;
+        db.execute_batch(&format!("CREATE OR REPLACE MACRO main.__msduck_{name}_char(value,width) AS {function}({cast}(value AS VARCHAR),width,CASE WHEN typeof(value) IN ('TINYINT','UTINYINT','SMALLINT','INTEGER') THEN 1 WHEN starts_with(typeof(value),'DECIMAL(') THEN 3 WHEN typeof(value) IN ('BIGINT','FLOAT','DOUBLE') THEN 2 ELSE 0 END)"))?;
     }
     Ok(())
 }
@@ -178,6 +197,98 @@ mod tests {
                 .unwrap(),
             None
         );
+    }
+    #[test]
+    fn decimal_scale_38_keeps_sql_server_leading_zero_and_width() {
+        let db = duckdb::Connection::open_in_memory().unwrap();
+        super::register(&db).unwrap();
+        let positive = format!("0.{}1", "0".repeat(37));
+        let negative = format!("-0.{}1", "0".repeat(37));
+        let captured_zero = format!("0.{}", "0".repeat(38));
+        let decimal = |value: &str| format!("CAST('{value}' AS DECIMAL(38,38))");
+        let read = |sql: &str| {
+            db.query_row(sql, [], |row| row.get::<_, Option<String>>(0))
+                .unwrap()
+        };
+        assert_eq!(
+            read("SELECT __msduck_cast_varchar(CAST('0' AS DECIMAL(38,38)),40)"),
+            Some(captured_zero)
+        );
+        assert_eq!(
+            read(&format!(
+                "SELECT __msduck_cast_varchar({},40)",
+                decimal(&positive)
+            )),
+            Some(positive.clone())
+        );
+        assert_eq!(
+            read(&format!(
+                "SELECT __msduck_cast_varchar({},41)",
+                decimal(&negative)
+            )),
+            Some(negative.clone())
+        );
+        assert_eq!(
+            read(&format!(
+                "SELECT __msduck_cast_char({},41)",
+                decimal(&positive)
+            )),
+            Some(format!("{positive} "))
+        );
+        assert_eq!(
+            read(&format!(
+                "SELECT __msduck_try_varchar({},39)",
+                decimal(&positive)
+            )),
+            None
+        );
+        assert!(
+            db.query_row(
+                &format!("SELECT __msduck_cast_varchar({},39)", decimal(&positive)),
+                [],
+                |row| row.get::<_, String>(0)
+            )
+            .is_err()
+        );
+        assert_eq!(
+            read("SELECT __msduck_cast_varchar(CAST(NULL AS DECIMAL(38,38)),40)"),
+            None
+        );
+        assert_eq!(
+            read("SELECT __msduck_cast_varchar(0.5::DOUBLE,40)"),
+            Some("0.5".into())
+        );
+        db.execute_batch("CREATE SEQUENCE decimal_calls").unwrap();
+        assert_eq!(
+            read(
+                "SELECT __msduck_cast_varchar(CAST(nextval('decimal_calls') AS DECIMAL(38,2)),40)"
+            ),
+            Some("1.00".into())
+        );
+        assert_eq!(
+            db.query_row("SELECT currval('decimal_calls')", [], |row| row
+                .get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+    }
+    #[test]
+    fn captured_decimal_avg_uses_explicit_varchar_conversion() {
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let mut session = crate::engine::Session::new(server.connection().unwrap()).unwrap();
+        let sql = "SELECT CONVERT(VARCHAR(100),AVG(d)) AS exact_value INTO dbo.decimal_display FROM (VALUES (CAST('0.00000000000000000000000000000000000001' AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38))),(CAST('0' AS DECIMAL(38,38)))) t(d)";
+        assert!(
+            session
+                .batch_response(sql, &Default::default(), false, None)
+                .1
+        );
+        let displayed: String = session
+            .db
+            .query_row("SELECT exact_value FROM dbo.decimal_display", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(displayed, format!("0.{}", "0".repeat(38)));
     }
     #[test]
     fn varchar_max_uses_plp_for_values_empty_and_null() {

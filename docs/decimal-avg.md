@@ -47,7 +47,10 @@ all seven reference overflow queries now fail with error 8115. Only two whole
 captures match exactly. Remaining differences are:
 
 - CONVERT-to-VARCHAR metadata flags are 1 rather than 33.
-- Native decimal-to-text conversion omits the leading zero at scale 38.
+- At that comparison revision, native decimal-to-text conversion omitted the
+  leading zero at scale 38. The later explicit VARCHAR/CHAR adapter correction
+  in `src/varchar.rs` restores it before width checks; the whole capture must
+  be re-audited at that revision before claiming case-wide parity.
 - Overflow lacks metadata before the error, retains a DuckDB message prefix,
   and reports state 1 instead of 2.
 - Aggregate NULL elimination does not emit warning 8153.

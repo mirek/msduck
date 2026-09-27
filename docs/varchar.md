@@ -9,9 +9,14 @@ Known result expressions expose VARCHAR descriptors, including empty result sets
 
 Tiny/small/INT values too wide for the output use an asterisk. Decimal, BIGINT
 and floating inputs report arithmetic overflow when their formatted text does
-not fit; TRY forms return NULL in that case. Numeric formatting otherwise follows
-the backend and still needs complete SQL Server emulation, especially floating,
-money and date/time inputs. Style arguments remain unsupported. This conversion
+not fit; TRY forms return NULL in that case. Explicit DECIMAL-to-VARCHAR/CHAR
+conversion restores the leading zero when DuckDB displays a value as `.123` or
+`-.123`, before checking the target width. The SQL Server DECIMAL(38,38)
+reference in `reference/decimal-avg.json` includes that zero even when the
+result is all fractional zeros. Other numeric formatting still needs complete
+SQL Server emulation, especially floating, money and date/time inputs. The
+separate NVARCHAR adapter is outside this correction. Style
+arguments remain unsupported. This conversion
 work does not add column width enforcement or all implicit cast
 rules. Some dynamically inferred result descriptors remain backend-derived.
 
@@ -21,8 +26,9 @@ unrepresentable values fail explicitly instead of being sent in invalid VARCHAR
 wire bytes. This limitation also applies to TRY forms. No live SQL Server endpoint
 was used to establish full conversion parity.
 
-Native tests exercise 6,000-row byte truncation, NULLs, volatile argument evaluation
-and exact MAX wire bytes. Client tests cover CP1252 text, widths/defaults, overflow,
+Native tests exercise 6,000-row byte truncation, NULLs, volatile argument evaluation,
+DECIMAL(38,38) leading zeros, exact width/overflow, and exact MAX wire bytes.
+Client tests cover CP1252 text, widths/defaults, overflow,
 prepared values over 8,000 bytes, NULL/empty descriptors and persisted views.
 
 References: [CAST and CONVERT](https://learn.microsoft.com/en-us/sql/t-sql/functions/cast-and-convert-transact-sql),
