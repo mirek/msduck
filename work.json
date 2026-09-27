@@ -4474,6 +4474,23 @@
       "dependencies": [],
       "issue": 441,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQ4Cy"
+    },
+    {
+      "id": "isjson-diagnostic-adapter-v1",
+      "title": "Preserve ISJSON binder error identity",
+      "state": "ready",
+      "authorization": "Direct owner continuing SQL Server compatibility goal; owner-run SQL Server reference from issue #441, no external submissions.",
+      "scope": [
+        "src/json_extract.rs"
+      ],
+      "acceptance": [
+        "Recognize only the complete known ISJSON Binder Error grammar for captured noncharacter type names and return SqlError 8116/state 1/class 16 with the unwrapped message.",
+        "Reject prefix/suffix/embedded-message lookalikes and preserve existing JSON extraction diagnostics.",
+        "Run formatting, strict workspace Clippy and workspace Rust tests at the exact head; full client replay follows in the dependent ISJSON adapter task."
+      ],
+      "dependencies": [],
+      "issue": 442,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQ5Uu"
     }
   ]
 }
