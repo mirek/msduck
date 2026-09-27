@@ -287,3 +287,47 @@ async fn clients_query_sys_databases() {
     };
     assert_eq!(rows, [expected("master", 1), expected("inventory", 5)]);
 }
+
+#[test]
+fn unavailable_registered_databases_are_not_recreated_and_can_be_dropped() {
+    let directory = std::env::temp_dir().join(format!(
+        "msduck-database-unavailable-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let primary = directory.join("msduck.duckdb");
+    let primary = primary.to_str().unwrap();
+    let lost = directory.join("msduck.lost.duckdb");
+    let corrupt = directory.join("msduck.corrupt.duckdb");
+    {
+        let server = Server::open(primary).unwrap();
+        let db = server.connection().unwrap();
+        db.databases().create(&db, "lost").unwrap();
+        db.databases().create(&db, "corrupt").unwrap();
+    }
+    std::fs::remove_file(&lost).unwrap();
+    std::fs::write(&corrupt, b"not a database").unwrap();
+    let server = Server::open(primary).unwrap();
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    // Missing data is not replaced by an empty database.
+    assert!(!lost.exists());
+    assert_eq!(catalog.list(&db).unwrap(), [database("master", 1)]);
+    assert_eq!(sql_error(catalog.select(&db, "lost").unwrap_err()).0, 911);
+    // The registration still holds the name until it is dropped.
+    assert_eq!(sql_error(catalog.create(&db, "lost").unwrap_err()).0, 1801);
+    catalog.remove(&db, "lost").unwrap();
+    catalog.remove(&db, "corrupt").unwrap();
+    assert!(!corrupt.exists());
+    assert_eq!(catalog.create(&db, "lost").unwrap(), database("lost", 7));
+    assert_eq!(
+        catalog.create(&db, "corrupt").unwrap(),
+        database("corrupt", 8)
+    );
+    drop((db, server));
+    std::fs::remove_dir_all(&directory).unwrap();
+}

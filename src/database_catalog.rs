@@ -45,6 +45,14 @@ impl Drop for Catalog {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Attach {
+    /// A new database whose file does not exist yet.
+    Create,
+    /// A registered database whose file must already exist.
+    Recover,
+}
+
 /// A database visible to SQL Server clients.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Database {
@@ -133,7 +141,7 @@ impl Catalog {
         };
         for (name, file) in registered {
             let result = catalog
-                .attach(owner, &name, &file)
+                .attach(owner, &name, &file, Attach::Recover)
                 .and_then(|()| catalog.publish(owner, &name));
             if let Err(error) = result {
                 // SQL Server keeps serving other databases when one cannot be
@@ -172,6 +180,18 @@ impl Catalog {
         Ok(alias)
     }
 
+    /// Whether a name is registered, including a database that failed to attach.
+    fn registered(&self, db: &Connection, name_key: &str) -> Result<bool> {
+        Ok(db.query_row(
+            &format!(
+                "SELECT count(*) > 0 FROM {} WHERE name_key=?",
+                self.registry()
+            ),
+            [name_key],
+            |row| row.get(0),
+        )?)
+    }
+
     /// Make `name` the connection's current database with the `dbo` schema.
     /// Returns the database's SQL Server name.
     pub fn select(&self, db: &Connection, name: &str) -> Result<String> {
@@ -208,7 +228,7 @@ impl Catalog {
     pub fn create(&self, db: &Connection, name: &str) -> Result<Database> {
         validate(name)?;
         let name_key = key(name);
-        if RESERVED.contains(&name_key.as_str()) || self.resolve(db, name)?.is_some() {
+        if RESERVED.contains(&name_key.as_str()) || self.registered(db, &name_key)? {
             return Err(exists(name));
         }
         ensure!(
@@ -237,7 +257,7 @@ impl Catalog {
             return Err(exists(name));
         }
         let attached = self
-            .attach(db, name, &file)
+            .attach(db, name, &file, Attach::Create)
             .and_then(|()| self.publish_all(db));
         if let Err(error) = attached {
             let _ = db.execute_batch(&format!("DETACH DATABASE IF EXISTS {}", quote(name)));
@@ -273,7 +293,29 @@ impl Catalog {
                 "Cannot drop the database 'master' because it is a system database."
             ));
         }
-        let Some(alias) = self.resolve(db, name)? else {
+        // A registered database that failed to attach can still be dropped.
+        let registered = db
+            .query_row(
+                &format!(
+                    "SELECT r.name,r.file,d.database_name IS NOT NULL FROM {} r \
+                     LEFT JOIN duckdb_databases() d ON d.database_name=r.name WHERE r.name_key=?",
+                    self.registry()
+                ),
+                [&name_key],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, bool>(2)?,
+                    ))
+                },
+            )
+            .map(Some)
+            .or_else(|error| match error {
+                duckdb::Error::QueryReturnedNoRows => Ok(None),
+                error => Err(error),
+            })?;
+        let Some((alias, file, attached)) = registered else {
             let mut error = SqlError::new(
                 3701,
                 1,
@@ -284,12 +326,9 @@ impl Catalog {
             error.severity = 11;
             bail!(error)
         };
-        let file: String = db.query_row(
-            &format!("SELECT file FROM {} WHERE name_key=?", self.registry()),
-            [&name_key],
-            |row| row.get(0),
-        )?;
-        db.execute_batch(&format!("DETACH DATABASE {}", quote(&alias)))?;
+        if attached {
+            db.execute_batch(&format!("DETACH DATABASE {}", quote(&alias)))?;
+        }
         db.execute(
             &format!("DELETE FROM {} WHERE name_key=?", self.registry()),
             [&name_key],
@@ -298,8 +337,17 @@ impl Catalog {
         Ok(())
     }
 
-    fn attach(&self, db: &Connection, name: &str, file: &str) -> Result<()> {
+    fn attach(&self, db: &Connection, name: &str, file: &str, mode: Attach) -> Result<()> {
         let path = self.directory.join(file);
+        // DuckDB creates missing files; recovery must not replace lost data
+        // with an empty database.
+        if mode == Attach::Recover {
+            ensure!(
+                path.is_file(),
+                "database file '{}' is missing",
+                path.display()
+            );
+        }
         bootstrap_file(&path)?;
         let path = path.to_str().context("database path is not UTF-8")?;
         db.execute_batch(&format!("ATTACH {} AS {}", literal(path), quote(name)))?;

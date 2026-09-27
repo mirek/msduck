@@ -12,7 +12,10 @@ and IDs are not reused after a drop.
 name, the lower-case key used for case-insensitive lookup, the ID, the file name
 and the create date. A file-backed server re-attaches every registered database
 on startup. If one cannot be attached, the server logs the failure and still
-starts. The database stays registered, but it is not listed or selectable.
+starts. A missing file is never recreated, so lost data is not replaced by an
+empty database. An unavailable database stays registered and keeps its name,
+but it is not listed or selectable. Dropping it removes the registration and
+any remaining files.
 
 ## Storage
 
