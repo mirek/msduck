@@ -21,6 +21,8 @@ pub enum TemporalType {
 pub enum SourceType {
     Temporal(TemporalType),
     Character,
+    Integer,
+    Numeric,
     UntypedNull,
 }
 
@@ -172,11 +174,26 @@ fn result_type(source: SourceType) -> TemporalType {
     match source {
         SourceType::Temporal(ty) => ty,
         SourceType::Character | SourceType::UntypedNull => TemporalType::DateTime2(7),
+        SourceType::Integer | SourceType::Numeric => TemporalType::DateTime2(7),
     }
 }
 
 pub fn bind_trunc(keyword: &str, source: SourceType) -> Result<Bound, RuleError> {
     let part = part(keyword)?;
+    if matches!(source, SourceType::Integer | SourceType::Numeric) {
+        let ty = if source == SourceType::Integer {
+            "int"
+        } else {
+            "numeric"
+        };
+        return Err(sql(
+            8116,
+            1,
+            16,
+            Phase::Binding,
+            format!("Argument data type {ty} is invalid for argument 2 of datetrunc function."),
+        ));
+    }
     let ty = result_type(source);
     if let Some(state) = trunc_rejection(part, ty) {
         return Err(sql(
@@ -252,11 +269,15 @@ pub fn bind_bucket_source(
     let source = match source {
         SourceType::Temporal(ty) => ty,
         SourceType::Character => return Err(invalid_argument("varchar", 3)),
+        SourceType::Integer => return Err(invalid_argument("int", 3)),
+        SourceType::Numeric => return Err(invalid_argument("numeric", 3)),
         SourceType::UntypedNull => return Err(invalid_argument("NULL", 3)),
     };
     let origin = match origin {
         Some(SourceType::Temporal(ty)) => Some(ty),
         Some(SourceType::Character) => return Err(invalid_argument("varchar", 4)),
+        Some(SourceType::Integer) => return Err(invalid_argument("int", 4)),
+        Some(SourceType::Numeric) => return Err(invalid_argument("numeric", 4)),
         Some(SourceType::UntypedNull) | None => None,
     };
     use Part::*;
@@ -288,8 +309,13 @@ pub fn bind_bucket_source(
             TemporalType::DateTime2(a.max(b))
         }
         (TemporalType::Time(a), Some(TemporalType::Time(b))) => TemporalType::Time(a.max(b)),
-        (TemporalType::DateTimeOffset(a), Some(TemporalType::DateTimeOffset(b))) => {
-            TemporalType::DateTimeOffset(a.max(b))
+        (TemporalType::DateTimeOffset(a), Some(TemporalType::DateTimeOffset(b))) if a == b => {
+            source
+        }
+        (TemporalType::DateTimeOffset(_), Some(TemporalType::DateTimeOffset(_))) => {
+            return Err(RuleError::Unsupported(
+                "uncaptured datetimeoffset scale combination",
+            ));
         }
         (TemporalType::Date, Some(TemporalType::DateTime2(_))) => {
             return Err(invalid_argument("date", 3));

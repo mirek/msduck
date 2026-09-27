@@ -711,6 +711,16 @@ fn captured_null_width_and_origin_binding() {
                 let source = TemporalType::DateTime2(7);
                 let mut result_type = source;
                 let actual = match name {
+                    "datetrunc integer input" => {
+                        datetrunc::bind_trunc("day", SourceType::Integer).map(|_| None)
+                    }
+                    "datetrunc decimal input" => {
+                        datetrunc::bind_trunc("day", SourceType::Numeric).map(|_| None)
+                    }
+                    "date_bucket integer input" => {
+                        datetrunc::bind_bucket_source("day", SourceType::Integer, None)
+                            .map(|_| None)
+                    }
                     "date_bucket null date" => {
                         datetrunc::bind_bucket("day", TemporalType::DateTime2(3), None)
                             .and_then(|bound| datetrunc::bucket(bound, Some(1), None, None))
@@ -824,5 +834,15 @@ fn captured_null_width_and_origin_binding() {
             }
         }
     }
-    assert_eq!(checked, 4 * 14);
+    assert_eq!(checked, 4 * 17);
+    assert_eq!(
+        datetrunc::bind_bucket(
+            "day",
+            TemporalType::DateTimeOffset(3),
+            Some(TemporalType::DateTimeOffset(7)),
+        ),
+        Err(RuleError::Unsupported(
+            "uncaptured datetimeoffset scale combination"
+        ))
+    );
 }
