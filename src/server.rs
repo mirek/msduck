@@ -20,6 +20,7 @@ pub struct Server {
     tls: Option<Arc<rustls::ServerConfig>>,
     administrator: Option<Arc<crate::authentication::Administrator>>,
     max_connections: usize,
+    databases: Arc<crate::database_catalog::Catalog>,
 }
 
 pub const DEFAULT_MAX_CONNECTIONS: usize = 128;
@@ -54,6 +55,7 @@ impl Drop for Permit {
 pub struct Connection {
     db: BackendConnection,
     diagnostics: crate::statement_diagnostics::Registry,
+    databases: Arc<crate::database_catalog::Catalog>,
 }
 impl std::ops::Deref for Connection {
     type Target = BackendConnection;
@@ -66,7 +68,12 @@ impl Connection {
         Ok(Self {
             db: self.db.try_clone()?,
             diagnostics: self.diagnostics.clone(),
+            databases: self.databases.clone(),
         })
+    }
+    /// The server's databases. A fresh connection starts in `master`.
+    pub fn databases(&self) -> &Arc<crate::database_catalog::Catalog> {
+        &self.databases
     }
     pub(crate) fn into_parts(self) -> (BackendConnection, crate::statement_diagnostics::Registry) {
         (self.db, self.diagnostics)
@@ -82,21 +89,15 @@ impl Server {
         crate::scalar::register(&owner)?;
         let diagnostics = crate::statement_diagnostics::Registry::default();
         diagnostics.register(&owner)?;
-        owner.execute_batch("CREATE SCHEMA IF NOT EXISTS dbo")?;
-        crate::schema_catalog::register(&owner)?;
-        crate::object_catalog::register(&owner)?;
-        crate::type_catalog::register(&owner)?;
-        crate::declared_columns::register(&owner)?;
-        crate::query_catalog::register(&owner)?;
-        crate::index_catalog::register(&owner)?;
-        crate::index_catalog::sync(&owner)?;
-        crate::index_catalog::publish_views(&owner)?;
+        crate::database_catalog::bootstrap_objects(&owner)?;
+        let databases = Arc::new(crate::database_catalog::Catalog::open(&owner, path)?);
         Ok(Self {
             owner: Arc::new(Mutex::new(owner)),
             diagnostics,
             tls: None,
             administrator: None,
             max_connections: DEFAULT_MAX_CONNECTIONS,
+            databases,
         })
     }
     pub fn with_tls(mut self, config: Arc<rustls::ServerConfig>) -> Self {
@@ -154,6 +155,7 @@ impl Server {
         Ok(Connection {
             db,
             diagnostics: self.diagnostics.clone(),
+            databases: self.databases.clone(),
         })
     }
 }
@@ -231,6 +233,7 @@ fn serve_login(
     };
     // An unused clone supplies fresh sessions for RESETCONNECTION requests.
     let template = db.try_clone()?;
+    let login_database = db.databases().select(&db, &login.database)?;
     let mut session = Session::new(db)?;
     session.original_login = authenticated_name;
     let mut rpc = crate::rpc::State::default();
@@ -258,7 +261,13 @@ fn serve_login(
                 // The headers name the transaction being reset, so reset after
                 // validating them and before running the request.
                 if reset {
-                    reset_session(&template, &mut session, &mut rpc, &mut acknowledgement)?;
+                    reset_session(
+                        &template,
+                        &login_database,
+                        &mut session,
+                        &mut rpc,
+                        &mut acknowledgement,
+                    )?;
                 }
                 match message.kind {
                     1 => tds::batch_body(&message.payload)
@@ -319,11 +328,15 @@ fn reset_requested(kind: u8, status: u8) -> Result<bool> {
 /// ENVCHANGE (if any) and the MS-TDS type 18 acknowledgement to `out`.
 fn reset_session(
     template: &Connection,
+    login_database: &str,
     session: &mut Session,
     rpc: &mut crate::rpc::State,
     out: &mut Vec<u8>,
 ) -> Result<()> {
-    let mut fresh = Session::new(template.try_clone()?)?;
+    // A reset returns to the login database even if the session changed it.
+    let connection = template.try_clone()?;
+    connection.databases().select(&connection, login_database)?;
+    let mut fresh = Session::new(connection)?;
     if session.transactions > 0 {
         // Tell the client its transaction ended, as an explicit ROLLBACK does.
         out.extend(session.rollback_transaction("")?);
@@ -428,5 +441,38 @@ mod diagnostic_context_tests {
         );
         let fresh = second.diagnostic_scope().unwrap();
         assert!(!fresh.null_eliminated());
+    }
+}
+
+#[cfg(test)]
+mod database_reset_tests {
+    use super::*;
+
+    #[test]
+    fn reset_returns_to_the_connection_database() {
+        let server = Server::open(":memory:").unwrap();
+        let template = server.connection().unwrap();
+        let databases = template.databases().clone();
+        databases.create(&template, "sales").unwrap();
+        for login_database in ["master", "sales"] {
+            let connection = template.try_clone().unwrap();
+            // The session moved to another database before the reset.
+            let other = if login_database == "master" {
+                "sales"
+            } else {
+                "master"
+            };
+            databases.select(&connection, other).unwrap();
+            let mut session = Session::new(connection).unwrap();
+            let mut rpc = crate::rpc::State::default();
+            let mut out = vec![];
+            reset_session(&template, login_database, &mut session, &mut rpc, &mut out).unwrap();
+            assert_eq!(databases.current(&session.db).unwrap(), login_database);
+            let schema: String = session
+                .db
+                .query_row("SELECT current_schema()", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(schema, "dbo");
+        }
     }
 }
