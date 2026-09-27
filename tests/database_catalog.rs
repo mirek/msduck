@@ -331,3 +331,81 @@ fn unavailable_registered_databases_are_not_recreated_and_can_be_dropped() {
     drop((db, server));
     std::fs::remove_dir_all(&directory).unwrap();
 }
+
+fn scratch_directory(label: &str) -> std::path::PathBuf {
+    let directory = std::env::temp_dir().join(format!(
+        "msduck-database-{label}-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&directory).unwrap();
+    directory
+}
+
+#[test]
+fn a_partially_recovered_database_is_detached() {
+    let directory = scratch_directory("partial");
+    let primary = directory.join("msduck.duckdb");
+    let primary = primary.to_str().unwrap();
+    {
+        let server = Server::open(primary).unwrap();
+        let db = server.connection().unwrap();
+        db.databases().create(&db, "old").unwrap();
+    }
+    {
+        // A conflicting object makes publication fail after the attach.
+        let db = duckdb::Connection::open(directory.join("msduck.old.duckdb")).unwrap();
+        db.execute_batch("DROP VIEW sys.databases; CREATE TABLE sys.databases(x INT)")
+            .unwrap();
+    }
+    let server = Server::open(primary).unwrap();
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    assert_eq!(catalog.list(&db).unwrap(), [database("master", 1)]);
+    assert_eq!(sql_error(catalog.select(&db, "old").unwrap_err()).0, 911);
+    assert_eq!(
+        scalar::<i64>(
+            &db,
+            "SELECT count(*) FROM duckdb_databases() WHERE database_name = 'old'"
+        ),
+        0
+    );
+    drop((db, server));
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn a_failed_file_deletion_keeps_the_registration() {
+    use std::os::unix::fs::PermissionsExt;
+    let directory = scratch_directory("undeletable");
+    let primary = directory.join("msduck.duckdb");
+    let server = Server::open(primary.to_str().unwrap()).unwrap();
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    catalog.create(&db, "kept").unwrap();
+    // Checkpoint the primary so no WAL write needs the directory meanwhile.
+    db.execute_batch("CHECKPOINT").unwrap();
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let probe = directory.join("probe");
+    let enforced = std::fs::write(&probe, b"").is_err();
+    let _ = std::fs::remove_file(&probe);
+    let result = catalog.remove(&db, "kept");
+    std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o755)).unwrap();
+    if enforced {
+        // Permissions do not apply to a privileged user.
+        assert!(result.is_err());
+        assert!(directory.join("msduck.kept.duckdb").exists());
+        assert_eq!(sql_error(catalog.create(&db, "kept").unwrap_err()).0, 1801);
+        catalog.remove(&db, "kept").unwrap();
+    } else {
+        result.unwrap();
+    }
+    assert!(!directory.join("msduck.kept.duckdb").exists());
+    assert_eq!(catalog.list(&db).unwrap(), [database("master", 1)]);
+    drop((db, server));
+    std::fs::remove_dir_all(&directory).unwrap();
+}

@@ -146,6 +146,8 @@ impl Catalog {
             if let Err(error) = result {
                 // SQL Server keeps serving other databases when one cannot be
                 // recovered; the database stays registered but is not listed.
+                // Listing follows attachment, so detach a partial recovery.
+                let _ = owner.execute_batch(&format!("DETACH DATABASE IF EXISTS {}", quote(&name)));
                 eprintln!("msduck: database {name} is unavailable: {error:#}");
             }
         }
@@ -329,11 +331,13 @@ impl Catalog {
         if attached {
             db.execute_batch(&format!("DETACH DATABASE {}", quote(&alias)))?;
         }
+        // Keep the registration until the files are gone, so a failed
+        // deletion leaves a database that another DROP can finish removing.
+        self.delete_files(&file)?;
         db.execute(
             &format!("DELETE FROM {} WHERE name_key=?", self.registry()),
             [&name_key],
         )?;
-        self.remove_files(&file);
         Ok(())
     }
 
@@ -426,12 +430,24 @@ impl Catalog {
         format!("{}.main.__msduck_database_ids", quote(&self.primary))
     }
 
+    /// Best-effort cleanup after a failed CREATE.
     fn remove_files(&self, file: &str) {
+        let _ = self.delete_files(file);
+    }
+
+    fn delete_files(&self, file: &str) -> Result<()> {
         let path = self.directory.join(file);
-        let _ = std::fs::remove_file(&path);
-        let mut wal = path.into_os_string();
+        let mut wal = path.clone().into_os_string();
         wal.push(".wal");
-        let _ = std::fs::remove_file(wal);
+        for path in [path, PathBuf::from(wal)] {
+            match std::fs::remove_file(&path) {
+                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                    return Err(error).with_context(|| format!("delete {}", path.display()));
+                }
+                _ => {}
+            }
+        }
+        Ok(())
     }
 }
 
