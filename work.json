@@ -3809,6 +3809,27 @@
       "dependencies": [],
       "issue": 389,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PP7OA"
+    },
+    {
+      "id": "session-reset-reference-v1",
+      "title": "Capture SQL Server session reset behavior through Tedious 20",
+      "state": "ready",
+      "authorization": "Direct owner full SQL Server compatibility goal; first-party Tedious 20 source and msduck TDS gap inventory identify an unmeasured pool reset behavior.",
+      "scope": [
+        "scripts/capture-session-reset.mjs",
+        "reference/session-reset.json",
+        "docs/session-reset-reference.md",
+        ".agents/skills/tedious/SKILL.md"
+      ],
+      "acceptance": [
+        "Show the Tedious 20 reset request type and status from source and reference observation; distinguish upstream mssqlite notes from msduck and SQL Server behavior.",
+        "Use fresh isolated databases to capture session settings, local temp objects, open transaction state, reset callback outcome and subsequent connection reuse with complete rows, metadata, errors and DONE events.",
+        "Repeat in fresh databases and reference containers and compare raw results; retain exact observations and untested limits.",
+        "Keep fixture bounded, credentials out of artifacts, and do not change server reset behavior."
+      ],
+      "dependencies": [],
+      "issue": 391,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PP8h1"
     }
   ]
 }
