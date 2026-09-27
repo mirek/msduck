@@ -3999,6 +3999,24 @@
       ],
       "issue": 403,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQL15"
+    },
+    {
+      "id": "docker-pr-filter-v1",
+      "title": "Limit PR Docker builds to packaging changes",
+      "state": "ready",
+      "authorization": "Direct owner request that PR CI not take more than an hour and that merge cycles be faster; owner-run Docker workflow is first-party input.",
+      "scope": [
+        ".github/workflows/docker.yml",
+        "docs/docker.md"
+      ],
+      "acceptance": [
+        "Restrict pull-request Docker triggers to packaging, smoke-test, container entrypoint/authentication and workflow changes; ordinary SQL/Rust source PRs should not launch both Docker jobs. Preserve main, tag and manual triggers and the owner-only actor/head guard.",
+        "Document the PR trigger policy and that the main Docker workflow still builds source changes after merge, without weakening branch protection or the required deterministic check.",
+        "Validate workflow syntax and exact trigger diff, open a focused owner PR, and record the review and CI revision."
+      ],
+      "dependencies": [],
+      "issue": 404,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQL8A"
     }
   ]
 }
