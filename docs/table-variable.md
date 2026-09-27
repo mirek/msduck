@@ -1,7 +1,7 @@
 # SQL Server table-variable reference behavior
 
-`reference/table-variable.json` retains 41 labelled requests in each of two
-fresh databases in each of two independent SQL Server 2025 containers (164
+`reference/table-variable.json` retains 44 labelled requests in each of two
+fresh databases in each of two independent SQL Server 2025 containers (176
 requests total). All four raw runs matched. The image is pinned to
 `mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a`.
 The fixture preserves rows, ordered result descriptors, error number/state/
@@ -70,6 +70,29 @@ msduck currently does not implement table variables.
   ordinary-table row. The fixture captures the ordered rows and DONE tokens
   before and after these operations.
 
+## Failed multi-row statements
+
+- A three-row `INSERT` into a `NOT NULL` table variable failed on a NULL row
+  with caught diagnostic 515/state 2/class 16. The earlier row `7` remained;
+  neither other row from the failed statement appeared. The caught
+  `XACT_STATE()` and `@@TRANCOUNT` were both 0.
+- A two-row `UPDATE` with one valid candidate (`3` to `1`) and one invalid
+  candidate (`1` to `-1`) emitted an `OUTPUT` row `(1,10)` for the valid
+  candidate *before* failing the `CHECK` constraint with caught diagnostic
+  547/state 0/class 16. Both original rows `(1,20)` and `(3,10)` remained
+  afterward. The `OUTPUT` row is evidence of work attempted before failure,
+  not a committed row. The generated constraint
+  name is kept out of the stable probe by catching the error; the fixture
+  retains the diagnostic identity, typed result descriptors and DONE tokens.
+- Inside an explicit transaction, a failed three-row `INSERT` reported
+  547/state 0/class 16 with `XACT_STATE() = 1` and `@@TRANCOUNT = 1` in the
+  catch block. The table variable still held its earlier `(1,10)` row before
+  and after `ROLLBACK`, while the ordinary-table control row disappeared.
+  The next successful table-variable identity value was 4: the failed
+  statement allocated values 2 and 3 even though it inserted no rows.
+  These probes establish statement atomicity for the captured forms, not
+  every constraint or transaction setting.
+
 ## Capture and replay
 
 Run `node scripts/capture-table-variable.mjs --one-database` for a disposable
@@ -97,7 +120,7 @@ because SQL Server embeds a different generated constraint name per database.
 Further reference work is needed for user-defined table types, alias types,
 collations beyond the default, index declarations and query plans, computed
 columns, named-constraint alternatives, multi-row statement atomicity under
-different transaction settings, nested procedures, triggers, cursors, TVPs,
+other constraints and transaction settings, nested procedures, triggers, cursors, TVPs,
 `INSERT EXEC`, and isolation across concurrent sessions.
 
 A deterministic SQL-layer successor should parse and bind
