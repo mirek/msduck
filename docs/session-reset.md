@@ -29,10 +29,13 @@ reuse after repeated resets. All three tests failed before this change with
 
 ## Differences and gaps
 
-- **RESETCONNECTIONSKIPTRAN (0x10).** Alone or combined with 0x08, it still
-  returns an explicit "not implemented" error. It has no reference capture yet
-  (`session-reset-skiptran-reference-v1`), and SQL Server preserves the
-  transaction in that mode.
+- **RESETCONNECTIONSKIPTRAN (0x10).** It still returns an explicit "not
+  implemented" error; combining it with 0x08 is also rejected. The
+  [SQL Server capture](session-reset-skiptran.md) records an actual first Batch
+  packet with 0x10 alone: the local transaction stays open and committable,
+  while DATEFIRST, NOCOUNT, the temp table and prepared handle reset. The
+  [fixture](../reference/session-reset-skiptran.json) retains the exact
+  responses. No runtime 0x10 behavior is implemented in msduck.
 - **Local temporary tables.** The reference drops `#reset_probe`, but msduck
   does not support `#` temp tables or `OBJECT_ID('tempdb..…')`, so that probe
   is not replayed. DuckDB `TEMP` objects are per-connection and are discarded.
