@@ -4532,6 +4532,29 @@
       ],
       "issue": 447,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRE0d"
+    },
+    {
+      "id": "sys-databases-descriptors-v1",
+      "title": "Pin SQL Server result descriptors for sys.databases",
+      "state": "backlog",
+      "authorization": "Direct owner instruction in this session (2026-09-27) to deliver full database support. No external submission is input.",
+      "scope": [
+        "src/query_catalog.rs",
+        "scripts/capture-sys-databases.mjs",
+        "reference/sys-databases.json",
+        "tests/sys_databases_descriptors.rs",
+        "docs/databases.md"
+      ],
+      "acceptance": [
+        "Capture SQL Server sys.databases column descriptors (types, lengths, collations, nullability) for the columns msduck publishes from the pinned reference image, and retain the capture.",
+        "Route sys.databases through system_catalog_fields so the TDS descriptors match the capture: sysname name and collation_name, bounded nvarchar descriptions, datetime create_date. Cover SELECT *, projections and empty results.",
+        "Run the required Rust and client checks."
+      ],
+      "dependencies": [
+        "multi-database-catalog-v1"
+      ],
+      "issue": 428,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQdWF"
     }
   ]
 }
