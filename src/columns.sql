@@ -36,7 +36,7 @@ LEFT JOIN sys.types t ON t.name=CASE ic.data_type
     WHEN 'INTEGER' THEN 'int' WHEN 'SMALLINT' THEN 'smallint' WHEN 'BIGINT' THEN 'bigint'
     WHEN 'UTINYINT' THEN 'tinyint' WHEN 'BOOLEAN' THEN 'bit' WHEN 'FLOAT' THEN 'real'
     WHEN 'DOUBLE' THEN 'float' WHEN 'DATE' THEN 'date' WHEN 'UUID' THEN 'uniqueidentifier'
-    ELSE NULL END
+    ELSE NULL END AND t.schema_id=4 AND NOT t.is_table_type
 UNION ALL
 SELECT c.object_id,c.name,c.column_id,c.system_type_id,c.user_type_id,
     c.max_length,c.precision,c.scale,c.collation_name,c.is_nullable,c.is_ansi_padded,

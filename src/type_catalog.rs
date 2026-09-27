@@ -83,6 +83,18 @@ pub(crate) fn create_table_type(
             |row| row.get(0),
         )?;
         ensure!(exists == 0, "table type already exists in schema");
+        // Several existing declaration/projection consumers still key built-in
+        // types by bare name. Until those are schema-aware, reject collisions
+        // explicitly instead of corrupting unrelated scalar column metadata.
+        let builtin_collision: i64 = db.query_row(
+            "SELECT count(*) FROM sys.types WHERE schema_id=4 AND NOT is_table_type AND lower(name)=lower(?)",
+            [name],
+            |row| row.get(0),
+        )?;
+        ensure!(
+            builtin_collision == 0,
+            "table type name collides with a built-in type"
+        );
         // Resolve every declaration before the first catalog write, including
         // when the caller owns an outer transaction and DuckDB has no savepoint.
         let mut prepared = Vec::with_capacity(columns.len());
@@ -97,6 +109,12 @@ pub(crate) fn create_table_type(
             let length = shape.length.unwrap_or(builtin.2);
             let precision = shape.precision.unwrap_or(builtin.3);
             let scale = shape.scale.unwrap_or(builtin.4);
+            if matches!(builtin.0, 106 | 108) {
+                ensure!(
+                    (1..=38).contains(&precision) && scale <= precision,
+                    "decimal table type column scale exceeds precision"
+                );
+            }
             ensure!(
                 length == -1 || length > 0,
                 "invalid table type column length"
@@ -544,6 +562,42 @@ mod tests {
             0
         );
         db.execute_batch("ROLLBACK").unwrap();
+        db.execute_batch("CREATE TABLE dbo.ordinary(id INTEGER)")
+            .unwrap();
+        crate::object_catalog::sync(&db).unwrap();
+        let column = TableColumn {
+            name: "id",
+            data_type: &definitions[0].data_type,
+            nullable: false,
+            collation_name: None,
+        };
+        assert!(create_table_type(&db, "dbo", "int", &[column], true).is_err());
+        assert_eq!(db.query_row("SELECT count(*) FROM sys.columns WHERE object_id=__msduck_object_id('dbo.ordinary','U')",[],|r|r.get::<_,i64>(0)).unwrap(),1);
+        let decimal = sqlparser::parser::Parser::parse_sql(
+            &crate::dialect::ServerDialect,
+            "CREATE TABLE scratch (bad DECIMAL(2,3))",
+        )
+        .unwrap()
+        .remove(0);
+        let Statement::CreateTable(decimal) = decimal else {
+            panic!("expected CREATE TABLE")
+        };
+        let invalid_decimal = TableColumn {
+            name: "bad",
+            data_type: &decimal.columns[0].data_type,
+            nullable: true,
+            collation_name: None,
+        };
+        assert!(create_table_type(&db, "dbo", "BadDecimal", &[invalid_decimal], true).is_err());
+        assert_eq!(
+            db.query_row(
+                "SELECT count(*) FROM sys.table_types WHERE name='BadDecimal'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            0
+        );
         let column = TableColumn {
             name: "id",
             data_type: &definitions[0].data_type,

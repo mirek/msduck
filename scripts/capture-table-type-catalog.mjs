@@ -99,6 +99,17 @@ async function observe(connection){
   assert.equal(result.errors.length,0,`reference setup: ${sql}`)
   setup.push({sql,result})
  }
+ const rejected=[]
+ for(const sql of [
+  'CREATE TYPE dbo.[int] AS TABLE (x INT NOT NULL)',
+  'CREATE TYPE dbo.BadDecimal AS TABLE (bad DECIMAL(2,3))'
+ ]){
+  const result=canonical(await capture(connection,sql))
+  assert.ok(result.errors.length>0,`reference should reject: ${sql}`)
+  rejected.push({sql,result})
+ }
+ assert.equal(rejected[0].result.errors[0]?.number,219,'built-in type name collision')
+ assert.equal(rejected[1].result.errors[0]?.number,183,'decimal scale above precision')
  const observations=[]
  for(const [name,sql] of queries){
   const result=canonical(await capture(connection,sql))
@@ -106,7 +117,7 @@ async function observe(connection){
   observations.push({name,sql,result})
  }
  check(observations)
- return {setup,observations}
+ return {setup,rejected,observations}
 }
 
 const runContainer=()=>withReferenceContainer(async(config,container)=>({
