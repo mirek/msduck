@@ -3796,7 +3796,7 @@
     {
       "id": "tds-status-reference-v1",
       "title": "Correct TDS reset packet status reference",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's standing SQL Server-compatible Rust server goal; owner-authored issue #389. The copied skill masks conflict with the primary Microsoft MS-TDS Status specification.",
       "scope": [
         ".agents/skills/tds-protocol/packet-framing.md"
