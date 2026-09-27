@@ -30,9 +30,10 @@ const MAX_NAME: usize = 128;
 #[derive(Debug)]
 pub struct Catalog {
     primary: String,
-    /// User database files are `<stem>.<encoded name>.duckdb` in this directory.
+    /// User database files are `<prefix>.<id>.<encoded name>.duckdb` in this
+    /// directory; the prefix is the primary's full file name.
     directory: PathBuf,
-    stem: String,
+    prefix: String,
     /// The directory belongs to an in-memory server and is removed with it.
     temporary: bool,
 }
@@ -114,7 +115,7 @@ impl Catalog {
             Self {
                 primary,
                 directory,
-                stem: "msduck".into(),
+                prefix: "msduck".into(),
                 temporary: true,
             }
         } else {
@@ -122,9 +123,9 @@ impl Catalog {
             Self {
                 primary,
                 directory: file.parent().map(Path::to_path_buf).unwrap_or_default(),
-                stem: file
-                    .file_stem()
-                    .and_then(|stem| stem.to_str())
+                prefix: file
+                    .file_name()
+                    .and_then(|name| name.to_str())
                     .context("database path needs a UTF-8 file name")?
                     .to_owned(),
                 temporary: false,
@@ -254,7 +255,7 @@ impl Catalog {
             [],
             |row| row.get(0),
         )?;
-        let file = file_name(&self.stem, database_id, &name_key);
+        let file = file_name(&self.prefix, database_id, &name_key);
         let path = self.directory.join(&file);
         ensure!(
             !path.exists(),
@@ -452,7 +453,7 @@ impl Catalog {
 
     /// The registry is ordinary SQL data, so a stored file name is trusted
     /// only if it is a single component generated for this row's ID and name.
-    /// Any stem is accepted, so renaming the primary file keeps its databases.
+    /// Any prefix is accepted, so renaming the primary file keeps its databases.
     fn path(&self, row: &Row) -> Result<PathBuf> {
         let file = row.file.as_str();
         let suffix = file_suffix(row.database_id, &row.name_key);
@@ -511,26 +512,26 @@ fn key(name: &str) -> String {
     name.to_lowercase()
 }
 
-/// Longest encoded name kept in a file name. With the stem, the ID and the
+/// Longest encoded name kept in a file name. With the prefix, the ID and the
 /// suffix, the component stays well inside common 255-byte limits.
 const FILE_NAME_FRAGMENT: usize = 64;
 
 /// The database ID makes the name unique; a bounded, readable fragment of the
 /// encoded name follows it.
-fn file_name(stem: &str, database_id: i32, name_key: &str) -> String {
-    // The primary stem is already a valid file name; only its length needs
-    // a bound so that the whole component fits. A shortened stem keeps a hash
-    // of the full stem, so servers whose stems share a prefix do not collide.
-    let stem = if stem.len() > FILE_NAME_FRAGMENT {
+fn file_name(prefix: &str, database_id: i32, name_key: &str) -> String {
+    // The prefix is already a valid file name; only its length needs a bound
+    // so that the whole component fits. A shortened prefix keeps a hash of the
+    // full prefix, so servers whose file names share a start do not collide.
+    let prefix = if prefix.len() > FILE_NAME_FRAGMENT {
         let mut end = FILE_NAME_FRAGMENT;
-        while !stem.is_char_boundary(end) {
+        while !prefix.is_char_boundary(end) {
             end -= 1;
         }
-        format!("{}~{:016x}", &stem[..end], fnv1a(stem.as_bytes()))
+        format!("{}~{:016x}", &prefix[..end], fnv1a(prefix.as_bytes()))
     } else {
-        stem.to_owned()
+        prefix.to_owned()
     };
-    format!("{stem}{}", file_suffix(database_id, name_key))
+    format!("{prefix}{}", file_suffix(database_id, name_key))
 }
 
 /// The part of a file name that identifies its database: the unique ID and a
@@ -640,12 +641,12 @@ mod tests {
         // Escapes are never split; the fragment stops at a whole character.
         assert_eq!(long, format!("msduck.32767.{}.duckdb", "%C3%A9".repeat(10)));
         assert!(long.len() < 100);
-        let stem = "s".repeat(246);
-        let bounded = file_name(&stem, 32767, &"é".repeat(128));
+        let prefix = "s".repeat(246);
+        let bounded = file_name(&prefix, 32767, &"é".repeat(128));
         assert!(bounded.starts_with(&format!("{}~", "s".repeat(64))));
         assert!(bounded.len() < 180, "{}", bounded.len());
         assert!(file_name(&"é".repeat(40), 5, "x").starts_with(&format!("{}~", "é".repeat(32))));
-        // Stems sharing their first 64 bytes still produce different names.
+        // Prefixes sharing their first 64 bytes still produce different names.
         let a = file_name(&format!("{}a", "s".repeat(64)), 5, "sales");
         let b = file_name(&format!("{}b", "s".repeat(64)), 5, "sales");
         assert_ne!(a, b);

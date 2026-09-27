@@ -20,20 +20,21 @@ any remaining files.
 ## Storage
 
 A user database lives next to the primary file as
-`<primary stem>.<database_id>.<name fragment>.duckdb`, for example
-`msduck.5.sales.duckdb`. The ID makes the name unique. The fragment is the
+`<primary file name>.<database_id>.<name fragment>.duckdb`, for example
+`msduck.duckdb.5.sales.duckdb`. The full primary file name keeps servers apart
+whose files differ only in extension, such as `tenant.db` and `tenant.duckdb`. The ID makes the name unique. The fragment is the
 lower-case name with ASCII letters, digits, `_` and `-` kept and every other
 UTF-8 byte written as `%XX`. It is cut at a whole character after 64 bytes, so
-long non-ASCII names stay within file-name limits. A primary stem longer than 64
+long non-ASCII names stay within file-name limits. A primary file name longer than 64
 bytes is cut the same way and followed by `~` and a 64-bit FNV-1a hash of the
-full stem, so servers whose stems share a prefix do not collide. The registry
+full name, so servers whose file names share a prefix do not collide. The registry
 is ordinary SQL data, so a stored file name is used only if it is a single
 file-name component that ends with the `.<database_id>.<fragment>.duckdb`
 suffix generated for that row's ID and name. Any other value, such as an
 absolute path, `..`, master's file or another database's file, makes the
 database unavailable, and neither recovery nor DROP touches the file. Any
-stem is accepted, so renaming the primary file keeps its databases. `My App` is stored as
-`msduck.5.my%20app.duckdb`. The registry records the file name.
+prefix is accepted, so renaming the primary file keeps its databases. `My App` is stored as
+`msduck.duckdb.5.my%20app.duckdb`. The registry records the file name.
 Creation refuses to adopt an existing file with that name. Dropping a database
 detaches it and deletes its file and WAL before the registration. If a deletion
 fails, the database stays registered and DROP reports the error, so a retry can
