@@ -4580,6 +4580,25 @@
       ],
       "issue": 448,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRGcP"
+    },
+    {
+      "id": "isjson-source-diagnostic-v1",
+      "title": "Recognize captured ISJSON source-type diagnostic names",
+      "state": "ready",
+      "authorization": "Direct owner continuation of full SQL Server compatibility; owner-run pinned SQL Server capture from issue #448 proves exact 8116 messages for five additional source type names.",
+      "scope": [
+        "src/json_extract.rs"
+      ],
+      "acceptance": [
+        "Map exact complete ISJSON binder messages for real, money, smallmoney, datetime and smalldatetime to error 8116/state 1 using the retained first-party SQL Server capture in issue #448.",
+        "Continue to reject prefixed, suffixed, case-altered and internal native-type lookalikes; add focused tests.",
+        "Run formatting, strict workspace Clippy, workspace Rust tests, independent tedious tests and diagnostic audit at the exact PR revision."
+      ],
+      "dependencies": [
+        "isjson-type-diagnostics-v1"
+      ],
+      "issue": 449,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRGuh"
     }
   ]
 }
