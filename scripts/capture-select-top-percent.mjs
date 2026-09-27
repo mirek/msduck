@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // First-party SQL Server SELECT TOP PERCENT / WITH TIES reference evidence.
 import assert from 'node:assert/strict'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Request, TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
@@ -14,6 +15,20 @@ const writeFixture = args.includes('--write-fixture')
 const positional = args.filter(arg => arg !== '--write-fixture')
 if (positional.length > 1) throw new Error('expected at most one output path')
 const output = resolve(positional[0] ?? 'artifacts/compatibility/select-top-percent/capture.json')
+const fixturePath = fileURLToPath(fixture)
+
+async function rejectFixtureOutput() {
+  if (output === fixturePath) throw new Error('output path must not be the retained fixture')
+  const info = async path => {
+    try { return await stat(path) }
+    catch (error) { if (error.code === 'ENOENT') return null; throw error }
+  }
+  // stat follows symlinks and also identifies hard links to the fixture.
+  const [outInfo, fixtureInfo] = await Promise.all([info(output), info(fixturePath)])
+  if (outInfo && fixtureInfo && outInfo.dev === fixtureInfo.dev && outInfo.ino === fixtureInfo.ino) {
+    throw new Error('output path aliases the retained fixture')
+  }
+}
 
 const source = 'dbo.top_percent_source'
 const cases = [
@@ -169,17 +184,21 @@ function summary(run) {
   assert.deepEqual(result('count two ties').sets[0].rows.map(row => row[0]).sort(), [1, 2, 3])
   assert.deepEqual(result('quarter percent ties').sets[0].rows.map(row => row[0]).sort(), [1, 2, 3])
   assert.deepEqual(result('half percent ties').sets[0].rows.map(row => row[0]).sort(), [1, 2, 3, 4, 5])
-  assert.deepEqual(result('prepared percent 0'), result('prepared percent 3'))
+  assert.deepEqual(stableResult('prepared percent 0', result('prepared percent 0')), stableResult('prepared percent 3', result('prepared percent 3')))
   return run.map(({ name, result }) => {
     assert(result.done.length > 0, `${name}: missing completion`)
-    // SQL Server does not specify the order among equal ORDER BY keys. Raw
-    // captures retain their order; only the stability comparison sorts ties.
-    const stable = structuredClone(result)
-    if (name.includes('ties') && !name.includes('unique')) {
-      for (const set of stable.sets) set.rows.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
-    }
-    return { name, result: stable }
+    return { name, result: stableResult(name, result) }
   })
+}
+
+function stableResult(name, result) {
+  // SQL Server does not specify order among equal ORDER BY keys. Raw captures
+  // retain their order; only the stability/replay comparisons sort those rows.
+  const stable = structuredClone(result)
+  if ((name.includes('ties') && !name.includes('unique')) || name.startsWith('prepared percent ')) {
+    for (const set of stable.sets) set.rows.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+  }
+  return stable
 }
 
 async function observe(connection) {
@@ -200,11 +219,12 @@ async function observe(connection) {
   for (let index = 0; index < preparedValues.length; ++index) {
     run.push({ name: `prepared percent ${index}`, sql: preparedSql, parameter: preparedValues[index], result: preparedResults[index] })
   }
-  assertSameCapture(preparedResults[0], preparedResults[3], 'prepared replay differs')
+  assertSameCapture(stableResult('prepared percent 0', preparedResults[0]), stableResult('prepared percent 3', preparedResults[3]), 'prepared replay differs')
   summary(run)
   return run
 }
 
+await rejectFixtureOutput()
 if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(resolve(output, '..'), { recursive: true })
 await withReferenceContainer(async (config, container) => {
@@ -213,7 +233,6 @@ await withReferenceContainer(async (config, container) => {
   const actual = { image: container.image, runs }
   const summaries = runs.map(summary)
   assertSameCapture(summaries[0], summaries[1], 'SELECT TOP behavior differs across fresh databases')
-  await writeFile(output, JSON.stringify(actual) + '\n')
   let retained
   try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
   catch (error) { if (error.code !== 'ENOENT') throw error }
@@ -221,6 +240,7 @@ await withReferenceContainer(async (config, container) => {
     assert.equal(actual.image, retained.image)
     assertSameCapture(summaries, retained.runs.map(summary), 'SELECT TOP behavior differs from retained fixture')
   }
+  await writeFile(output, JSON.stringify(actual) + '\n')
   if (writeFixture) await writeNewFixture(fixture, actual)
   console.log(`Captured ${runs[0].length} SELECT TOP observations in two fresh databases${retained ? ' and matched retained invariants' : ''}`)
 })

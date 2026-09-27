@@ -52,4 +52,6 @@ On a host with Node.js 24+ and Docker, run
 `node scripts/capture-select-top-percent.mjs artifacts/compatibility/select-top-percent/recheck.json`.
 The script creates and removes its own pinned container and fresh databases,
 compares against the retained fixture, and refuses to overwrite that fixture.
+The output path must be separate from the fixture, including symlink and hard-link
+aliases.
 `--write-fixture` is for initial creation only when the file is absent.
