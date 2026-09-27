@@ -3,7 +3,8 @@
 `reference/json-extraction-boundaries.json` retains 80 `JSON_VALUE` and
 `JSON_QUERY` requests against the pinned SQL Server 2025 image. The owner-run
 capture repeats every request in two fresh databases, checks both runs exactly,
-and retains rows, typed result descriptors, diagnostics and DONE events. A later
+and retains rows, typed result descriptors, diagnostics, DONE events and their
+relative event order. A later
 independent capture matched the fixture. Regenerate a scratch capture with
 `node scripts/capture-json-extraction-boundaries.mjs`; the fixture cannot be
 overwritten by that command. The image digest and each SQL request are in the

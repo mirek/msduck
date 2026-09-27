@@ -3,7 +3,8 @@
 import { lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { canonical, capture } from './lib/compatibility.mjs'
+import { Request } from 'tedious'
+import { canonical } from './lib/compatibility.mjs'
 import { assertSameCapture, isolatedReference, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
 
@@ -80,12 +81,58 @@ const cases = [
 const programs = cases.flatMap(([name, document, path]) =>
   ['JSON_VALUE', 'JSON_QUERY'].map(fn => ({ name, fn, sql: `SELECT ${fn}(${document},${path}) AS value` })))
 
+function captureOrdered(connection, sql) {
+  return new Promise(resolve => {
+    const result = { sets: [], done: [], errors: [], info: [], events: [], returnStatus: null }
+    const request = new Request(sql, (error, rowCount) => {
+      connection.off('errorMessage', onError)
+      connection.off('infoMessage', onInfo)
+      result.rowCount = rowCount
+      if (error && !result.errors.length) result.errors.push({ message: error.message, number: error.number ?? null })
+      resolve(result)
+    })
+    const onError = error => {
+      result.events.push({ kind: 'ERROR', number: error.number })
+      result.errors.push({ number: error.number, state: error.state, class: error.class, lineNumber: error.lineNumber, message: error.message })
+    }
+    const onInfo = info => {
+      result.events.push({ kind: 'INFO', number: info.number })
+      result.info.push({ number: info.number, state: info.state, class: info.class, lineNumber: info.lineNumber, message: info.message })
+    }
+    connection.on('infoMessage', onInfo)
+    connection.on('errorMessage', onError)
+    request.on('columnMetadata', metadata => {
+      result.events.push({ kind: 'COLMETADATA', columns: metadata.length })
+      result.sets.push({
+        columns: metadata.map(c => ({ name: c.colName, type: c.type.name, length: c.dataLength ?? null, precision: c.precision ?? null, scale: c.scale ?? null, flags: c.flags, collation: canonical(c.collation ?? null) })),
+        rows: [],
+      })
+    })
+    request.on('row', row => {
+      result.events.push({ kind: 'ROW' })
+      result.sets.at(-1).rows.push(row.map(c => c.value))
+    })
+    for (const name of ['done', 'doneInProc', 'doneProc']) request.on(name, (rowCount, more) => {
+      result.events.push({ kind: name.toUpperCase(), rowCount: rowCount ?? null, more })
+      result.done.push({ kind: name, rowCount: rowCount ?? null, more })
+    })
+    request.on('doneProc', (_count, _more, status) => { result.returnStatus = status })
+    try { connection.execSqlBatch(request) }
+    catch (error) {
+      connection.off('errorMessage', onError)
+      connection.off('infoMessage', onInfo)
+      result.errors.push({ message: error.message, number: error.number ?? null })
+      resolve(result)
+    }
+  })
+}
+
 async function observe(connection) {
   const records = []
   for (const { name, fn, sql } of programs) {
-    const result = canonical(await capture(connection, sql))
+    const result = canonical(await captureOrdered(connection, sql))
     if (result.sets.length > 1 || result.sets.some(set => set.rows.length > 1) ||
-        result.errors.length > 4 || result.done.length > 8 ||
+        result.errors.length > 4 || result.done.length > 8 || result.events.length > 16 ||
         JSON.stringify(result).length > 20000) throw new Error(`unbounded capture: ${name}/${fn}`)
     records.push({ name, fn, sql, result })
   }
