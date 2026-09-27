@@ -4390,6 +4390,26 @@
       ],
       "issue": 433,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQtRy"
+    },
+    {
+      "id": "decimal-varchar-leading-zero-v1",
+      "title": "Preserve leading zero in DECIMAL-to-VARCHAR conversion",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server compatibility goal; first-party reference/decimal-avg.json, docs/decimal-avg.md and owner-authored issue #435. No external submission.",
+      "scope": [
+        "src/varchar.rs",
+        "docs/varchar.md",
+        "docs/decimal-avg.md"
+      ],
+      "acceptance": [
+        "Normalize decimal display text lacking the zero before its decimal point for explicit VARCHAR and CHAR conversion, without changing float formatting, applying width limits before formatting or evaluating the operand twice.",
+        "Add native regressions for the captured DECIMAL(38,38) AVG value, negative nonzero decimal, exact-width boundary and NULL; preserve existing numeric overflow behavior.",
+        "Document the corrected captured gap and remaining metadata or decimal display differences without claiming full compatibility.",
+        "Run formatting, workspace Rust tests, strict Clippy, independent tedious clients and diagnostic audit at the exact final revision."
+      ],
+      "dependencies": [],
+      "issue": 435,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQvYr"
     }
   ]
 }
