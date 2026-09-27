@@ -4221,6 +4221,56 @@
       "dependencies": [],
       "issue": 425,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQaSz"
+    },
+    {
+      "id": "multi-database-catalog-v1",
+      "title": "Attach user databases with a registry, sys.databases and session database selection",
+      "state": "ready",
+      "authorization": "Direct owner instruction in this session (2026-09-27) to support CREATE DATABASE, USE and sys.databases and to work on it. No external submission is input.",
+      "scope": [
+        "src/database_catalog.rs",
+        "src/server.rs",
+        "src/lib.rs",
+        "tests/database_catalog.rs",
+        "docs/databases.md"
+      ],
+      "acceptance": [
+        "Add a database catalog module that creates, attaches, re-attaches on startup, bootstraps (dbo schema and msduck sys catalog objects) and drops user databases as DuckDB catalogs, backed by a registry in the primary database. Expose the primary catalog as master with database_id 1; user database IDs start at 5. Reject reserved and duplicate names explicitly.",
+        "Publish sys.databases in every database, listing master and user databases. Provide a session database selection API (DuckDB default catalog plus dbo schema) that server-side connection setup and RESETCONNECTION use, so a reset restores the connection database. LOGIN7 decoding stays unchanged in this task.",
+        "Cover in-memory and file-backed servers with root-side Rust integration tests, including persistence across reopen, and run the required formatting, strict workspace Clippy, workspace Rust tests and npm client tests. Open a focused owner PR linked to issue 428."
+      ],
+      "dependencies": [],
+      "issue": 428,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQdWF"
+    },
+    {
+      "id": "multi-database-statements-v1",
+      "title": "Execute CREATE DATABASE, DROP DATABASE, USE and DB_NAME/DB_ID against the database catalog",
+      "state": "backlog",
+      "authorization": "Direct owner instruction in this session (2026-09-27) to support CREATE DATABASE, USE and sys.databases and to work on it. No external submission is input.",
+      "scope": [
+        "src/engine.rs",
+        "src/database_catalog.rs",
+        "tests/databases.test.mjs",
+        "package.json",
+        "docs/databases.md",
+        "README.md",
+        "ROADMAP.md",
+        "crates/msduck-tds/src/lib.rs"
+      ],
+      "acceptance": [
+        "Route CREATE DATABASE (with IF NOT EXISTS where parsed), DROP DATABASE and USE through the database catalog. USE emits ENVCHANGE type 1 and informational message 5701. Refuse CREATE and DROP DATABASE inside a user transaction, and reject unsupported options explicitly.",
+        "DB_NAME(), DB_NAME(id) and DB_ID(name) follow the session database.",
+        "Add tedious coverage for connect to master, create a database, USE it, create tables, reconnect with that database in the login, and query sys.databases. Update README and ROADMAP with the verified behavior and the remaining gaps.",
+        "LOGIN7 accepts any existing database, the server selects it for the session and reports it in the login ENVCHANGE, and unknown databases still fail login explicitly."
+      ],
+      "dependencies": [
+        "multi-database-catalog-v1",
+        "select-top-percent-ties-v1",
+        "returnvalue-codec-v1"
+      ],
+      "issue": 428,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQdWF"
     }
   ]
 }
