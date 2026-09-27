@@ -19,7 +19,11 @@ of three transport outcomes: plaintext, TLS, or rejection. The root owns PEM
 loading, cryptography and sockets. It sends the negotiation response before
 closing incompatible connections. TLS handshake records use PRELOGIN packets
 (type 0x12), including the final server flight; subsequent TDS messages travel
-inside raw TLS records. The handshake has socket timeouts and a size bound.
+inside raw TLS records. The handshake has a 15-second monotonic deadline across
+every PRELOGIN-wrapped read and write, as well as a size bound. The deadline is
+checked at every socket operation within packet reassembly, so a peer cannot
+extend it by sending one byte just before each read timeout. Normal socket
+timeouts are restored after a successful handshake.
 
 For required encryption, OFF receives REQ, ON/REQ receives ON, and NOT_SUP
 receives REQ followed by termination. This follows the current
@@ -50,3 +54,7 @@ precedes bootstrap authentication and ORIGINAL_LOGIN. SQL-managed
 logins and permissions, optional
 login-only encryption, TLS 1.3 configuration, client-certificate authentication
 and TDS 8.0 remain unfinished. This is not a production-ready listener.
+
+The handshake deadline regression uses a real loopback socket and a shorter
+test budget to prove that a trickled PRELOGIN packet cannot keep the handshake
+open indefinitely. It is separate from the successful tedious TLS/login tests.
