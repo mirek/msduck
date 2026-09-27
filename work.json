@@ -3948,7 +3948,7 @@
     {
       "id": "table-type-catalog-v1",
       "title": "Persist user-defined table-type catalog identities for TVP binding",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement the full SQL Server compatible Rust/DuckDB server; first-party current catalog and owner TVP evidence. No external submission is input.",
       "scope": [
         "src/type_catalog.rs",
