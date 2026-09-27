@@ -846,3 +846,66 @@ fn captured_null_width_and_origin_binding() {
         ))
     );
 }
+
+#[test]
+fn pinned_reference_precision_grid_and_typed_overflow() {
+    // Read-only probes against the pinned SQL Server 2025 reference image.
+    let probes = [
+        (
+            TemporalType::Time(0),
+            value(1, 1, 1, 13, 47, 39, 0, 0),
+            "13:47:39",
+        ),
+        (
+            TemporalType::Time(1),
+            value(1, 1, 1, 13, 47, 39, 1_000_000, 0),
+            "13:47:39.1",
+        ),
+        (
+            TemporalType::DateTime2(0),
+            value(2024, 5, 15, 13, 47, 39, 0, 0),
+            "2024-05-15 13:47:39",
+        ),
+        (
+            TemporalType::DateTimeOffset(0),
+            value(2024, 5, 15, 13, 47, 39, 0, 330),
+            "2024-05-15 13:47:39 +05:30",
+        ),
+    ];
+    for (ty, input, expected) in probes {
+        let bound = datetrunc::bind_bucket("millisecond", ty, None).unwrap();
+        let output = datetrunc::bucket(bound, Some(7), Some(input), None)
+            .unwrap()
+            .unwrap();
+        assert_eq!(datetrunc::text(output, ty).unwrap(), expected, "{ty:?}");
+    }
+    let ty = TemporalType::SmallDateTime;
+    let bound = datetrunc::bind_bucket("second", ty, None).unwrap();
+    let output = datetrunc::bucket(
+        bound,
+        Some(7),
+        Some(value(2024, 5, 15, 13, 47, 0, 0, 0)),
+        None,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        datetrunc::text(output, ty).unwrap(),
+        "2024-05-15 13:47:00.000"
+    );
+
+    let ty = TemporalType::DateTime2(7);
+    let bound = datetrunc::bind_bucket("day", ty, None).unwrap();
+    let result = datetrunc::bucket(bound, Some(10), Some(value(1, 1, 1, 0, 0, 0, 0, 0)), None);
+    assert_eq!(
+        result,
+        Err(RuleError::Sql {
+            number: 9835,
+            state: 1,
+            class: 16,
+            phase: Phase::Execution,
+            message: "Calculating date bucket for 'datetime2' column caused an overflow."
+                .to_owned(),
+        })
+    );
+}

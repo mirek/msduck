@@ -444,12 +444,16 @@ impl Value {
         i128::from(self.day) * DAY + i128::from(self.tick)
     }
 
-    fn from_absolute(absolute: i128, offset_minutes: i16) -> Result<Self, RuleError> {
-        let day =
-            i32::try_from(absolute.div_euclid(DAY)).map_err(|_| range_error(9835, 1, "date"))?;
+    fn from_absolute(
+        absolute: i128,
+        offset_minutes: i16,
+        ty: TemporalType,
+    ) -> Result<Self, RuleError> {
+        let day = i32::try_from(absolute.div_euclid(DAY))
+            .map_err(|_| range_error(9835, 1, type_name(ty)))?;
         let tick = i64::try_from(absolute.rem_euclid(DAY)).expect("one day fits i64");
         if ymd_from_day(day).is_none() {
-            return Err(range_error(9835, 1, "date"));
+            return Err(range_error(9835, 1, type_name(ty)));
         }
         Ok(Self {
             day,
@@ -584,15 +588,15 @@ impl Value {
     }
 }
 
-fn shift_months(origin: Value, months: i128) -> Result<Value, RuleError> {
+fn shift_months(origin: Value, months: i128, ty: TemporalType) -> Result<Value, RuleError> {
     let (year, month, day) =
         ymd_from_day(origin.day).ok_or(RuleError::Unsupported("origin calendar"))?;
     let target = i128::from(year - 1) * 12 + i128::from(month - 1) + months;
-    let year =
-        i32::try_from(target.div_euclid(12) + 1).map_err(|_| range_error(9835, 1, "date"))?;
+    let year = i32::try_from(target.div_euclid(12) + 1)
+        .map_err(|_| range_error(9835, 1, type_name(ty)))?;
     let month = i32::try_from(target.rem_euclid(12) + 1).expect("month range");
     let day = day.min(month_length(year, month));
-    let day = day_from_ymd(year, month, day).ok_or_else(|| range_error(9835, 1, "date"))?;
+    let day = day_from_ymd(year, month, day).ok_or_else(|| range_error(9835, 1, type_name(ty)))?;
     Ok(Value { day, ..origin })
 }
 
@@ -612,7 +616,31 @@ fn datetime_grid(value: Value) -> Result<Value, RuleError> {
     let absolute = value.absolute();
     let ticks = (absolute * 300 + SECOND / 2).div_euclid(SECOND);
     let rounded = (ticks * SECOND + 150).div_euclid(300);
-    Value::from_absolute(rounded, value.offset_minutes)
+    Value::from_absolute(rounded, value.offset_minutes, TemporalType::DateTime)
+}
+
+fn quantize(value: Value, ty: TemporalType) -> Result<Value, RuleError> {
+    let scale = match ty {
+        TemporalType::Time(scale)
+        | TemporalType::DateTime2(scale)
+        | TemporalType::DateTimeOffset(scale) => scale,
+        TemporalType::DateTime => return datetime_grid(value),
+        TemporalType::SmallDateTime => {
+            let rounded = (value.absolute() + MINUTE / 2).div_euclid(MINUTE) * MINUTE;
+            return Value::from_absolute(rounded, value.offset_minutes, ty);
+        }
+        TemporalType::Date => return Ok(value),
+    };
+    let unit = 10_i128.pow(u32::from(7 - scale));
+    if matches!(ty, TemporalType::Time(_)) {
+        let tick = (i128::from(value.tick) + unit / 2).div_euclid(unit) * unit;
+        return Ok(Value {
+            tick: tick.rem_euclid(DAY) as i64,
+            ..value
+        });
+    }
+    let rounded = (value.absolute() + unit / 2).div_euclid(unit) * unit;
+    Value::from_absolute(rounded, value.offset_minutes, ty)
 }
 
 /// A typed NULL width yields NULL. A NULL origin selects the default origin.
@@ -652,6 +680,7 @@ pub fn bucket(
                 origin.absolute() - i128::from(origin.offset_minutes) * MINUTE
                     + i128::from(value.offset_minutes) * MINUTE,
                 value.offset_minutes,
+                ty,
             )?
         } else {
             origin
@@ -668,10 +697,10 @@ pub fn bucket(
         let step = width * months_per_part;
         let difference = i128::from(year - origin_year) * 12 + i128::from(month - origin_month);
         let mut bucket_index = difference.div_euclid(step);
-        let mut candidate = shift_months(local_origin, bucket_index * step)?;
+        let mut candidate = shift_months(local_origin, bucket_index * step, ty)?;
         if candidate.absolute() > value.absolute() {
             bucket_index -= 1;
-            candidate = shift_months(local_origin, bucket_index * step)?;
+            candidate = shift_months(local_origin, bucket_index * step, ty)?;
         }
         candidate
     } else {
@@ -684,13 +713,10 @@ pub fn bucket(
         Value::from_absolute(
             result_absolute + i128::from(value.offset_minutes) * MINUTE,
             value.offset_minutes,
+            ty,
         )?
     };
-    let out = if ty == TemporalType::DateTime {
-        datetime_grid(out)?
-    } else {
-        out
-    };
+    let out = quantize(out, ty)?;
     Ok(Some(range_check(out, ty, "date_bucket")?))
 }
 
