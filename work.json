@@ -4414,7 +4414,7 @@
     {
       "id": "decimal-unicode-leading-zero-v1",
       "title": "Preserve DECIMAL leading zero in NVARCHAR and NCHAR conversion",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server compatibility goal; first-party decimal AVG evidence, merged PR #436 and owner-authored issue #437. No external submission.",
       "scope": [
         "scripts/capture-decimal-unicode.mjs",
