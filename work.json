@@ -4039,6 +4039,25 @@
       ],
       "issue": 406,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQNfE"
+    },
+    {
+      "id": "temp-table-scope-reference-v1",
+      "title": "Capture SQL Server temporary-table lifetime and scope",
+      "state": "ready",
+      "authorization": "Direct owner continuing SQL Server compatibility goal; first-party SQL Server 2025 captures and Microsoft CREATE TABLE/sp_executesql documentation. No external submission is input.",
+      "scope": [
+        "scripts/capture-temp-table-scope.mjs",
+        "reference/temp-table-scope.json",
+        "docs/temp-table-scope-reference.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, typed descriptors, errors, informational messages and DONE events for local temporary tables across batches, nested sp_executesql/RPC, two sessions, explicit DROP and transaction rollback; include a bounded global-table visibility case if supported by the pinned server.",
+        "Use four fresh databases across two independent pinned SQL Server containers and require raw agreement plus retained-fixture replay; write a fixture only when absent, reject output aliases and overwrites, and do not normalize behavioral differences.",
+        "Document SQL Server version, observed lifetime/name-resolution rules, source links and remaining msduck runtime gap; keep all changes within the three claimed paths."
+      ],
+      "dependencies": [],
+      "issue": 408,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQPQm"
     }
   ]
 }
