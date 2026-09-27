@@ -3181,7 +3181,7 @@
     {
       "id": "tvp-wire-reference-v1",
       "title": "Capture SQL Server TVP RPC request wire behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal and instruction to proceed with this first-party TVP wire reference task. Local TDS skill and source show type 0xF3 is not decoded in Rust. No external submission is input.",
       "scope": [
         "scripts/capture-tvp-wire.mjs",
@@ -3222,7 +3222,7 @@
     {
       "id": "savepoint-reference-v1",
       "title": "Capture SQL Server savepoint and nested transaction reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. First-party ROADMAP.md and docs/transaction-manager.md list this area as open; no external submission is input.",
       "scope": [
         "scripts/capture-savepoint.mjs",
@@ -3813,7 +3813,7 @@
     {
       "id": "session-reset-reference-v1",
       "title": "Capture SQL Server session reset behavior through Tedious 20",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal; first-party Tedious 20 source and msduck TDS gap inventory identify an unmeasured pool reset behavior.",
       "scope": [
         "scripts/capture-session-reset.mjs",
