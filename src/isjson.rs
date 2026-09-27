@@ -104,8 +104,8 @@ unsafe fn carrier(kind: duckdb_logical_type) -> bool {
     }
 }
 
-unsafe fn type_name(kind: duckdb_logical_type) -> &'static str {
-    match Id::from(unsafe { duckdb_get_type_id(kind) }) {
+unsafe fn type_name(kind: duckdb_logical_type) -> Option<&'static str> {
+    Some(match Id::from(unsafe { duckdb_get_type_id(kind) }) {
         Id::Boolean => "bit",
         Id::Tinyint | Id::UTinyint => "tinyint",
         Id::Smallint | Id::USmallint => "smallint",
@@ -121,25 +121,25 @@ unsafe fn type_name(kind: duckdb_logical_type) -> &'static str {
         Id::Blob => "varbinary",
         Id::Struct => unsafe {
             if duckdb_struct_type_child_count(kind) == 0 {
-                return "struct";
+                return None;
             }
             let child = duckdb_struct_type_child_name(kind, 0);
             if child.is_null() {
-                return "struct";
+                return None;
             }
             let name = CStr::from_ptr(child).to_bytes();
             let result = if name.starts_with(b"__msduck_datetime2_") {
-                "datetime2"
+                Some("datetime2")
             } else if name.starts_with(b"__msduck_datetimeoffset_") {
-                "datetimeoffset"
+                Some("datetimeoffset")
             } else {
-                "struct"
+                None
             };
             duckdb_free(child.cast());
-            result
+            return result;
         },
-        _ => "unknown",
-    }
+        _ => return None,
+    })
 }
 
 unsafe extern "C" fn bind(info: duckdb_bind_info) {
@@ -152,13 +152,20 @@ unsafe extern "C" fn bind(info: duckdb_bind_info) {
         let name = (!accepted).then(|| type_name(kind));
         duckdb_destroy_logical_type(&mut kind);
         duckdb_destroy_expression(&mut expression);
-        if let Some(name) = name {
-            let message = CString::new(format!(
-                "Argument data type {} is invalid for argument 1 of isjson function.",
-                name
-            ))
-            .expect("static message has no NUL");
-            duckdb_scalar_function_bind_set_error(info, message.as_ptr());
+        match name {
+            Some(Some(name)) => {
+                let message = CString::new(format!(
+                    "Argument data type {} is invalid for argument 1 of isjson function.",
+                    name
+                ))
+                .expect("static message has no NUL");
+                duckdb_scalar_function_bind_set_error(info, message.as_ptr());
+            }
+            Some(None) => duckdb_scalar_function_bind_set_error(
+                info,
+                c"ISJSON input has an unsupported native type.".as_ptr(),
+            ),
+            None => {}
         }
     }));
     if outcome.is_err() {
@@ -248,7 +255,12 @@ unsafe extern "C" fn invoke<const MODE: u8>(
                     .collect::<Vec<_>>();
                 i32::from(valid_utf16(&units, MODE))
             } else {
-                i32::from(valid(&string_bytes(source, row)?, MODE))
+                let bytes = string_bytes(source, row)?;
+                if bytes.len() > remaining {
+                    return Err(c"ISJSON input exceeds the configured chunk limit.");
+                }
+                remaining -= bytes.len();
+                i32::from(valid(&bytes, MODE))
             };
             destination.add(row).write_unaligned(value);
             duckdb_validity_set_row_validity(validity, row as idx_t, true);
@@ -351,5 +363,19 @@ mod tests {
                 .unwrap(),
             6000
         );
+    }
+
+    #[test]
+    fn ansi_rows_share_the_chunk_budget() {
+        let db = duckdb::Connection::open_in_memory().unwrap();
+        crate::scalar::register(&db).unwrap();
+        let error = db
+            .query_row(
+                "SELECT sum(__msduck_isjson_0(repeat(' ', 1048576 + i % 2))) FROM range(70) r(i)",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("configured chunk limit"));
     }
 }
