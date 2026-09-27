@@ -339,7 +339,7 @@ impl Catalog {
     }
 
     fn attach(&self, db: &Connection, name: &str, file: &str, mode: Attach) -> Result<()> {
-        let path = self.directory.join(file);
+        let path = self.path(file)?;
         // DuckDB creates missing files; recovery must not replace lost data
         // with an empty database.
         if mode == Attach::Recover {
@@ -427,8 +427,22 @@ impl Catalog {
         format!("{}.main.__msduck_database_ids", quote(&self.primary))
     }
 
+    /// The registry is ordinary SQL data, so a stored file name is trusted
+    /// only if it is a single generated component inside the directory.
+    fn path(&self, file: &str) -> Result<PathBuf> {
+        let mut components = Path::new(file).components();
+        ensure!(
+            matches!(components.next(), Some(std::path::Component::Normal(_)))
+                && components.next().is_none()
+                && file.ends_with(".duckdb")
+                && !file.contains(['/', '\\']),
+            "invalid registered database file name '{file}'"
+        );
+        Ok(self.directory.join(file))
+    }
+
     fn delete_files(&self, file: &str) -> Result<()> {
-        let path = self.directory.join(file);
+        let path = self.path(file)?;
         let mut wal = path.clone().into_os_string();
         wal.push(".wal");
         for path in [path, PathBuf::from(wal)] {

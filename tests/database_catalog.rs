@@ -409,3 +409,40 @@ fn a_failed_file_deletion_keeps_the_registration() {
     drop((db, server));
     std::fs::remove_dir_all(&directory).unwrap();
 }
+
+#[test]
+fn registered_file_names_cannot_leave_the_data_directory() {
+    let directory = scratch_directory("escape");
+    let outside = scratch_directory("escape-target");
+    let victim = outside.join("victim.duckdb");
+    duckdb::Connection::open(&victim).unwrap();
+    let primary = directory.join("msduck.duckdb");
+    let primary = primary.to_str().unwrap();
+    {
+        let server = Server::open(primary).unwrap();
+        let db = server.connection().unwrap();
+        db.databases().create(&db, "app").unwrap();
+        db.databases().create(&db, "other").unwrap();
+        // The registry is reachable through ordinary SQL.
+        db.execute(
+            "UPDATE main.__msduck_databases SET file = ? WHERE name_key = 'app'",
+            [victim.to_str().unwrap()],
+        )
+        .unwrap();
+        db.execute(
+            "UPDATE main.__msduck_databases SET file = '../escape-target/victim.duckdb' WHERE name_key = 'other'",
+            [],
+        )
+        .unwrap();
+    }
+    let server = Server::open(primary).unwrap();
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    assert_eq!(catalog.list(&db).unwrap(), [database("master", 1)]);
+    assert!(catalog.remove(&db, "app").is_err());
+    assert!(catalog.remove(&db, "other").is_err());
+    assert!(victim.exists());
+    drop((db, server));
+    std::fs::remove_dir_all(&directory).unwrap();
+    std::fs::remove_dir_all(&outside).unwrap();
+}

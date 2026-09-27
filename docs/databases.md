@@ -26,7 +26,10 @@ lower-case name with ASCII letters, digits, `_` and `-` kept and every other
 UTF-8 byte written as `%XX`. It is cut at a whole character after 64 bytes, so
 long non-ASCII names stay within file-name limits. A primary stem longer than 64
 bytes is cut the same way and followed by `~` and a 64-bit FNV-1a hash of the
-full stem, so servers whose stems share a prefix do not collide. `My App` is stored as
+full stem, so servers whose stems share a prefix do not collide. The registry
+is ordinary SQL data, so a stored file name is used only if it is a single
+`.duckdb` file-name component. Anything else, such as an absolute path or `..`,
+makes the database unavailable, and neither recovery nor DROP touches the file. `My App` is stored as
 `msduck.5.my%20app.duckdb`. The registry records the file name.
 Creation refuses to adopt an existing file with that name. Dropping a database
 detaches it and deletes its file and WAL before the registration. If a deletion
@@ -34,7 +37,10 @@ fails, the database stays registered and DROP reports the error, so a retry can
 finish. A CREATE that fails after its file exists cleans up the same way.
 
 An in-memory server keeps its user databases in a temporary directory, which is
-removed when the server is dropped. A process that crashes can leave this
+removed when the last `Server` or `server::Connection` handle is dropped. A
+`Session` does not hold the catalog yet, so dropping an in-memory server while a
+session is still open removes the files under that session. The statements task
+gives `Session` the catalog, which it needs for `USE`. A process that crashes can leave this
 directory behind in the system temporary directory.
 
 ## Per-database catalog objects
