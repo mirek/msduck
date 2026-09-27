@@ -2,6 +2,8 @@
 # Entry point installed at the SQL Server image's /opt/mssql/bin/sqlservr path.
 # Ensures a TLS certificate exists, then starts the msduck container launcher.
 set -eu
+# Database, WAL, key and credential files are private to the server user.
+umask 077
 secrets=${MSDUCK_SECRETS_DIR:-/var/opt/mssql/secrets}
 if [ -n "${MSDUCK_TLS_CERT:-}${MSDUCK_TLS_KEY:-}" ]; then
   # A mounted pair is used as given; the launcher reports missing files.
@@ -17,9 +19,9 @@ else
     # certificate lands it is missing, so an interrupted start regenerates both.
     mkdir -p "$secrets"
     host=$(hostname)
-    (umask 077 && openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+    openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
       -subj "/CN=$host" -addext "subjectAltName=DNS:$host,DNS:localhost,IP:127.0.0.1" \
-      -keyout "$key.tmp" -out "$cert.tmp" 2>/dev/null)
+      -keyout "$key.tmp" -out "$cert.tmp" 2>/dev/null
     rm -f "$cert"
     mv -f "$key.tmp" "$key"
     mv -f "$cert.tmp" "$cert"

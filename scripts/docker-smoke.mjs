@@ -84,7 +84,19 @@ try {
   assert.deepEqual(await query(connection, 'SELECT id, name FROM dbo.ducks'), [[1, 'Mallard']])
   connection.close()
   await assert.rejects(connect(port, `${password}x`), error => /Login failed/.test(error.message))
+  // A second container on the same volume cannot lock the database; it must
+  // exit without replacing the running server's credential.
+  const intruder = `${run}-intruder`
+  containers.push(intruder)
+  await docker(['run', '--name', intruder, '--volume', `${volume}:/var/opt/mssql`,
+    '--env', 'MSSQL_SA_PASSWORD', image], { MSSQL_SA_PASSWORD: `${password}Other` })
+    .then(() => assert.fail('second container started on a locked database'), () => {})
+  assert.doesNotMatch(await logs(intruder), /listening on/)
+  ;(await connect(port, password)).close()
   const certificate = await docker(['exec', first, 'cat', '/var/opt/mssql/secrets/msduck-cert.pem'])
+  // Persisted data and secrets are private to the server user.
+  const modes = await docker(['exec', first, 'sh', '-c', 'stat -c "%a %n" /var/opt/mssql/data/* /var/opt/mssql/secrets/*'])
+  for (const line of modes.split('\n')) assert.match(line, /^[0-7]00 /, line)
   await docker(['rm', '--force', first])
 
   // The volume keeps data and certificate; SA_PASSWORD and MSSQL_TCP_PORT are honoured.

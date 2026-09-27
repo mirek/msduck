@@ -59,6 +59,10 @@ requires TLS and `sa` password authentication:
   [authentication](authentication.md)). The plaintext is never written or passed
   as an argument, and a changed `MSSQL_SA_PASSWORD` takes effect on restart.
   SQL Server applies the variable only when it first initializes.
+  The credential is written only after the database lock and port are held,
+  so a second container that cannot start against a shared volume never
+  changes the running server's password.
+- Database, key and credential files are created with mode 0600 (umask 077).
 
 ## Differences from the SQL Server image
 

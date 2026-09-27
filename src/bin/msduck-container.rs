@@ -57,11 +57,7 @@ fn main() -> Result<()> {
 
     std::fs::create_dir_all(&data).context("create MSSQL_DATA_DIR")?;
     std::fs::create_dir_all(&secrets).context("create secrets directory")?;
-    let credentials = secrets.join("msduck-admin.json");
-    write_private(
-        &credentials,
-        &msduck::authentication::credential_file("sa", &password)?,
-    )?;
+    let hashed = msduck::authentication::credential_file("sa", &password)?;
     drop(password);
 
     let tls = msduck::tls::load(&cert, &key)?;
@@ -69,10 +65,14 @@ fn main() -> Result<()> {
     let database = database
         .to_str()
         .context("MSSQL_DATA_DIR must be valid UTF-8")?;
-    let server = Server::open(database)?
-        .with_tls(tls)
-        .with_administrator(Administrator::load(&credentials)?)?;
+    // Acquire the database lock and the port before publishing the credential:
+    // a running server sharing this volume reloads it for every login, so a
+    // replacement that cannot start must not change its password.
+    let server = Server::open(database)?.with_tls(tls);
     let listener = TcpListener::bind(SocketAddr::new(ip, port))?;
+    let credentials = secrets.join("msduck-admin.json");
+    write_private(&credentials, &hashed)?;
+    let server = server.with_administrator(Administrator::load(&credentials)?)?;
     eprintln!(
         "msduck listening on {} (required TLS, sa authentication, database {database})",
         listener.local_addr()?
