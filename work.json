@@ -3534,7 +3534,7 @@
     {
       "id": "string-escape-format-v1",
       "title": "Match SQL Server STRING_ESCAPE format padding and NULL diagnostics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal to implement a fully functional SQL Server compatible Rust/DuckDB server, and explicit owner integration-session authorization after first-party pinned SQL Server 2025 matrix capture. No external submission is input.",
       "scope": [
         "crates/msduck-core/src/json_escape.rs",
@@ -3557,7 +3557,7 @@
     {
       "id": "string-escape-prepared-null-assertion-v1",
       "title": "Correct prepared STRING_ESCAPE typed NULL format expectation",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Direct owner continuing SQL Server compatibility goal and explicit integration-session request to preserve pinned SQL Server 2025 typed-NULL format behavior while tests/tedious.test.mjs remains reserved by another task. First-party follow-up to #362; no external submission is input.",
       "scope": [
         "tests/tedious.test.mjs"
