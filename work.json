@@ -4646,6 +4646,25 @@
       ],
       "issue": 454,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRQXU"
+    },
+    {
+      "id": "json-extraction-boundaries-reference-v1",
+      "title": "Capture JSON_VALUE and JSON_QUERY validation-order boundaries",
+      "state": "ready",
+      "authorization": "Mirek's continuing instruction to build the SQL Server-compatible Rust/DuckDB server; first-party docs/json-extraction.md and repository code identify the validation-order gap; no external submission is input.",
+      "scope": [
+        "scripts/capture-json-extraction-boundaries.mjs",
+        "reference/json-extraction-boundaries.json",
+        "docs/json-extraction-boundaries.md"
+      ],
+      "acceptance": [
+        "Capture raw rows, typed descriptors, diagnostics and DONE events for JSON_VALUE and JSON_QUERY across valid and malformed documents, early match with malformed suffix, wrong-kind matches, strict/lax missing paths, truncated ancestors, root scalars, overlong scalar text, NULL inputs and representative path errors.",
+        "Repeat each request in two fresh databases on the pinned SQL Server 2025 container; compare runs exactly and retain the raw fixture. Bound individual records and refuse fixture overwrite.",
+        "Record observed rules and remaining implementation gaps without claiming parity; propose a disjoint runtime successor if evidence exposes one. Evidence-only scope; no runtime edits."
+      ],
+      "dependencies": [],
+      "issue": 456,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRYw_"
     }
   ]
 }
