@@ -3576,7 +3576,7 @@
     {
       "id": "string-escape-result-properties-v1",
       "title": "Preserve STRING_ESCAPE computed result metadata",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server compatibility goal and explicit integration-session direction to retain and later fix the first-party pinned 27-case STRING_ESCAPE descriptor difference. Shared result-properties file is held by task #360; no external submission is input.",
       "scope": [
         "crates/msduck-sql/src/result_properties.rs",
