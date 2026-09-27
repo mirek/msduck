@@ -3852,6 +3852,27 @@
       ],
       "issue": 393,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PP9y4"
+    },
+    {
+      "id": "tds-first-packet-reset-status-v1",
+      "title": "Preserve first-packet TDS reset status through framing",
+      "state": "backlog",
+      "authorization": "Direct owner full SQL Server compatibility goal; first-party review of the active framing branch and MS-TDS Status specification identifies later-packet reset status incorrectly aggregated into the message.",
+      "scope": [
+        "crates/msduck-tds/src/framing.rs",
+        "crates/msduck-tds/tests/reset_status.rs",
+        "docs/tds-reset-status.md"
+      ],
+      "acceptance": [
+        "Preserve RESETCONNECTION (0x08) and RESETCONNECTIONSKIPTRAN (0x10) only from the first packet of Batch, RPC or Transaction Manager messages; later-packet flags never trigger reset and both flags together receive an explicit error policy.",
+        "Keep EOM and IGNORE semantics intact; test first-only, later-only, final-only, both-flags, single-packet and fragmented cases with exact bytes and bounded fatal malformed-input behavior.",
+        "Do not edit the active root reader or server dispatcher; document the root integration gate, and run deterministic crate tests, formatting and strict Clippy at the exact revision."
+      ],
+      "dependencies": [
+        "incremental-tds-framing-v1"
+      ],
+      "issue": 394,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PP-Du"
     }
   ]
 }
