@@ -4665,6 +4665,27 @@
       "dependencies": [],
       "issue": 456,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRYw_"
+    },
+    {
+      "id": "json-extraction-scalar-root-core-v1",
+      "title": "Reject scalar JSON document roots in extraction core",
+      "state": "ready",
+      "authorization": "Mirek's continuing implementation goal and owner-run SQL Server evidence retained by merged PR 457; no external submission is input.",
+      "scope": [
+        "crates/msduck-core/src/json_path.rs",
+        "crates/msduck-core/tests/json_extraction_root.rs",
+        "docs/json-extraction-root.md"
+      ],
+      "acceptance": [
+        "Use reference/json-extraction-boundaries.json: JSON_VALUE and JSON_QUERY at $ reject scalar JSON roots 1, quoted text and null with 13609/state 1. Correct the deterministic extraction root-kind rule without changing generic json::root or ISJSON behavior.",
+        "Add focused tests for the six captured function/document combinations, object/array root non-regression and early selection. Preserve source text; no effects in core.",
+        "Document remaining exact-position diagnostic and wire token-order gaps; a core-only change must not claim runtime parity. Run formatting, core tests and strict core Clippy on the final revision."
+      ],
+      "dependencies": [
+        "json-extraction-boundaries-reference-v1"
+      ],
+      "issue": 458,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRZ3p"
     }
   ]
 }
