@@ -4291,6 +4291,83 @@
       "dependencies": [],
       "issue": 430,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQqeg"
+    },
+    {
+      "id": "table-variable-sql-v1",
+      "title": "Parse and bind SQL Server table variables in deterministic SQL layer",
+      "state": "backlog",
+      "authorization": "Mirek's continuing SQL Server compatibility goal and owner-authored issue #432; first-party reference/table-variable.json and docs/table-variable.md.",
+      "scope": [
+        "crates/msduck-sql/src/dialect.rs",
+        "crates/msduck-sql/src/batch.rs",
+        "crates/msduck-sql/src/preflight.rs",
+        "crates/msduck-sql/src/table_variable.rs",
+        "crates/msduck-sql/src/lib.rs",
+        "crates/msduck-sql/tests/table_variable.rs"
+      ],
+      "acceptance": [
+        "Parse DECLARE @t TABLE with typed columns, defaults, identity and supported constraints; preserve SQL Server syntax errors and reject unsupported declarations explicitly instead of passing them to DuckDB.",
+        "Bind table-variable names in object positions for SELECT, INSERT, UPDATE, DELETE and OUTPUT INTO over explicit batch/procedure scope; keep scalar variables distinct and prohibit cross-batch/dynamic-SQL leakage.",
+        "Preserve deterministic typed descriptors for empty and NULL results without database access or hidden process state; test syntax, duplicate names, scope and reference-backed metadata.",
+        "Run formatting, deterministic SQL tests and strict workspace Clippy at the exact head; document any captured behavior deferred to root execution."
+      ],
+      "dependencies": [
+        "drop-index-batch-syntax-v1",
+        "string-agg-rules-v1"
+      ],
+      "issue": 432,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQtBv"
+    },
+    {
+      "id": "table-variable-runtime-v1",
+      "title": "Execute SQL Server table variables with session-private storage",
+      "state": "backlog",
+      "authorization": "Mirek's continuing SQL Server compatibility goal and owner-authored issue #432; first-party reference/table-variable.json and docs/table-variable.md.",
+      "scope": [
+        "src/table_variables.rs",
+        "src/engine.rs",
+        "src/lib.rs",
+        "src/rpc.rs",
+        "tests/table_variables.rs"
+      ],
+      "acceptance": [
+        "Execute parsed table-variable declarations and SELECT, INSERT, UPDATE, DELETE and OUTPUT forms with typed result descriptors and statement-atomic effects; clean up private storage on scope exit and errors.",
+        "Preserve table-variable rows and identity allocations across transaction/savepoint rollback while ordinary table changes roll back, matching the retained SQL Server capture.",
+        "Create a fresh scope for each SQL batch, procedure and prepared/RPC execution; preserve explicit unsupported errors and captured diagnostic and DONE-family behavior.",
+        "Add root-side integration regressions and run formatting, workspace Rust tests, strict Clippy, independent tedious clients and diagnostic audit at the final revision."
+      ],
+      "dependencies": [
+        "table-variable-sql-v1",
+        "result-alignment-v1",
+        "select-top-percent-ties-v1",
+        "multi-database-catalog-v1",
+        "prepared-execution-context-v1"
+      ],
+      "issue": 432,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQtBv"
+    },
+    {
+      "id": "table-variable-client-v1",
+      "title": "Replay table-variable behavior through tedious and document compatibility",
+      "state": "backlog",
+      "authorization": "Mirek's continuing SQL Server compatibility goal and owner-authored issue #432; first-party reference/table-variable.json and docs/table-variable.md.",
+      "scope": [
+        "tests/table_variables.test.mjs",
+        "package.json",
+        "README.md",
+        "ROADMAP.md",
+        "docs/table-variable.md"
+      ],
+      "acceptance": [
+        "Add independent tedious tests for captured empty metadata, rows, DML/OUTPUT, batch/RPC/prepared scope, transaction/savepoint rollback and session reuse; preserve raw SQL Server differences instead of normalizing them away.",
+        "Update README and ROADMAP only for behavior verified at the final revision; document unsupported and uncaptured table-variable forms explicitly.",
+        "Run formatting, workspace Rust tests, strict Clippy, npm test and diagnostic audit at the final revision and report exact remaining differences."
+      ],
+      "dependencies": [
+        "table-variable-runtime-v1"
+      ],
+      "issue": 432,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQtBv"
     }
   ]
 }
