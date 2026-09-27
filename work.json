@@ -4062,7 +4062,7 @@
     {
       "id": "datediff-numeric-input-v1",
       "title": "Match SQL Server DATEDIFF numeric operand binding",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server compatibility goal; first-party SQL Server captures and Microsoft DATEDIFF/type-conversion docs. No external submission is input.",
       "scope": [
         "src/datepart.rs",
