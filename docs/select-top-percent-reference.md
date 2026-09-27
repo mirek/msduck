@@ -1,15 +1,18 @@
 # SQL Server SELECT TOP PERCENT and WITH TIES reference
 
-`reference/select-top-percent.json` retains 40 raw tedious observations in each
+`reference/select-top-percent.json` retains 50 raw tedious observations in each
 of two fresh databases on the pinned SQL Server 2025 image
 `mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a`.
 The server reported ProductVersion `17.0.4065.4` and collation
 `SQL_Latin1_General_CP1_CI_AS`. A second fresh container, again with two fresh
 databases, reproduced the fixture byte for byte. The fixture SHA-256 is
-`12140917db38662bb1b81a97147a8dd519e3ad965f828e9b288fc9c552a59dba`.
+`e55a22709a972fec5133291d3417ed47b4940d2996f52cfce37ea361b321f128`.
 The two full raw captures are retained separately under ignored
-`artifacts/compatibility/select-top-percent/prepared-first.json` and
-`prepared-second.json` in the owner's worktree. The generator records SQL text,
+`artifacts/compatibility/select-top-percent/shapes-first.json` and
+`shapes-second.json` in the owner's worktree. Both raw captures have the fixture
+hash above. The earlier 40-case capture remains in Git history at `ba3916b3`
+and in the owner's ignored `prepared-first.json` and `prepared-second.json`.
+The generator records SQL text,
 ordered rows, column descriptors, errors, information events, RPC return status
 and DONE-family counts. It checks stable invariants across databases and against
 the retained fixture. For tie cases, only the stability comparison sorts rows
@@ -40,10 +43,26 @@ handle with `25` succeeds again and matches its first execution. The fixture
 also covers variables, an aggregate, a nested TOP query, and a set-operation
 branch. Errors and completion sequences remain raw in the fixture.
 
+The 2026-09-27 follow-up adds ten query-shape cases. `SELECT DISTINCT TOP (50)
+PERCENT score` sees five distinct scores (including NULL), so it returns three
+scores `10,9,8`; a 25% DISTINCT query with `WITH TIES` returns `10,9`. Ordering
+that DISTINCT result by a nonprojected `score` produces error 145, state 1, class
+15, before column metadata. `GROUP BY score` likewise has five output groups:
+50% returns `(10,1),(9,2),(8,2)`, with nullable `IntN` descriptors for both
+columns. `HAVING COUNT(*)>1` leaves two groups before 50% selects `(9,2)`.
+Grouping by score, ordering only by frequency and applying `TOP (60) PERCENT
+WITH TIES` returns all five groups: the three-group cutoff lands on frequency 1,
+whose remaining peers are included. A nonprojected `score` can order a projected
+`id` when `id` supplies a unique tie-breaker. A scalar subquery yielding FLOAT
+25 selects two rows. Nested 50% cuts four inner rows down to two outer rows;
+a DISTINCT percentage inside a derived set-operation branch contributes three
+rows before the outer UNION ALL. The raw fixture retains every descriptor, error
+and DONE token for these cases.
+
 These observations establish this pinned SQL Server build's behavior for the
 captured cases. They do not test character collations, volatile count
-expressions, DISTINCT, SELECT INTO, transaction effects, concurrent writes, or
-every nested query shape. `msduck` still explicitly rejects SELECT TOP PERCENT
+expressions, other DISTINCT and grouped shapes, SELECT INTO, transaction effects,
+concurrent writes, or every nested query shape. `msduck` still explicitly rejects SELECT TOP PERCENT
 and WITH TIES; a successor must implement and compare actual client behavior.
 The [Microsoft TOP specification](https://learn.microsoft.com/en-us/sql/t-sql/queries/top-transact-sql)
 documents percentage rounding and the requirement for ORDER BY with ties.
