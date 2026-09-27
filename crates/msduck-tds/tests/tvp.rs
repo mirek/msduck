@@ -123,6 +123,18 @@ fn every_truncation_and_trailing_byte_is_rejected() {
     );
     let (_, consumed) = decode_prefix(&trailing, Limits::default()).unwrap();
     assert_eq!(consumed, wire.len());
+
+    let mut later_parameters = wire.clone();
+    later_parameters.extend(vec![0x7f; 1024]);
+    let (_, consumed) = decode_prefix(
+        &later_parameters,
+        Limits {
+            max_input_bytes: wire.len(),
+            ..Limits::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(consumed, wire.len());
 }
 
 #[test]

@@ -14,8 +14,8 @@ nullable row and a three-row TVP, each across four fresh databases. The null
 wire form is decoded, but the captured SQL Server rejected its non-default RPC
 use with error 8060; successful decoding does not imply execution acceptance.
 
-Parsing is limited by the caller's input, column, row, total-cell and cell-byte
-budgets. The defaults cap input at 4 MiB, columns at 1024, rows at 10,000,
+Parsing is limited by the caller's consumed-byte, column, row, total-cell and
+cell-byte budgets. The defaults cap TVP consumption at 4 MiB, columns at 1024, rows at 10,000,
 cells at 100,000 and each cell at 65,534 bytes. Truncation, malformed lengths,
 unexpected tokens and trailing bytes are errors. The implemented column codecs
 cover bounded `INTN`, `NVARCHAR` and `VARBINARY`; `NVARCHAR(max)` and

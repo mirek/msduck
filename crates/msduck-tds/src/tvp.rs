@@ -95,10 +95,11 @@ pub struct Tvp<'a> {
 /// Decode one TVP at the start of `input`, returning the number of consumed bytes.
 /// A caller parsing a larger RPC request may use the count to find the next parameter.
 pub fn decode_prefix(input: &[u8], limits: Limits) -> Result<(Tvp<'_>, usize), Error> {
-    if input.len() > limits.max_input_bytes {
-        return Err(Error::InputLimit);
-    }
-    let mut c = Cursor { input, offset: 0 };
+    let mut c = Cursor {
+        input,
+        offset: 0,
+        limit: limits.max_input_bytes,
+    };
     if c.byte()? != 0xf3 {
         return Err(Error::InvalidType);
     }
@@ -266,11 +267,15 @@ fn read_cell<'a>(c: &mut Cursor<'a>, column: &Column, limit: usize) -> Result<Ce
 struct Cursor<'a> {
     input: &'a [u8],
     offset: usize,
+    limit: usize,
 }
 
 impl<'a> Cursor<'a> {
     fn take(&mut self, length: usize) -> Result<&'a [u8], Error> {
         let end = self.offset.checked_add(length).ok_or(Error::Truncated)?;
+        if end > self.limit {
+            return Err(Error::InputLimit);
+        }
         let bytes = self.input.get(self.offset..end).ok_or(Error::Truncated)?;
         self.offset = end;
         Ok(bytes)
