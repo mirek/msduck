@@ -4555,6 +4555,31 @@
       ],
       "issue": 428,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQdWF"
+    },
+    {
+      "id": "isjson-source-types-v1",
+      "title": "Capture and match additional ISJSON source types",
+      "state": "ready",
+      "authorization": "Direct owner continuation of the full SQL Server compatible server goal; first-party ISJSON capture in PR #444 and owner-run Codex-reviewed binder diagnostics in PR #446 expose unverified source declarations.",
+      "scope": [
+        "src/isjson.rs",
+        "scripts/capture-isjson-source-types.mjs",
+        "reference/isjson-source-types.json",
+        "tests/isjson_source_types.test.mjs",
+        "docs/isjson.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, result descriptors, diagnostics and completion tokens for additional SQL Server numeric and temporal ISJSON source types, typed NULLs and source-column expressions in two fresh databases on the pinned SQL Server 2025 image; compare raw runs and retain the fixture without overwrite aliases.",
+        "Implement only captured type binding, diagnostic and ordering behavior in the existing ISJSON adapter, preserving bounded native reads, one evaluation and explicit unsupported cases.",
+        "Replay captured cases through a standalone tedious test, preserving descriptor mismatches explicitly instead of normalizing them; document remaining compatibility gaps.",
+        "Run formatting, strict workspace Clippy, workspace Rust tests, independent tedious tests, diagnostic audit and focused replay at the exact PR revision."
+      ],
+      "dependencies": [
+        "isjson-coercion-v1",
+        "isjson-type-diagnostics-v1"
+      ],
+      "issue": 448,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRGcP"
     }
   ]
 }
