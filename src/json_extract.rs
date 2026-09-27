@@ -9,6 +9,9 @@ use sqlparser::ast::*;
 /// Recover the native diagnostic after DuckDB adds its scalar-error wrapper.
 /// Exact matching avoids treating user text embedded in unrelated errors as JSON.
 pub fn diagnostic(message: &str) -> Option<SqlError> {
+    if let Some(error) = isjson_bind_diagnostic(message) {
+        return Some(error);
+    }
     let message = message
         .strip_prefix("Invalid Input Error: ")
         .unwrap_or(message);
@@ -17,6 +20,29 @@ pub fn diagnostic(message: &str) -> Option<SqlError> {
     }
     msduck_core::json_path::diagnostic(message)
         .or_else(|| crate::string_escape::diagnostic(message))
+}
+
+fn isjson_bind_diagnostic(message: &str) -> Option<SqlError> {
+    let unwrapped = message.strip_prefix("Binder Error: ")?;
+    let kind = unwrapped
+        .strip_prefix("Argument data type ")?
+        .strip_suffix(" is invalid for argument 1 of isjson function.")?;
+    if !matches!(
+        kind,
+        "int"
+            | "bit"
+            | "decimal"
+            | "float"
+            | "date"
+            | "datetime2"
+            | "uniqueidentifier"
+            | "varbinary"
+            | "xml"
+            | "text"
+    ) {
+        return None;
+    }
+    Some(SqlError::new(8116, 1, unwrapped))
 }
 pub fn lower(expr: &mut Expr) -> Result<(), String> {
     let Expr::Function(f) = expr else {
@@ -237,6 +263,27 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
 }
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn isjson_bind_error_identity_requires_the_complete_message() {
+        let canonical =
+            "Binder Error: Argument data type int is invalid for argument 1 of isjson function.";
+        assert_eq!(
+            diagnostic(canonical),
+            Some(SqlError::new(8116, 1, &canonical["Binder Error: ".len()..]))
+        );
+        for altered in [
+            format!("prefix {canonical}"),
+            format!("{canonical} trailing"),
+            canonical.replace("int", "integer"),
+            canonical.replace("argument 1", "argument 2"),
+            canonical.replace("isjson", "other"),
+        ] {
+            assert!(diagnostic(&altered).is_none(), "{altered}");
+        }
+    }
+
     #[test]
     fn existence_chunk_nulls_and_volatile_arguments() {
         let db = duckdb::Connection::open_in_memory().unwrap();
