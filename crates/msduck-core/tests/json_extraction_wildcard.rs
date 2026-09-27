@@ -15,20 +15,20 @@ fn captured_wildcard_results_and_core_diagnostics_match_both_reference_runs() {
             let source = record["source"].as_str().unwrap();
             let path = record["path"].as_str().unwrap();
             let query = record["fn"] == "JSON_QUERY";
+            if matches!(
+                name,
+                "range path" | "single range path" | "last path" | "list path"
+            ) {
+                assert_eq!(msduck_core::json_path::path(path), Err(PATH));
+                advanced += 1;
+                continue;
+            }
             let actual = extract(source, path, query);
             let source_units = source.encode_utf16().collect::<Vec<_>>();
             let path_units = path.encode_utf16().collect::<Vec<_>>();
             let utf16 = extract_utf16(&source_units, &path_units, query)
                 .map(|value| value.map(|units| String::from_utf16(&units).unwrap()));
             assert_eq!(actual, utf16, "UTF-16 parity: {name}/query={query}");
-            if matches!(
-                name,
-                "range path" | "single range path" | "last path" | "list path"
-            ) {
-                assert_eq!(actual, Err(PATH), "unsupported advanced path: {name}");
-                advanced += 1;
-                continue;
-            }
             let errors = record["result"]["errors"].as_array().unwrap();
             if let Some(reference) = errors.first() {
                 let error = actual.unwrap_err();
