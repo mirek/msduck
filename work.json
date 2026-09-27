@@ -4495,7 +4495,7 @@
     {
       "id": "isjson-type-diagnostics-v1",
       "title": "Map ISJSON binder type diagnostics to error 8116",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server compatibility goal; owner-run Codex review of PR #444 at 75dfe30 identified an adapter gap.",
       "scope": [
         "src/json_extract.rs"
