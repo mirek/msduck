@@ -36,8 +36,10 @@ emits a descriptor before its error.
 The current implementation's `json_path::extract` already descends early for
 selected paths and validates the full document for missing paths, but its
 documented `JSON_VALUE`/`JSON_QUERY` behavior has not been compared against this
-fixture at the wire level. The current core `root` check and path parser need a
-focused successor for the captured root-scalar rejection and wildcard shape.
+fixture at the wire level. The captured scalar-root rule and wildcard subset
+now have separate core implementations; see [scalar roots](json-extraction-root.md)
+and [wildcards](json-extraction-wildcard.md). Their exact runtime diagnostics
+and result descriptors still need comparison against these fixtures.
 The root adapter and result-metadata path need separate work for typed NULL-path
 error ordering and source-dependent descriptors. Broader wildcard/range syntax,
 source collations, detailed syntax positions and error precedence remain open.
