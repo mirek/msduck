@@ -19,10 +19,11 @@ sqlcmd.
 | --- | --- |
 | `latest`, `X.Y.Z`, `X.Y` | a pushed stable `vX.Y.Z` Git tag |
 | `X.Y.Z-pre` | a prerelease tag such as `vX.Y.Z-rc.1` (never `latest`) |
-| `edge`, `sha-<short>` | each push to `main` |
 
-Each tag is one manifest for `linux/amd64` and `linux/arm64`. Each platform is
-built on a native GitHub runner, not under emulation.
+Only release tags publish. Each tag is one manifest for `linux/amd64` and
+`linux/arm64`, built on native GitHub runners rather than under emulation.
+An `edge` tag was published from `main` on 2026-09-27 before publishing was
+limited to releases. It is no longer updated.
 
 ## Environment
 
@@ -75,22 +76,31 @@ requires TLS and `sa` password authentication:
   not implemented.
 - All databases share one DuckDB file. SQL Server's `.mdf`/`.ldf` files, backups
   and `mssql.conf` are not read.
-- `sqlcmd` and `mssql-tools` are not bundled. Health checks that run
-  `/opt/mssql-tools*/bin/sqlcmd` inside the container fail; probe from a client
-  or use the readiness log line instead.
+- `sqlcmd` is Microsoft's [go-sqlcmd](https://github.com/microsoft/go-sqlcmd)
+  (v1.10.0, checksum-verified; notice in `/usr/share/doc/go-sqlcmd`), not
+  the ODBC `mssql-tools` build. It is installed at both
+  `/opt/mssql-tools18/bin/sqlcmd` and `/opt/mssql-tools/bin/sqlcmd`, so
+  health checks such as
+  `sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" -b`
+  work unchanged. The smoke test covers the health-check forms (`-S -U -P -Q`,
+  with and without `-C` and `-b`, at both paths). Other options are go-sqlcmd's
+  and are not separately verified. ODBC-only options and scripts that query
+  catalog views msduck lacks, such as `sys.databases`, can still fail. `bcp` is
+  not bundled.
 
 ## Publishing
 
 `.github/workflows/docker.yml` builds each platform, runs
 `scripts/docker-smoke.mjs` against the built image, pushes by digest, and then
-merges the digests into one tagged manifest. For pull requests, its two Docker
-builds run only when packaging, Rust manifests/lockfile/vendor build inputs,
-the smoke test, the container entrypoint, authentication/TLS, Node package
-dependencies, or this workflow changes. Ordinary SQL/Rust source PRs use the
-fast required CI check and do not wait on optional
-Docker builds. Every push to `main` still builds and publishes both platforms,
-so merged source changes receive image coverage; version tags and manual runs
-also keep their existing behavior. Runs require the owner as actor, like CI.
+merges the digests into one tagged manifest. It publishes only for `v*` tags.
+Pushes to `main` do not run it, because each run builds DuckDB natively for
+two platforms. The tag run smoke-tests every platform before anything is
+pushed, so a broken image never reaches Docker Hub. Pull requests build and
+smoke-test without pushing, and only when packaging, Rust
+manifests/lockfile/vendor build inputs, the smoke test, the container
+entrypoint, authentication/TLS/server session handling, Node package
+dependencies, or this workflow change. Manual runs build and test without
+pushing. Runs require the owner as actor, like CI.
 
 The workflow needs two repository secrets: the Docker Hub account name and a
 Docker Hub access token with read/write scope for `mirek/msduck`:
@@ -104,4 +114,5 @@ To test an image locally: `docker build -t msduck:local .` and then
 `node scripts/docker-smoke.mjs msduck:local`. The smoke test covers password
 policy, ignored settings, TLS login, wrong-password rejection, and persistence
 of data and certificate across restarts, and recovery from a partial
-certificate pair. It also covers `SA_PASSWORD` and `MSSQL_TCP_PORT`.
+certificate pair. It also covers `SA_PASSWORD`, `MSSQL_TCP_PORT` and the
+bundled `sqlcmd` health checks.
