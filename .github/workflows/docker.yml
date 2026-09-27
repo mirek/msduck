@@ -8,11 +8,9 @@ on:
       - Dockerfile
       - .dockerignore
       - 'docker/**'
-      - Cargo.toml
-      - Cargo.lock
-      - 'crates/**'
-      - 'vendor/**'
-      - 'src/**'
+      - src/bin/msduck-container.rs
+      - src/authentication.rs
+      - src/tls.rs
       - scripts/docker-smoke.mjs
       - package.json
       - package-lock.json
