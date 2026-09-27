@@ -4669,7 +4669,7 @@
     {
       "id": "json-extraction-scalar-root-core-v1",
       "title": "Reject scalar JSON document roots in extraction core",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing implementation goal and owner-run SQL Server evidence retained by merged PR 457; no external submission is input.",
       "scope": [
         "crates/msduck-core/src/json_path.rs",
