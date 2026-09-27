@@ -161,16 +161,30 @@ ID) and records the card before publication, because the snapshot is immutable
 afterwards. Without the `project` token scope (`gh auth refresh -s project`) it
 warns and publishes without a card; board updates are then skipped for that task.
 
-After a task's PR merges, publish its `done` state promptly. Stale `ready` tasks
-keep their files reserved against new ready scopes and block dependent tasks.
+The claiming worker handles its own PR through review follow-up, exact-head
+required CI, merge, and completion unless the owner explicitly designates a
+separate integrator. Before merging, verify owner PR/head provenance, the claim
+and changed paths, required verification and a completed review of the current
+head. Address confirmed findings and resolve conversations only after checking
+the fix. Do not merge a draft, a failing or pending required check, an unresolved
+finding or a changed head. Skipped optional jobs need an understood reason and
+appropriate evidence for the exact revision. Merge with the exact head SHA;
+Codex output is advisory and does not authorize unclaimed changes. An integrator
+designated by the owner uses the same gates.
+
+After a task's PR merges, its worker publishes the `done` state promptly. Stale
+`ready` tasks keep their files reserved against new ready scopes and block
+dependent tasks.
 Use `list --available` to see ready, unclaimed tasks with completed dependencies.
 The full `list` looks up every claim tag in one request.
 Add a successor only after the original worker stops. Never import every project
 item into the registry or enable automatic intake.
 
-A worker updates Claim/Review/Blocked board fields using the helper. The owner
-marks completion in the registry and board after the PR merges and acceptance
-criteria are met. A Done card alone does not satisfy dependency checks. Immutable
+A worker updates Claim/Review/Blocked board fields using the helper and publishes
+completion in the registry and board after its PR merges and acceptance criteria
+are met. If the worker stops before finishing, the owner may designate an
+integrator or authorize a successor only after confirming local and remote jobs
+have stopped. A Done card alone does not satisfy dependency checks. Immutable
 claim tags remain as historical receipts even after completion.
 
 ## Abandonment and recovery

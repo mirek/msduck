@@ -70,15 +70,19 @@ reference captures; a remote pass does not establish full compatibility.
 
 ## GitHub collaboration
 
-Use the sequence in `docs/parallel-collaboration.md`. An issue or project card
+Use the queue and claim sequence in `docs/parallel-collaboration.md`; for merge
+ownership, follow the canonical contribution skill. An issue or project card
 does not reserve work: only a successful `claim TASK-ID` does. Workers use
 focused branches and PRs, push checkpoints, link the task issue, open drafts for
-unfinished work, and mark ready once reviewable. The human owner or an explicitly
-designated integration session handles review decisions, merging and task
-completion; sharing the `mirek` credential does not grant a worker that role.
-The integrator checks exact-revision CI and owner-triaged review findings before
-merging. An automatic review request is not a completed review. Preserve raw
-reference evidence and report the revision covered by each test run.
+unfinished work, and mark ready once reviewable. The claiming worker owns its PR
+through review follow-up, exact-head required CI, merge, and prompt registry and
+project completion after merge. The owner may explicitly designate a separate
+integrator or hand off stopped work. Sharing the `mirek` credential does not
+approve unrelated work or third-party content. Do not merge drafts, failing
+required checks or unresolved review findings; a skipped optional job needs an
+understood reason and exact-revision evidence. An automatic review request is
+not a completed review. Preserve raw reference evidence and report the revision
+covered by each test run.
 
 ## Code Review Rules
 

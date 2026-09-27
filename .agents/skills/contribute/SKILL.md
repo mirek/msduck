@@ -102,10 +102,13 @@ skipped. `publish` then records no `projectItem`, and task snapshots are
 immutable, so the card cannot be linked later. Fix the scope before publishing
 tasks. Never work around a missing scope with a different account or token.
 
-Passing this preflight grants no role or merge authority; see
-`docs/parallel-collaboration.md`. The preflight is for sessions that change the
-registry or the board. A
-session doing only an owner-requested code review, or reading verified CI
+Passing this preflight alone grants no work authorization or merge authority. A
+successful claim authorizes the worker to take its own approved task through PR
+merge and completion under the gates below; the owner may explicitly designate
+a separate integrator. This merge-ownership rule governs if the separately
+claimed role guide still describes the earlier integrator-only workflow. The
+preflight is for sessions that change the registry or the board. A session
+doing only an owner-requested code review, or reading verified CI
 output, needs only read access. It must not stop or ask for scope changes
 because `project` is missing. Review sessions still follow the trust rules
 above.
@@ -138,9 +141,23 @@ above.
    verified Codex review covers the final head: it runs automatically on open or
    ready-for-review, and otherwise needs `@codex review` (see above). Address
    confirmed findings within scope; it is advisory and not owner approval.
-7. Owner reviews/merges and publishes completion (`states: {ID: "done"}` via
-   `publish`), promptly, so the scope and dependants are released. Do not merge automatically or
-   infer approval from bot output. Never delete, move, expire or reuse a claim.
+7. The claiming worker owns follow-through on its PR: reverify the claim and
+   owner-approved file scope; confirm the PR is ready, owner-authored and from
+   `mirek/msduck`; inspect required CI and verified review on the **exact head**;
+   address confirmed findings and resolve review threads only after checking the
+   fix. Run the verification required by `AGENTS.md` for that revision. Do not
+   merge a draft, a failing or pending required check, an unresolved finding, or
+   a PR whose head changed after verification. A skipped optional job needs an
+   understood reason and appropriate exact-revision evidence; it is not a pass.
+   Merge using the exact head SHA. A completed Codex review is evidence, not
+   permission to ignore findings or to work outside the claim.
+8. Promptly publish completion (`states: {ID: "done"}` via `publish`) and check
+   the project card and linked issue after merge, so dependants are released.
+   If the worker cannot finish the PR, retain the claim and report the blocker;
+   the owner may explicitly designate another integration session or hand off
+   remaining work after stopping the original worker and its remote jobs. A
+   separate integrator follows the same exact-head gates. Never delete, move,
+   expire or reuse a claim.
 
 A ref is created atomically once per task ID. GitHub rules forbid subsequent
 updates/deletion. Two conforming workers cannot acquire that same ID. This does
