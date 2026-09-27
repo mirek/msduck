@@ -4710,6 +4710,31 @@
       ],
       "issue": 460,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRbOk"
+    },
+    {
+      "id": "json-extraction-wildcard-core-v1",
+      "title": "Capture and implement JSON extraction wildcard rules",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server-compatible Rust/DuckDB goal and owner-run extraction fixture from merged PR 457; no external submission is input.",
+      "scope": [
+        "scripts/capture-json-extraction-wildcard.mjs",
+        "reference/json-extraction-wildcard.json",
+        "crates/msduck-core/src/json_path.rs",
+        "crates/msduck-core/tests/json_extraction_wildcard.rs",
+        "docs/json-extraction-wildcard.md",
+        "docs/json-extraction-boundaries.md"
+      ],
+      "acceptance": [
+        "Capture raw rows, typed descriptors, diagnostics and ordered events for JSON_VALUE and JSON_QUERY wildcard paths over empty/single/multiple arrays, scalar/container/NULL elements, nested paths, strict/lax modes, malformed JSON before/after matches, and representative unsupported path forms. Repeat in two fresh databases on pinned SQL Server 2025, independently replay, and refuse fixture overwrite.",
+        "Implement captured deterministic extraction wildcard behavior in msduck-core::json_path, preserving source slices, early-selection validation order, UTF-16 parity and bounded iterative evaluation. Keep JSON_PATH_EXISTS unchanged and do not guess uncaptured path extensions.",
+        "Test captured core output/error contracts; record remaining diagnostics/descriptors/event gaps without claiming wire parity. Run format, workspace Rust, strict Clippy, independent clients and local audit at final revision."
+      ],
+      "dependencies": [
+        "json-extraction-boundaries-reference-v1",
+        "json-extraction-scalar-root-core-v1"
+      ],
+      "issue": 461,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRb0E"
     }
   ]
 }
