@@ -3898,6 +3898,31 @@
       ],
       "issue": 395,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PP-gr"
+    },
+    {
+      "id": "docker-image-v1",
+      "title": "Publish mirek/msduck Docker image as a drop-in for the SQL Server container",
+      "state": "ready",
+      "authorization": "Direct owner instruction 2026-09-27: publish mirek/msduck on Docker Hub; it should behave like the public mssql container, accepting its configuration and ignoring ineffective settings (e.g. ACCEPT_EULA) so users can swap images. Owner chose v* tags + main as edge, native amd64+arm64, Docker Hub namespace mirek/msduck with DOCKERHUB_USERNAME/DOCKERHUB_TOKEN secrets.",
+      "scope": [
+        "Dockerfile",
+        ".dockerignore",
+        "docker/",
+        "src/bin/msduck-container.rs",
+        "src/authentication.rs",
+        ".github/workflows/docker.yml",
+        "scripts/docker-smoke.mjs",
+        "docs/docker.md"
+      ],
+      "acceptance": [
+        "Add a container launcher binary that reads the Microsoft image environment (MSSQL_SA_PASSWORD or SA_PASSWORD with SQL Server complexity rules, MSSQL_TCP_PORT, MSSQL_DATA_DIR, MSSQL_IP_ADDRESS), accepts and reports ignored settings such as ACCEPT_EULA and MSSQL_PID, always requires TLS and the sa administrator, and never passes the password through arguments. Leave the development CLI and its loopback-only policy unchanged.",
+        "Build a multi-stage image that runs as uid 10001 with data under /var/opt/mssql, exposes 1433, and generates a persistent self-signed certificate unless one is mounted.",
+        "Publish native amd64 and arm64 builds to mirek/msduck as one manifest: v* tags publish version tags and latest, main publishes edge, and pull requests build without pushing. Pin actions by SHA and guard on the owner like ci.yml.",
+        "Smoke-test the built image with tedious using SQL Server-style settings (sa, encrypt, trustServerCertificate) and a wrong-password rejection; add a Rust unit test for credential generation; document usage, the differences from SQL Server, and secret setup."
+      ],
+      "dependencies": [],
+      "issue": 396,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PP-kY"
     }
   ]
 }
