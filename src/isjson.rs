@@ -62,17 +62,27 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
     };
     if let Some(kind) = declared.and_then(|kind| msduck_sql::sql_type::declaration(kind).ok()) {
         let rejected = match kind {
-            SqlType::Text => Some("__msduck_isjson_reject_text"),
-            SqlType::Xml => Some("__msduck_isjson_reject_xml"),
+            SqlType::Text => Some(("__msduck_isjson_reject_text", false)),
+            SqlType::Xml => Some(("__msduck_isjson_reject_xml", false)),
+            SqlType::Money => Some(("__msduck_isjson_reject_money", true)),
+            SqlType::SmallMoney => Some(("__msduck_isjson_reject_smallmoney", true)),
+            SqlType::DateTime => Some(("__msduck_isjson_reject_datetime", true)),
+            SqlType::SmallDateTime => Some(("__msduck_isjson_reject_smalldatetime", true)),
             _ => None,
         };
-        if let Some(name) = rejected {
-            // SQL Server rejects these declarations before the CAST executes.
-            // Keeping the binder failure as a scalar preserves that ordering
-            // even when DuckDB does not model XML or aliases TEXT to VARCHAR.
+        if let Some((name, bind_operand)) = rejected {
+            // SQL Server resolves source names before rejecting these types.
+            // Keep supported CASTs as children for binding, while the bind
+            // callback prevents their runtime conversion from executing.
+            // DuckDB cannot bind XML or TEXT here; those retain the earlier
+            // placeholder path until their declarations are modeled.
             *expr = crate::engine::unary_function(
                 name,
-                Expr::Value(Value::Number("0".into(), false).into()),
+                if bind_operand {
+                    value.clone()
+                } else {
+                    Expr::Value(Value::Number("0".into(), false).into())
+                },
             );
             return Ok(());
         }
@@ -112,7 +122,8 @@ unsafe fn type_name(kind: duckdb_logical_type) -> Option<&'static str> {
         Id::Integer | Id::UInteger | Id::IntegerLiteral => "int",
         Id::Bigint | Id::UBigint | Id::Hugeint | Id::UHugeint => "bigint",
         Id::Decimal => "decimal",
-        Id::Float | Id::Double => "float",
+        Id::Float => "real",
+        Id::Double => "float",
         Id::Date => "date",
         Id::Time | Id::TimeNs => "time",
         Id::Timestamp | Id::TimestampS | Id::TimestampMs | Id::TimestampNs => "datetime2",
@@ -189,6 +200,17 @@ unsafe extern "C" fn reject_xml(info: duckdb_bind_info) {
             c"Argument data type xml is invalid for argument 1 of isjson function.".as_ptr(),
         );
     }
+}
+
+unsafe extern "C" fn reject_declared<const KIND: u8>(info: duckdb_bind_info) {
+    let message = match KIND {
+        0 => c"Argument data type money is invalid for argument 1 of isjson function.",
+        1 => c"Argument data type smallmoney is invalid for argument 1 of isjson function.",
+        2 => c"Argument data type datetime is invalid for argument 1 of isjson function.",
+        3 => c"Argument data type smalldatetime is invalid for argument 1 of isjson function.",
+        _ => c"ISJSON has an unsupported declared type.",
+    };
+    unsafe { duckdb_scalar_function_bind_set_error(info, message.as_ptr()) }
 }
 
 unsafe fn present(vector: duckdb_vector, row: idx_t) -> bool {
@@ -306,6 +328,18 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
         one::<4>(db, c"__msduck_isjson_4", bind)?;
         one::<0>(db, c"__msduck_isjson_reject_text", reject_text)?;
         one::<0>(db, c"__msduck_isjson_reject_xml", reject_xml)?;
+        one::<0>(db, c"__msduck_isjson_reject_money", reject_declared::<0>)?;
+        one::<0>(
+            db,
+            c"__msduck_isjson_reject_smallmoney",
+            reject_declared::<1>,
+        )?;
+        one::<0>(db, c"__msduck_isjson_reject_datetime", reject_declared::<2>)?;
+        one::<0>(
+            db,
+            c"__msduck_isjson_reject_smalldatetime",
+            reject_declared::<3>,
+        )?;
     }
     Ok(())
 }
