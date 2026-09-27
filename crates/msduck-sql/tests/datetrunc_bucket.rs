@@ -953,3 +953,18 @@ fn pinned_reference_time_origin_wrap_and_range() {
         })
     );
 }
+
+#[test]
+fn datetimeoffset_utc_boundary_needs_a_separate_rule() {
+    // SQL Server keeps 14:00 +14:00 for this day truncation rather than
+    // producing an invalid local midnight with a year-zero UTC instant.
+    let ty = TemporalType::DateTimeOffset(0);
+    let bound = datetrunc::bind_trunc("day", SourceType::Temporal(ty)).unwrap();
+    let input = value(1, 1, 1, 14, 0, 0, 0, 840);
+    assert_eq!(
+        datetrunc::truncate(bound, Some(input), 7),
+        Err(RuleError::Unsupported(
+            "datetimeoffset result crosses the UTC calendar boundary",
+        ))
+    );
+}

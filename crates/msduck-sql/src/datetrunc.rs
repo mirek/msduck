@@ -493,6 +493,15 @@ fn range_check(value: Value, ty: TemporalType, function: &'static str) -> Result
     if matches!(ty, TemporalType::Time(_)) {
         return Ok(value);
     }
+    if matches!(ty, TemporalType::DateTimeOffset(_)) {
+        let utc = value.absolute() - i128::from(value.offset_minutes) * MINUTE;
+        let latest = i128::from(maximum(ty)) * DAY + DAY - 1;
+        if !(0..=latest).contains(&utc) {
+            return Err(RuleError::Unsupported(
+                "datetimeoffset result crosses the UTC calendar boundary",
+            ));
+        }
+    }
     if value.day < minimum(ty) || value.day > maximum(ty) {
         if function == "datetrunc" {
             if value.day > maximum(ty) {
