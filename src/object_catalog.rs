@@ -8,6 +8,7 @@ use sqlparser::ast::*;
 pub fn register(db: &Connection) -> Result<()> {
     system_objects::register(db)?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS main.__msduck_objects(object_id INTEGER PRIMARY KEY, schema_id INTEGER NOT NULL, name VARCHAR NOT NULL, type_code VARCHAR NOT NULL, create_date TIMESTAMP NOT NULL, modify_date TIMESTAMP NOT NULL, UNIQUE(schema_id,name));
+        CREATE TABLE IF NOT EXISTS main.__msduck_table_types(user_type_id INTEGER PRIMARY KEY,name VARCHAR NOT NULL,schema_id INTEGER NOT NULL,type_table_object_id INTEGER NOT NULL UNIQUE,object_name VARCHAR NOT NULL UNIQUE,create_date TIMESTAMP NOT NULL,UNIQUE(schema_id,name));
         CREATE TABLE IF NOT EXISTS main.__msduck_table_properties(object_id INTEGER PRIMARY KEY,lob_data_space_id INTEGER NOT NULL DEFAULT 0 CHECK(lob_data_space_id IN (0,1)));
         CREATE TABLE IF NOT EXISTS main.__msduck_hidden_column_owners(object_id INTEGER PRIMARY KEY,schema_name VARCHAR NOT NULL,name VARCHAR NOT NULL,UNIQUE(schema_name,name));
         CREATE TABLE IF NOT EXISTS main.__msduck_default_constraints(object_id INTEGER PRIMARY KEY,parent_object_id INTEGER NOT NULL,column_id INTEGER NOT NULL,name VARCHAR NOT NULL,create_date TIMESTAMP NOT NULL,modify_date TIMESTAMP NOT NULL,UNIQUE(parent_object_id,column_id));
@@ -19,6 +20,9 @@ pub fn register(db: &Connection) -> Result<()> {
           UNION ALL
           SELECT name,object_id,CAST(NULL AS INTEGER),schema_id,CAST(0 AS INTEGER),rpad(type_code,2,' '),CASE WHEN type_code='U' THEN 'USER_TABLE' ELSE 'VIEW' END,create_date,modify_date,false,false,false
           FROM main.__msduck_objects
+          UNION ALL
+          SELECT object_name,type_table_object_id,CAST(NULL AS INTEGER),CAST(4 AS INTEGER),CAST(0 AS INTEGER),'TT','TYPE_TABLE',create_date,create_date,true,false,false
+          FROM main.__msduck_table_types
           UNION ALL
           SELECT d.name,d.object_id,CAST(NULL AS INTEGER),o.schema_id,d.parent_object_id,'D ','DEFAULT_CONSTRAINT',d.create_date,d.modify_date,false,false,false
           FROM main.__msduck_default_constraints d JOIN main.__msduck_objects o ON o.object_id=d.parent_object_id;
