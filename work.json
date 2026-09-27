@@ -4410,6 +4410,29 @@
       "dependencies": [],
       "issue": 435,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQvYr"
+    },
+    {
+      "id": "decimal-unicode-leading-zero-v1",
+      "title": "Preserve DECIMAL leading zero in NVARCHAR and NCHAR conversion",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server compatibility goal; first-party decimal AVG evidence, merged PR #436 and owner-authored issue #437. No external submission.",
+      "scope": [
+        "scripts/capture-decimal-unicode.mjs",
+        "reference/decimal-unicode.json",
+        "src/nvarchar.rs",
+        "docs/nvarchar.md"
+      ],
+      "acceptance": [
+        "Retain raw SQL Server NVARCHAR/NCHAR rows, descriptors, errors and DONE tokens for DECIMAL(38,38) zero and signed fractions, exact widths, ordinary/TRY overflow and typed NULL; compare four fresh databases across two pinned containers and independently replay the fixture.",
+        "Apply decimal-specific leading-zero formatting before NVARCHAR/NCHAR width checks without changing float or ordinary text paths, NULL behavior or single evaluation of volatile operands.",
+        "Add native and root-session regressions against the retained reference, document exact observations and remaining Unicode conversion gaps.",
+        "Run formatting, workspace Rust tests, strict Clippy, independent tedious clients and diagnostic audit at the exact final revision."
+      ],
+      "dependencies": [
+        "decimal-varchar-leading-zero-v1"
+      ],
+      "issue": 437,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQzan"
     }
   ]
 }
