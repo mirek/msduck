@@ -4599,6 +4599,30 @@
       ],
       "issue": 449,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRGuh"
+    },
+    {
+      "id": "isjson-depth-unicode-v1",
+      "title": "Capture and match ISJSON depth and Unicode boundaries",
+      "state": "ready",
+      "authorization": "Direct continuing owner goal; first-party code and documentation gap, owner-authored issue #452.",
+      "scope": [
+        "crates/msduck-core/src/json.rs",
+        "scripts/capture-isjson-depth.mjs",
+        "reference/isjson-depth.json",
+        "tests/isjson_depth.test.mjs",
+        "docs/isjson.md"
+      ],
+      "acceptance": [
+        "Capture SQL Server ISJSON default and VALUE responses for nested arrays and objects around observed depth transitions, escaped versus raw Unicode edge units, and typed NVARCHAR(MAX) parameters; retain raw rows, descriptors, diagnostics and completion tokens from two fresh databases on the pinned image with output-alias protection.",
+        "Match captured syntax/depth behavior in the deterministic scanner with bounded memory and no recursion; protect generic JSON-prefix and fragment behavior.",
+        "Replay captured cases through a standalone tedious test without normalizing metadata differences; document remaining gaps.",
+        "Run formatting, strict workspace Clippy, workspace Rust tests, independent tedious tests, diagnostic audit and focused replay at the exact PR revision."
+      ],
+      "dependencies": [
+        "isjson-source-types-v1"
+      ],
+      "issue": 452,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRPO2"
     }
   ]
 }
