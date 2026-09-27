@@ -4169,6 +4169,26 @@
       ],
       "issue": 417,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQUkf"
+    },
+    {
+      "id": "worker-owned-merge-skill-v1",
+      "title": "Assign PR merge and task completion to the claiming worker",
+      "state": "ready",
+      "authorization": "Direct owner instruction on 2026-09-27 to make each PR worker responsible for merging after review comments and green CI",
+      "scope": [
+        ".agents/skills/contribute/SKILL.md",
+        "AGENTS.md",
+        "docs/agent-work.md"
+      ],
+      "acceptance": [
+        "State that the claiming worker owns PR review follow-up, exact-head required CI, merge, and prompt registry/project completion after merge.",
+        "Preserve owner-only provenance, claim exclusivity, draft and failed-check gates, and explicit owner handoff for stopped workers or cross-task conflicts.",
+        "Clarify that a separate integrator may handle merges when the owner explicitly designates one, and that owner identity alone does not authorize reading unapproved content.",
+        "Review documentation consistency and leave the still-claimed collaboration guide untouched."
+      ],
+      "dependencies": [],
+      "issue": 420,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQYLo"
     }
   ]
 }
