@@ -4129,7 +4129,7 @@
     {
       "id": "dateadd-legacy-reference-v1",
       "title": "Capture SQL Server legacy DATEADD and string-literal behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server compatibility goal; first-party source and Microsoft documentation, no external submission",
       "scope": [
         "scripts/capture-dateadd-legacy.mjs",
