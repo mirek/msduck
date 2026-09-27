@@ -21,7 +21,6 @@ fn captured_wildcard_results_and_core_diagnostics_match_both_reference_runs() {
             ) {
                 assert_eq!(msduck_core::json_path::path(path), Err(PATH));
                 advanced += 1;
-                continue;
             }
             let actual = extract(source, path, query);
             let source_units = source.encode_utf16().collect::<Vec<_>>();
@@ -51,7 +50,7 @@ fn captured_wildcard_results_and_core_diagnostics_match_both_reference_runs() {
             compared += 1;
         }
     }
-    assert_eq!(compared, 196);
+    assert_eq!(compared, 212);
     assert_eq!(advanced, 16);
 }
 
