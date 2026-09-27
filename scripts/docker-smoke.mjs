@@ -84,6 +84,18 @@ try {
   assert.deepEqual(await query(connection, 'SELECT id, name FROM dbo.ducks'), [[1, 'Mallard']])
   connection.close()
   await assert.rejects(connect(port, `${password}x`), error => /Login failed/.test(error.message))
+
+  // SQL Server image health checks run the bundled sqlcmd inside the container.
+  // The password comes from the container's own environment, not our arguments.
+  const sqlcmd = (path, flags, sql = 'SELECT 1', secret = '"$MSSQL_SA_PASSWORD"') =>
+    docker(['exec', first, 'sh', '-c', `${path} -S localhost -U sa -P ${secret} ${flags} -Q "${sql}"`])
+  for (const path of ['/opt/mssql-tools18/bin/sqlcmd', '/opt/mssql-tools/bin/sqlcmd']) {
+    for (const flags of ['-C -b', '-C', '-b', '']) {
+      assert.match(await sqlcmd(path, flags), /\(1 row affected\)/, `${path} ${flags}`)
+    }
+  }
+  await assert.rejects(sqlcmd('/opt/mssql-tools18/bin/sqlcmd', '-C -b', 'SELECT nope FROM missing_table'))
+  await assert.rejects(sqlcmd('/opt/mssql-tools18/bin/sqlcmd', '-C -b', 'SELECT 1', '"$MSSQL_SA_PASSWORD"x'))
   // A second container on the same volume cannot lock the database; it must
   // exit without replacing the running server's credential.
   const intruder = `${run}-intruder`
