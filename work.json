@@ -3652,6 +3652,27 @@
       "dependencies": [],
       "issue": 374,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPprv"
+    },
+    {
+      "id": "select-top-percent-shapes-reference-v1",
+      "title": "Capture SQL Server TOP PERCENT and WITH TIES query-shape behavior",
+      "state": "ready",
+      "authorization": "Mirek's standing full SQL Server compatibility objective and owner-authored follow-up issue #376; first-party reference/select-top-percent.json and docs/select-top-percent-reference.md identify these gaps.",
+      "scope": [
+        "scripts/capture-select-top-percent.mjs",
+        "reference/select-top-percent.json",
+        "docs/select-top-percent-reference.md"
+      ],
+      "acceptance": [
+        "Capture exact SQL Server rows, descriptors, errors and completion tokens for TOP PERCENT and WITH TIES over DISTINCT, GROUP BY/HAVING, order keys absent from projection, scalar subquery count expressions, and set-operation or derived-query scopes where valid. Preserve unsupported syntax as captured errors.",
+        "Run the pinned reference against two fresh databases and a second fresh container; retain raw independent captures and update fixture only after stable comparison. Do not normalize observable differences or claim uncaptured semantics.",
+        "Update the reference document with exact fixture revision/hash, observed rules and remaining uncertainty. Do not change runtime behavior in this task."
+      ],
+      "dependencies": [
+        "select-top-percent-reference-v1"
+      ],
+      "issue": 376,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPqSe"
     }
   ]
 }
