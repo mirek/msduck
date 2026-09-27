@@ -21,6 +21,11 @@ fn encode(parameter: &Parameter<'_>) -> Vec<u8> {
     out
 }
 
+// This is msduck's existing prepared-handle vector, preserved by the codec
+// refactor. It is not SQL Server's: the first-party capture in
+// `reference/rpc-output-wire.json` (PR #303) shows the wire name `@handle` and
+// flags 0 (`ac0000074000680061006e0064006c0065000100000000000026040401000000`).
+// Task `prepared-handle-wire-v1` switches the helper to the captured bytes.
 #[test]
 fn prepared_handle_remains_the_exact_int_returnvalue_vector() {
     let mut old = Vec::new();

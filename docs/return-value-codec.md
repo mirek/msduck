@@ -9,7 +9,10 @@ TYPE_VARBYTE value. There is no outer token-length field. The owner-controlled
 `mirek/mssqlite` reference uses the same field order in
 `packages/tds/src/token/return-value.ts` and delegates TYPE_INFO/value encoding
 to its typed codecs. The existing prepared-handle token's exact byte vector is
-preserved through the new encoder.
+preserved through the new encoder. That vector strips `@` from the name and uses
+flags 1, but SQL Server sends `@handle` with flags 0 (captured in
+`reference/rpc-output-wire.json`, PR #303). Task `prepared-handle-wire-v1`
+changes the helper and the root RPC test that fixes the old bytes.
 
 The codec accepts nullable INTN (1/2/4/8 bytes), BITN, NVARCHAR/NCHAR,
 VARCHAR/CHAR, VARBINARY/BINARY and DECIMALN. It handles raw UTF-16 units,
