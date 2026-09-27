@@ -2262,7 +2262,7 @@
     {
       "id": "agent-work-publish-v1",
       "title": "Add safe concurrent registry publication and fast task discovery",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction in session 2026-09-26: continue implementation and make creating and claiming work reliable for concurrent agents. First-party audit of scripts/agent-work.mjs and agent-control history; no external submission is input.",
       "scope": [
         "scripts/agent-work.mjs",
