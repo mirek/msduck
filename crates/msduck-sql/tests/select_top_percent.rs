@@ -167,6 +167,21 @@ fn unsupported_shapes_remain_explicit() {
             "repeated",
         ),
         ("SELECT TOP (1) PERCENT * FROM t ORDER BY 1", "wildcard"),
+        // Positions count expanded columns, which the AST does not have.
+        ("SELECT TOP (1) WITH TIES * FROM t ORDER BY 2", "wildcard"),
+        (
+            "SELECT TOP (1) WITH TIES t.*, id FROM t ORDER BY 2",
+            "wildcard",
+        ),
+        // A ranking copy of a volatile key would be evaluated separately.
+        (
+            "SELECT TOP (2) WITH TIES NEWID() AS k, id FROM t ORDER BY k",
+            "volatile",
+        ),
+        (
+            "SELECT TOP (50) PERCENT id, RAND() * 10 FROM t ORDER BY 2",
+            "volatile",
+        ),
         ("SELECT DISTINCT TOP (1) PERCENT * FROM t", "wildcard"),
         (
             "SELECT TOP (1) PERCENT id FROM t ORDER BY id OFFSET 0 ROWS",
@@ -209,5 +224,53 @@ fn plain_top_and_other_bodies_are_unchanged() {
         query
             .to_string()
             .contains("row_number() OVER (ORDER BY NULL)")
+    );
+}
+
+#[test]
+fn out_of_range_positions_use_sql_server_error_108() {
+    let message = lower("SELECT TOP (1) WITH TIES id, score FROM t ORDER BY 3").unwrap_err();
+    let error = top::diagnostic(&message).unwrap();
+    assert_eq!(
+        (
+            error.number,
+            error.state,
+            error.severity,
+            error.message.as_str()
+        ),
+        (
+            108,
+            1,
+            16,
+            "The ORDER BY position number 3 is out of range of the number of items in the select list."
+        )
+    );
+}
+
+#[test]
+fn wildcards_and_nonvolatile_aliases_still_rank_by_source_keys() {
+    let sql = lower("SELECT TOP (1) WITH TIES * FROM t ORDER BY score DESC").unwrap();
+    assert!(sql.contains("rank() OVER (ORDER BY score DESC)"), "{sql}");
+    let sql = lower("SELECT TOP (2) WITH TIES GETDATE() AS d, id FROM t ORDER BY d").unwrap();
+    assert!(sql.contains("rank() OVER (ORDER BY GETDATE())"), "{sql}");
+}
+
+#[test]
+fn distinct_keys_match_qualified_and_unqualified_columns() {
+    for sql in [
+        "SELECT DISTINCT TOP (50) PERCENT t.score FROM t ORDER BY score",
+        "SELECT DISTINCT TOP (50) PERCENT score FROM t ORDER BY t.score",
+        "SELECT DISTINCT TOP (50) PERCENT t.score FROM t ORDER BY T.Score",
+    ] {
+        let sql = lower(sql).unwrap();
+        assert!(
+            sql.contains("QUALIFY row_number() OVER (ORDER BY score)"),
+            "{sql}"
+        );
+    }
+    // Different qualifiers name different columns.
+    assert_eq!(
+        lower("SELECT DISTINCT TOP (50) PERCENT a.score FROM a, b ORDER BY b.score").unwrap_err(),
+        top::DISTINCT_ORDER
     );
 }

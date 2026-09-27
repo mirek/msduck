@@ -141,12 +141,30 @@ pub const NEGATIVE_COUNT: &str = "A TOP N or FETCH rowcount value may not be neg
 pub const NONINTEGER_COUNT: &str = "The number of rows provided for a TOP or FETCH clauses row count parameter must be an integer.";
 pub const DISTINCT_ORDER: &str =
     "ORDER BY items must appear in the select list if SELECT DISTINCT is specified.";
+const POSITION_PREFIX: &str = "The ORDER BY position number ";
+const WILDCARD_ORDINAL: &str = "unsupported TOP PERCENT/WITH TIES ordinal ordering over a wildcard";
+const VOLATILE_KEY: &str =
+    "unsupported TOP PERCENT/WITH TIES ordering by a volatile select-list expression";
+/// Functions that return a different value on each evaluation. Ranking must
+/// not evaluate them separately from the projected value.
+const VOLATILE: [&str; 7] = [
+    "newid",
+    "newsequentialid",
+    "rand",
+    "crypt_gen_random",
+    "random",
+    "gen_random_uuid",
+    "uuid",
+];
 
 /// Diagnostics captured in reference/select-top-percent.json use class 15.
 pub fn diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
     let message = message
         .strip_prefix("Invalid Input Error: ")
         .unwrap_or(message);
+    if message.starts_with(POSITION_PREFIX) {
+        return Some(msduck_core::diagnostic::SqlError::new(108, 1, message));
+    }
     let number = match message {
         TIES_WITHOUT_ORDER => 1062,
         PERCENT_RANGE => 1031,
@@ -280,17 +298,70 @@ fn projected(item: &SelectItem) -> Result<&Expr, String> {
     }
 }
 
-fn ordinal(expr: &Expr, projection: &[SelectItem]) -> Option<usize> {
+/// An integer ORDER BY constant is a select-list position. Positions count
+/// output columns, so they cannot be resolved against an unexpanded wildcard.
+fn ordinal(expr: &Expr, projection: &[SelectItem]) -> Result<Option<usize>, String> {
     let Expr::Value(value) = expr else {
-        return None;
+        return Ok(None);
     };
     let Value::Number(n, _) = &value.value else {
-        return None;
+        return Ok(None);
     };
-    n.parse::<usize>()
-        .ok()
-        .filter(|n| (1..=projection.len()).contains(n))
-        .map(|n| n - 1)
+    let Ok(n) = n.parse::<usize>() else {
+        return Ok(None);
+    };
+    if projection.iter().any(|item| {
+        matches!(
+            item,
+            SelectItem::Wildcard(_) | SelectItem::QualifiedWildcard(..)
+        )
+    }) {
+        return Err(WILDCARD_ORDINAL.into());
+    }
+    if !(1..=projection.len()).contains(&n) {
+        return Err(format!(
+            "{POSITION_PREFIX}{n} is out of range of the number of items in the select list."
+        ));
+    }
+    Ok(Some(n - 1))
+}
+
+fn volatile(expr: &Expr) -> bool {
+    let mut found = false;
+    let _ = visit_expressions(expr, |expr| {
+        if let Expr::Function(function) = expr
+            && VOLATILE
+                .iter()
+                .any(|name| function.name.to_string().eq_ignore_ascii_case(name))
+        {
+            found = true;
+            return std::ops::ControlFlow::Break(());
+        }
+        std::ops::ControlFlow::Continue(())
+    });
+    found
+}
+
+/// Whether an ORDER BY key names a projected column. An unqualified name
+/// matches a qualified column with that name; qualified names must agree.
+fn same_column(projected: &Expr, key: &Expr) -> bool {
+    let parts = |expr: &Expr| -> Option<Vec<String>> {
+        match expr {
+            Expr::Identifier(id) => Some(vec![id.value.to_lowercase()]),
+            Expr::CompoundIdentifier(ids) => {
+                Some(ids.iter().map(|id| id.value.to_lowercase()).collect())
+            }
+            _ => None,
+        }
+    };
+    if projected == key {
+        return true;
+    }
+    match (parts(projected), parts(key)) {
+        (Some(a), Some(b)) if a.len() == 1 || b.len() == 1 => a.last() == b.last(),
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
 }
 
 fn alias(expr: &Expr, projection: &[SelectItem]) -> Option<usize> {
@@ -311,10 +382,17 @@ fn source_keys(
     keys.iter()
         .map(|key| {
             let mut key = key.clone();
-            if let Some(index) =
-                ordinal(&key.expr, projection).or_else(|| alias(&key.expr, projection))
-            {
-                key.expr = projected(&projection[index])?.clone();
+            let index = match ordinal(&key.expr, projection)? {
+                Some(index) => Some(index),
+                None => alias(&key.expr, projection),
+            };
+            if let Some(index) = index {
+                let expr = projected(&projection[index])?;
+                // The ranking copy would be evaluated apart from the projection.
+                if volatile(expr) {
+                    return Err(VOLATILE_KEY.into());
+                }
+                key.expr = expr.clone();
             }
             Ok(key)
         })
@@ -341,13 +419,11 @@ fn distinct_keys(
     }
     keys.iter()
         .map(|key| {
-            let index = ordinal(&key.expr, projection)
+            let index = ordinal(&key.expr, projection)?
                 .or_else(|| alias(&key.expr, projection))
                 .or_else(|| {
                     projection.iter().position(|item| {
-                        let expr = projected(item).expect("checked projection");
-                        expr == &key.expr
-                            || matches!((expr, &key.expr), (Expr::Identifier(a), Expr::Identifier(b)) if a.value.eq_ignore_ascii_case(&b.value))
+                        same_column(projected(item).expect("checked projection"), &key.expr)
                     })
                 })
                 .ok_or(DISTINCT_ORDER)?;
