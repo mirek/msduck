@@ -131,7 +131,7 @@ async function main() {
     let boardResult = task.projectItem ? 'updated' : 'no project card';
     try { board(registry, task, readiness); }
     catch { boardResult = 'failed (claim remains owned; retry status later)'; }
-    console.log(JSON.stringify({ board: { readiness, result: boardResult }, registryState: task.state, note: 'registry state changes only when the integrator publishes completion' }));
+    console.log(JSON.stringify({ board: { readiness, result: boardResult }, registryState: task.state, note: 'registry state changes only when the claiming worker or an owner-designated integrator publishes completion after merge' }));
   }
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1; });
