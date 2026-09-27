@@ -4394,7 +4394,7 @@
     {
       "id": "decimal-varchar-leading-zero-v1",
       "title": "Preserve leading zero in DECIMAL-to-VARCHAR conversion",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server compatibility goal; first-party reference/decimal-avg.json, docs/decimal-avg.md and owner-authored issue #435. No external submission.",
       "scope": [
         "src/varchar.rs",
