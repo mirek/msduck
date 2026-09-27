@@ -651,6 +651,10 @@ fn body_fields(
                 if !view_definition
                     && expression_name(e).is_none()
                     && properties.origin == msduck_core::result::Origin::Expression
+                    // SQL Server retains fComputed for the three FROMPARTS
+                    // constructors even though their result is a temporal
+                    // family whose ordinary casts omit it.
+                    && !matches!(e, Expr::Function(f) if crate::result_properties::fromparts_arguments(f).is_some())
                     && info
                         .as_ref()
                         .is_some_and(|info| matches!(info.system_type_id, Some(41 | 42 | 43 | 98)))

@@ -4,7 +4,10 @@ use duckdb::{
     vscalar::{ScalarFunctionSignature, VScalar},
     vtab::arrow::WritableVector,
 };
-use msduck_core::{diagnostic::SqlError, openjson::rows};
+use msduck_core::{
+    diagnostic::SqlError,
+    openjson::{OUTPUT_LIMIT, Row, rows_with_limit},
+};
 use sqlparser::{ast::*, dialect::GenericDialect, parser::Parser};
 mod binary;
 mod schema;
@@ -12,6 +15,32 @@ pub fn diagnostic(message: &str) -> Option<SqlError> {
     msduck_core::openjson::diagnostic(message).or_else(|| schema::diagnostic(message))
 }
 struct OpenJson;
+fn checked_varchar(bytes: &[u8], max: usize) -> Result<&str, Box<dyn std::error::Error>> {
+    if bytes.len() > max {
+        return Err(OUTPUT_LIMIT.into());
+    }
+    Ok(std::str::from_utf8(bytes)?)
+}
+fn varchar_rows(source: &str, path: &str, remaining: &mut usize) -> Result<Vec<Row>, &'static str> {
+    let rows = rows_with_limit(source, path, remaining)?;
+    // The list vector copies these bytes while the decoded rows are still
+    // retained. Reserve that second copy before materializing any output.
+    let mut output_bytes = 0usize;
+    for row in &rows {
+        let value_bytes = row.value.as_ref().map_or(0, String::len);
+        if row.key.len() > crate::unicode_carrier::CELL_LIMIT
+            || value_bytes > crate::unicode_carrier::CELL_LIMIT
+        {
+            return Err(OUTPUT_LIMIT);
+        }
+        output_bytes = output_bytes
+            .checked_add(row.key.len())
+            .and_then(|n| n.checked_add(value_bytes))
+            .ok_or(OUTPUT_LIMIT)?;
+    }
+    *remaining = remaining.checked_sub(output_bytes).ok_or(OUTPUT_LIMIT)?;
+    Ok(rows)
+}
 impl VScalar for OpenJson {
     type State = ();
     fn invoke(
@@ -25,6 +54,7 @@ impl VScalar for OpenJson {
         let len = input.len();
         let inputs = [input.flat_vector(0), input.flat_vector(1)];
         let mut all = Vec::new();
+        let mut remaining = crate::unicode_carrier::CHUNK_LIMIT;
         let mut result = output.list_vector();
         for row in 0..len {
             let offset = all.len();
@@ -41,9 +71,11 @@ impl VScalar for OpenJson {
                             duckdb::ffi::duckdb_string_t_length(value) as usize,
                         )
                     };
-                    texts.push(std::str::from_utf8(bytes)?.to_owned());
+                    texts.push(
+                        checked_varchar(bytes, crate::unicode_carrier::CELL_LIMIT)?.to_owned(),
+                    );
                 }
-                all.extend(rows(&texts[0], &texts[1])?);
+                all.extend(varchar_rows(&texts[0], &texts[1], &mut remaining)?);
             }
             result.set_entry(row, offset, all.len() - offset);
         }
@@ -270,6 +302,41 @@ pub fn lower(factor: &mut TableFactor) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn varchar_input_is_checked_before_copying_or_decoding() {
+        assert_eq!(checked_varchar(b"abc", 3).unwrap(), "abc");
+        assert_eq!(
+            checked_varchar(b"abcd", 3).unwrap_err().to_string(),
+            OUTPUT_LIMIT
+        );
+        assert_eq!(
+            checked_varchar(b"\xff", 0).unwrap_err().to_string(),
+            OUTPUT_LIMIT
+        );
+    }
+    #[test]
+    fn varchar_budget_is_shared_across_documents() {
+        let retained = std::mem::size_of::<Row>() + 2;
+        let emitted = 2;
+        let mut remaining = retained + emitted;
+        assert_eq!(
+            varchar_rows(r#"["x"]"#, "$", &mut remaining).unwrap().len(),
+            1
+        );
+        assert_eq!(remaining, 0);
+        assert!(matches!(
+            varchar_rows("[null]", "$", &mut remaining),
+            Err(OUTPUT_LIMIT)
+        ));
+        let mut remaining = retained + emitted - 1;
+        assert!(matches!(
+            varchar_rows(r#"["x"]"#, "$", &mut remaining),
+            Err(OUTPUT_LIMIT)
+        ));
+        let mut remaining = 0;
+        assert!(varchar_rows("[]", "$", &mut remaining).unwrap().is_empty());
+        assert_eq!(remaining, 0);
+    }
     #[test]
     fn template_binding_does_not_revisit_user_expressions() {
         let mut statement = Parser::parse_sql(

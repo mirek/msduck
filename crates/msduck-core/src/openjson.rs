@@ -26,7 +26,13 @@ pub struct Row {
 }
 /// Expand an object or array, preserving duplicate keys and lexical values.
 /// Validates the entire input document before selecting a path.
-pub fn rows(source: &str, path_text: &str) -> Result<Vec<Row>, &'static str> {
+/// Bound retained row structures and decoded UTF-8 payloads during expansion.
+/// The caller can share `remaining` across multiple documents in one chunk.
+pub fn rows_with_limit(
+    source: &str,
+    path_text: &str,
+    remaining: &mut usize,
+) -> Result<Vec<Row>, &'static str> {
     if !matches!(root(source.as_bytes()), Some(Kind::Object | Kind::Array)) {
         return Err(DOCUMENT);
     }
@@ -67,6 +73,12 @@ pub fn rows(source: &str, path_text: &str) -> Result<Vec<Row>, &'static str> {
             Kind::Array => (Some(text.to_owned()), 4),
             Kind::Object => (Some(text.to_owned()), 5),
         };
+        let size = key
+            .len()
+            .checked_add(value.as_ref().map_or(0, String::len))
+            .and_then(|n| n.checked_add(std::mem::size_of::<Row>()))
+            .ok_or(OUTPUT_LIMIT)?;
+        *remaining = remaining.checked_sub(size).ok_or(OUTPUT_LIMIT)?;
         output.push(Row {
             key,
             value,
@@ -157,6 +169,35 @@ mod tests {
     use super::*;
     fn u(text: &str) -> Vec<u16> {
         text.encode_utf16().collect()
+    }
+    fn rows(source: &str, path: &str) -> Result<Vec<Row>, &'static str> {
+        let mut remaining = usize::MAX;
+        rows_with_limit(source, path, &mut remaining)
+    }
+    #[test]
+    fn varchar_expansion_enforces_retained_output_budget() {
+        let size = std::mem::size_of::<Row>() + 2;
+        let mut remaining = size;
+        assert_eq!(
+            rows_with_limit(r#"["x"]"#, "$", &mut remaining).unwrap(),
+            vec![Row {
+                key: "0".into(),
+                value: Some("x".into()),
+                kind: 1,
+            }]
+        );
+        assert_eq!(remaining, 0);
+        assert_eq!(
+            rows_with_limit("[null]", "$", &mut remaining),
+            Err(OUTPUT_LIMIT)
+        );
+        let mut remaining = size - 1;
+        assert_eq!(
+            rows_with_limit(r#"["x"]"#, "$", &mut remaining),
+            Err(OUTPUT_LIMIT)
+        );
+        let large = format!("[{}]", vec!["null"; 1000].join(","));
+        assert_eq!(rows_with_limit(&large, "$", &mut 1024), Err(OUTPUT_LIMIT));
     }
     #[test]
     fn utf16_expansion_enforces_retained_output_budget() {

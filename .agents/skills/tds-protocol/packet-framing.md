@@ -121,12 +121,23 @@ packet-beta
 
 ### Status Flags
 
+The [MS-TDS Status definition](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/ce398f9a-7d47-4ede-8f36-9dd6fc21ca43)
+defines these one-byte TDS packet-header flags. They are not SMP flags and do
+not require MARS.
+
 | Bit | Mask | Name | Description |
 |-----|------|------|-------------|
-| 0 | 0x01 | EOM | End of message — last packet of current message |
-| 1 | 0x02 | Ignore | Ignore event (server→client; EOM must also be set) |
-| 2 | 0x04 | RESETCONNECTION | Reset connection on next message (TDS 7.1+ MARS only) |
-| 3 | 0x08 | RESETCONNECTIONSKIPTRAN | Reset but keep transaction state (TDS 7.3+ MARS only) |
+| 0 | 0x01 | EOM | Last packet of the current TDS message |
+| 1 | 0x02 | IGNORE | Client→server; ignore this event; EOM must also be set |
+| 2 | 0x04 | Unused | No status flag is assigned; receivers must ignore unused bits |
+| 3 | 0x08 | RESETCONNECTION | Client→server, TDS 7.1+; reset the connection environment before processing the event for connection pooling |
+| 4 | 0x10 | RESETCONNECTIONSKIPTRAN | Client→server, TDS 7.3+; reset the environment while preserving transaction state |
+
+Either reset flag applies only to Batch, RPC, or Transaction Manager requests
+and must be on the first packet of the message; a later-packet reset flag should
+be ignored. The two reset flags must never appear together. Ordinary reset does
+not reset distributed transactions or isolation levels; SKIPTRAN additionally
+preserves the transaction state.
 
 ### Packet Size
 
