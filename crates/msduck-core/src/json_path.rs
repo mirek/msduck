@@ -210,6 +210,12 @@ fn exists_inner(source: &str, path_text: &str) -> Option<bool> {
 /// Preserves lexical numbers and container text; enforces the scalar UTF-16 limit.
 pub fn extract(source: &str, path_text: &str, query: bool) -> Result<Option<String>, &'static str> {
     let (strict, steps) = path(path_text)?;
+    // SQL Server extraction requires an object or array document root. Check
+    // only its opening byte here: scanning the entire document would lose an
+    // early selected value when an unrelated suffix is malformed.
+    if !matches!(trim(source).as_bytes().first(), Some(b'{' | b'[')) {
+        return Err(DOCUMENT);
+    }
     // Root extraction consumes the document. A missing path must also validate
     // all remaining text; successful descent only validates the required prefix.
     if steps.is_empty() {
