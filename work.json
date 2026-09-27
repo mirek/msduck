@@ -4205,6 +4205,22 @@
       "dependencies": [],
       "issue": 422,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQY2r"
+    },
+    {
+      "id": "session-reset-skiptran-doc-v1",
+      "title": "Link SKIPTRAN reference from session reset guide",
+      "state": "ready",
+      "authorization": "Direct owner instruction to implement full SQL Server compatibility and verified owner-initiated Codex review on owner PR #424",
+      "scope": [
+        "docs/session-reset.md"
+      ],
+      "acceptance": [
+        "Replace the stale no-capture wording with a link to the retained 0x10 fixture and its documented SQL Server observation.",
+        "Preserve the explicit msduck runtime gap and ordinary 0x08 behavior; check links and documentation diff."
+      ],
+      "dependencies": [],
+      "issue": 425,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQaSz"
     }
   ]
 }
