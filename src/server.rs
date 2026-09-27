@@ -229,25 +229,36 @@ fn serve_login(
         tds::write_message(&mut stream, &out, login.packet_size)?;
         return Ok(());
     };
+    // An unused clone supplies fresh sessions for RESETCONNECTION requests.
+    let template = db.try_clone()?;
     let mut session = Session::new(db)?;
     session.original_login = authenticated_name;
     let mut rpc = crate::rpc::State::default();
     tds::write_message(&mut stream, &tds::login_response(&login), 4096)?;
     while let Some(message) = tds::read_message(&mut stream, login.packet_size)? {
+        let mut acknowledgement = vec![];
         let response = if message.status & 2 != 0 {
             let mut out = vec![];
             tds::done(&mut out, 0xfd, 2, 0, 0);
             Ok(out)
-        } else if message.status & 0x18 != 0 {
-            Err(anyhow::anyhow!("connection reset is not implemented"))
+        } else if message.status & 0x10 != 0 {
+            Err(anyhow::anyhow!(
+                "RESETCONNECTIONSKIPTRAN is not implemented"
+            ))
         } else {
             (|| -> Result<Vec<u8>> {
+                let reset = reset_requested(message.kind, message.status)?;
                 if matches!(message.kind, 1 | 3 | 14) {
                     let (_, descriptor) = tds::request_headers(&message.payload)?;
                     ensure!(
                         descriptor.is_none_or(|value| value == session.transaction_descriptor),
                         "invalid transaction descriptor for this session"
                     );
+                }
+                // The headers name the transaction being reset, so reset after
+                // validating them and before running the request.
+                if reset {
+                    reset_session(&template, &mut session, &mut rpc, &mut acknowledgement)?;
                 }
                 match message.kind {
                     1 => tds::batch_body(&message.payload)
@@ -280,9 +291,48 @@ fn serve_login(
             );
             out
         });
-        tds::write_message(&mut stream, &response, login.packet_size)?;
+        acknowledgement.extend(response);
+        tds::write_message(&mut stream, &acknowledgement, login.packet_size)?;
     }
     // Dropping the connection rolls back any outstanding DuckDB transaction.
+    Ok(())
+}
+
+/// Whether a message asks for RESETCONNECTION (0x08). MS-TDS defines the bit
+/// only for SQL batch, RPC and transaction manager requests; on any other
+/// message it is rejected before the session is touched.
+fn reset_requested(kind: u8, status: u8) -> Result<bool> {
+    if status & 0x08 == 0 {
+        return Ok(false);
+    }
+    ensure!(
+        matches!(kind, 1 | 3 | 14),
+        "RESETCONNECTION is only valid on SQL batch, RPC and transaction manager requests"
+    );
+    Ok(true)
+}
+
+/// RESETCONNECTION: roll back an open transaction, then replace the session
+/// with a fresh one on a new backend connection. Dropping the old connection
+/// discards connection-scoped settings and temporary objects; prepared handles
+/// are released. Only the authenticated login survives. Writes the rollback
+/// ENVCHANGE (if any) and the MS-TDS type 18 acknowledgement to `out`.
+fn reset_session(
+    template: &Connection,
+    session: &mut Session,
+    rpc: &mut crate::rpc::State,
+    out: &mut Vec<u8>,
+) -> Result<()> {
+    let mut fresh = Session::new(template.try_clone()?)?;
+    if session.transactions > 0 {
+        // Tell the client its transaction ended, as an explicit ROLLBACK does.
+        out.extend(session.rollback_transaction("")?);
+    }
+    fresh.original_login = std::mem::take(&mut session.original_login);
+    *session = fresh;
+    *rpc = crate::rpc::State::default();
+    // ENVCHANGE, length 3, type 18 (reset completion), empty new and old values.
+    out.extend([0xe3, 3, 0, 18, 0, 0]);
     Ok(())
 }
 
@@ -297,6 +347,23 @@ fn login_failure(out: &mut Vec<u8>) {
             message_utf16: None,
         },
     );
+}
+
+#[cfg(test)]
+mod reset_tests {
+    use super::reset_requested;
+
+    #[test]
+    fn reset_applies_only_to_request_messages() {
+        for kind in [1, 3, 14] {
+            assert!(reset_requested(kind, 0x09).unwrap());
+            assert!(!reset_requested(kind, 0x01).unwrap());
+        }
+        for kind in [6, 7, 0x12, 0x10] {
+            assert!(reset_requested(kind, 0x08).is_err());
+            assert!(!reset_requested(kind, 0x01).unwrap());
+        }
+    }
 }
 
 #[cfg(test)]
