@@ -3830,6 +3830,28 @@
       "dependencies": [],
       "issue": 391,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PP8h1"
+    },
+    {
+      "id": "session-reset-skiptran-reference-v1",
+      "title": "Capture SQL Server RESETCONNECTIONSKIPTRAN behavior",
+      "state": "backlog",
+      "authorization": "Direct owner full SQL Server compatibility goal; first-party Tedious reset source, owner-authored ordinary reset capture and MS-TDS status reference identify an unmeasured 0x10 transaction-preserving reset variant.",
+      "scope": [
+        "scripts/capture-session-reset-skiptran.mjs",
+        "reference/session-reset-skiptran.json",
+        "docs/session-reset-skiptran.md"
+      ],
+      "acceptance": [
+        "Use tightly scoped outgoing packet instrumentation with pinned Tedious 20 or an equivalent bounded post-login TDS client; record actual first Batch packet header/status with 0x10 and without 0x08, never retaining LOGIN7, secrets or packet payloads.",
+        "Capture before/after transaction visibility, settings, temp objects, prepared-handle reuse and connection reuse with complete rows, metadata, errors, INFO and DONE events; compare ordinary reset when useful and do not infer SKIPTRAN behavior from its name.",
+        "Use two fresh databases in each of two pinned SQL Server 2025 containers; compare raw captures, clean up any preserved transaction, and retain exact observations and remaining gaps.",
+        "Document driver-private instrumentation and do not change msduck runtime reset behavior."
+      ],
+      "dependencies": [
+        "session-reset-reference-v1"
+      ],
+      "issue": 393,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PP9y4"
     }
   ]
 }
