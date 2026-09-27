@@ -4510,6 +4510,28 @@
       ],
       "issue": 445,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRBKw"
+    },
+    {
+      "id": "prepared-handle-wire-v1",
+      "title": "Emit SQL Server's prepared-handle RETURNVALUE name and flags",
+      "state": "backlog",
+      "authorization": "Owner handoff of returnvalue-codec-v1 to this session (2026-09-27) with instruction to address review feedback. No external submission is input.",
+      "scope": [
+        "crates/msduck-tds/src/lib.rs",
+        "crates/msduck-tds/tests/return_value.rs",
+        "src/rpc.rs",
+        "docs/return-value-codec.md"
+      ],
+      "acceptance": [
+        "return_handle emits the captured SQL Server token: the wire name keeps its @ prefix and flags are 0. Update the deterministic vector and the root RPC test to the bytes captured in reference/rpc-output-wire.json.",
+        "Run the required Rust checks and npm client tests, including the prepared RPC coverage in tests/tedious.test.mjs."
+      ],
+      "dependencies": [
+        "returnvalue-codec-v1",
+        "prepared-execution-context-v1"
+      ],
+      "issue": 447,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRE0d"
     }
   ]
 }
