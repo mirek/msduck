@@ -4080,6 +4080,29 @@
       "dependencies": [],
       "issue": 410,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQQXM"
+    },
+    {
+      "id": "docker-sqlcmd-v1",
+      "title": "Bundle sqlcmd in the Docker image and publish only on release tags",
+      "state": "ready",
+      "authorization": "Direct owner instruction 2026-09-27 after PR 397: add sqlcmd so SQL Server image health checks work unchanged; publishing :edge on every main push is excessive compute, publish on v* tags only.",
+      "scope": [
+        "Dockerfile",
+        ".dockerignore",
+        "docker/",
+        ".github/workflows/docker.yml",
+        "scripts/docker-smoke.mjs",
+        "docs/docker.md"
+      ],
+      "acceptance": [
+        "Install a checksum-verified, version-pinned go-sqlcmd for amd64 and arm64 at /opt/mssql-tools18/bin/sqlcmd and /opt/mssql-tools/bin/sqlcmd; retain its license notice in the image.",
+        "Smoke-test the common SQL Server image health-check invocations (sqlcmd -S localhost -U sa -P ... -C -Q \"SELECT 1\" with and without -b, and the legacy path) inside the container; document any sqlcmd behavior msduck does not support.",
+        "Stop publishing on main pushes (no edge or sha tags); v* tags publish as before, pull requests only build and smoke-test when image-specific files change, and manual dispatch never pushes from other refs.",
+        "Update docs/docker.md for the new tags, sqlcmd support and the stale edge tag."
+      ],
+      "dependencies": [],
+      "issue": 411,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQSB_"
     }
   ]
 }
