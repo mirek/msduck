@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // First-party SQL Server ROWVERSION/TIMESTAMP rows, descriptors and diagnostics.
 import assert from 'node:assert/strict'
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { TYPES } from 'tedious'
 import { capture, canonical } from './lib/compatibility.mjs'
@@ -20,7 +20,13 @@ const output = resolve(positional[0] ?? 'artifacts/compatibility/rowversion/capt
 
 async function rejectFixtureOutput() {
   const fixturePath = fileURLToPath(fixture)
-  if (output === fixturePath) throw new Error('output path must not be the retained fixture')
+  const [outputParent, fixtureParent] = await Promise.all([
+    realpath(dirname(output)),
+    realpath(dirname(fixturePath)),
+  ])
+  if (outputParent === fixtureParent && basename(output) === basename(fixturePath)) {
+    throw new Error('output path must not be the retained fixture')
+  }
   const info = async path => {
     try { return await stat(path) }
     catch (error) { if (error.code === 'ENOENT') return null; throw error }
@@ -128,9 +134,9 @@ function validate(run) {
   assert.deepEqual(get('rowversion identity rejected').errors.map(error => [error.number,error.state]), [[2749,2]])
 }
 
+await mkdir(resolve(output, '..'), { recursive: true })
 await rejectFixtureOutput()
 if (writeFixture) await refuseExistingFixture(fixture)
-await mkdir(resolve(output, '..'), { recursive: true })
 const containers = []
 for (let containerIndex = 0; containerIndex < (oneDatabase ? 1 : 2); containerIndex++) {
   const entry = await withReferenceContainer(async (config, container) => {
