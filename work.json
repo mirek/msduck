@@ -4103,6 +4103,28 @@
       "dependencies": [],
       "issue": 411,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQSB_"
+    },
+    {
+      "id": "session-reset-v1",
+      "title": "Implement TDS RESETCONNECTION session reset",
+      "state": "ready",
+      "authorization": "Direct owner instruction 2026-09-27 (\"yes, let's add sqlcmd\"). In a local first-party test, go-sqlcmd v1.10.0 logged in but every query failed with 'connection reset is not implemented'; with the reset bit ignored, SELECT 1 and @@VERSION succeeded. Evidence: docs/session-reset-reference.md and docs/tds-gap-inventory.md step 3.",
+      "scope": [
+        "src/server.rs",
+        "tests/session_reset.test.mjs",
+        "docs/session-reset.md",
+        "docs/tds-gap-inventory.md",
+        ".github/workflows/ci.yml"
+      ],
+      "acceptance": [
+        "Handle RESETCONNECTION (0x08) as one session operation before executing that message: roll back an open transaction, restore session settings (NOCOUNT, DATEFIRST and other Session state), drop connection-scoped temporary state, invalidate RPC prepared handles, and keep the authenticated original login. Acknowledge with ENVCHANGE type 18 per MS-TDS.",
+        "Keep RESETCONNECTIONSKIPTRAN (0x10), alone or combined with 0x08, as an explicit unsupported error until its reference exists. Do not edit src/rpc.rs, src/engine.rs or the TDS crate, which other tasks own.",
+        "Add tedious Connection.reset() client tests mirroring docs/session-reset-reference.md (settings, rollback visible from a second connection, stale prepared handle, reuse after repeated resets), and run them in CI's client shards. Record exact differences from the reference, such as error numbers.",
+        "Run formatting, strict Clippy, workspace tests and the independent client tests at the exact revision."
+      ],
+      "dependencies": [],
+      "issue": 412,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQSZV"
     }
   ]
 }
