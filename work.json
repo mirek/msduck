@@ -4372,7 +4372,7 @@
     {
       "id": "table-variable-atomicity-reference-v1",
       "title": "Capture table-variable multi-row statement atomicity",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server compatibility goal; first-party table-variable capture gap and owner-authored issue #433. No external submission.",
       "scope": [
         "scripts/capture-table-variable.mjs",
