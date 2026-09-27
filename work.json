@@ -4650,7 +4650,7 @@
     {
       "id": "json-extraction-boundaries-reference-v1",
       "title": "Capture JSON_VALUE and JSON_QUERY validation-order boundaries",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing instruction to build the SQL Server-compatible Rust/DuckDB server; first-party docs/json-extraction.md and repository code identify the validation-order gap; no external submission is input.",
       "scope": [
         "scripts/capture-json-extraction-boundaries.mjs",
