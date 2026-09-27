@@ -43,8 +43,16 @@ FROM (VALUES
     ('nchar',239,239,8000,0,0,'SQL_Latin1_General_CP1_CI_AS'),
     ('xml',241,241,-1,0,0,NULL),
     ('sysname',231,256,256,0,0,'SQL_Latin1_General_CP1_CI_AS')
-) t(name,system_id,user_id,length,type_precision,type_scale,type_collation);
+) t(name,system_id,user_id,length,type_precision,type_scale,type_collation)
+UNION ALL
+SELECT name,CAST(243 AS UTINYINT),user_type_id,schema_id,CAST(NULL AS INTEGER),
+    CAST(-1 AS SMALLINT),CAST(0 AS UTINYINT),CAST(0 AS UTINYINT),
+    CAST(NULL AS VARCHAR),false,true,false,CAST(0 AS INTEGER),CAST(0 AS INTEGER),true
+FROM main.__msduck_table_types;
+CREATE OR REPLACE VIEW sys.table_types AS
+SELECT t.*,u.type_table_object_id,false AS is_memory_optimized
+FROM sys.types t JOIN main.__msduck_table_types u ON u.user_type_id=t.user_type_id;
 CREATE OR REPLACE MACRO main.__msduck_type_id(value) AS
-    map_extract_value((SELECT map(list('sys'||chr(0)||name),list(user_type_id)) FROM sys.types),__msduck_type_key(CAST(value AS VARCHAR)));
+    map_extract_value((SELECT map(list(lower(s.name)||chr(0)||lower(t.name)),list(t.user_type_id)) FROM sys.types t JOIN main.__msduck_schemas s USING(schema_id)),__msduck_type_key(CAST(value AS VARCHAR)));
 CREATE OR REPLACE MACRO main.__msduck_type_name(value) AS
     map_extract_value((SELECT map(list(user_type_id),list(name)) FROM sys.types),value);

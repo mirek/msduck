@@ -13,9 +13,18 @@ pub fn register(db: &Connection) -> anyhow::Result<()> {
 ")?;
     system_columns::register(db)?;
     db.execute_batch(
+        "CREATE TABLE IF NOT EXISTS main.__msduck_table_type_columns(
+        object_id INTEGER NOT NULL,column_id INTEGER NOT NULL,name VARCHAR NOT NULL,
+        system_type_id UTINYINT NOT NULL,user_type_id INTEGER NOT NULL,
+        max_length SMALLINT NOT NULL,precision UTINYINT NOT NULL,scale UTINYINT NOT NULL,
+        collation_name VARCHAR,is_nullable BOOLEAN NOT NULL,is_ansi_padded BOOLEAN NOT NULL,
+        PRIMARY KEY(object_id,column_id),UNIQUE(object_id,name))",
+    )?;
+    db.execute_batch(
         "CREATE OR REPLACE MACRO main.__msduck_col_name(obj,col) AS map_extract_value(
-        (SELECT map(list(CAST(object_id AS VARCHAR)||chr(0)||CAST(column_id AS VARCHAR)),list(name))
+         (SELECT map(list(CAST(object_id AS VARCHAR)||chr(0)||CAST(column_id AS VARCHAR)),list(name))
          FROM (SELECT object_id,column_id,name FROM main.__msduck_column_info
+               UNION ALL SELECT object_id,column_id,name FROM main.__msduck_table_type_columns
                UNION ALL SELECT object_id,column_id,name FROM main.__msduck_builtin_columns)),
         CAST(obj AS VARCHAR)||chr(0)||CAST(col AS VARCHAR));",
     )?;

@@ -38,6 +38,18 @@ LEFT JOIN sys.types t ON t.name=CASE ic.data_type
     WHEN 'DOUBLE' THEN 'float' WHEN 'DATE' THEN 'date' WHEN 'UUID' THEN 'uniqueidentifier'
     ELSE NULL END
 UNION ALL
+SELECT c.object_id,c.name,c.column_id,c.system_type_id,c.user_type_id,
+    c.max_length,c.precision,c.scale,c.collation_name,c.is_nullable,c.is_ansi_padded,
+    false,false,false,false,false,false,false,false,false,
+    CAST(0 AS INTEGER),CAST(0 AS INTEGER),CAST(0 AS INTEGER),false,false,
+    CAST(0 AS UTINYINT),'NOT_APPLICABLE',
+    CAST(NULL AS INTEGER),CAST(NULL AS VARCHAR),CAST(NULL AS VARCHAR),CAST(NULL AS INTEGER),
+    CAST(NULL AS VARCHAR),false,false,
+    CAST(NULL AS INTEGER),CAST(NULL AS VARCHAR),false,
+    CAST(NULL AS INTEGER),CAST(NULL AS VARCHAR),false,
+    CAST(NULL AS INTEGER),CAST(NULL AS UTINYINT),CAST(NULL AS VARCHAR)
+FROM main.__msduck_table_type_columns c JOIN main.__msduck_table_types t ON t.type_table_object_id=c.object_id
+UNION ALL
 SELECT * EXCLUDE(in_system_columns) FROM main.__msduck_builtin_columns
 WHERE NOT in_system_columns;
 
