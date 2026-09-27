@@ -4021,7 +4021,7 @@
     {
       "id": "tvp-binding-reference-v1",
       "title": "Capture SQL Server TVP type resolution and metadata rejection",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server-compatible Rust/DuckDB server goal; first-party TVP captures and official MS-TDS metadata specification. No external submission is input.",
       "scope": [
         "scripts/capture-tvp-binding.mjs",
