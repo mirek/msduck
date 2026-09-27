@@ -3747,6 +3747,31 @@
       "dependencies": [],
       "issue": 384,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PP4EB"
+    },
+    {
+      "id": "select-top-percent-ties-v1",
+      "title": "Execute SELECT TOP PERCENT and WITH TIES from captured SQL Server behavior",
+      "state": "ready",
+      "authorization": "Direct owner goal of 2026-09-27: continue development on this repo. First-party successor to the owner-authored reference/select-top-percent.json captures merged in #375 and #377; no external submission is input. src/engine.rs is otherwise held only by blocked result-alignment-v1; edits there are limited to the TOP call site and error-number mapping.",
+      "scope": [
+        "crates/msduck-sql/src/top.rs",
+        "crates/msduck-sql/tests/select_top_percent.rs",
+        "src/engine.rs",
+        "tests/tedious.test.mjs",
+        "docs/select-top-percent.md",
+        "README.md",
+        "ROADMAP.md"
+      ],
+      "acceptance": [
+        "Replace the unsupported TOP PERCENT/WITH TIES rejection with deterministic msduck-sql AST lowering: ceiling percentage counts over the post-DISTINCT/GROUP BY/HAVING row set, WITH TIES peer inclusion by ORDER BY keys, limit expression evaluated once, and runtime NULL/range validation; keep plain TOP behavior unchanged.",
+        "Report captured diagnostics 1062, 1031, 1014, 127 and 1060 with their states/classes; keep uncaptured or unsupported shapes (for example DISTINCT with unnamed projections) explicitly unsupported rather than guessed.",
+        "Add pure lowering tests and replay applicable reference/select-top-percent.json cases through tedious (rows, descriptors, errors, prepared/RPC reuse). Run cargo fmt, strict Clippy on the CI toolchain, workspace tests and client tests at the exact revision; document remaining gaps without claiming full TOP compatibility."
+      ],
+      "dependencies": [
+        "select-top-percent-shapes-reference-v1"
+      ],
+      "issue": 385,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PP4VA"
     }
   ]
 }
