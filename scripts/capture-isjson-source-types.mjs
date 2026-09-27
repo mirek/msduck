@@ -61,6 +61,13 @@ inputs.push(
   { name: 'varchar NULL source column', input: 'v', from: '(VALUES (CAST(NULL AS VARCHAR(20)))) AS source(v)' },
   { name: 'nvarchar NULL source column', input: 'v', from: '(VALUES (CAST(NULL AS NVARCHAR(20)))) AS source(v)' },
 )
+for (const type of ['MONEY', 'SMALLMONEY', 'DATETIME', 'SMALLDATETIME']) {
+  const name = type.toLowerCase()
+  inputs.push(
+    { name: `${name} missing column`, input: `CAST(missing_column AS ${type})` },
+    { name: `${name} invalid cast`, input: `CAST('not-a-value' AS ${type})` },
+  )
+}
 const programs = inputs.flatMap(({ name, input, from }) => [
   { name, mode: 'default', sql: `SELECT ISJSON(${input}) AS is_json${from ? ` FROM ${from}` : ''}` },
   { name, mode: 'value', sql: `SELECT ISJSON(${input}, VALUE) AS is_json${from ? ` FROM ${from}` : ''}` },

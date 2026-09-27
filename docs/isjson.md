@@ -44,7 +44,7 @@ treating them as a pass. SQL Server's computed INT descriptor has flags 33
 where msduck currently emits flags 1; the result-metadata path is reserved by
 another claim. Wider XML/TEXT declarations and aliases remain unverified.
 
-`reference/isjson-source-types.json` adds 68 owner-run SQL Server 2025 requests
+`reference/isjson-source-types.json` adds 84 owner-run SQL Server 2025 requests
 observed twice in fresh databases. TINYINT, SMALLINT, BIGINT, REAL, MONEY,
 SMALLMONEY, TIME, DATETIME, SMALLDATETIME and DATETIMEOFFSET values, typed NULLs
 and VALUES source columns all fail with error 8116/state 1/class 16 and the
@@ -56,6 +56,12 @@ MONEY/SMALLMONEY/DATETIME/SMALLDATETIME casts preserve their declaration name
 at preflight. Those four types' VALUES source columns currently reach ISJSON
 after backend lowering has erased their logical type. Their error messages are
 therefore recorded as explicit remaining differences, not treated as parity.
+For direct casts, SQL Server resolves a missing source column first (207), but
+rejects a validly bound cast to these four types with 8116 even if its value
+would fail conversion. The adapter keeps the cast operand in the binder path
+and rejects it before runtime evaluation. Msduck's shared unresolved-column
+diagnostic still reports generic 50000 for these missing-column inputs; the
+replay asserts and reports that exact remaining number and message difference.
 
 Remaining work includes engine-specific depth and Unicode edge behavior,
 complete noncharacter source typing through column/alias binding, exact syntax diagnostic parity and the

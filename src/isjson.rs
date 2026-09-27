@@ -62,21 +62,27 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
     };
     if let Some(kind) = declared.and_then(|kind| msduck_sql::sql_type::declaration(kind).ok()) {
         let rejected = match kind {
-            SqlType::Text => Some("__msduck_isjson_reject_text"),
-            SqlType::Xml => Some("__msduck_isjson_reject_xml"),
-            SqlType::Money => Some("__msduck_isjson_reject_money"),
-            SqlType::SmallMoney => Some("__msduck_isjson_reject_smallmoney"),
-            SqlType::DateTime => Some("__msduck_isjson_reject_datetime"),
-            SqlType::SmallDateTime => Some("__msduck_isjson_reject_smalldatetime"),
+            SqlType::Text => Some(("__msduck_isjson_reject_text", false)),
+            SqlType::Xml => Some(("__msduck_isjson_reject_xml", false)),
+            SqlType::Money => Some(("__msduck_isjson_reject_money", true)),
+            SqlType::SmallMoney => Some(("__msduck_isjson_reject_smallmoney", true)),
+            SqlType::DateTime => Some(("__msduck_isjson_reject_datetime", true)),
+            SqlType::SmallDateTime => Some(("__msduck_isjson_reject_smalldatetime", true)),
             _ => None,
         };
-        if let Some(name) = rejected {
-            // SQL Server rejects these declarations before the CAST executes.
-            // Keeping the binder failure as a scalar preserves that ordering
-            // even when DuckDB does not model XML or aliases TEXT to VARCHAR.
+        if let Some((name, bind_operand)) = rejected {
+            // SQL Server resolves source names before rejecting these types.
+            // Keep supported CASTs as children for binding, while the bind
+            // callback prevents their runtime conversion from executing.
+            // DuckDB cannot bind XML or TEXT here; those retain the earlier
+            // placeholder path until their declarations are modeled.
             *expr = crate::engine::unary_function(
                 name,
-                Expr::Value(Value::Number("0".into(), false).into()),
+                if bind_operand {
+                    value.clone()
+                } else {
+                    Expr::Value(Value::Number("0".into(), false).into())
+                },
             );
             return Ok(());
         }

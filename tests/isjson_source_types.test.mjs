@@ -12,7 +12,7 @@ const erasedColumnTypes = new Map([
   ['smalldatetime', 'datetime2'],
 ])
 
-test('ISJSON source-type binding matches retained SQL Server diagnostics and reports descriptor gap', { timeout: 120000 }, async t => {
+test('ISJSON source types retain captured diagnostics and report remaining differences', { timeout: 120000 }, async t => {
   assert.deepEqual(fixture.containers[0].runs[0], fixture.containers[0].runs[1])
   const connection = await start(t)
   const failures = []
@@ -31,7 +31,25 @@ test('ISJSON source-type binding matches retained SQL Server diagnostics and rep
       local: `Argument data type ${lowered} is invalid for argument 1 of isjson function.`,
       reference: `Argument data type ${columnType} is invalid for argument 1 of isjson function.`,
     }] : []
-    const expected = descriptorGap.concat(sourceTypeGap)
+    const missingColumnType = item.name.endsWith(' missing column')
+      ? item.name.slice(0, -' missing column'.length)
+      : null
+    let nameResolutionGap = []
+    if (missingColumnType) {
+      assert.equal(actual.errors.length, 1, item.name)
+      assert.equal(actual.errors[0].number, 50000, item.name)
+      assert.ok(
+        actual.errors[0].message.startsWith(
+          'Binder Error: Referenced column "missing_column" was not found because the FROM clause is missing\n\nLINE 1:',
+        ) && actual.errors[0].message.includes('missing_column'),
+        item.name,
+      )
+      nameResolutionGap = [
+        { path: '/errors/0/number', local: 50000, reference: 207 },
+        { path: '/errors/0/message', local: actual.errors[0].message, reference: "Invalid column name 'missing_column'." },
+      ]
+    }
+    const expected = descriptorGap.concat(sourceTypeGap, nameResolutionGap)
     if (JSON.stringify(delta) !== JSON.stringify(expected)) {
       failures.push({ name: item.name, mode: item.mode, differences: delta.slice(0, 4) })
     }
