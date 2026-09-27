@@ -13,13 +13,14 @@ else
   if [ ! -s "$cert" ] || [ ! -s "$key" ]; then
     # Like SQL Server, fall back to a self-signed certificate. It persists with
     # the volume so clients pinning it keep working across restarts. Generate
-    # into temporary files so an interrupted start leaves no partial pair; the
-    # key is published first, so a missing certificate regenerates both.
+    # into temporary files and drop any stale certificate first: until the new
+    # certificate lands it is missing, so an interrupted start regenerates both.
     mkdir -p "$secrets"
     host=$(hostname)
     (umask 077 && openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
       -subj "/CN=$host" -addext "subjectAltName=DNS:$host,DNS:localhost,IP:127.0.0.1" \
       -keyout "$key.tmp" -out "$cert.tmp" 2>/dev/null)
+    rm -f "$cert"
     mv -f "$key.tmp" "$key"
     mv -f "$cert.tmp" "$cert"
     echo "msduck: generated self-signed TLS certificate $cert" >&2

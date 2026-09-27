@@ -17,7 +17,8 @@ sqlcmd.
 
 | Tag | Source |
 | --- | --- |
-| `latest`, `X.Y.Z`, `X.Y` | a pushed `vX.Y.Z` Git tag |
+| `latest`, `X.Y.Z`, `X.Y` | a pushed stable `vX.Y.Z` Git tag |
+| `X.Y.Z-pre` | a prerelease tag such as `vX.Y.Z-rc.1` (never `latest`) |
 | `edge`, `sha-<short>` | each push to `main` |
 
 Each tag is one manifest for `linux/amd64` and `linux/arm64`. Each platform is
