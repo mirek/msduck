@@ -11,7 +11,8 @@ The two full raw captures are retained separately under ignored
 `artifacts/compatibility/select-top-percent/shapes-first.json` and
 `shapes-second.json` in the owner's worktree. Both raw captures have the fixture
 hash above. The earlier 40-case capture remains in Git history at `ba3916b3`
-and in the owner's ignored `prepared-first.json` and `prepared-second.json`.
+and in the owner's ignored `artifacts/reference/select-top-percent/prepared-first.json`
+and `prepared-second.json`.
 The generator records SQL text,
 ordered rows, column descriptors, errors, information events, RPC return status
 and DONE-family counts. It checks stable invariants across databases and against
