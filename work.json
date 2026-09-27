@@ -4107,7 +4107,7 @@
     {
       "id": "session-reset-v1",
       "title": "Implement TDS RESETCONNECTION session reset",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction 2026-09-27 (\"yes, let's add sqlcmd\"). In a local first-party test, go-sqlcmd v1.10.0 logged in but every query failed with 'connection reset is not implemented'; with the reset bit ignored, SELECT 1 and @@VERSION succeeded. Evidence: docs/session-reset-reference.md and docs/tds-gap-inventory.md step 3.",
       "scope": [
         "src/server.rs",
