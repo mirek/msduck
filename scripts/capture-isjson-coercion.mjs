@@ -3,8 +3,9 @@
 process.env.TZ = 'UTC'
 if (new Date(0).getTimezoneOffset() !== 0) throw new Error('UTC client time zone is required')
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
+import { basename, dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { canonical, capture } from './lib/compatibility.mjs'
 import { assertSameCapture, isolatedReference, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 import { withReferenceContainer } from './lib/reference-container.mjs'
@@ -14,6 +15,23 @@ const writeFixture = process.argv.includes('--write-fixture')
 const positional = process.argv.slice(2).filter(arg => arg !== '--write-fixture')
 if (positional.length > 1) throw new Error('expected at most one scratch output path')
 const output = resolve(positional[0] ?? 'artifacts/isjson-coercion/capture.json')
+async function canonicalPath(path) {
+  const absolute = resolve(path)
+  try { return await realpath(absolute) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    const parent = dirname(absolute)
+    return parent === absolute ? absolute : resolve(await canonicalPath(parent), basename(absolute))
+  }
+}
+async function identity(path) {
+  try { const value = await stat(path); return `${value.dev}:${value.ino}` }
+  catch (error) { if (error.code === 'ENOENT') return null; throw error }
+}
+const fixturePath = fileURLToPath(fixture)
+if (await canonicalPath(output) === await canonicalPath(fixturePath) ||
+    (await identity(fixturePath) !== null && await identity(output) === await identity(fixturePath))) {
+  throw new Error('refusing to overwrite retained fixture ' + fixturePath)
+}
 if (writeFixture) await refuseExistingFixture(fixture)
 
 const inputs = [
