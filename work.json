@@ -4456,7 +4456,7 @@
     {
       "id": "isjson-coercion-v1",
       "title": "Match SQL Server ISJSON input coercion and diagnostics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal; first-party current adapter and owner-run SQL Server capture.",
       "scope": [
         "src/isjson.rs",
