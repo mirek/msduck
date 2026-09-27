@@ -4437,7 +4437,7 @@
     {
       "id": "soundex-byte-core-v1",
       "title": "Implement deterministic SQL Server SOUNDEX byte core",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server compatibility goal; first-party evidence in reference/soundex-difference.json and docs/soundex-difference.md.",
       "scope": [
         "crates/msduck-core/src/soundex.rs",
