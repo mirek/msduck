@@ -60,7 +60,8 @@ Tedious 20's `Connection.reset()` sets `resetConnectionOnNextRequest` and sends
 `getInitialSql()` through `execSqlBatch`; its packet writer maps the flag to
 status bit 0x08. The [msduck SQL Server 2025 capture](../../../docs/session-reset-reference.md)
 observes the outgoing Batch message and reset flag, callback, response events,
-and follow-up session state. It does not test `RESETCONNECTIONSKIPTRAN` (0x10).
+and follow-up session state, including invalidation of a server prepared handle
+(error 8179 on reuse). It does not test `RESETCONNECTIONSKIPTRAN` (0x10).
 
 Tedious 20 does not expose MARS/SMP, so it cannot be the MARS-capable client
 ground truth. Use `System.Data.SqlClient` (or `Microsoft.Data.SqlClient`) with
