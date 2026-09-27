@@ -3673,6 +3673,24 @@
       ],
       "issue": 376,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPqSe"
+    },
+    {
+      "id": "openjson-varchar-output-bound-v1",
+      "title": "Bound VARCHAR OPENJSON row expansion per chunk",
+      "state": "ready",
+      "authorization": "Mirek's standing full SQL Server-compatible Rust server objective and owner-authored issue #378; first-party code inspection of UTF-16 and VARCHAR OPENJSON paths.",
+      "scope": [
+        "crates/msduck-core/src/openjson.rs",
+        "src/openjson.rs"
+      ],
+      "acceptance": [
+        "Add a deterministic VARCHAR OPENJSON row expansion entry point with an explicit checked retained-output budget. Count row structure and key/value bytes; reject exactly when the budget is exhausted, while preserving existing lexical rows, duplicate keys and diagnostics for valid inputs.",
+        "Carry one configured chunk budget across root DuckDB input rows before list-vector materialization, matching the existing UTF-16 path. Test exact boundary, multiple rows sharing a budget, NULL rows, and representative oversized expansion without relying on a full 64 MiB allocation.",
+        "Run formatting, workspace Rust tests, strict Clippy, independent tedious interoperability, and relevant diagnostic audit. Record exact revisions and keep the resource-limit difference from SQL Server explicit."
+      ],
+      "dependencies": [],
+      "issue": 378,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPtsF"
     }
   ]
 }
