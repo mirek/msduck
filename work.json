@@ -3691,6 +3691,24 @@
       "dependencies": [],
       "issue": 378,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PPtsF"
+    },
+    {
+      "id": "openjson-schema-varchar-bound-v1",
+      "title": "Bound explicit-schema VARCHAR OPENJSON materialization",
+      "state": "ready",
+      "authorization": "Mirek's standing full SQL Server-compatible Rust server objective, owner-authored issue #380, and first-party code inspection of the existing OPENJSON schema adapter.",
+      "scope": [
+        "crates/msduck-core/src/openjson/schema.rs",
+        "src/openjson/schema.rs"
+      ],
+      "acceptance": [
+        "Add deterministic checked VARCHAR source-row expansion that charges row structures and copied string bytes before retaining rows; preserve lexical values, strict/lax path errors and NULL behavior.",
+        "Check VARCHAR source/path input size before copying; share one configured budget across every source row in a DuckDB chunk and count the second output-vector copy. Bound selected scalar/fragment VARCHAR output across the chunk and check each output cell before materialization.",
+        "Test exact budget boundaries, many small source rows, shared budget across documents, NULL inputs and unchanged ordinary schema extraction. Run formatting, workspace Rust tests, strict Clippy, independent tedious interoperability and local diagnostic audit at the exact revision; retain raw gaps."
+      ],
+      "dependencies": [],
+      "issue": 380,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PPyBx"
     }
   ]
 }
