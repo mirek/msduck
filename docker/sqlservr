@@ -3,17 +3,27 @@
 # Ensures a TLS certificate exists, then starts the msduck container launcher.
 set -eu
 secrets=${MSDUCK_SECRETS_DIR:-/var/opt/mssql/secrets}
-cert=${MSDUCK_TLS_CERT:-$secrets/msduck-cert.pem}
-key=${MSDUCK_TLS_KEY:-$secrets/msduck-key.pem}
-if [ ! -e "$cert" ] && [ ! -e "$key" ]; then
-  # Like SQL Server, fall back to a self-signed certificate. It persists with
-  # the volume so clients pinning it keep working across restarts.
-  mkdir -p "$(dirname "$cert")" "$(dirname "$key")"
-  host=$(hostname)
-  (umask 077 && openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
-    -subj "/CN=$host" -addext "subjectAltName=DNS:$host,DNS:localhost,IP:127.0.0.1" \
-    -keyout "$key" -out "$cert" 2>/dev/null)
-  echo "msduck: generated self-signed TLS certificate $cert" >&2
+if [ -n "${MSDUCK_TLS_CERT:-}${MSDUCK_TLS_KEY:-}" ]; then
+  # A mounted pair is used as given; the launcher reports missing files.
+  cert=${MSDUCK_TLS_CERT:-}
+  key=${MSDUCK_TLS_KEY:-}
+else
+  cert=$secrets/msduck-cert.pem
+  key=$secrets/msduck-key.pem
+  if [ ! -s "$cert" ] || [ ! -s "$key" ]; then
+    # Like SQL Server, fall back to a self-signed certificate. It persists with
+    # the volume so clients pinning it keep working across restarts. Generate
+    # into temporary files so an interrupted start leaves no partial pair; the
+    # key is published first, so a missing certificate regenerates both.
+    mkdir -p "$secrets"
+    host=$(hostname)
+    (umask 077 && openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+      -subj "/CN=$host" -addext "subjectAltName=DNS:$host,DNS:localhost,IP:127.0.0.1" \
+      -keyout "$key.tmp" -out "$cert.tmp" 2>/dev/null)
+    mv -f "$key.tmp" "$key"
+    mv -f "$cert.tmp" "$cert"
+    echo "msduck: generated self-signed TLS certificate $cert" >&2
+  fi
 fi
 export MSDUCK_SECRETS_DIR="$secrets" MSDUCK_TLS_CERT="$cert" MSDUCK_TLS_KEY="$key"
 exec /usr/local/bin/msduck-container

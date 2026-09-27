@@ -95,6 +95,16 @@ try {
   const reopened = await connect(secondPort, password)
   assert.deepEqual(await query(reopened, 'SELECT name FROM dbo.ducks'), [['Mallard']])
   reopened.close()
+  await docker(['rm', '--force', second])
+
+  // An interrupted first start can leave only the key; the next start regenerates the pair.
+  await docker(['run', '--rm', '--volume', `${volume}:/var/opt/mssql`, image, 'rm', '/var/opt/mssql/secrets/msduck-cert.pem'])
+  const third = `${run}-third`
+  const thirdPort = await start(third, { ACCEPT_EULA: 'Y', MSSQL_SA_PASSWORD: password })
+  assert.match(await logs(third), /generated self-signed TLS certificate/)
+  const recovered = await connect(thirdPort, password)
+  assert.deepEqual(await query(recovered, 'SELECT name FROM dbo.ducks'), [['Mallard']])
+  recovered.close()
   console.log(`docker smoke test passed for ${image}`)
 } finally {
   for (const name of containers) await docker(['rm', '--force', name]).catch(() => {})

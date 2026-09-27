@@ -8,8 +8,11 @@ on:
       - Dockerfile
       - .dockerignore
       - 'docker/**'
-      - src/bin/msduck-container.rs
-      - src/authentication.rs
+      - Cargo.toml
+      - Cargo.lock
+      - 'crates/**'
+      - 'vendor/**'
+      - 'src/**'
       - scripts/docker-smoke.mjs
       - .github/workflows/docker.yml
   workflow_dispatch:

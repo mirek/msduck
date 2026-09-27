@@ -50,6 +50,9 @@ requires TLS and `sa` password authentication:
 
 - On first start, the image generates a self-signed certificate (like SQL
   Server's default) in `/var/opt/mssql/secrets`. It persists with the volume.
+  If an interrupted start left only one file of the pair, the next start
+  regenerates both. A pair set through `MSDUCK_TLS_CERT`/`MSDUCK_TLS_KEY` is
+  never generated or replaced.
 - On each start, the password is hashed into
   `/var/opt/mssql/secrets/msduck-admin.json` (mode 0600; see
   [authentication](authentication.md)). The plaintext is never written or passed
@@ -75,8 +78,8 @@ requires TLS and `sa` password authentication:
 
 `.github/workflows/docker.yml` builds each platform, runs
 `scripts/docker-smoke.mjs` against the built image, pushes by digest, and then
-merges the digests into one tagged manifest. Pull requests that touch the image
-build and smoke-test without pushing. Runs require the owner as actor, like CI.
+merges the digests into one tagged manifest. Pull requests that touch any file
+the image is built from build and smoke-test it without pushing. Runs require the owner as actor, like CI.
 
 The workflow needs two repository secrets: the Docker Hub account name and a
 Docker Hub access token with read/write scope for `mirek/msduck`:
@@ -89,5 +92,5 @@ gh secret set DOCKERHUB_TOKEN   # paste the token when prompted
 To test an image locally: `docker build -t msduck:local .` and then
 `node scripts/docker-smoke.mjs msduck:local`. The smoke test covers password
 policy, ignored settings, TLS login, wrong-password rejection, and persistence
-of data and certificate across restarts. It also covers `SA_PASSWORD` and
-`MSSQL_TCP_PORT`.
+of data and certificate across restarts, and recovery from a partial
+certificate pair. It also covers `SA_PASSWORD` and `MSSQL_TCP_PORT`.
