@@ -2628,7 +2628,7 @@
     {
       "id": "returnvalue-codec-v1",
       "title": "Implement bounded typed TDS RETURNVALUE encoding",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing objective to implement the SQL Server compatible Rust/DuckDB server and owner request for disjoint parallel tasks. First-party TDS gap documented in docs/tds-gap-inventory.md, local MS-TDS skill and owner-controlled mirek/mssqlite; no external submission is input.",
       "scope": [
         "crates/msduck-tds/src/return_value.rs",
