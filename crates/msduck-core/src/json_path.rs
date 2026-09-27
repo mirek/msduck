@@ -509,6 +509,10 @@ pub fn extract_utf16(
 ) -> Result<Option<Vec<u16>>, &'static str> {
     let (strict, steps) = path_utf16(path, false)?;
     let document = Utf16Document::new(source);
+    let opening = skip_ws(&document.syntax, 0, source.len());
+    if !matches!(document.syntax.get(opening), Some(b'{' | b'[')) {
+        return Err(DOCUMENT);
+    }
     if steps.is_empty() {
         root(&document.syntax).ok_or(DOCUMENT)?;
     }

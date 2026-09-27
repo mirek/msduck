@@ -1,4 +1,4 @@
-use msduck_core::json_path::{DOCUMENT, extract};
+use msduck_core::json_path::{DOCUMENT, extract, extract_utf16};
 
 #[test]
 fn captured_scalar_document_roots_are_invalid_for_both_extractors() {
@@ -32,6 +32,12 @@ fn captured_scalar_document_roots_are_invalid_for_both_extractors() {
                     extract(source, "$", query),
                     Err(DOCUMENT),
                     "{name}/{function}"
+                );
+                let units = source.encode_utf16().collect::<Vec<_>>();
+                assert_eq!(
+                    extract_utf16(&units, &[b'$' as u16], query),
+                    Err(DOCUMENT),
+                    "UTF-16 {name}/{function}"
                 );
             }
         }

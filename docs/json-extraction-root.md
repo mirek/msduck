@@ -7,7 +7,7 @@ and `null` with error 13609/state 1 and an unexpected character at position
 zero. These inputs remain valid for `ISJSON(..., VALUE)`; extraction applies a
 different document-root rule.
 
-`msduck_core::json_path::extract` now requires the first non-JSON-whitespace
+`msduck_core::json_path::extract` and `extract_utf16` now require the first non-JSON-whitespace
 byte of an extraction document to open an object or array. It parses the path
 first, as it did before this change, then checks the root opener. It does not
 scan the whole document at that point, because a selected value can return
