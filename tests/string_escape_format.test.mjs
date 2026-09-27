@@ -18,7 +18,7 @@ function rpc(connection, sql, type, value) {
   }, sql)
 }
 
-test('STRING_ESCAPE format cases preserve exact SQL Server comparison and computed-flag gap', { timeout: 120000 }, async t => {
+test('STRING_ESCAPE format cases match exact SQL Server capture', { timeout: 120000 }, async t => {
   assert.deepEqual(fixture.runs[0], fixture.runs[1], 'reference captures must agree across fresh databases')
   const connection = await start(t)
   for (const item of fixture.runs[0]) {
@@ -27,12 +27,6 @@ test('STRING_ESCAPE format cases preserve exact SQL Server comparison and comput
     const actual = canonical(await (item.parameter
       ? rpc(connection, item.sql, type, item.parameter.value)
       : capture(connection, item.sql)))
-    // The only remaining difference is the result_properties computed bit.
-    // Keep it visible in the raw comparison until the disjoint successor owns
-    // that shared SQL metadata rule; do not normalize the fixture or capture.
-    const expectedDiff = item.result.sets.length
-      ? [{ path: '/sets/0/columns/0/flags', local: 1, reference: 33 }]
-      : []
-    assert.deepEqual(differences(actual, item.result), expectedDiff, item.name)
+    assert.deepEqual(differences(actual, item.result), [], item.name)
   }
 })
