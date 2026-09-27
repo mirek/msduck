@@ -4368,6 +4368,28 @@
       ],
       "issue": 432,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQtBv"
+    },
+    {
+      "id": "table-variable-atomicity-reference-v1",
+      "title": "Capture table-variable multi-row statement atomicity",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server compatibility goal; first-party table-variable capture gap and owner-authored issue #433. No external submission.",
+      "scope": [
+        "scripts/capture-table-variable.mjs",
+        "reference/table-variable.json",
+        "docs/table-variable.md"
+      ],
+      "acceptance": [
+        "Capture a failed multi-row INSERT and UPDATE after preexisting table-variable rows, retaining TRY/CATCH diagnostics, ordered rows, typed descriptors and DONE-family tokens without inventing stable generated constraint names.",
+        "Capture failure inside an explicit transaction with XACT_STATE and @@TRANCOUNT, then rollback and re-read table-variable rows and identity allocation against an ordinary table control.",
+        "Require exact raw agreement in four fresh databases across two pinned SQL Server containers and independent replay against the retained fixture; preserve output alias/overwrite guards and bounded output.",
+        "Document exact observations, limitations and runtime implications; verify generator syntax, fixture equality, changed file scope and replay at the final revision."
+      ],
+      "dependencies": [
+        "table-variable-reference-v1"
+      ],
+      "issue": 433,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQtRy"
     }
   ]
 }
