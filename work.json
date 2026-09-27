@@ -2783,7 +2783,7 @@
     {
       "id": "datetrunc-bucket-core-v1",
       "title": "Add deterministic DATETRUNC and DATE_BUCKET rules",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. Deterministic successor proposed by the first-party reference document; evidence is the retained first-party fixture. No external submission is input.",
       "scope": [
         "crates/msduck-sql/src/datetrunc.rs",
