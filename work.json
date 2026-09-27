@@ -3677,7 +3677,7 @@
     {
       "id": "openjson-varchar-output-bound-v1",
       "title": "Bound VARCHAR OPENJSON row expansion per chunk",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's standing full SQL Server-compatible Rust server objective and owner-authored issue #378; first-party code inspection of UTF-16 and VARCHAR OPENJSON paths.",
       "scope": [
         "crates/msduck-core/src/openjson.rs",
