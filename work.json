@@ -4849,6 +4849,22 @@
       ],
       "issue": 471,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRpAq"
+    },
+    {
+      "id": "json-document-client-assertion-v1",
+      "title": "Align tedious 13609 assertion with captured SQL Server diagnostic",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server compatibility goal; owner-run SQL Server 2025 advanced-path fixture and owner PR #472 client failure; owner-authored issue #473.",
+      "scope": [
+        "tests/tedious.test.mjs"
+      ],
+      "acceptance": [
+        "Replace the stale generic 13609 message assertion with the exact owner-captured JSON_QUERY malformed-document case and verify number, state, message, CATCH and rethrow without weakening other assertions.",
+        "Coordinate with json-extraction-document-diagnostic-v1 so the combined exact revision passes independent clients and required checks before either change reaches main."
+      ],
+      "dependencies": [],
+      "issue": 473,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRrs1"
     }
   ]
 }
