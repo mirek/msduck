@@ -1,30 +1,22 @@
-use msduck_core::json_path::{PATH, diagnostic, exists, exists_utf16, extract, extract_utf16};
+use msduck_core::json_path::{
+    PATH, diagnostic, exists, exists_utf16, extract, extract_utf16, path,
+};
 
 #[test]
-fn captured_wildcard_results_and_core_diagnostics_match_both_reference_runs() {
-    let fixture: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../reference/json-extraction-wildcard.json"
-    ))
-    .unwrap();
+fn captured_range_results_and_diagnostic_identities_match_both_runs() {
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../../../reference/json-advanced-path.json")).unwrap();
     let runs = fixture["containers"][0]["runs"].as_array().unwrap();
     let mut compared = 0;
-    let mut advanced = 0;
     for run in runs {
         for record in run.as_array().unwrap() {
             let name = record["name"].as_str().unwrap();
             let source = record["source"].as_str().unwrap();
-            let path = record["path"].as_str().unwrap();
+            let path_text = record["path"].as_str().unwrap();
             let query = record["fn"] == "JSON_QUERY";
-            if matches!(
-                name,
-                "range path" | "single range path" | "last path" | "list path"
-            ) {
-                assert_eq!(msduck_core::json_path::path(path), Err(PATH));
-                advanced += 1;
-            }
-            let actual = extract(source, path, query);
+            let actual = extract(source, path_text, query);
             let source_units = source.encode_utf16().collect::<Vec<_>>();
-            let path_units = path.encode_utf16().collect::<Vec<_>>();
+            let path_units = path_text.encode_utf16().collect::<Vec<_>>();
             let utf16 = extract_utf16(&source_units, &path_units, query)
                 .map(|value| value.map(|units| String::from_utf16(&units).unwrap()));
             assert_eq!(actual, utf16, "UTF-16 parity: {name}/query={query}");
@@ -33,10 +25,10 @@ fn captured_wildcard_results_and_core_diagnostics_match_both_reference_runs() {
                 let error = actual.unwrap_err();
                 let identity = diagnostic(error).unwrap();
                 assert_eq!(identity.number, reference["number"], "{name}/query={query}");
-                if name != "wildcard invalid suffix" {
+                if identity.number != 13607 {
                     assert_eq!(identity.state, reference["state"], "{name}/query={query}");
                 }
-                if identity.number != 13609 && identity.number != 13607 {
+                if !matches!(identity.number, 13607 | 13609 | 13659) {
                     assert_eq!(
                         identity.message, reference["message"],
                         "{name}/query={query}"
@@ -50,20 +42,25 @@ fn captured_wildcard_results_and_core_diagnostics_match_both_reference_runs() {
             compared += 1;
         }
     }
-    assert_eq!(compared, 212);
-    assert_eq!(advanced, 16);
+    assert_eq!(compared, 284);
 }
 
 #[test]
-fn wildcard_existence_is_unchanged_and_large_arrays_are_iterative() {
+fn ordinary_and_existence_paths_still_reject_ranges() {
     let source = "[1,2]";
-    let path = "$[*]";
-    assert!(exists(source, path));
-    assert!(exists_utf16(
+    let selector = "$[0 to 1]";
+    assert_eq!(path(selector), Err(PATH));
+    assert!(!exists(source, selector));
+    assert!(!exists_utf16(
         &source.encode_utf16().collect::<Vec<_>>(),
-        &path.encode_utf16().collect::<Vec<_>>()
+        &selector.encode_utf16().collect::<Vec<_>>()
     ));
-    let many = format!("[{}]", "1,".repeat(20_000).trim_end_matches(','));
-    assert_eq!(extract(&many, path, false), Ok(None));
-    assert_eq!(extract(&many, path, true), Ok(None));
+    assert_eq!(extract(source, selector, false), Ok(None));
+
+    let many = format!("[{}]", "1,".repeat(10_000).trim_end_matches(','));
+    assert_eq!(
+        extract(&many, "$[9999 to 9999]", false),
+        Ok(Some("1".into()))
+    );
+    assert_eq!(extract(&many, "$[0 to 9999]", false), Ok(None));
 }
