@@ -5540,7 +5540,7 @@
     {
       "id": "at-time-zone-future-cycle-reference-v1",
       "title": "Capture 2101–2500 SQL Server named-zone rules",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing implementation goal, owner-authored issue #529, and pinned SQL Server 2025 named-zone evidence through year 2100.",
       "scope": [
         "scripts/capture-at-time-zone-history-2101-2500.mjs",
