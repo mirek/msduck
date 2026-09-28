@@ -106,12 +106,23 @@ impl SequenceSpec {
         }
     }
 
-    pub fn advance(self, state: &mut SequenceState) -> Result<i64, SequenceError> {
-        if !(self.minimum..=self.maximum).contains(&state.current)
-            || (!state.allocated && state.current != self.start)
+    /// Rebuild caller-owned state from a persisted current value and allocation
+    /// flag. A never-allocated sequence must still point at its start value.
+    pub fn restore_state(
+        self,
+        current: i64,
+        allocated: bool,
+    ) -> Result<SequenceState, SequenceError> {
+        if !(self.minimum..=self.maximum).contains(&current)
+            || (!allocated && current != self.start)
         {
             return Err(SequenceError::InvalidState);
         }
+        Ok(SequenceState { current, allocated })
+    }
+
+    pub fn advance(self, state: &mut SequenceState) -> Result<i64, SequenceError> {
+        self.restore_state(state.current, state.allocated)?;
         let value = if !state.allocated {
             self.start
         } else {

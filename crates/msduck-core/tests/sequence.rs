@@ -91,6 +91,32 @@ fn restart_and_cycle_use_the_bounds_instead_of_the_start() {
             .unwrap()
     );
     assert_eq!(spec.advance(&mut state).unwrap(), 12);
+
+    let mut restored = spec.restore_state(16, true).unwrap();
+    assert_eq!(spec.advance(&mut restored), Ok(10));
+    assert_eq!(
+        spec.restore_state(10, false),
+        Err(SequenceError::InvalidState)
+    );
+}
+
+#[test]
+fn persisted_state_restores_without_replaying_allocations() {
+    let spec = SequenceSpec::new(IntegerType::Int, 5, 2, 1, 11, false).unwrap();
+    assert_eq!(spec.restore_state(5, false), Ok(spec.initial_state()));
+    let mut state = spec.restore_state(9, true).unwrap();
+    assert_eq!(state.current_value(), 9);
+    assert!(state.has_allocated());
+    assert_eq!(spec.advance(&mut state), Ok(11));
+    assert_eq!(spec.advance(&mut state), Err(SequenceError::Exhausted));
+    assert_eq!(
+        spec.restore_state(12, true),
+        Err(SequenceError::InvalidState)
+    );
+    assert_eq!(
+        spec.restore_state(3, false),
+        Err(SequenceError::InvalidState)
+    );
 }
 
 #[test]

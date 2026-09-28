@@ -8,6 +8,9 @@ for intermediate arithmetic so an `i64` endpoint or step cannot wrap. Cycling
 uses the configured minimum for an ascending sequence and maximum for a
 descending sequence; it does not return to `START WITH`. A failed advance leaves
 the caller's state unchanged.
+The adapter can restore persisted state from a current value and allocation
+flag using `SequenceSpec::restore_state`; it rejects values outside the
+configured bounds and an unallocated value different from `START WITH`.
 
 A `RowAllocations` instance belongs to one result row. It maps a caller-supplied,
 database-scoped sequence identity to its allocated value. The first reference
