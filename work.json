@@ -4739,7 +4739,7 @@
     {
       "id": "json-extraction-array-range-v1",
       "title": "Capture and implement JSON extraction array ranges",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server-compatible Rust/DuckDB goal and owner-run JSON wildcard fixture from merged PR 462; no external submission is input.",
       "scope": [
         "scripts/capture-json-advanced-path.mjs",
@@ -4762,7 +4762,7 @@
     {
       "id": "json-wildcard-test-boundary-v1",
       "title": "Keep wildcard fixture test scoped to wildcard behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server-compatible Rust/DuckDB goal; owner-origin fixture and locally observed stale test when implementing owner task #463.",
       "scope": [
         "crates/msduck-core/tests/json_extraction_wildcard.rs"
@@ -4775,6 +4775,30 @@
       "dependencies": [],
       "issue": 464,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRfOE"
+    },
+    {
+      "id": "json-range-dynamic-diagnostic-v1",
+      "title": "Preserve dynamic strict JSON range diagnostic text",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server-compatible Rust/DuckDB goal; owner-run reference/json-advanced-path.json and verified Codex finding on owner PR #466. No external submission is input.",
+      "scope": [
+        "crates/msduck-core/src/json_path.rs",
+        "crates/msduck-core/tests/json_advanced_path.rs",
+        "src/json_extract.rs",
+        "tests/json_advanced_path.rs",
+        "docs/json-advanced-path.md"
+      ],
+      "acceptance": [
+        "Use captured 13659/state 1 examples to carry selected index, source UTF-16 position and requested end bound through a deterministic core error value without hidden process state or string leaks.",
+        "Emit SQL Server's exact dynamic 13659 message from the root JSON extraction adapter, including strict JSON_VALUE and JSON_QUERY; preserve existing 13660 identities and ordinary/wildcard behavior.",
+        "Add fixture-backed core and wire tests for exact errors and metadata, run full required Rust/client/audit checks at the PR head, and document any remaining path/document diagnostic offsets separately."
+      ],
+      "dependencies": [
+        "json-extraction-array-range-v1",
+        "json-wildcard-test-boundary-v1"
+      ],
+      "issue": 467,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRi81"
     }
   ]
 }
