@@ -5503,6 +5503,39 @@
       ],
       "issue": 525,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PT11f"
+    },
+    {
+      "id": "at-time-zone-first-centuries-runtime-v1",
+      "title": "Integrate year-1 named-zone AT TIME ZONE rules and boundary semantics",
+      "state": "ready",
+      "authorization": "Mirek's continuing implementation goal, owner-authored issue #527, and pinned raw SQL Server 2025 evidence in reference/at-time-zone-history-0001-0499.json.",
+      "scope": [
+        "scripts/generate-at-time-zone-history-0001-0499.mjs",
+        "src/at_time_zone_rules_0001_0499.json",
+        "src/at_time_zone_native.rs",
+        "tests/at_time_zone_first_centuries.rs",
+        "tests/at_time_zone_ancient.rs",
+        "docs/at-time-zone-first-centuries.md",
+        "docs/at-time-zone-ancient.md",
+        "docs/at-time-zone-early-history.md",
+        "docs/at-time-zone-historical.md",
+        "docs/at-time-zone-medieval.md",
+        "docs/at-time-zone-native.md",
+        "docs/at-time-zone-utc-range.md",
+        "docs/at-time-zone-future.md"
+      ],
+      "acceptance": [
+        "Generate a compact table derived only from the pinned 0001–0499 raw fixture, verifying source checksum, all 141 ordered names, 75,895 transitions, first-instant baseline, and continuous join to the 0500 snapshot. Prepend it to the native adapter and preserve UTC's full range and the named-zone upper bound at 2100.",
+        "Match captured year-1 instant behavior: for example Pacific UTC midnight has offset zero and changes to -08:00 at 08:00 UTC, while Samoa changes to -11:00 at 11:00 UTC. Do not infer earlier or unrepresentable local dates.",
+        "Match captured year-1 local-wall choices despite the synthetic zero-offset UTC interval: Pacific local midnight uses -08:00 and Samoa uses -11:00. Keep positive-offset local walls that SQL Server rejects with error 9813 explicitly rejected rather than returning a fabricated value; report any remaining diagnostic-token mismatch honestly.",
+        "Add SQL-facing seasonal, year-1 boundary, local-wall and year-0500 join regressions; move the existing 0499 rejection to supported conversion behavior. Update the current-range documentation and remaining scan/error limitations.",
+        "Run source/fixture checks, formatting, full workspace Rust tests, strict Clippy, independent client tests and diagnostic audit at exact PR head; require owner PR CI and completed Codex review before merge."
+      ],
+      "dependencies": [
+        "at-time-zone-first-centuries-reference-v1"
+      ],
+      "issue": 527,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PT6VY"
     }
   ]
 }
