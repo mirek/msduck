@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // First-party SQL Server 2025 evidence for session DATEFORMAT conversion rules.
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { withReferenceContainer, referenceImage } from './lib/reference-container.mjs'
@@ -8,6 +9,7 @@ import { connect, isolatedReference, assertSameCapture, refuseExistingFixture, w
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/dateformat.json', import.meta.url)
+const fixtureSha256 = '836c2cf16c12f318fc4a35d8c07531ea1f3cf0e3d266cca4b453a296c20efeb3'
 const args = process.argv.slice(2)
 const check = args.includes('--check')
 const writeFixture = args.includes('--write-fixture')
@@ -188,12 +190,30 @@ function validate(run) {
     assert.deepEqual(get(`${format} ambiguous`).sets[0].rows, [expected],
       `${format}: ambiguous temporal row changed`)
   }
+  const singleDateRows = day => [[dateValue(day)]]
+  assert.deepEqual(get('runtime changes in one batch').sets.map(set => set.rows),
+    [singleDateRows('04-03'), singleDateRows('03-04')], 'same-batch format change lost')
+  for (const [name, day] of [
+    ['A retains dmy', '04-03'],
+    ['A unchanged by B', '04-03'],
+    ['B retains default mdy', '03-04'],
+    ['B own setting', '04-05'],
+    ['language resets format', '03-04'],
+    ['format overrides language', '04-03'],
+    ['after invalid format', '04-03'],
+    ['format from variable', '03-04'],
+  ]) assert.deepEqual(get(name).sets[0].rows, singleDateRows(day), `${name}: session outcome changed`)
+  assert.deepEqual(get('B ymd spelling under mdy').sets[0].rows, [[null]],
+    'B mdy control unexpectedly accepted ymd spelling')
   assert.deepEqual(get('ydm same date').sets[0].rows[0].slice(0, 4), [
     { kind: 'date', value: '2024-05-04T00:00:00.000Z' },
     { kind: 'date', value: '2024-04-05T00:00:00.000Z' },
     { kind: 'date', value: '2024-05-04T00:00:00.000Z', nanosecondsDelta: 0 },
     { kind: 'date', value: '2024-05-04T00:00:00.000Z', nanosecondsDelta: 0 },
   ], 'ydm DATE/DATETIME/DATETIME2/DATETIMEOFFSET type split changed')
+  assert.deepEqual(get('ydm strict datetime').sets[0].rows,
+    [[{ kind: 'date', value: '2024-12-31T00:00:00.000Z' }]],
+    'legacy DATETIME ydm conversion changed')
   assert.deepEqual(value('A retains dmy'), value('A unchanged by B'), 'other session changed A')
   assert.deepEqual(value('B own setting'), get('ymd same date').sets[0].rows[0][0], 'B did not adopt ymd')
   assert.notDeepEqual(value('B own setting'), value('B ymd spelling under mdy'), 'B setting indistinguishable from mdy')
@@ -204,8 +224,11 @@ function validate(run) {
   assertSameCapture(get('ISO timestamp under dmy').sets, get('ISO timestamp under ydm').sets, 'ISO changed under ydm')
   assertSameCapture(get('ISO timestamp under dmy').sets, get('ISO timestamp under mdy').sets, 'ISO changed under mdy')
   const isoRow = get('ISO timestamp under dmy').sets[0].rows[0]
-  assert.equal(isoRow[3], 120, 'original ISO offset minutes lost')
-  assert(isoRow[2].includes('+02:00'), 'original ISO offset text lost')
+  assert.deepEqual(isoRow, [
+    { kind: 'date', value: '2024-03-04T05:06:07.123Z', nanosecondsDelta: 0.0004567 },
+    { kind: 'date', value: '2024-03-04T03:06:07.123Z', nanosecondsDelta: 0.0004567 },
+    '2024-03-04 05:06:07.1234567 +02:00', 120,
+  ], 'ISO conversion or original offset changed')
   assert.deepEqual(get('ydm strict date failure').errors, [{
     number: 241, state: 1, class: 16, lineNumber: 1,
     message: 'Conversion failed when converting date and/or time from character string.',
@@ -226,13 +249,17 @@ function validate(run) {
     ['ERROR', 'DONE'], 'invalid DATEFORMAT error and DONE order')
   assert.equal(get('prepared execute-time setting').errors.length, 0)
   assert.equal(get('prepared execute-time setting').sets.length, 3)
-  assert.deepEqual(get('prepared execute-time setting').sets[0].rows, [], 'sp_prepare emits metadata without rows')
-  assert.notDeepEqual(get('prepared execute-time setting').sets[1].rows, get('prepared execute-time setting').sets[2].rows)
+  assert.deepEqual(get('prepared execute-time setting').sets.map(set => set.rows), [
+    [], singleDateRows('04-03'), singleDateRows('03-04'),
+  ], 'sp_prepare metadata or execute-time dmy/mdy rows changed')
   assert.deepEqual(get('session reusable').sets[0].rows, [[1]])
 }
 
 if (check) {
-  const retained = JSON.parse(await readFile(fixture, 'utf8'))
+  const bytes = await readFile(fixture)
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), fixtureSha256,
+    'retained DATEFORMAT fixture changed; recapture and verify before updating the pinned digest')
+  const retained = JSON.parse(bytes.toString('utf8'))
   assert.equal(retained.image, referenceImage)
   assert.equal(retained.independentContainers, 2)
   validate(retained.results)

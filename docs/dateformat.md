@@ -36,7 +36,9 @@ prepared, then produces April 3 and March 4 when executed under successive
 `dmy` and `mdy` settings; the fixture preserves all three result boundaries.
 
 Run `node scripts/capture-dateformat.mjs --check` to validate the pinned capture
-without starting SQL Server. A new capture uses two independent containers and
+without starting SQL Server. The check pins the fixture's SHA-256 as well as
+the named case plan and key observed results; a changed capture needs a new
+two-container replay before updating that digest. A new capture uses two independent containers and
 fresh private databases, comparing their complete records before writing. The
 script uses exclusive writes to refuse replacing either the output or the retained fixture;
 `--write-fixture` only creates a missing fixture. The retained capture was made
