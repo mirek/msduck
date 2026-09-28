@@ -5244,7 +5244,7 @@
     {
       "id": "at-time-zone-native-doc-v1",
       "title": "Align native AT TIME ZONE adapter notes with SQL lowering",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing implementation goal and verified owner-initiated Codex finding on owner PR #506, review commit dcb94b0; no third-party input.",
       "scope": [
         "docs/at-time-zone-native.md"
