@@ -20,7 +20,7 @@ impl ResultType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 enum Descriptor {
     Unknown,
     Null,
@@ -214,9 +214,139 @@ fn concatenate(left: Descriptor, right: Descriptor) -> Descriptor {
     Known(ResultType::Character { family, length })
 }
 
-// Literal-only conditionals may be folded by SQL Server before metadata is
-// declared. Keep the existing conservative result until that folding is modeled.
-fn common_operands<'a>(values: impl Iterator<Item = &'a Expr>) -> Descriptor {
+// Only these source forms have a captured, value-independent NULL decision.
+// Other constant expressions may have conversions or diagnostics to preserve.
+fn literal_nullness(expr: &Expr) -> Option<bool> {
+    match expr {
+        Expr::Nested(inner) => literal_nullness(inner),
+        Expr::Cast { expr: inner, .. } if literal_nullness(inner) == Some(true) => Some(true),
+        Expr::Value(value) => match &value.value {
+            Value::Null => Some(true),
+            Value::SingleQuotedString(_) | Value::NationalStringLiteral(_) => Some(false),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn literal_truth(expr: &Expr) -> Option<bool> {
+    match expr {
+        Expr::Nested(inner) => literal_truth(inner),
+        Expr::BinaryOp { left, op, right } => {
+            let left = literal_count(left)?;
+            let right = literal_count(right)?;
+            match op {
+                BinaryOperator::Eq => Some(left == right),
+                BinaryOperator::NotEq => Some(left != right),
+                BinaryOperator::Lt => Some(left < right),
+                BinaryOperator::LtEq => Some(left <= right),
+                BinaryOperator::Gt => Some(left > right),
+                BinaryOperator::GtEq => Some(left >= right),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn has_max_operand(values: &[&Expr]) -> bool {
+    values.iter().any(|value| {
+        matches!(
+            expression(value),
+            Descriptor::Known(ResultType::Character {
+                length: Length::Max,
+                ..
+            })
+        )
+    })
+}
+
+// SQL Server keeps the selected Unicode literal's width. If an ANSI branch
+// wins while another branch is Unicode, conversion to the common Unicode
+// family retains the widest branch declaration before constant selection,
+// capped at NVARCHAR's 4,000-character bound.
+fn folded_character_result(selected: Option<&Expr>, values: &[&Expr]) -> Option<Descriptor> {
+    let declarations: Vec<_> = values.iter().map(|value| projected(value)).collect();
+    let mut ansi = false;
+    let mut unicode = false;
+    let mut widest = 1;
+    for declaration in &declarations {
+        match declaration {
+            Descriptor::Null => {}
+            Descriptor::Known(ResultType::Character {
+                family: family @ (Family::Varchar | Family::Nvarchar),
+                length: Length::Bounded(width),
+            }) => {
+                ansi |= *family == Family::Varchar;
+                unicode |= *family == Family::Nvarchar;
+                widest = widest.max(*width);
+            }
+            _ => return None,
+        }
+    }
+    let selected = selected.map(projected).unwrap_or(Descriptor::Null);
+    if ansi && unicode {
+        return match selected {
+            Descriptor::Known(ResultType::Character {
+                family: Family::Nvarchar,
+                ..
+            }) => Some(selected),
+            Descriptor::Known(ResultType::Character {
+                family: Family::Varchar,
+                ..
+            })
+            | Descriptor::Null => Some(Descriptor::Known(ResultType::character(
+                Family::Nvarchar,
+                Length::Bounded(widest.min(4000)),
+            ))),
+            _ => None,
+        };
+    }
+    Some(match selected {
+        Descriptor::Null => declarations.into_iter().fold(Descriptor::Null, common),
+        other => other,
+    })
+}
+
+fn folded_case(conditions: &[CaseWhen], else_result: Option<&Expr>) -> Option<Descriptor> {
+    let values: Vec<_> = conditions
+        .iter()
+        .map(|branch| &branch.result)
+        .chain(else_result)
+        .collect();
+    if values.iter().any(|value| literal_nullness(value).is_none())
+        || has_max_operand(&values)
+        || conditions
+            .iter()
+            .any(|branch| literal_truth(&branch.condition).is_none())
+    {
+        return None;
+    }
+    let mut selected = None;
+    for branch in conditions {
+        if literal_truth(&branch.condition)? {
+            selected = Some(&branch.result);
+            break;
+        }
+    }
+    folded_character_result(selected.or(else_result), &values)
+}
+
+fn folded_coalesce(values: &[&Expr]) -> Option<Descriptor> {
+    if values.iter().any(|value| literal_nullness(value).is_none()) || has_max_operand(values) {
+        return None;
+    }
+    let selected = values
+        .iter()
+        .copied()
+        .find(|value| literal_nullness(value) == Some(false))?;
+    folded_character_result(Some(selected), values)
+}
+
+// Runtime conditions must combine branch declarations even when every result
+// expression is a literal. Constant conditions can instead select a captured
+// literal branch before result metadata is declared.
+fn common_operands<'a>(values: impl Iterator<Item = &'a Expr>, force_literals: bool) -> Descriptor {
     fn constant(expr: &Expr) -> bool {
         match expr {
             Expr::Value(_) => true,
@@ -225,17 +355,9 @@ fn common_operands<'a>(values: impl Iterator<Item = &'a Expr>) -> Descriptor {
         }
     }
     let values: Vec<_> = values.collect();
-    let has_runtime_operand = values.iter().any(|value| !constant(value));
+    let has_runtime_operand = force_literals || values.iter().any(|value| !constant(value));
     // MAX survives SQL Server's literal folding and fixes the family/capacity.
-    let has_max_operand = values.iter().any(|value| {
-        matches!(
-            expression(value),
-            Descriptor::Known(ResultType::Character {
-                length: Length::Max,
-                ..
-            })
-        )
-    });
+    let has_max_operand = has_max_operand(&values);
     values
         .into_iter()
         .map(|value| {
@@ -380,6 +502,22 @@ fn expression(expr: &Expr) -> Descriptor {
         },
         Expr::Value(value) if matches!(value.value, Value::Null) => Descriptor::Null,
         Expr::Case {
+            operand: None,
+            conditions,
+            else_result,
+            ..
+        } => folded_case(conditions, else_result.as_deref()).unwrap_or_else(|| {
+            common_operands(
+                conditions
+                    .iter()
+                    .map(|branch| &branch.result)
+                    .chain(else_result.iter().map(|value| value.as_ref())),
+                conditions
+                    .iter()
+                    .any(|branch| literal_truth(&branch.condition).is_none()),
+            )
+        }),
+        Expr::Case {
             conditions,
             else_result,
             ..
@@ -388,6 +526,7 @@ fn expression(expr: &Expr) -> Descriptor {
                 .iter()
                 .map(|branch| &branch.result)
                 .chain(else_result.iter().map(|value| value.as_ref())),
+            false,
         ),
         Expr::Function(function) => {
             if let Some(kind @ DataType::Nvarchar(_)) =
@@ -433,10 +572,21 @@ fn expression(expr: &Expr) -> Descriptor {
                     .map_or(Descriptor::Unknown, Descriptor::Known);
             }
             if let Ok(Some(values)) = crate::case_types::coalesce_args(function) {
-                return common_operands(values.into_iter());
+                return folded_coalesce(&values)
+                    .unwrap_or_else(|| common_operands(values.into_iter(), false));
             }
-            if let Ok(Some([_, yes, no])) = crate::predicate::iif_args(function) {
-                return common_operands([yes, no].into_iter());
+            if let Ok(Some([predicate, yes, no])) = crate::predicate::iif_args(function) {
+                let values = [yes, no];
+                if !has_max_operand(&values)
+                    && literal_nullness(yes).is_some()
+                    && literal_nullness(no).is_some()
+                    && let Some(truth) = literal_truth(predicate)
+                    && let Some(folded) =
+                        folded_character_result(Some(if truth { yes } else { no }), &values)
+                {
+                    return folded;
+                }
+                return common_operands(values.into_iter(), literal_truth(predicate).is_none());
             }
             if let Ok(Some(values)) = crate::choose::args(function) {
                 return values
@@ -514,9 +664,64 @@ pub fn isnull_type(first: &Expr, replacement: &Expr) -> Option<ResultType> {
     }
 }
 
-/// Pad only result branches, preserving each condition/index and branch laziness.
+/// Adjust only result branches, preserving each condition/index and branch laziness.
 pub fn lower_fixed_results(expr: &mut Expr) {
+    let skip = |function: &sqlparser::ast::Function| {
+        if crate::case_types::coalesce_args(function)
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            Some(0)
+        } else if crate::predicate::iif_args(function)
+            .ok()
+            .flatten()
+            .is_some()
+            || crate::choose::args(function).ok().flatten().is_some()
+        {
+            Some(1)
+        } else {
+            None
+        }
+    };
+    let oversized_ansi = |value: &Expr| {
+        matches!(
+            projected(value),
+            Descriptor::Known(ResultType::Character {
+                family: Family::Varchar,
+                length: Length::Bounded(4001..=u16::MAX),
+            })
+        )
+    };
+    let has_oversized_ansi = match expr {
+        Expr::Case {
+            conditions,
+            else_result,
+            ..
+        } => {
+            conditions
+                .iter()
+                .any(|branch| oversized_ansi(&branch.result))
+                || else_result.as_deref().is_some_and(oversized_ansi)
+        }
+        Expr::Function(function) => {
+            if let (Some(skip), FunctionArguments::List(args)) = (skip(function), &function.args) {
+                args.args.iter().skip(skip).any(|arg| {
+                    matches!(arg, FunctionArg::Unnamed(FunctionArgExpr::Expr(value)) if oversized_ansi(value))
+                })
+            } else {
+                false
+            }
+        }
+        _ => false,
+    };
+    // A folded mixed-family VARCHAR(5000) branch becomes NVARCHAR(4000) in
+    // SQL Server. Limit the branch value as well as its descriptor.
     let (width, function) = match expression(expr) {
+        Descriptor::Known(ResultType::Character {
+            family: Family::Nvarchar,
+            length: Length::Bounded(4000),
+        }) if has_oversized_ansi => (4000, "__msduck_nvarchar_width"),
         Descriptor::Known(ResultType::Character {
             family: Family::Nchar,
             length: Length::Bounded(width),
@@ -527,7 +732,7 @@ pub fn lower_fixed_results(expr: &mut Expr) {
         }) => (width, "__msduck_char_width"),
         _ => return,
     };
-    let pad = |value: &mut Expr| {
+    let adjust = |value: &mut Expr| {
         *value = crate::expr::binary_function(
             function,
             value.clone(),
@@ -541,33 +746,20 @@ pub fn lower_fixed_results(expr: &mut Expr) {
             ..
         } => {
             for branch in conditions {
-                pad(&mut branch.result);
+                adjust(&mut branch.result);
             }
             if let Some(value) = else_result {
-                pad(value);
+                adjust(value);
             }
         }
         Expr::Function(function) => {
-            let skip = if crate::case_types::coalesce_args(function)
-                .ok()
-                .flatten()
-                .is_some()
-            {
-                0
-            } else if crate::predicate::iif_args(function)
-                .ok()
-                .flatten()
-                .is_some()
-                || crate::choose::args(function).ok().flatten().is_some()
-            {
-                1
-            } else {
+            let Some(skip) = skip(function) else {
                 return;
             };
             if let FunctionArguments::List(args) = &mut function.args {
                 for argument in args.args.iter_mut().skip(skip) {
                     if let FunctionArg::Unnamed(FunctionArgExpr::Expr(value)) = argument {
-                        pad(value);
+                        adjust(value);
                     }
                 }
             }
