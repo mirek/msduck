@@ -319,6 +319,13 @@ pub(crate) fn bounded_literal_unicode_promotion<'a>(
     use msduck_core::character::Family;
 
     fn literal(expr: &Expr) -> Option<(Family, u16)> {
+        let mut expr = expr;
+        for _ in 0..64 {
+            match expr {
+                Expr::Nested(inner) => expr = inner,
+                _ => break,
+            }
+        }
         let Expr::Value(value) = expr else {
             return None;
         };

@@ -109,3 +109,43 @@ fn unicode_promotion_changes_nullable_flag_after_four_thousand_characters() {
         }
     }
 }
+
+#[test]
+fn parenthesized_literals_and_null_arms_keep_captured_flags() {
+    // Raw SQL Server 2025 cases are retained in
+    // artifacts/compatibility/mixed-literal-shapes-sqlserver-2025.jsonl.
+    let catalog = catalog();
+    for (name, sql, nullable) in [
+        (
+            "CASE nested",
+            "SELECT CASE WHEN 1=1 THEN ('a') ELSE N'x' END",
+            false,
+        ),
+        ("COALESCE nested", "SELECT COALESCE(('a'),N'x')", false),
+        (
+            "COALESCE untyped NULL",
+            "SELECT COALESCE('a',NULL,N'x')",
+            true,
+        ),
+        (
+            "CASE unreachable NULL",
+            "SELECT CASE WHEN 1=1 THEN 'a' WHEN 1=0 THEN NULL ELSE N'x' END",
+            true,
+        ),
+        (
+            "CASE implicit NULL",
+            "SELECT CASE WHEN 1=1 THEN 'a' WHEN 1=0 THEN N'x' END",
+            true,
+        ),
+    ] {
+        let Statement::Query(query) = batch::parse(sql).unwrap().remove(0) else {
+            panic!("{name}");
+        };
+        let fields = query_fields(&catalog, &query, &Scope::default()).unwrap();
+        assert_eq!(
+            fields[0].properties,
+            Properties::expression(nullable),
+            "{name}"
+        );
+    }
+}
