@@ -191,7 +191,8 @@ impl<const SCALE: u8, const INSTANT: bool> VScalar for Convert<SCALE, INSTANT> {
                 return Err("invalid temporal payload".into());
             }
             let zone_name = zone_name(&name, unicode, row, len, stored.as_ref())?;
-            let zone = catalog.0.get(&lookup_key(&zone_name)).ok_or(INVALID_ZONE)?;
+            let key = lookup_key(&zone_name);
+            let zone = catalog.0.get(&key).ok_or(INVALID_ZONE)?;
             let rules = Rules::new(zone.initial, &zone.transitions)?;
             let value = unsafe { ticks.as_slice_with_len::<i64>(len)[row] };
             if INSTANT {
@@ -207,13 +208,13 @@ impl<const SCALE: u8, const INSTANT: bool> VScalar for Convert<SCALE, INSTANT> {
                 crate::datetime2::DateTime2::from_ticks(value)?;
             }
             let resolved = if INSTANT {
-                if !(START..END).contains(&value) {
+                if key != "utc" && !(START..END).contains(&value) {
                     return Err("AT TIME ZONE instant outside captured rule range".into());
                 }
                 rules.resolve_utc(value)?
             } else {
                 let resolved = rules.resolve_local(value)?;
-                if !(START..END).contains(&resolved.utc_ticks) {
+                if key != "utc" && !(START..END).contains(&resolved.utc_ticks) {
                     return Err("AT TIME ZONE instant outside captured rule range".into());
                 }
                 resolved
@@ -364,8 +365,8 @@ mod tests {
         }
         for (stamp, zone) in [
             ("2024-01-01", "Not A Time Zone"),
-            ("1899-12-31", "UTC"),
-            ("2051-01-01", "UTC"),
+            ("1899-12-31", "Pacific Standard Time"),
+            ("2051-01-01", "Pacific Standard Time"),
         ] {
             let sql = format!(
                 "SELECT __msduck_at_time_zone_local_7(__msduck_datetime2_cast_7('{stamp}'),'{zone}')"
