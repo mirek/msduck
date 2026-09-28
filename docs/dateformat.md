@@ -16,7 +16,10 @@ newer types return May 4. For `2024/31/12` under `ydm`, strict `DATE` conversion
 emits error 241 (state 1, severity 16) after a `Date` descriptor and no row;
 strict `DATETIME` returns December 31.
 
-The same ISO timestamp results under `dmy`, `ydm` and `mdy`. A single batch
+The same ISO timestamp results under `dmy`, `ydm` and `mdy`. The capture retains
+the typed DATETIMEOFFSET value, a text rendering with its original `+02:00`
+offset, and `DATEPART(TZOFFSET)` of 120 minutes. The order probes likewise
+include offset text and minutes alongside the typed temporal results. A single batch
 changes from `dmy` to `mdy` and returns April 3 followed by March 4 for the
 same slash text. Another connection retains its own format. `SET LANGUAGE
 us_english` resets the first connection to `mdy`, and a later `SET DATEFORMAT
@@ -29,7 +32,7 @@ prepared, then produces April 3 and March 4 when executed under successive
 Run `node scripts/capture-dateformat.mjs --check` to validate the pinned capture
 without starting SQL Server. A new capture uses two independent containers and
 fresh private databases, comparing their complete records before writing. The
-script refuses to replace either the output or the retained fixture;
+script uses exclusive writes to refuse replacing either the output or the retained fixture;
 `--write-fixture` only creates a missing fixture. The retained capture was made
 on `linux.local`; the local Docker VM exposed only 2 GiB and SQL Server exited
 before login readiness. This is a resource limit of that VM, not a DATEFORMAT
@@ -38,8 +41,9 @@ result.
 The current server has no explicit DATEFORMAT session setting in its engine
 source. This fixture is reference evidence for follow-up binding and runtime
 work; it does not claim implemented msduck behavior. Tedious normalizes temporal
-values to JavaScript dates, including DATETIMEOFFSET to a UTC instant, so the
-fixture is not a raw temporal wire-payload or original-offset capture. It does
+values to JavaScript dates, including DATETIMEOFFSET to a UTC instant. The
+separate text and TZOFFSET columns retain the original SQL offset, but this
+fixture is still not a raw temporal wire-payload capture. It does
 not establish behavior for every date spelling, language, style code, RPC
 temporal parameter, or locale-specific month name.
 

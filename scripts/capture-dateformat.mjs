@@ -24,8 +24,12 @@ const orders = [
   ['dym', '05/2024/04'],
 ]
 const types = ['DATE', 'DATETIME', 'DATETIME2(7)', 'DATETIMEOFFSET(7)']
-const conversions = value => `SELECT ${types.map((type, index) => `TRY_CAST(N'${value}' AS ${type}) AS value_${index}`).join(',')}`
-const isoSql = "SELECT CAST(N'2024-03-04T05:06:07.1234567' AS DATETIME2(7)) AS dt2,CAST(N'2024-03-04T05:06:07.1234567+02:00' AS DATETIMEOFFSET(7)) AS dto"
+const conversions = value => {
+  const offset = `TRY_CAST(N'${value}' AS DATETIMEOFFSET(7))`
+  return `SELECT ${types.map((type, index) => `TRY_CAST(N'${value}' AS ${type}) AS value_${index}`).join(',')},CONVERT(NVARCHAR(48),${offset}) AS dto_text,DATEPART(TZOFFSET,${offset}) AS dto_offset_minutes`
+}
+const isoOffset = "CAST(N'2024-03-04T05:06:07.1234567+02:00' AS DATETIMEOFFSET(7))"
+const isoSql = `SELECT CAST(N'2024-03-04T05:06:07.1234567' AS DATETIME2(7)) AS dt2,${isoOffset} AS dto,CONVERT(NVARCHAR(48),${isoOffset}) AS dto_text,DATEPART(TZOFFSET,${isoOffset}) AS dto_offset_minutes`
 
 async function observe(primary, config) {
   const databaseName = (await capture(primary, 'SELECT DB_NAME() AS name')).sets[0].rows[0][0]
@@ -108,6 +112,9 @@ function validate(run) {
   assert.deepEqual(value('B retains default mdy'), value('format from variable'), 'variable format failed')
   assertSameCapture(get('ISO timestamp under dmy').sets, get('ISO timestamp under ydm').sets, 'ISO changed under ydm')
   assertSameCapture(get('ISO timestamp under dmy').sets, get('ISO timestamp under mdy').sets, 'ISO changed under mdy')
+  const isoRow = get('ISO timestamp under dmy').sets[0].rows[0]
+  assert.equal(isoRow[3], 120, 'original ISO offset minutes lost')
+  assert(isoRow[2].includes('+02:00'), 'original ISO offset text lost')
   assert.equal(get('ydm strict date failure').errors.length, 1)
   assert.equal(get('invalid format').errors.length, 1)
   assert.equal(get('prepared execute-time setting').errors.length, 0)
@@ -145,7 +152,7 @@ if (check) {
   try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
   catch (error) { if (error.code !== 'ENOENT') throw error }
   if (retained) assertSameCapture(actual, retained, 'fresh DATEFORMAT capture differs from retained fixture')
-  await writeFile(output, JSON.stringify(actual) + '\n')
+  await writeFile(output, JSON.stringify(actual) + '\n', { flag: 'wx' })
   if (writeFixture) await writeNewFixture(fixture, actual)
   console.log(`Captured ${actual.results.length} DATEFORMAT observations in two independent containers${retained ? ' and matched the retained fixture' : ''}`)
 }
