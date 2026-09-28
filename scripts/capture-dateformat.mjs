@@ -313,21 +313,23 @@ if (check) {
   await mkdir(dirname(output), { recursive: true })
   const runs = []
   let image
-  for (let index = 0; index < 2; index++) {
-    await withReferenceContainer(async (config, container) => {
-      assert.equal(container.image, referenceImage, 'unexpected SQL Server image')
-      image ??= container.image
-      assert.equal(container.image, image)
-      const run = await isolatedReference(config, primary => observe(primary, config))
-      runs.push(run)
-      try {
+  try {
+    for (let index = 0; index < 2; index++) {
+      await withReferenceContainer(async (config, container) => {
+        assert.equal(container.image, referenceImage, 'unexpected SQL Server image')
+        image ??= container.image
+        assert.equal(container.image, image)
+        const run = await isolatedReference(config, primary => observe(primary, config))
+        runs.push(run)
         validate(run)
         if (runs.length === 2) assertSameCapture(runs[1], runs[0], 'independent DATEFORMAT captures differ')
-      } catch (error) {
-        await writeFile(output, JSON.stringify({ image, independentContainers: runs.length, divergentRuns: runs }) + '\n', { flag: 'wx' })
-        throw error
-      }
-    })
+      })
+    }
+  } catch (error) {
+    if (runs.length) {
+      await writeFile(output, JSON.stringify({ image, independentContainers: runs.length, divergentRuns: runs }) + '\n', { flag: 'wx' })
+    }
+    throw error
   }
   const actual = { image, independentContainers: 2, results: runs[0] }
   await writeFile(output, JSON.stringify(actual) + '\n', { flag: 'wx' })
