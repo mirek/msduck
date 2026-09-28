@@ -5284,6 +5284,30 @@
       ],
       "issue": 509,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PS9YU"
+    },
+    {
+      "id": "at-time-zone-utc-range-v1",
+      "title": "Support UTC AT TIME ZONE across SQL temporal range",
+      "state": "ready",
+      "authorization": "Mirek's continuing implementation goal and first-party SQL Server 2025 reference work; no external content is input.",
+      "scope": [
+        "src/at_time_zone_native.rs",
+        "scripts/capture-at-time-zone-utc-range.mjs",
+        "reference/at-time-zone-utc-range.json",
+        "tests/at_time_zone_utc_range.rs",
+        "docs/at-time-zone-utc-range.md"
+      ],
+      "acceptance": [
+        "Capture pinned SQL Server 2025 raw TDS descriptors, rows, errors, messages and completion for DATETIME2 and DATETIMEOFFSET at years 0001, 1899, 2051 and 9999 through AT TIME ZONE UTC; retain image digest and @@VERSION.",
+        "Capture a non-UTC named zone outside the current 1900-2050 rule window and preserve its unsupported history explicitly rather than extrapolating offsets.",
+        "Support UTC across the exact temporal range in the bounded native adapter, including local and instant inputs, nulls and scale; add SQL-facing regressions and document remaining metadata/error differences.",
+        "Run fixture consistency check, formatting, strict workspace Clippy, workspace Rust tests, independent client tests and diagnostic audit on exact head; use owner PR with required CI and completed Codex review."
+      ],
+      "dependencies": [
+        "at-time-zone-names-v1"
+      ],
+      "issue": 511,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PTDsZ"
     }
   ]
 }
