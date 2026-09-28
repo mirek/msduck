@@ -5122,6 +5122,28 @@
       ],
       "issue": 495,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PSbQ6"
+    },
+    {
+      "id": "at-time-zone-binding-v1",
+      "title": "Bind AT TIME ZONE input and result declarations",
+      "state": "ready",
+      "authorization": "Mirek's continuing owner instruction and owner-run pinned SQL Server 2025 reference/at-time-zone.json. No third-party issue or review content is input.",
+      "scope": [
+        "crates/msduck-sql/src/at_time_zone.rs",
+        "crates/msduck-sql/tests/at_time_zone_binding.rs",
+        "docs/at-time-zone-binding.md"
+      ],
+      "acceptance": [
+        "Bind captured DATETIME2 and DATETIMEOFFSET scales unchanged, DATETIME to DATETIMEOFFSET(3), SMALLDATETIME to DATETIMEOFFSET(0), independent of parameter values and zone rules.",
+        "Reject captured DATE and INT input with exact SQL Server 8116/state 1/class 16 diagnostics; leave uncaptured families explicit as unsupported rather than inventing coercions.",
+        "Replay captured descriptors and error records in fixture-backed deterministic SQL-crate tests; document staging, nullable metadata and remaining zone-name/runtime/export work.",
+        "Do not edit reserved msduck-sql/src/lib.rs; run formatting, strict Clippy, workspace Rust tests, independent clients and local audit on exact revision; use owner PR with exact-head CI and verified review."
+      ],
+      "dependencies": [
+        "at-time-zone-reference-v1"
+      ],
+      "issue": 497,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PSfj_"
     }
   ]
 }
