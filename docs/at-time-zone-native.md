@@ -18,8 +18,10 @@ The compact [rule table](../src/at_time_zone_rules_1900_2050.json) contains
 `node scripts/generate-at-time-zone-rules.mjs --check` verifies that the
 committed table derives exactly from the pinned full-content capture digest;
 running the command without `--check` regenerates it. Runtime registration
-validates the table's provenance, transition order, continuity and offset
-bounds before accepting a query. It never reads the host's time-zone database.
+validates the table's provenance, transition order, continuity and offset bounds
+once per process, then shares the immutable validated catalog across connections.
+Failed validation remains a registration error on every connection. It never
+reads the host's time-zone database.
 
 The original named-zone table covers UTC instants from 1900-01-01 through
 2050-12-31. The separately pinned historical and future tables extend the
