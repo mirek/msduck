@@ -5558,6 +5558,41 @@
       ],
       "issue": 529,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PUBw4"
+    },
+    {
+      "id": "at-time-zone-future-cycle-runtime-v1",
+      "title": "Integrate captured 2101–2500 named-zone rules",
+      "state": "ready",
+      "authorization": "Mirek's continuing implementation goal, owner-authored issue #531, and pinned SQL Server 2025 evidence in reference/at-time-zone-history-2101-2500.json.",
+      "scope": [
+        "scripts/generate-at-time-zone-history-2101-2500.mjs",
+        "src/at_time_zone_rules_2101_2500.json",
+        "src/at_time_zone_native.rs",
+        "tests/at_time_zone_future_cycle.rs",
+        "tests/at_time_zone_future.rs",
+        "tests/at_time_zone_first_centuries.rs",
+        "tests/at_time_zone_utc_range.rs",
+        "docs/at-time-zone-future-cycle.md",
+        "docs/at-time-zone-future.md",
+        "docs/at-time-zone-ancient.md",
+        "docs/at-time-zone-medieval.md",
+        "docs/at-time-zone-early-history.md",
+        "docs/at-time-zone-first-centuries.md",
+        "docs/at-time-zone-native.md",
+        "docs/at-time-zone-utc-range.md",
+        "docs/at-time-zone-historical.md"
+      ],
+      "acceptance": [
+        "Generate a compact source-pinned 141-zone 32,000-transition table from the retained 2101–2500 fixture and check bounds, continuity and its join to the 2051–2100 table. Runtime registration validates provenance and transition history.",
+        "Accept captured named-zone UTC instants and local walls through 2500, preserving UTC's full SQL temporal range, typed DATETIMEOFFSET results, and explicit rejection from 2501 onward.",
+        "Add SQL-facing seasonal and boundary regressions at 2100/2101 and 2500/2501; update range documentation and retain scan limits and diagnostic-token gaps without claiming recurrence after 2500.",
+        "Run source and fixture checks, formatting, full workspace Rust tests, strict Clippy, independent client tests and diagnostic audit at exact PR head; require owner PR CI and completed Codex review before merge."
+      ],
+      "dependencies": [
+        "at-time-zone-future-cycle-reference-v1"
+      ],
+      "issue": 531,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PUEiv"
     }
   ]
 }
