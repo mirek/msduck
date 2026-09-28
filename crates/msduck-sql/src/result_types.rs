@@ -572,12 +572,10 @@ fn expression(expr: &Expr) -> Descriptor {
                     && literal_nullness(yes).is_some()
                     && literal_nullness(no).is_some()
                     && let Some(truth) = literal_truth(predicate)
-                {
-                    if let Some(folded) =
+                    && let Some(folded) =
                         folded_character_result(Some(if truth { yes } else { no }), &values)
-                    {
-                        return folded;
-                    }
+                {
+                    return folded;
                 }
                 return common_operands(values.into_iter(), literal_truth(predicate).is_none());
             }
