@@ -14,6 +14,9 @@ const longAnsi = 'a'.repeat(5000)
 const cases = [
   ['CASE true Unicode', "SELECT CASE WHEN 1=1 THEN N'a' ELSE N'longer' END AS value"],
   ['CASE false Unicode', "SELECT CASE WHEN 1=0 THEN N'a' ELSE N'longer' END AS value"],
+  ['CASE not equal constant', "SELECT CASE WHEN 1<>0 THEN N'a' ELSE N'longer' END AS value"],
+  ['CASE less than constant', "SELECT CASE WHEN -1<0 THEN N'a' ELSE N'longer' END AS value"],
+  ['CASE greater than constant', "SELECT CASE WHEN 2>1 THEN N'a' ELSE N'longer' END AS value"],
   ['CASE no ELSE Unicode', "SELECT CASE WHEN 1=0 THEN N'a' END AS value"],
   ['CASE runtime predicate', "SELECT id,CASE WHEN id=1 THEN N'a' ELSE N'longer' END AS value FROM (VALUES(1),(2)) v(id) ORDER BY id"],
   ['CASE empty input', "SELECT CASE WHEN id=1 THEN N'a' ELSE N'longer' END AS value FROM (VALUES(1)) v(id) WHERE 1=0"],
@@ -26,6 +29,7 @@ const cases = [
   ['CASE typed NULL', "SELECT CASE WHEN 1=1 THEN CAST(NULL AS NVARCHAR(12)) ELSE N'🦆' END AS value"],
   ['CASE MAX branch', "SELECT CASE WHEN 1=1 THEN N'a' ELSE CAST(N'longer' AS NVARCHAR(MAX)) END AS value"],
   ['IIF true and false', "SELECT IIF(1=1,N'a',N'longer') AS yes,IIF(1=0,N'a',N'longer') AS no"],
+  ['IIF not equal constant', "SELECT IIF(1<>0,N'a',N'longer') AS value"],
   ['IIF selected untyped NULL', "SELECT IIF(1=1,NULL,N'x') AS unicode_result,IIF(1=1,NULL,'abc') AS ansi_result"],
   ['IIF runtime predicate', "SELECT id,IIF(id=1,N'a',N'longer') AS value FROM (VALUES(1),(2)) v(id) ORDER BY id"],
   ['IIF typed NULL and MAX', "SELECT IIF(1=1,CAST(NULL AS NVARCHAR(12)),N'🦆') AS bounded,IIF(1=1,N'a',CAST(N'longer' AS NVARCHAR(MAX))) AS unbounded"],

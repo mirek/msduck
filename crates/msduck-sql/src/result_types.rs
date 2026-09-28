@@ -232,11 +232,19 @@ fn literal_nullness(expr: &Expr) -> Option<bool> {
 fn literal_truth(expr: &Expr) -> Option<bool> {
     match expr {
         Expr::Nested(inner) => literal_truth(inner),
-        Expr::BinaryOp {
-            left,
-            op: BinaryOperator::Eq,
-            right,
-        } => Some(literal_count(left)? == literal_count(right)?),
+        Expr::BinaryOp { left, op, right } => {
+            let left = literal_count(left)?;
+            let right = literal_count(right)?;
+            match op {
+                BinaryOperator::Eq => Some(left == right),
+                BinaryOperator::NotEq => Some(left != right),
+                BinaryOperator::Lt => Some(left < right),
+                BinaryOperator::LtEq => Some(left <= right),
+                BinaryOperator::Gt => Some(left > right),
+                BinaryOperator::GtEq => Some(left >= right),
+                _ => None,
+            }
+        }
         _ => None,
     }
 }
@@ -656,9 +664,64 @@ pub fn isnull_type(first: &Expr, replacement: &Expr) -> Option<ResultType> {
     }
 }
 
-/// Pad only result branches, preserving each condition/index and branch laziness.
+/// Adjust only result branches, preserving each condition/index and branch laziness.
 pub fn lower_fixed_results(expr: &mut Expr) {
+    let skip = |function: &sqlparser::ast::Function| {
+        if crate::case_types::coalesce_args(function)
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            Some(0)
+        } else if crate::predicate::iif_args(function)
+            .ok()
+            .flatten()
+            .is_some()
+            || crate::choose::args(function).ok().flatten().is_some()
+        {
+            Some(1)
+        } else {
+            None
+        }
+    };
+    let oversized_ansi = |value: &Expr| {
+        matches!(
+            projected(value),
+            Descriptor::Known(ResultType::Character {
+                family: Family::Varchar,
+                length: Length::Bounded(4001..=u16::MAX),
+            })
+        )
+    };
+    let has_oversized_ansi = match expr {
+        Expr::Case {
+            conditions,
+            else_result,
+            ..
+        } => {
+            conditions
+                .iter()
+                .any(|branch| oversized_ansi(&branch.result))
+                || else_result.as_deref().is_some_and(oversized_ansi)
+        }
+        Expr::Function(function) => {
+            if let (Some(skip), FunctionArguments::List(args)) = (skip(function), &function.args) {
+                args.args.iter().skip(skip).any(|arg| {
+                    matches!(arg, FunctionArg::Unnamed(FunctionArgExpr::Expr(value)) if oversized_ansi(value))
+                })
+            } else {
+                false
+            }
+        }
+        _ => false,
+    };
+    // A folded mixed-family VARCHAR(5000) branch becomes NVARCHAR(4000) in
+    // SQL Server. Limit the branch value as well as its descriptor.
     let (width, function) = match expression(expr) {
+        Descriptor::Known(ResultType::Character {
+            family: Family::Nvarchar,
+            length: Length::Bounded(4000),
+        }) if has_oversized_ansi => (4000, "__msduck_nvarchar_width"),
         Descriptor::Known(ResultType::Character {
             family: Family::Nchar,
             length: Length::Bounded(width),
@@ -669,7 +732,7 @@ pub fn lower_fixed_results(expr: &mut Expr) {
         }) => (width, "__msduck_char_width"),
         _ => return,
     };
-    let pad = |value: &mut Expr| {
+    let adjust = |value: &mut Expr| {
         *value = crate::expr::binary_function(
             function,
             value.clone(),
@@ -683,33 +746,20 @@ pub fn lower_fixed_results(expr: &mut Expr) {
             ..
         } => {
             for branch in conditions {
-                pad(&mut branch.result);
+                adjust(&mut branch.result);
             }
             if let Some(value) = else_result {
-                pad(value);
+                adjust(value);
             }
         }
         Expr::Function(function) => {
-            let skip = if crate::case_types::coalesce_args(function)
-                .ok()
-                .flatten()
-                .is_some()
-            {
-                0
-            } else if crate::predicate::iif_args(function)
-                .ok()
-                .flatten()
-                .is_some()
-                || crate::choose::args(function).ok().flatten().is_some()
-            {
-                1
-            } else {
+            let Some(skip) = skip(function) else {
                 return;
             };
             if let FunctionArguments::List(args) = &mut function.args {
                 for argument in args.args.iter_mut().skip(skip) {
                     if let FunctionArg::Unnamed(FunctionArgExpr::Expr(value)) = argument {
-                        pad(value);
+                        adjust(value);
                     }
                 }
             }
