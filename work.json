@@ -5389,7 +5389,7 @@
     {
       "id": "at-time-zone-history-1500-1799-v1",
       "title": "Capture and support AT TIME ZONE named-zone rules for 1500–1799",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing implementation goal and first-party pinned SQL Server 2025 reference probe.",
       "scope": [
         "scripts/capture-at-time-zone-history-1500-1799.mjs",
@@ -5420,7 +5420,7 @@
     {
       "id": "at-time-zone-history-1000-1499-v1",
       "title": "Capture and support AT TIME ZONE named-zone rules for 1000–1499",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Mirek's continuing implementation goal and first-party pinned SQL Server 2025 reference probe.",
       "scope": [
         "scripts/capture-at-time-zone-history-1000-1499.mjs",
