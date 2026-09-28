@@ -66,13 +66,23 @@ fn utc_uses_the_full_sql_temporal_range() {
                 "{name}"
             );
             if name.contains("before snapshot") {
-                let (_, ok) = session.batch_response(
+                let (bytes, ok) = session.batch_response(
                     case["query"].as_str().unwrap(),
                     &Default::default(),
                     false,
                     None,
                 );
-                assert!(!ok, "pre-1900 named-zone history is not captured: {name}");
+                assert!(ok, "1899 named-zone history is captured: {name}");
+                let expected = if name.starts_with("local") {
+                    "1899-12-31T12:00:00.0000000-08:00"
+                } else {
+                    "1899-12-31T04:00:00.0000000-08:00"
+                };
+                assert_eq!(
+                    first_offset(&bytes, 7),
+                    Some(DateTimeOffset::parse_iso(expected).unwrap()),
+                    "{name}"
+                );
             } else {
                 // The separately captured future extension owns the positive
                 // server assertion for these retained 2051 reference rows.

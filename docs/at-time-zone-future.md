@@ -18,10 +18,11 @@ verifies that the compact [runtime extension](../src/at_time_zone_rules_2051_210
 derives exactly from the pinned raw fixture and joins continuously to the
 original 20,414-transition table.
 
-The native adapter now uses the combined 24,414 transitions for named-zone
-UTC instants from 1900-01-01 through 2100-12-31. It still accepts `UTC` across
+The native adapter uses this extension together with the earlier 1900–2050
+table and the 1800–1899 historical prefix for named-zone UTC instants from
+1800-01-01 through 2100-12-31. It still accepts `UTC` across
 the full SQL temporal range because UTC has no transition history. It rejects
-uncaptured named-zone instants before 1900 or from 2101 onward rather than
+uncaptured named-zone instants before 1800 or from 2101 onward rather than
 inventing offsets. The [SQL-facing regression](../tests/at_time_zone_future.rs)
 checks retained seasonal offsets for Pacific, Central European and Samoa zones,
 the 2051 boundary, and the end of the new range.

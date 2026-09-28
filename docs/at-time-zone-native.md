@@ -22,9 +22,10 @@ validates the table's provenance, transition order, continuity and offset
 bounds before accepting a query. It never reads the host's time-zone database.
 
 The original named-zone table covers UTC instants from 1900-01-01 through
-2050-12-31. UTC itself has no offset transitions and accepts the full SQL
-temporal range; other names need a separately captured extension beyond the
-original table and remain explicit outside proven ranges. The
+2050-12-31. The separately pinned historical and future tables extend the
+combined window to 1800-01-01 through 2100-12-31. UTC itself has no offset
+transitions and accepts the full SQL temporal range; other names remain
+explicit outside the proven window. The
 underlying daily scan can miss changes that cancel before the next midnight,
 and minute refinement cannot prove subminute boundaries. The SQL Server rule
 source can also change independently of the pinned image. `AT TIME ZONE` is
