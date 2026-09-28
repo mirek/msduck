@@ -5778,7 +5778,7 @@
     {
       "id": "identity-sequence-advance-v1",
       "title": "Add atomic private identity-sequence advance for explicit inserts",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server compatibility goal and first-party retained IDENTITY_INSERT captures; prerequisite for later root INSERT/session runtime integration.",
       "scope": [
         "vendor/libduckdb-sys/build_bundled_cc.rs",
