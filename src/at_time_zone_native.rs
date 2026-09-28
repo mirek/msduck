@@ -407,6 +407,10 @@ impl<const SCALE: u8, const INSTANT: bool> VScalar for Convert<SCALE, INSTANT> {
         let mut result = output.struct_vector();
         let mut utc_result = result.child(0, len);
         let mut offset_result = result.child(1, len);
+        // A chunk can contain many rows for the same zone. Keep its validated
+        // rules for the whole invocation instead of rechecking every transition
+        // for each row before the binary-search resolution.
+        let mut rules_by_zone = HashMap::new();
         for row in 0..len {
             if source.row_is_null(row as u64) || name.row_is_null(row as u64) {
                 result.set_null(row);
@@ -424,7 +428,12 @@ impl<const SCALE: u8, const INSTANT: bool> VScalar for Convert<SCALE, INSTANT> {
             let zone_name = zone_name(&name, unicode, row, len, stored.as_ref())?;
             let key = lookup_key(&zone_name);
             let zone = catalog.0.get(&key).ok_or(INVALID_ZONE)?;
-            let rules = Rules::new(zone.initial, &zone.transitions)?;
+            let rules = match rules_by_zone.entry(key.clone()) {
+                std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(Rules::new(zone.initial, &zone.transitions)?)
+                }
+            };
             let value = unsafe { ticks.as_slice_with_len::<i64>(len)[row] };
             if INSTANT {
                 let offset = unsafe {
