@@ -5733,6 +5733,25 @@
       "dependencies": [],
       "issue": 544,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PUzA4"
+    },
+    {
+      "id": "identity-insert-runtime-plan-v1",
+      "title": "Plan SET IDENTITY_INSERT runtime from captured SQL Server behavior",
+      "state": "ready",
+      "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party follow-up to the owner-authored identity-insert-reference-v1 capture, not an external submission.",
+      "scope": [
+        "docs/identity-insert-runtime-plan.md"
+      ],
+      "acceptance": [
+        "Map current parser, Session, INSERT lowering, allocator, diagnostic and prepared-execution paths with source links, and compare them to the retained SQL Server fixture and owner-authored mssqlite identity implementation.",
+        "Specify session-local state and explicit value/allocator semantics, errors 544/545/8101/8107, transaction rollback, two-session isolation, and exact rows/descriptors/completions to replay; mark unprobed behavior unknown.",
+        "Propose ordered bounded successor scopes without editing or assigning files reserved by active workers; documentation-only source and link review."
+      ],
+      "dependencies": [
+        "identity-insert-reference-v1"
+      ],
+      "issue": 546,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PU3pT"
     }
   ]
 }
