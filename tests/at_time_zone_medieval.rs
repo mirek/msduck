@@ -57,7 +57,7 @@ fn medieval_named_zone_seasons_match_retained_sql_server_offsets() {
 }
 
 #[test]
-fn medieval_range_crosses_1000_and_1500_but_rejects_0999() {
+fn medieval_range_crosses_1000_and_1500() {
     let server = Server::open(":memory:").unwrap();
     let mut session = Session::new(server.connection().unwrap()).unwrap();
     for (sql, expected) in [
@@ -83,17 +83,6 @@ fn medieval_range_crosses_1000_and_1500_but_rejects_0999() {
         assert_eq!(
             first_offset(&bytes),
             Some(DateTimeOffset::parse_iso(expected).unwrap()),
-            "{sql}"
-        );
-    }
-    for sql in [
-        "SELECT CAST('0999-12-31T12:00:00' AS DATETIME2(7)) AT TIME ZONE 'Pacific Standard Time'",
-        "SELECT CAST('0999-12-31T12:00:00+00:00' AS DATETIMEOFFSET(7)) AT TIME ZONE 'Pacific Standard Time'",
-    ] {
-        assert!(
-            !session
-                .batch_response(sql, &Default::default(), false, None)
-                .1,
             "{sql}"
         );
     }

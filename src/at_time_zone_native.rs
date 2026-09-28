@@ -16,7 +16,8 @@ mod transition_core;
 use transition_core::{Rules, Transition};
 
 const INVALID_ZONE: &str = "The time zone ID provided to AT TIME ZONE clause is invalid.";
-const START: i64 = 315_253_728_000_000_000; // 1000-01-01 UTC
+const START: i64 = 157_469_184_000_000_000; // 0500-01-01 UTC
+const MEDIEVAL_START: i64 = 315_253_728_000_000_000; // 1000-01-01 UTC
 const EARLY_START: i64 = 473_038_272_000_000_000; // 1500-01-01 UTC
 const HISTORICAL_START: i64 = 567_709_344_000_000_000; // 1800-01-01 UTC
 const BASE_START: i64 = 599_266_080_000_000_000; // 1900-01-01 UTC
@@ -218,8 +219,20 @@ fn load() -> Result<Catalog, Box<dyn std::error::Error>> {
             json: include_str!("at_time_zone_rules_1000_1499.json"),
             source_sha: "86e987fb51060e398456bf875e56fd0b710613f5413ba5aaf99fcab2fdb0f20e",
             following_sha: "60aba524ce29c1199b54c99e32bcb0616a59fff99fa8927049b9aaab1173af79",
-            start: START,
+            start: MEDIEVAL_START,
             end: EARLY_START,
+            expected_count: 76_000,
+        },
+    )?;
+    prepend_history(
+        &mut zones,
+        &document["image"],
+        HistorySnapshot {
+            json: include_str!("at_time_zone_rules_0500_0999.json"),
+            source_sha: "b8861eaf6c208d1249eb02e6d343162e9ac85021fe6b9bd3fdafeb726037931c",
+            following_sha: "86e987fb51060e398456bf875e56fd0b710613f5413ba5aaf99fcab2fdb0f20e",
+            start: START,
+            end: MEDIEVAL_START,
             expected_count: 76_000,
         },
     )?;
@@ -394,6 +407,10 @@ impl<const SCALE: u8, const INSTANT: bool> VScalar for Convert<SCALE, INSTANT> {
         let mut result = output.struct_vector();
         let mut utc_result = result.child(0, len);
         let mut offset_result = result.child(1, len);
+        // A chunk can contain many rows for the same zone. Keep its validated
+        // rules for the whole invocation instead of rechecking every transition
+        // for each row before the binary-search resolution.
+        let mut rules_by_zone = HashMap::new();
         for row in 0..len {
             if source.row_is_null(row as u64) || name.row_is_null(row as u64) {
                 result.set_null(row);
@@ -411,7 +428,12 @@ impl<const SCALE: u8, const INSTANT: bool> VScalar for Convert<SCALE, INSTANT> {
             let zone_name = zone_name(&name, unicode, row, len, stored.as_ref())?;
             let key = lookup_key(&zone_name);
             let zone = catalog.0.get(&key).ok_or(INVALID_ZONE)?;
-            let rules = Rules::new(zone.initial, &zone.transitions)?;
+            let rules = match rules_by_zone.entry(key.clone()) {
+                std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(Rules::new(zone.initial, &zone.transitions)?)
+                }
+            };
             let value = unsafe { ticks.as_slice_with_len::<i64>(len)[row] };
             if INSTANT {
                 let offset = unsafe {
@@ -486,7 +508,7 @@ mod tests {
                 .values()
                 .map(|zone| zone.transitions.len())
                 .sum::<usize>(),
-            161_214
+            237_214
         );
         let db = db();
         assert_eq!(
@@ -607,7 +629,7 @@ mod tests {
         }
         for (stamp, zone) in [
             ("2024-01-01", "Not A Time Zone"),
-            ("0999-12-31", "Pacific Standard Time"),
+            ("0499-12-31", "Pacific Standard Time"),
             ("2101-01-01", "Pacific Standard Time"),
         ] {
             let sql = format!(
