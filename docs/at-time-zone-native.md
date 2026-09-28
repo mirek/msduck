@@ -21,8 +21,10 @@ running the command without `--check` regenerates it. Runtime registration
 validates the table's provenance, transition order, continuity and offset
 bounds before accepting a query. It never reads the host's time-zone database.
 
-The adapter accepts UTC instants from 1900-01-01 through 2050-12-31. It
-rejects dates outside that captured range instead of extrapolating. The
+The original named-zone table covers UTC instants from 1900-01-01 through
+2050-12-31. UTC itself has no offset transitions and accepts the full SQL
+temporal range; other names need a separately captured extension beyond the
+original table and remain explicit outside proven ranges. The
 underlying daily scan can miss changes that cancel before the next midnight,
 and minute refinement cannot prove subminute boundaries. The SQL Server rule
 source can also change independently of the pinned image. `AT TIME ZONE` is
@@ -32,8 +34,8 @@ immutable.
 The SQL-facing work in PR #506 chooses local-wall versus instant conversion
 for captured exact temporal inputs and replays selected rows and descriptors.
 It does not cover legacy `DATETIME` and `SMALLDATETIME`, columns whose temporal
-declaration is unavailable to the lowering pass, or dates outside the captured
-range. The staged declaration binder and core resolver still need exported
+declaration is unavailable to the lowering pass, or named-zone dates outside
+captured rule ranges. The staged declaration binder and core resolver still need exported
 crate entry points, and the error path still needs exact SQL Server 8116 and
 9820 diagnostics and invalid-zone descriptor behavior. Further differential
 tests must retain exact rows, metadata, errors and completion tokens for those

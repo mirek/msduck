@@ -19,12 +19,16 @@ for 141 named zones. UTC has offset zero and no transitions in that snapshot.
 The adapter now skips the snapshot-range guard **only** for the exact `UTC`
 catalog key after the previously captured case/NUL lookup normalization. The
 validated temporal core still checks the full type range and source offset.
-Other names retain the range guard: the reference successfully converts
-Pacific Standard Time in 1899 and 2051, but this server has not captured rules
-for those dates and must not invent an offset.
+Other names retain a guard based on their separately captured rule range. The
+reference successfully converts Pacific Standard Time in 1899 and 2051; the
+former remains outside the original snapshot, and the latter needs a future
+rule extension. No offset should be invented for uncaptured dates.
 
 The SQL-facing test checks the supported UTC rows, type and scale, plus NULL
 and scale-zero boundary values. Two differences remain explicit: SQL Server's
 direct result descriptor has flags 33 while this server currently emits 1;
-named zones outside the transition window are rejected here although SQL
-Server returns rows. Neither difference is treated as a compatibility pass.
+the 1899 Pacific reference rows remain outside captured named-zone history.
+The test retains the 2051 Pacific reference rows but leaves their positive
+server assertion to the future-rule regression. It checks explicit rejection
+in 2101, beyond that planned extension. None of these differences is treated
+as a compatibility pass.
