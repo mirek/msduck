@@ -557,3 +557,33 @@ fn concurrent_create_and_drop_leave_a_consistent_catalog() {
     }
     catalog.create(&db, "race").unwrap();
 }
+
+#[test]
+fn readers_never_select_a_database_that_is_still_being_created() {
+    let server = Server::open(":memory:").unwrap();
+    let creator = server.connection().unwrap();
+    let reader = server.connection().unwrap();
+    let catalog = creator.databases().clone();
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let watching = {
+        let stop = stop.clone();
+        std::thread::spawn(move || {
+            let catalog = reader.databases().clone();
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                if catalog.select(&reader, "fresh").is_ok() {
+                    // Once selectable, the database is fully published.
+                    let helper: i32 = reader
+                        .query_row("SELECT __msduck_db_id('fresh')", [], |row| row.get(0))
+                        .unwrap();
+                    assert_eq!(helper, 5);
+                    catalog.select(&reader, "master").unwrap();
+                    return true;
+                }
+            }
+            false
+        })
+    };
+    catalog.create(&creator, "fresh").unwrap();
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    watching.join().unwrap();
+}

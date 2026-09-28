@@ -179,7 +179,20 @@ impl Catalog {
     }
 
     /// Resolve a client database name to its attached DuckDB catalog alias.
+    /// CREATE and DROP hold the same lock, so a database is never resolved
+    /// while it is attached but not yet published, or while it is detaching.
     pub fn resolve(&self, db: &Connection, name: &str) -> Result<Option<String>> {
+        let _change = self.lock();
+        self.resolve_published(db, name)
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.changes
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn resolve_published(&self, db: &Connection, name: &str) -> Result<Option<String>> {
         if name.eq_ignore_ascii_case(MASTER) {
             return Ok(Some(self.primary.clone()));
         }
@@ -215,7 +228,10 @@ impl Catalog {
     /// Make `name` the connection's current database with the `dbo` schema.
     /// Returns the database's SQL Server name.
     pub fn select(&self, db: &Connection, name: &str) -> Result<String> {
-        let alias = self.resolve(db, name)?.ok_or_else(|| missing(name))?;
+        let _change = self.lock();
+        let alias = self
+            .resolve_published(db, name)?
+            .ok_or_else(|| missing(name))?;
         db.execute_batch(&format!("USE {}; SET schema = 'dbo'", quote(&alias)))?;
         Ok(self.display(&alias))
     }
@@ -247,10 +263,7 @@ impl Catalog {
     /// a transaction because DuckDB attaches catalogs outside transactions.
     pub fn create(&self, db: &Connection, name: &str) -> Result<Database> {
         validate(name)?;
-        let _change = self
-            .changes
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _change = self.lock();
         let name_key = key(name);
         if RESERVED.contains(&name_key.as_str()) || self.registered(db, &name_key)? {
             return Err(exists(name));
@@ -319,10 +332,7 @@ impl Catalog {
     /// Detach a user database and remove its storage. The caller must make
     /// sure no session is using it; the connection must not be using it.
     pub fn remove(&self, db: &Connection, name: &str) -> Result<()> {
-        let _change = self
-            .changes
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _change = self.lock();
         let name_key = key(name);
         if name_key == MASTER {
             bail!(SqlError::new(
