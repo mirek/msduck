@@ -5017,6 +5017,24 @@
       ],
       "issue": 485,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PR8q0"
+    },
+    {
+      "id": "parameter-metadata-provenance-v1",
+      "title": "Preserve bound parameter provenance in result metadata",
+      "state": "ready",
+      "authorization": "Direct owner continuing implementation goal and owner-run SQL Server prepared capture during conditional-literal-folding-v1; no external submission is input.",
+      "scope": [
+        "src/result_types.rs"
+      ],
+      "acceptance": [
+        "Replace the metadata-only CAST(NULL) surrogate for bound character, TIME and money parameters with an AST representation that keeps their declared type while remaining distinguishable from an explicit typed-NULL literal; do not change execution or wire parameter values.",
+        "Add focused root tests distinguishing COALESCE of a bound NVARCHAR(12) parameter from COALESCE of explicit CAST(NULL AS NVARCHAR(12)), and preserve existing time/money/character parameter declarations.",
+        "Replay the pinned prepared SQL Server capture in reference/conditional-literal-folding.json after the dependent SQL crate folding task lands; the root change may merge independently first.",
+        "Run formatting, workspace Rust tests, strict Clippy, independent client tests and local diagnostic audit on the exact revision; use an owner PR with exact-head CI and verified Codex review."
+      ],
+      "dependencies": [],
+      "issue": 486,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PSAZO"
     }
   ]
 }
