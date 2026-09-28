@@ -70,7 +70,9 @@ fn body(expr: &SetExpr) -> Option<Vec<Descriptor>> {
             .iter()
             .map(|item| match item {
                 SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } => {
-                    Some(expression(expr))
+                    // A projected literal has its own bounded declaration even
+                    // when no runtime column or cast supplies a type.
+                    Some(projected(expr))
                 }
                 // Wildcards change output positions after binding. Do not guess.
                 _ => None,
@@ -140,8 +142,27 @@ pub(crate) fn common_character(
     }
 }
 
-// Conditional operands need literal declarations even when the top-level
-// literal result takes a separate adapter path. Reuse the shared storage rule.
+// Keep unconverted ANSI literals on the existing unknown adapter path until
+// best-fit conversion runs before the wire's strict Windows-1252 encoder.
+fn projected(expr: &Expr) -> Descriptor {
+    fn unconverted_ansi(expr: &Expr) -> bool {
+        match expr {
+            Expr::Nested(inner) | Expr::Collate { expr: inner, .. } => unconverted_ansi(inner),
+            Expr::Value(value) => {
+                matches!(&value.value, Value::SingleQuotedString(s) if msduck_core::encoding::encode_cp1252(s).is_err())
+            }
+            _ => false,
+        }
+    }
+    if unconverted_ansi(expr) {
+        expression(expr)
+    } else {
+        operand(expr)
+    }
+}
+
+// Projected and conditional operands need literal declarations. Reuse the
+// shared storage rule so their widths agree with other SQL binding paths.
 fn operand(expr: &Expr) -> Descriptor {
     if let Expr::Nested(inner) | Expr::Collate { expr: inner, .. } = expr {
         return operand(inner);
