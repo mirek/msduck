@@ -5714,6 +5714,25 @@
       ],
       "issue": 542,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PUv0G"
+    },
+    {
+      "id": "identity-insert-reference-v1",
+      "title": "Capture SQL Server SET IDENTITY_INSERT session and allocation behavior",
+      "state": "ready",
+      "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party reference capture for the unfinished SET IDENTITY_INSERT feature, not an external submission.",
+      "scope": [
+        "scripts/capture-identity-insert.mjs",
+        "reference/identity-insert.json",
+        "docs/identity-insert-reference.md"
+      ],
+      "acceptance": [
+        "Capture two fresh-database SQL Server 2025 runs with raw rows, typed descriptors, diagnostics and ordered completion tokens for ON/OFF, session isolation and the one-table-per-session restriction.",
+        "Probe explicit column-list requirements, transaction rollback, qualified table names and allocation behavior after explicit high and low values; distinguish observed results from generalizations.",
+        "Validate retained fixture stability and salient outcomes, preserve a reproducible generator, and document runtime implementation gaps without editing shared helpers or Rust files."
+      ],
+      "dependencies": [],
+      "issue": 544,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PUzA4"
     }
   ]
 }
