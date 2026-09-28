@@ -5562,7 +5562,7 @@
     {
       "id": "at-time-zone-future-cycle-runtime-v1",
       "title": "Integrate captured 2101–2500 named-zone rules",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing implementation goal, owner-authored issue #531, and pinned SQL Server 2025 evidence in reference/at-time-zone-history-2101-2500.json.",
       "scope": [
         "scripts/generate-at-time-zone-history-2101-2500.mjs",
