@@ -2,7 +2,7 @@
 
 `SET DATEFORMAT` controls how SQL Server interprets date character strings at
 execution time. The [pinned SQL Server 2025 capture](../reference/dateformat.json)
-records 42 observations from each of two independent containers. It checks every
+records 43 observations from each of two independent containers. It checks every
 documented order (`mdy`, `dmy`, `ymd`, `ydm`, `myd`, `dym`) against ambiguous text and
 an order-specific spelling. It retains `DATE`, `DATETIME`, `DATETIME2(7)` and
 `DATETIMEOFFSET(7)` descriptors, rows, conversion errors and ordered wire-token
@@ -25,7 +25,9 @@ the typed DATETIMEOFFSET value, a text rendering with its original `+02:00`
 offset, and `DATEPART(TZOFFSET)` of 120 minutes. The order probes likewise
 include offset text and minutes alongside the typed temporal results. A single batch
 changes from `dmy` to `mdy` and returns April 3 followed by March 4 for the
-same slash text. Another connection retains its own format. `SET LANGUAGE
+same slash text. Another connection retains its own format: `24/04/05` is NULL
+under its default `mdy`, then April 5 under `ymd`, while the first connection
+keeps its `dmy` interpretation. `SET LANGUAGE
 us_english` resets the first connection to `mdy`, and a later `SET DATEFORMAT
 dmy` overrides it. Invalid `SET DATEFORMAT xyz` emits error 2741 (state 1,
 severity 16) without changing the preceding format. A variable can supply a

@@ -30,6 +30,45 @@ const conversions = value => {
 }
 const isoOffset = "CAST(N'2024-03-04T05:06:07.1234567+02:00' AS DATETIMEOFFSET(7))"
 const isoSql = `SELECT CAST(N'2024-03-04T05:06:07.1234567' AS DATETIME2(7)) AS dt2,${isoOffset} AS dto,CONVERT(NVARCHAR(48),${isoOffset}) AS dto_text,DATEPART(TZOFFSET,${isoOffset}) AS dto_offset_minutes`
+const ambiguous = "SELECT TRY_CAST(N'03/04/2024' AS DATE) AS value"
+const ymdOnly = "SELECT TRY_CAST(N'24/04/05' AS DATE) AS value"
+const casePlan = [
+  ['server version', "SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)) AS product_version"],
+  ...orders.flatMap(([format, sameDate]) => [
+    [`set ${format}`, `SET DATEFORMAT ${format}`],
+    [`${format} ambiguous`, conversions('03/04/2024')],
+    [`${format} same date`, conversions(sameDate)],
+  ]),
+  ['set ydm for strict conversion', 'SET DATEFORMAT ydm'],
+  ['ydm strict date failure', "SELECT CAST(N'2024/31/12' AS DATE) AS value"],
+  ['ydm strict datetime', "SELECT CAST(N'2024/31/12' AS DATETIME) AS value"],
+  ['set dmy for ISO probe', 'SET DATEFORMAT dmy'],
+  ['ISO timestamp under dmy', isoSql],
+  ['set ydm for ISO probe', 'SET DATEFORMAT ydm'],
+  ['ISO timestamp under ydm', isoSql],
+  ['set mdy for ISO probe', 'SET DATEFORMAT mdy'],
+  ['ISO timestamp under mdy', isoSql],
+  ['runtime changes in one batch', "SET DATEFORMAT dmy; SELECT TRY_CAST(N'03/04/2024' AS DATE) AS dmy_value; SET DATEFORMAT mdy; SELECT TRY_CAST(N'03/04/2024' AS DATE) AS mdy_value"],
+  ['set dmy for independent session', 'SET DATEFORMAT dmy'],
+  ['A retains dmy', ambiguous],
+  ['B retains default mdy', ambiguous, 'B'],
+  ['B ymd spelling under mdy', ymdOnly, 'B'],
+  ['B set ymd', 'SET DATEFORMAT ymd', 'B'],
+  ['A unchanged by B', ambiguous],
+  ['B own setting', ymdOnly, 'B'],
+  ['language resets format', `SET LANGUAGE us_english; ${ambiguous}`],
+  ['format overrides language', `SET DATEFORMAT dmy; ${ambiguous}`],
+  ['invalid format', 'SET DATEFORMAT xyz'],
+  ['after invalid format', ambiguous],
+  ['format from variable', `DECLARE @format SYSNAME=N'mdy'; SET DATEFORMAT @format; ${ambiguous}`],
+  ['prepared execute-time setting', `DECLARE @handle INT;
+      SET DATEFORMAT mdy;
+      EXEC sys.sp_prepare @handle OUTPUT, N'@d NVARCHAR(30)', N'SELECT TRY_CAST(@d AS DATE) AS value';
+      SET DATEFORMAT dmy; EXEC sys.sp_execute @handle, N'03/04/2024';
+      SET DATEFORMAT mdy; EXEC sys.sp_execute @handle, N'03/04/2024';
+      EXEC sys.sp_unprepare @handle`],
+  ['session reusable', 'SELECT 1 AS reusable'],
+].map(([name, sql, session = 'A']) => ({ name, sql, session }))
 
 async function captureWithDoneTokens(connection, sql) {
   const doneTokens = []
@@ -76,40 +115,7 @@ async function observe(primary, config) {
     return result
   }
   try {
-    await record('server version', "SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)) AS product_version")
-    for (const [format, sameDate] of orders) {
-      await record(`set ${format}`, `SET DATEFORMAT ${format}`)
-      await record(`${format} ambiguous`, conversions('03/04/2024'))
-      await record(`${format} same date`, conversions(sameDate))
-    }
-    await record('set ydm for strict conversion', 'SET DATEFORMAT ydm')
-    await record('ydm strict date failure', "SELECT CAST(N'2024/31/12' AS DATE) AS value")
-    await record('ydm strict datetime', "SELECT CAST(N'2024/31/12' AS DATETIME) AS value")
-    await record('set dmy for ISO probe', 'SET DATEFORMAT dmy')
-    await record('ISO timestamp under dmy', isoSql)
-    await record('set ydm for ISO probe', 'SET DATEFORMAT ydm')
-    await record('ISO timestamp under ydm', isoSql)
-    await record('set mdy for ISO probe', 'SET DATEFORMAT mdy')
-    await record('ISO timestamp under mdy', isoSql)
-    await record('runtime changes in one batch', "SET DATEFORMAT dmy; SELECT TRY_CAST(N'03/04/2024' AS DATE) AS dmy_value; SET DATEFORMAT mdy; SELECT TRY_CAST(N'03/04/2024' AS DATE) AS mdy_value")
-    await record('set dmy for independent session', 'SET DATEFORMAT dmy')
-    await record('A retains dmy', "SELECT TRY_CAST(N'03/04/2024' AS DATE) AS value")
-    await record('B retains default mdy', "SELECT TRY_CAST(N'03/04/2024' AS DATE) AS value", 'B')
-    await record('B set ymd', 'SET DATEFORMAT ymd', 'B')
-    await record('A unchanged by B', "SELECT TRY_CAST(N'03/04/2024' AS DATE) AS value")
-    await record('B own setting', "SELECT TRY_CAST(N'03/04/2024' AS DATE) AS value", 'B')
-    await record('language resets format', "SET LANGUAGE us_english; SELECT TRY_CAST(N'03/04/2024' AS DATE) AS value")
-    await record('format overrides language', "SET DATEFORMAT dmy; SELECT TRY_CAST(N'03/04/2024' AS DATE) AS value")
-    await record('invalid format', 'SET DATEFORMAT xyz')
-    await record('after invalid format', "SELECT TRY_CAST(N'03/04/2024' AS DATE) AS value")
-    await record('format from variable', "DECLARE @format SYSNAME=N'mdy'; SET DATEFORMAT @format; SELECT TRY_CAST(N'03/04/2024' AS DATE) AS value")
-    await record('prepared execute-time setting', `DECLARE @handle INT;
-      SET DATEFORMAT mdy;
-      EXEC sys.sp_prepare @handle OUTPUT, N'@d NVARCHAR(30)', N'SELECT TRY_CAST(@d AS DATE) AS value';
-      SET DATEFORMAT dmy; EXEC sys.sp_execute @handle, N'03/04/2024';
-      SET DATEFORMAT mdy; EXEC sys.sp_execute @handle, N'03/04/2024';
-      EXEC sys.sp_unprepare @handle`)
-    await record('session reusable', 'SELECT 1 AS reusable')
+    for (const { name, sql, session } of casePlan) await record(name, sql, session)
     try { validate(run) }
     catch (error) {
       await mkdir(dirname(output), { recursive: true })
@@ -123,7 +129,8 @@ async function observe(primary, config) {
 }
 
 function validate(run) {
-  assert.equal(run.length, 42, 'case count')
+  assert.deepEqual(run.map(({ name, sql, session }) => ({ name, sql, session })), casePlan,
+    'retained cases differ from current capture plan')
   const get = name => {
     const entry = run.find(item => item.name === name)
     assert(entry, `missing ${name}`)
@@ -142,6 +149,8 @@ function validate(run) {
   const value = name => get(name).sets[0].rows[0][0]
   assert.notDeepEqual(value('mdy ambiguous'), value('dmy ambiguous'), 'ambiguous input should follow order')
   assert.deepEqual(value('A retains dmy'), value('A unchanged by B'), 'other session changed A')
+  assert.deepEqual(value('B own setting'), get('ymd same date').sets[0].rows[0][0], 'B did not adopt ymd')
+  assert.notDeepEqual(value('B own setting'), value('B ymd spelling under mdy'), 'B setting indistinguishable from mdy')
   assert.deepEqual(value('B retains default mdy'), value('language resets format'), 'language did not reset mdy')
   assert.deepEqual(value('A retains dmy'), value('format overrides language'), 'DATEFORMAT did not override language')
   assert.deepEqual(value('format overrides language'), value('after invalid format'), 'invalid format changed A')
