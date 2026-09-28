@@ -4779,7 +4779,7 @@
     {
       "id": "json-range-dynamic-diagnostic-v1",
       "title": "Preserve dynamic strict JSON range diagnostic text",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server-compatible Rust/DuckDB goal; owner-run reference/json-advanced-path.json and verified Codex finding on owner PR #466. No external submission is input.",
       "scope": [
         "crates/msduck-core/src/json_path.rs",
@@ -4799,6 +4799,31 @@
       ],
       "issue": 467,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRi81"
+    },
+    {
+      "id": "json-extraction-path-diagnostic-v1",
+      "title": "Preserve captured JSON extraction path syntax diagnostics",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server-compatible Rust/DuckDB goal; owner-run reference/json-advanced-path.json and reference/json-extraction-wildcard.json. No external submission is input.",
+      "scope": [
+        "crates/msduck-core/src/json_path.rs",
+        "crates/msduck-core/tests/json_advanced_path.rs",
+        "crates/msduck-core/tests/json_extraction_wildcard.rs",
+        "src/json_extract.rs",
+        "tests/json_advanced_path.rs",
+        "docs/json-advanced-path.md",
+        "docs/json-extraction-wildcard.md"
+      ],
+      "acceptance": [
+        "For captured malformed advanced and wildcard extraction paths, preserve error 13607's exact SQL Server state, unexpected character and UTF-16 position using structured deterministic parser errors with no hidden process state.",
+        "Match retained 13607 records through both core UTF-8 and UTF-16 APIs and over TDS, including uppercase TO, missing range spaces, negative bounds, endpoint overflow, last offsets and invalid wildcard suffix.",
+        "Keep ordinary path and JSON_PATH_EXISTS semantics evidence-based, leave malformed-document 13609 differences explicit, and run all required exact-head Rust, client and audit checks."
+      ],
+      "dependencies": [
+        "json-range-dynamic-diagnostic-v1"
+      ],
+      "issue": 469,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRl3d"
     }
   ]
 }
