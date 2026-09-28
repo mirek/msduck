@@ -19,17 +19,18 @@ that the compact [runtime prefix](../src/at_time_zone_rules_1000_1499.json)
 derives exactly from the pinned fixture and joins continuously to the existing
 1500–1799 table.
 
-The native adapter combines this prefix with the 1500–1799, 1800–1899,
-1900–2050 and 2051–2100 tables. Named-zone UTC instants from 1000-01-01
+The native adapter combines this prefix with the 0500–0999, 1500–1799,
+1800–1899, 1900–2050 and 2051–2100 tables. Named-zone UTC instants from 0500-01-01
 through 2100-12-31 are in the captured range; `UTC` retains the full SQL
-temporal range. Dates before 1000 and from 2101 onward remain explicitly
+temporal range. Dates before 0500 and from 2101 onward remain explicitly
 uncaptured for other names. The [SQL-facing regression](../tests/at_time_zone_medieval.rs)
-checks seasonal offsets for Pacific, Central European and Samoa zones, both
-ends of the new range, and explicit rejection before it.
+checks seasonal offsets for Pacific, Central European and Samoa zones and the
+1000 and 1500 joins. The 0500–0999 regression checks the lower boundary and
+explicit rejection before it.
 
 A daily scan could miss changes that cancel between sampled midnights; minute
 refinement does not prove subminute boundaries. The pinned SQL Server image
-accepts named-zone inputs as early as year 1, so 0001–0999 remains a genuine
+accepts named-zone inputs as early as year 1, so 0001–0499 remains a genuine
 compatibility gap. Exact invalid-zone error 9820 and some TDS result flags
 remain separate gaps. This extension preserves them as differences rather
 than treating a partial snapshot as full parity.
