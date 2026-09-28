@@ -214,9 +214,103 @@ fn concatenate(left: Descriptor, right: Descriptor) -> Descriptor {
     Known(ResultType::Character { family, length })
 }
 
-// Literal-only conditionals may be folded by SQL Server before metadata is
-// declared. Keep the existing conservative result until that folding is modeled.
-fn common_operands<'a>(values: impl Iterator<Item = &'a Expr>) -> Descriptor {
+// Only these source forms have a captured, value-independent NULL decision.
+// Other constant expressions may have conversions or diagnostics to preserve.
+fn literal_nullness(expr: &Expr) -> Option<bool> {
+    match expr {
+        Expr::Nested(inner) => literal_nullness(inner),
+        Expr::Cast { expr: inner, .. } if literal_nullness(inner) == Some(true) => Some(true),
+        Expr::Value(value) => match &value.value {
+            Value::Null => Some(true),
+            Value::SingleQuotedString(_) | Value::NationalStringLiteral(_) => Some(false),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn literal_truth(expr: &Expr) -> Option<bool> {
+    match expr {
+        Expr::Nested(inner) => literal_truth(inner),
+        Expr::BinaryOp {
+            left,
+            op: BinaryOperator::Eq,
+            right,
+        } => Some(literal_count(left)? == literal_count(right)?),
+        _ => None,
+    }
+}
+
+fn has_max_operand(values: &[&Expr]) -> bool {
+    values.iter().any(|value| {
+        matches!(
+            expression(value),
+            Descriptor::Known(ResultType::Character {
+                length: Length::Max,
+                ..
+            })
+        )
+    })
+}
+
+fn folded_case(conditions: &[CaseWhen], else_result: Option<&Expr>) -> Option<Descriptor> {
+    let values: Vec<_> = conditions
+        .iter()
+        .map(|branch| &branch.result)
+        .chain(else_result)
+        .collect();
+    if values.iter().any(|value| literal_nullness(value).is_none())
+        || has_max_operand(&values)
+        || conditions
+            .iter()
+            .any(|branch| literal_truth(&branch.condition).is_none())
+    {
+        return None;
+    }
+    let mut selected = None;
+    for branch in conditions {
+        if literal_truth(&branch.condition)? {
+            selected = Some(&branch.result);
+            break;
+        }
+    }
+    let selected = selected.or(else_result);
+    match selected {
+        Some(value) if literal_nullness(value) == Some(false) => Some(projected(value)),
+        Some(value) if literal_nullness(value) == Some(true) => {
+            let type_from_all = values
+                .into_iter()
+                .map(projected)
+                .fold(Descriptor::Null, common);
+            Some(match projected(value) {
+                Descriptor::Known(kind) => Descriptor::Known(kind),
+                _ => type_from_all,
+            })
+        }
+        None => Some(
+            values
+                .into_iter()
+                .map(projected)
+                .fold(Descriptor::Null, common),
+        ),
+        _ => None,
+    }
+}
+
+fn folded_coalesce(values: &[&Expr]) -> Option<Descriptor> {
+    if values.iter().any(|value| literal_nullness(value).is_none()) || has_max_operand(values) {
+        return None;
+    }
+    values
+        .iter()
+        .find(|value| literal_nullness(value) == Some(false))
+        .map(|value| projected(value))
+}
+
+// Runtime conditions must combine branch declarations even when every result
+// expression is a literal. Constant conditions can instead select a captured
+// literal branch before result metadata is declared.
+fn common_operands<'a>(values: impl Iterator<Item = &'a Expr>, force_literals: bool) -> Descriptor {
     fn constant(expr: &Expr) -> bool {
         match expr {
             Expr::Value(_) => true,
@@ -225,17 +319,9 @@ fn common_operands<'a>(values: impl Iterator<Item = &'a Expr>) -> Descriptor {
         }
     }
     let values: Vec<_> = values.collect();
-    let has_runtime_operand = values.iter().any(|value| !constant(value));
+    let has_runtime_operand = force_literals || values.iter().any(|value| !constant(value));
     // MAX survives SQL Server's literal folding and fixes the family/capacity.
-    let has_max_operand = values.iter().any(|value| {
-        matches!(
-            expression(value),
-            Descriptor::Known(ResultType::Character {
-                length: Length::Max,
-                ..
-            })
-        )
-    });
+    let has_max_operand = has_max_operand(&values);
     values
         .into_iter()
         .map(|value| {
@@ -380,6 +466,22 @@ fn expression(expr: &Expr) -> Descriptor {
         },
         Expr::Value(value) if matches!(value.value, Value::Null) => Descriptor::Null,
         Expr::Case {
+            operand: None,
+            conditions,
+            else_result,
+            ..
+        } => folded_case(conditions, else_result.as_deref()).unwrap_or_else(|| {
+            common_operands(
+                conditions
+                    .iter()
+                    .map(|branch| &branch.result)
+                    .chain(else_result.iter().map(|value| value.as_ref())),
+                conditions
+                    .iter()
+                    .any(|branch| literal_truth(&branch.condition).is_none()),
+            )
+        }),
+        Expr::Case {
             conditions,
             else_result,
             ..
@@ -388,6 +490,7 @@ fn expression(expr: &Expr) -> Descriptor {
                 .iter()
                 .map(|branch| &branch.result)
                 .chain(else_result.iter().map(|value| value.as_ref())),
+            false,
         ),
         Expr::Function(function) => {
             if let Some(kind @ DataType::Nvarchar(_)) =
@@ -433,10 +536,19 @@ fn expression(expr: &Expr) -> Descriptor {
                     .map_or(Descriptor::Unknown, Descriptor::Known);
             }
             if let Ok(Some(values)) = crate::case_types::coalesce_args(function) {
-                return common_operands(values.into_iter());
+                return folded_coalesce(&values)
+                    .unwrap_or_else(|| common_operands(values.into_iter(), false));
             }
-            if let Ok(Some([_, yes, no])) = crate::predicate::iif_args(function) {
-                return common_operands([yes, no].into_iter());
+            if let Ok(Some([predicate, yes, no])) = crate::predicate::iif_args(function) {
+                let values = [yes, no];
+                if !has_max_operand(&values)
+                    && literal_nullness(yes).is_some()
+                    && literal_nullness(no).is_some()
+                    && let Some(truth) = literal_truth(predicate)
+                {
+                    return projected(if truth { yes } else { no });
+                }
+                return common_operands(values.into_iter(), literal_truth(predicate).is_none());
             }
             if let Ok(Some(values)) = crate::choose::args(function) {
                 return values
