@@ -4,7 +4,7 @@ use duckdb::{
     vscalar::{ScalarFunctionSignature, VScalar},
     vtab::arrow::WritableVector,
 };
-use msduck_core::{diagnostic::SqlError, json_path::extract};
+use msduck_core::{diagnostic::SqlError, json_path::extract_detailed};
 use sqlparser::ast::*;
 /// Recover the native diagnostic after DuckDB adds its scalar-error wrapper.
 /// Exact matching avoids treating user text embedded in unrelated errors as JSON.
@@ -166,7 +166,7 @@ impl<const MODE: u8> VScalar for Extract<MODE> {
                 unsafe {
                     result.as_mut_slice_with_len::<i32>(len)[row] = present;
                 }
-            } else if let Some(value) = extract(&texts[0], &texts[1], MODE == 1)? {
+            } else if let Some(value) = extract_detailed(&texts[0], &texts[1], MODE == 1)? {
                 result.insert(row, value.as_str());
             } else {
                 result.set_null(row);
@@ -238,7 +238,7 @@ fn extract_unicode<const MODE: u8>(
                 output.flat_vector().as_mut_slice_with_len::<i32>(len)[row] = present;
             }
         } else if let Some(value) =
-            msduck_core::json_path::extract_utf16(&units[0], &units[1], MODE == 1)?
+            msduck_core::json_path::extract_utf16_detailed(&units[0], &units[1], MODE == 1)?
         {
             let size = value
                 .len()

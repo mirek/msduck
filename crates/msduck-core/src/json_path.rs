@@ -17,8 +17,8 @@ pub const RANGE_REVERSED: &str =
     "Reversed indexing not yet supported for advanced JSON array accessors.";
 pub const RANGE_LAST: &str = "Last operator not yet supported for advanced JSON array accessors.";
 pub const RANGE_LIST: &str = "Comma operator not yet supported for advanced JSON array accessors.";
-// The current static error contract cannot carry SQL Server's index and UTF-16
-// position in the 13659 message. Keep its identity distinct for the adapter.
+// Legacy extraction callers use this marker; detailed extraction carries the
+// index, UTF-16 position and bound needed for SQL Server's 13659 text.
 pub const RANGE_PARTIAL: &str = "Advanced JSON array range exceeds the available elements.";
 pub const WIDTH: &str = "String value in the specified JSON path would be truncated.";
 
@@ -29,6 +29,81 @@ pub const NULL_PATHS: [&str; 3] = [
     "Argument data type NULL is invalid for argument 2 of JSON_QUERY function.",
     "Argument data type NULL is invalid for argument 2 of JSON_PATH_EXISTS function.",
 ];
+
+/// Extraction failures retain the fields needed by a backend adapter without
+/// depending on its error type or process-global diagnostic state.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ExtractionError {
+    Static(&'static str),
+    PartialRange {
+        index: usize,
+        position: usize,
+        bound: usize,
+    },
+}
+impl ExtractionError {
+    pub fn marker(&self) -> &'static str {
+        match self {
+            Self::Static(message) => message,
+            Self::PartialRange { .. } => RANGE_PARTIAL,
+        }
+    }
+}
+impl From<&'static str> for ExtractionError {
+    fn from(message: &'static str) -> Self {
+        Self::Static(message)
+    }
+}
+impl std::fmt::Display for ExtractionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Static(message) => f.write_str(message),
+            Self::PartialRange {
+                index,
+                position,
+                bound,
+            } => write!(
+                f,
+                "Index {index} provided at position {position} is not within the array of size {bound}."
+            ),
+        }
+    }
+}
+impl std::error::Error for ExtractionError {}
+
+fn partial_range_message(message: &str) -> bool {
+    if message.len() > 128 {
+        return false;
+    }
+    let Some((index, rest)) = message
+        .strip_prefix("Index ")
+        .and_then(|text| text.split_once(" provided at position "))
+    else {
+        return false;
+    };
+    let Some((position, bound)) = rest.split_once(" is not within the array of size ") else {
+        return false;
+    };
+    let Some(bound) = bound.strip_suffix('.') else {
+        return false;
+    };
+    let (Ok(index), Ok(position), Ok(bound)) = (
+        index.parse::<usize>(),
+        position.parse::<usize>(),
+        bound.parse::<usize>(),
+    ) else {
+        return false;
+    };
+    index < bound
+        && position > 0
+        && message
+            == ExtractionError::PartialRange {
+                index,
+                position,
+                bound,
+            }
+            .to_string()
+}
 
 /// Recognize an exact canonical JSON extraction message.
 /// Backend wrappers must be removed by the caller, never by core rules.
@@ -62,6 +137,7 @@ pub fn diagnostic(message: &str) -> Option<SqlError> {
             )
         })
     })
+    .or_else(|| partial_range_message(message).then(|| SqlError::new(13659, 1, message)))
 }
 /// Trim only JSON whitespace.
 pub fn trim(s: &str) -> &str {
@@ -268,9 +344,13 @@ fn exists_inner(source: &str, path_text: &str) -> Option<bool> {
     }
     Some(false)
 }
-/// Extract JSON_VALUE (`query = false`) or JSON_QUERY (`query = true`).
-/// Preserves lexical numbers and container text; enforces the scalar UTF-16 limit.
-pub fn extract(source: &str, path_text: &str, query: bool) -> Result<Option<String>, &'static str> {
+/// Extract JSON_VALUE (`query = false`) or JSON_QUERY (`query = true`) with
+/// structured errors for backend adapters.
+pub fn extract_detailed(
+    source: &str,
+    path_text: &str,
+    query: bool,
+) -> Result<Option<String>, ExtractionError> {
     let (strict, steps) = parse_path(path_text, true, true)?;
     if steps
         .iter()
@@ -278,11 +358,13 @@ pub fn extract(source: &str, path_text: &str, query: bool) -> Result<Option<Stri
     {
         let source_units = source.encode_utf16().collect::<Vec<_>>();
         let path_units = path_text.encode_utf16().collect::<Vec<_>>();
-        return extract_utf16(&source_units, &path_units, query)?
+        return extract_utf16_detailed(&source_units, &path_units, query)?
             .map(|units| {
-                String::from_utf16(&units).map_err(
-                    |_| "JSON string with isolated surrogate code units is not yet supported",
-                )
+                String::from_utf16(&units).map_err(|_| {
+                    ExtractionError::Static(
+                        "JSON string with isolated surrogate code units is not yet supported",
+                    )
+                })
             })
             .transpose();
     }
@@ -290,7 +372,7 @@ pub fn extract(source: &str, path_text: &str, query: bool) -> Result<Option<Stri
     // only its opening byte here: scanning the entire document would lose an
     // early selected value when an unrelated suffix is malformed.
     if !matches!(trim(source).as_bytes().first(), Some(b'{' | b'[')) {
-        return Err(DOCUMENT);
+        return Err(DOCUMENT.into());
     }
     // Root extraction consumes the document. A missing path must also validate
     // all remaining text; successful descent only validates the required prefix.
@@ -299,7 +381,11 @@ pub fn extract(source: &str, path_text: &str, query: bool) -> Result<Option<Stri
     }
     let Some(tail) = selected(source, &steps)? else {
         root(source.as_bytes()).ok_or(DOCUMENT)?;
-        return if strict { Err(MISSING) } else { Ok(None) };
+        return if strict {
+            Err(MISSING.into())
+        } else {
+            Ok(None)
+        };
     };
     let (kind, end) = prefix(tail.as_bytes()).ok_or(DOCUMENT)?;
     if tail
@@ -307,7 +393,7 @@ pub fn extract(source: &str, path_text: &str, query: bool) -> Result<Option<Stri
         .get(end)
         .is_some_and(|c| !matches!(c, b' ' | b'\t' | b'\r' | b'\n' | b',' | b'}' | b']'))
     {
-        return Err(DOCUMENT);
+        return Err(DOCUMENT.into());
     }
     let value = &tail[..end];
     let container = matches!(kind, Kind::Array | Kind::Object);
@@ -315,13 +401,13 @@ pub fn extract(source: &str, path_text: &str, query: bool) -> Result<Option<Stri
         return if container {
             Ok(Some(value.into()))
         } else if strict {
-            Err(CONTAINER)
+            Err(CONTAINER.into())
         } else {
             Ok(None)
         };
     }
     if container {
-        return if strict { Err(SCALAR) } else { Ok(None) };
+        return if strict { Err(SCALAR.into()) } else { Ok(None) };
     }
     if value == "null" {
         return Ok(None);
@@ -332,9 +418,14 @@ pub fn extract(source: &str, path_text: &str, query: bool) -> Result<Option<Stri
         value.into()
     };
     if value.encode_utf16().count() > 4000 {
-        return if strict { Err(WIDTH) } else { Ok(None) };
+        return if strict { Err(WIDTH.into()) } else { Ok(None) };
     }
     Ok(Some(value))
+}
+
+/// Source-preserving extraction for callers using the legacy static error API.
+pub fn extract(source: &str, path_text: &str, query: bool) -> Result<Option<String>, &'static str> {
+    extract_detailed(source, path_text, query).map_err(|error| error.marker())
 }
 
 /// Decode a quoted JSON string without requiring paired UTF-16 surrogates.
@@ -593,7 +684,7 @@ fn extract_advanced_utf16(
     steps: &[Utf16Step],
     strict: bool,
     query: bool,
-) -> Result<Option<Vec<u16>>, &'static str> {
+) -> Result<Option<Vec<u16>>, ExtractionError> {
     // Wildcard and multi-index range selection examine the complete document.
     // Keep one array iterator per active selector rather than collecting rows.
     root(&document.syntax).ok_or(DOCUMENT)?;
@@ -621,7 +712,7 @@ fn extract_advanced_utf16(
     let mut count = 0u8;
     let mut selected = None;
     let mut saw_null = false;
-    let mut partial_range = false;
+    let mut partial_range = None;
     while let Some(item) = work.pop() {
         match item {
             Work::Node { at, end, step } if step == steps.len() => {
@@ -690,7 +781,11 @@ fn extract_advanced_utf16(
                         });
                     }
                 } else if index >= first && index < last && last != usize::MAX {
-                    partial_range = true;
+                    partial_range.get_or_insert(ExtractionError::PartialRange {
+                        index,
+                        position: close + 1,
+                        bound: last,
+                    });
                 }
                 if index >= first && index <= last {
                     work.push(Work::Node {
@@ -705,8 +800,11 @@ fn extract_advanced_utf16(
     if saw_null {
         return Ok(None);
     }
-    if strict && count > 0 && partial_range {
-        return Err(RANGE_PARTIAL);
+    if strict
+        && count > 0
+        && let Some(error) = partial_range
+    {
+        return Err(error);
     }
     if count != 1 {
         return if strict {
@@ -714,7 +812,8 @@ fn extract_advanced_utf16(
                 CONTAINER_MULTIPLE
             } else {
                 MISSING
-            })
+            }
+            .into())
         } else {
             Ok(None)
         };
@@ -727,14 +826,14 @@ fn extract_advanced_utf16(
         return if container {
             Ok(Some(value.to_vec()))
         } else if strict {
-            Err(if has_wildcard { MISSING } else { CONTAINER })
+            Err(if has_wildcard { MISSING } else { CONTAINER }.into())
         } else {
             Ok(None)
         };
     }
     if container {
         return if strict {
-            Err(if has_wildcard { MISSING } else { SCALAR })
+            Err(if has_wildcard { MISSING } else { SCALAR }.into())
         } else {
             Ok(None)
         };
@@ -745,22 +844,23 @@ fn extract_advanced_utf16(
         value.to_vec()
     };
     if value.len() > 4000 {
-        return if strict { Err(WIDTH) } else { Ok(None) };
+        return if strict { Err(WIDTH.into()) } else { Ok(None) };
     }
     Ok(Some(value))
 }
 
-/// Extract exact UTF-16 scalar units or unchanged container source text.
-pub fn extract_utf16(
+/// Extract exact UTF-16 scalar units or unchanged container source text with
+/// structured errors for backend adapters.
+pub fn extract_utf16_detailed(
     source: &[u16],
     path: &[u16],
     query: bool,
-) -> Result<Option<Vec<u16>>, &'static str> {
+) -> Result<Option<Vec<u16>>, ExtractionError> {
     let (strict, mut steps) = parse_path_utf16(path, true, true)?;
     let document = Utf16Document::new(source);
     let opening = skip_ws(&document.syntax, 0, source.len());
     if !matches!(document.syntax.get(opening), Some(b'{' | b'[')) {
-        return Err(DOCUMENT);
+        return Err(DOCUMENT.into());
     }
     if steps.iter().any(|step| {
         matches!(step, Utf16Step::All)
@@ -781,7 +881,11 @@ pub fn extract_utf16(
     }
     let Some(at) = document.selected(0, source.len(), &steps)? else {
         root(&document.syntax).ok_or(DOCUMENT)?;
-        return if strict { Err(MISSING) } else { Ok(None) };
+        return if strict {
+            Err(MISSING.into())
+        } else {
+            Ok(None)
+        };
     };
     let (kind, end) = document.prefix(at, source.len())?;
     if document
@@ -789,7 +893,7 @@ pub fn extract_utf16(
         .get(end)
         .is_some_and(|c| !matches!(c, b' ' | b'\t' | b'\r' | b'\n' | b',' | b'}' | b']'))
     {
-        return Err(DOCUMENT);
+        return Err(DOCUMENT.into());
     }
     let value = &source[at..end];
     if singleton_range && &document.syntax[at..end] == b"null" {
@@ -800,13 +904,13 @@ pub fn extract_utf16(
         return if container {
             Ok(Some(value.to_vec()))
         } else if strict {
-            Err(CONTAINER)
+            Err(CONTAINER.into())
         } else {
             Ok(None)
         };
     }
     if container {
-        return if strict { Err(SCALAR) } else { Ok(None) };
+        return if strict { Err(SCALAR.into()) } else { Ok(None) };
     }
     if &document.syntax[at..end] == b"null" {
         return Ok(None);
@@ -817,9 +921,18 @@ pub fn extract_utf16(
         value.to_vec()
     };
     if value.len() > 4000 {
-        return if strict { Err(WIDTH) } else { Ok(None) };
+        return if strict { Err(WIDTH.into()) } else { Ok(None) };
     }
     Ok(Some(value))
+}
+
+/// UTF-16 extraction for callers using the legacy static error API.
+pub fn extract_utf16(
+    source: &[u16],
+    path: &[u16],
+    query: bool,
+) -> Result<Option<Vec<u16>>, &'static str> {
+    extract_utf16_detailed(source, path, query).map_err(|error| error.marker())
 }
 /// Existence validates the full document and preserves UTF-16 key identity.
 pub fn exists_utf16(source: &[u16], path: &[u16]) -> bool {
