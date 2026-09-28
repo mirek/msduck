@@ -6,9 +6,11 @@ interprets tagged `DATETIME2` ticks as a named-zone wall time; the second
 interprets tagged `DATETIMEOFFSET` UTC ticks as an instant. Both return the
 tagged `DATETIMEOFFSET` representation already used by the server: UTC ticks
 and offset minutes. The adapter passes an explicit immutable rule table to the
-deterministic transition resolver. The [SQL-facing lowering](at-time-zone-lowering.md)
-in PR #506 connects captured `DATETIME2(s)` and `DATETIMEOFFSET(s)` expressions
-to these functions; the native adapter on its own remains internal.
+deterministic transition resolver. The native adapter on its own remains
+internal. [PR #506's SQL-facing lowering](https://github.com/mirek/msduck/pull/506/files)
+connects captured `DATETIME2(s)` and `DATETIMEOFFSET(s)` expressions to these
+functions when that change is present in the checkout; its file changes include
+the `docs/at-time-zone-lowering.md` guide.
 
 The compact [rule table](../src/at_time_zone_rules_1900_2050.json) contains
 141 Windows names and 20,414 minute-resolved transitions detected from the
