@@ -4932,6 +4932,27 @@
       ],
       "issue": 479,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PR2EK"
+    },
+    {
+      "id": "hashbytes-binding-v1",
+      "title": "Bind HASHBYTES argument families and result declaration",
+      "state": "ready",
+      "authorization": "Direct owner continuing implementation goal from first-party reference/hashbytes-checksum.json and merged hashbytes-core-v1; no external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/hashbytes.rs",
+        "crates/msduck-sql/tests/hashbytes_binding.rs"
+      ],
+      "acceptance": [
+        "Implement deterministic two-argument HASHBYTES binding: captured character algorithm families, captured character/binary input families, typed NULL versus untyped NULL, exact 174 and 8116 state 1/class 15 or 16 diagnostics, and nullable VARBINARY(8000) result independent of runtime values.",
+        "Replay retained named batch, RPC and prepared capture cases for diagnostics and descriptors. Explicitly mark uncaptured families unsupported rather than guessing. Keep this module unregistered while msduck-sql/src/lib.rs is claimed by string-agg-rules-v1.",
+        "Do not duplicate digest computation or integrate DuckDB/TDS in this task. Run formatting, strict workspace Clippy, workspace tests, independent client tests and the local diagnostic audit on the exact revision; use a focused owner PR with exact-head CI and Codex review."
+      ],
+      "dependencies": [
+        "hashbytes-checksum-reference-v1",
+        "hashbytes-core-v1"
+      ],
+      "issue": 480,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PR2Tr"
     }
   ]
 }
