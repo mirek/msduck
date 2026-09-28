@@ -5481,6 +5481,28 @@
       ],
       "issue": 523,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PTpLu"
+    },
+    {
+      "id": "at-time-zone-first-centuries-reference-v1",
+      "title": "Capture named-zone AT TIME ZONE reference behavior for 0001–0499",
+      "state": "ready",
+      "authorization": "Mirek's continuing implementation goal, owner-authored issue #525, and the pinned SQL Server 2025 reference program.",
+      "scope": [
+        "scripts/capture-at-time-zone-history-0001-0499.mjs",
+        "reference/at-time-zone-history-0001-0499.json",
+        "docs/at-time-zone-first-centuries.md"
+      ],
+      "acceptance": [
+        "Probe the earliest SQL Server 2025 named-zone instant and local-wall boundaries for all 141 ordered sys.time_zone_info names; retain raw TDS successes and failures and do not assume midnight UTC is representable after a negative-offset conversion.",
+        "Capture a common valid baseline, seasonal samples, bounded daily scans and hour/minute refinements throughout 0001–0499, preserving raw TDS descriptors, rows, diagnostics and completion. Handle JavaScript years 1–99 explicitly without Date.UTC's 1900 remapping.",
+        "Pin the image, version and canonical content checksum; validate ordered names, offset bounds, transition continuity, sample replay and the exact join to the 0500 snapshot. Keep rejected instants and scan limitations visible; do not invent unsupported offsets.",
+        "Document evidence, boundary behavior and remaining uncertainty. Keep this task reference-only; leave runtime adapter changes to a separately claimed successor. Run the capture validator, relevant Node checks and appropriate review/CI at the exact PR head."
+      ],
+      "dependencies": [
+        "at-time-zone-history-0500-0999-v1"
+      ],
+      "issue": 525,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PT11f"
     }
   ]
 }
