@@ -4865,6 +4865,29 @@
       "dependencies": [],
       "issue": 473,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRrs1"
+    },
+    {
+      "id": "decompress-core-v1",
+      "title": "Implement bounded deterministic DECOMPRESS decoder",
+      "state": "ready",
+      "authorization": "Direct owner continuing implementation goal and first-party COMPRESS/DECOMPRESS reference successor; no external submission is input.",
+      "scope": [
+        "crates/msduck-core/src/decompress.rs",
+        "crates/msduck-core/tests/decompress.rs",
+        "crates/msduck-core/Cargo.toml",
+        "Cargo.lock",
+        "docs/compress-decompress.md"
+      ],
+      "acceptance": [
+        "Implement a pure DECOMPRESS byte decoder with caller-provided output bound. Preserve captured NULL/empty, header field skipping, truncated-stream NULL, first-member-only, complete-trailer CRC-32/ISIZE validation and 9826 corruption semantics.",
+        "Replay relevant retained fixture vectors, including hand-built GZIP members. Report uncaptured malformed streams explicitly; do not guess SQL Server behavior. Keep the module unregistered in msduck-core/src/lib.rs because that file is reserved by another worker.",
+        "Do not implement COMPRESS encoder or root runtime adapter. Record the remaining integration gap in docs/compress-decompress.md. Run formatting, strict core Clippy and core tests; run required workspace/client/audit checks for semantic Rust change on exact revision."
+      ],
+      "dependencies": [
+        "compress-decompress-reference-v1"
+      ],
+      "issue": 475,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRv1G"
     }
   ]
 }
