@@ -5126,7 +5126,7 @@
     {
       "id": "at-time-zone-binding-v1",
       "title": "Bind AT TIME ZONE input and result declarations",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing owner instruction and owner-run pinned SQL Server 2025 reference/at-time-zone.json. No third-party issue or review content is input.",
       "scope": [
         "crates/msduck-sql/src/at_time_zone.rs",
