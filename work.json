@@ -5190,6 +5190,31 @@
       ],
       "issue": 501,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PSq2I"
+    },
+    {
+      "id": "at-time-zone-native-v1",
+      "title": "Implement native named-zone AT TIME ZONE adapter from pinned history",
+      "state": "ready",
+      "authorization": "Mirek's continuing owner implementation goal and first-party pinned SQL Server history #501; no external submission is input.",
+      "scope": [
+        "scripts/generate-at-time-zone-rules.mjs",
+        "src/at_time_zone_rules_1900_2050.json",
+        "src/at_time_zone_native.rs",
+        "src/switchoffset.rs",
+        "docs/at-time-zone-native.md"
+      ],
+      "acceptance": [
+        "Derive a compact pinned reproducible runtime rule table from reference/at-time-zone-history-1900-2050.json without normalizing captured historical offsets.",
+        "Register native DATETIME2 and DATETIMEOFFSET scalar adapters using immutable explicit snapshot state; preserve 100ns ticks, SQL Server named-zone case behavior, NULLs, DST gaps/overlaps and offset-aware instants; reject invalid zones, payloads and unproven dates.",
+        "Test catalog samples, DST boundaries, Samoa date-line jump, NULLs and multi-chunk evaluation; run repository Rust/client/audit verification and owner PR gates on exact head.",
+        "Document remaining public SQL binder/lowering and error-number integration; do not claim complete AT TIME ZONE compatibility."
+      ],
+      "dependencies": [
+        "at-time-zone-history-1900-2050-v1",
+        "at-time-zone-transition-core-v1"
+      ],
+      "issue": 503,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PSugD"
     }
   ]
 }
