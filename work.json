@@ -5593,6 +5593,27 @@
       ],
       "issue": 531,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PUEiv"
+    },
+    {
+      "id": "at-time-zone-catalog-cache-v1",
+      "title": "Reuse validated AT TIME ZONE catalog across connections",
+      "state": "ready",
+      "authorization": "Mirek's continuing implementation goal and owner-authored issue #533; current native adapter loads the same immutable 345,109-transition table for every connection.",
+      "scope": [
+        "src/at_time_zone_native.rs",
+        "tests/at_time_zone_catalog_cache.rs",
+        "docs/at-time-zone-native.md"
+      ],
+      "acceptance": [
+        "Initialize the immutable source-pinned catalog once per process with thread-safe, fallible initialization; subsequent registrations share the validated state without mutable global rule effects, while malformed built-in evidence still fails registration explicitly.",
+        "Exercise concurrent first registrations through independent server connections and SQL-facing local/instant conversions with typed results; preserve session isolation and the AT TIME ZONE volatile declaration.",
+        "Run formatting, strict Clippy, full workspace Rust tests, independent client tests and diagnostic audit at exact PR head; require owner PR CI and completed Codex review before merge, and report measured verification time without claiming compatibility completion."
+      ],
+      "dependencies": [
+        "at-time-zone-future-cycle-runtime-v1"
+      ],
+      "issue": 533,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PUKSY"
     }
   ]
 }
