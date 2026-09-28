@@ -1780,7 +1780,152 @@ test('TOP limits individual set-operation branches before combining rows', { tim
   assert.deepEqual((await query(c, 'SELECT n FROM dbo.top_union ORDER BY n')).rows, [[1],[2]])
   await query(c, 'CREATE VIEW dbo.top_union_view AS SELECT TOP(0) 1 AS n UNION ALL SELECT TOP(1) 2')
   assert.deepEqual((await query(c, 'SELECT n FROM dbo.top_union_view')).rows, [[2]])
-  await assert.rejects(query(c, 'SELECT 1 AS n UNION ALL SELECT TOP(50) PERCENT 2'))
+  assert.deepEqual((await query(c, 'SELECT 1 AS n UNION ALL SELECT TOP(50) PERCENT 2')).rows, [[1],[2]])
+})
+
+const topPercentRuns = JSON.parse(readFileSync(new URL('../reference/select-top-percent.json', import.meta.url), 'utf8')).runs
+function topPercentStable(name, result) {
+  // SQL Server leaves the order among equal ORDER BY keys unspecified; sort
+  // only within contiguous equal-score groups, as the capture script does.
+  const stable = structuredClone(result)
+  if ((name.includes('ties') && !name.includes('unique')) || name.startsWith('prepared percent ')) {
+    for (const set of stable.sets) {
+      for (let start = 0; start < set.rows.length;) {
+        let end = start + 1
+        while (end < set.rows.length && Object.is(set.rows[end][1], set.rows[start][1])) ++end
+        const group = set.rows.slice(start, end).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+        set.rows.splice(start, end - start, ...group)
+        start = end
+      }
+    }
+  }
+  return stable
+}
+function topPercentListen(c, request, result) {
+  const onError = e => result.errors.push({ number: e.number, state: e.state, class: e.class, lineNumber: e.lineNumber, message: e.message })
+  const onInfo = e => result.info.push({ number: e.number, state: e.state, class: e.class, lineNumber: e.lineNumber, message: e.message })
+  const onMetadata = metadata => result.sets.push({
+    columns: metadata.map(m => ({ name: m.colName, type: m.type.name, length: m.dataLength ?? null, precision: m.precision ?? null, scale: m.scale ?? null, flags: m.flags, collation: canonical(m.collation ?? null) })), rows: [],
+  })
+  const onRow = row => result.sets.at(-1).rows.push(row.map(cell => cell.value))
+  const onDone = Object.fromEntries(['done', 'doneInProc', 'doneProc'].map(kind => [kind, (rowCount, more) => result.done.push({ kind, rowCount: rowCount ?? null, more })]))
+  const onStatus = (_count, _more, status) => { result.returnStatus = status }
+  c.on('errorMessage', onError); c.on('infoMessage', onInfo)
+  request.on('columnMetadata', onMetadata); request.on('row', onRow); request.on('doneProc', onStatus)
+  for (const [kind, listener] of Object.entries(onDone)) request.on(kind, listener)
+  return () => {
+    c.off('errorMessage', onError); c.off('infoMessage', onInfo)
+    request.off('columnMetadata', onMetadata); request.off('row', onRow); request.off('doneProc', onStatus)
+    for (const [kind, listener] of Object.entries(onDone)) request.off(kind, listener)
+  }
+}
+function topPercentRpc(c, sql, value) {
+  return new Promise(resolve => {
+    const result = { sets: [], done: [], errors: [], info: [], returnStatus: null }
+    let detach
+    const request = new Request(sql, (error, rowCount) => {
+      detach()
+      result.rowCount = rowCount
+      if (error && !result.errors.length) result.errors.push({ message: error.message, number: error.number ?? null })
+      resolve(result)
+    })
+    request.addParameter('p', TYPES.Float, value)
+    detach = topPercentListen(c, request, result)
+    c.execSql(request)
+  })
+}
+async function topPercentPrepared(c, sql, values) {
+  let complete = () => {}
+  const request = new Request(sql, (...args) => complete(...args))
+  request.addParameter('p', TYPES.Float)
+  await new Promise((resolve, reject) => { request.once('prepared', resolve); request.once('error', reject); c.prepare(request) })
+  const executions = []
+  for (const value of values) {
+    const result = { sets: [], done: [], errors: [], info: [], returnStatus: null }
+    const detach = topPercentListen(c, request, result)
+    await new Promise(resolve => {
+      complete = (error, rowCount) => {
+        result.rowCount = rowCount
+        if (error && !result.errors.length) result.errors.push({ message: error.message, number: error.number ?? null })
+        resolve()
+      }
+      request.error = undefined
+      c.execute(request, { p: value })
+    })
+    detach()
+    executions.push(canonical(result))
+  }
+  await new Promise((resolve, reject) => { complete = error => error ? reject(error) : resolve(); request.error = undefined; c.unprepare(request) })
+  return executions
+}
+
+// Retained differences are listed exactly: each maps the SQL Server capture
+// to the precise msduck result. Every other case must match the capture,
+// including descriptors, errors and completion tokens.
+const topPercentKnownDifferences = new Map([
+  // SERVERPROPERTY is not implemented, so the identity query fails to bind.
+  ['server identity', captured => ({
+    ...captured,
+    sets: [],
+    done: [{ kind: 'done', rowCount: null, more: false }],
+    rowCount: 0,
+    errors: [{ number: 208, state: 1, class: 16, lineNumber: 1, message: 'Catalog Error: Scalar Function with name serverproperty does not exist!' }],
+  })],
+  // SQL Server reports varchar-to-float error 8114; msduck reports DuckDB's
+  // conversion error 245 with the same metadata, rows and completion.
+  ['text percent', captured => ({
+    ...captured,
+    errors: [{ number: 245, state: 1, class: 16, lineNumber: 1, message: "Conversion Error: Could not convert string 'abc' to DOUBLE" }],
+  })],
+])
+
+// Backend messages add a caret excerpt of the lowered SQL after the first line.
+function topPercentDifference(result) {
+  return { ...result, errors: result.errors.map(error => ({ ...error, message: error.message.split('\n')[0] })) }
+}
+
+test('SELECT TOP PERCENT and WITH TIES replay the retained SQL Server capture', { timeout: 60000 }, async t => {
+  const c = await start(t)
+  const expected = topPercentRuns[0]
+  assert.equal(expected.length, 50)
+  const actual = []
+  const prepared = expected.filter(item => item.name.startsWith('prepared percent '))
+  for (const item of expected) {
+    if (item.name.startsWith('prepared percent ')) continue
+    const sql = item.sql
+    actual.push({ name: item.name, result: canonical(item.name.startsWith('RPC percent ')
+      ? await topPercentRpc(c, sql, item.name === 'RPC percent first' ? 25 : null)
+      : await capture(c, sql)) })
+  }
+  const executions = await topPercentPrepared(c, prepared[0].sql, prepared.map(item => item.parameter))
+  prepared.forEach((item, index) => actual.push({ name: item.name, result: executions[index] }))
+  assert.equal(topPercentRuns.length, 2)
+  for (const run of topPercentRuns) {
+    const differences = []
+    for (const item of run) {
+      const observed = actual.find(entry => entry.name === item.name)
+      assert.ok(observed, item.name)
+      const same = JSON.stringify(topPercentStable(item.name, observed.result)) === JSON.stringify(topPercentStable(item.name, item.result))
+      if (!same) differences.push(item.name)
+    }
+    for (const [name, expectedDifference] of topPercentKnownDifferences) {
+      assert.deepEqual(
+        topPercentDifference(topPercentStable(name, actual.find(entry => entry.name === name).result)),
+        expectedDifference(topPercentStable(name, run.find(item => item.name === name).result)),
+        name,
+      )
+    }
+    const unexpected = differences.filter(name => !topPercentKnownDifferences.has(name))
+    if (unexpected.length) {
+      const name = unexpected[0]
+      assert.deepEqual(
+        topPercentStable(name, actual.find(entry => entry.name === name).result),
+        topPercentStable(name, run.find(item => item.name === name).result),
+        `first unexpected difference of ${unexpected.length}: ${unexpected.join(', ')}`,
+      )
+    }
+    assert.deepEqual(differences, [...topPercentKnownDifferences.keys()])
+  }
 })
 
 test('TOP rejects NULL and negative counts without treating NULL as unlimited', { timeout: 20000 }, async t => {

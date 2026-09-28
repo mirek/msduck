@@ -42,6 +42,7 @@ fn runtime_diagnostic(message: &str) -> Option<SqlError> {
             )
         })
         .or_else(|| msduck_sql::recursive_lower::diagnostic(message))
+        .or_else(|| msduck_sql::top::diagnostic(message))
         .or_else(|| crate::money_range::diagnostic(message))
         .or_else(|| {
             msduck_core::diagnostic::numeric(
@@ -3548,12 +3549,12 @@ impl VisitorMut for Translator<'_> {
         if let Err(error) = crate::top::paging(query) {
             return ControlFlow::Break(error);
         }
+        if let Err(error) = crate::top::ranked(query) {
+            return ControlFlow::Break(error);
+        }
         if let SetExpr::Select(select) = query.body.as_mut()
             && let Some(top) = select.top.take()
         {
-            if top.percent || top.with_ties {
-                return ControlFlow::Break("unsupported TOP PERCENT/WITH TIES".into());
-            }
             if query.limit_clause.is_some() || query.fetch.is_some() {
                 return ControlFlow::Break(
                     "TOP cannot be combined with OFFSET/FETCH in the same query".into(),

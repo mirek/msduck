@@ -216,6 +216,10 @@ SELECT INTO creates persistent tables from bound query types with separate
 creation/insertion semantics; see [SELECT INTO coverage](docs/select-into.md).
 TOP limits apply independently within set-operation branches; see
 [TOP coverage](docs/top-set-operations.md).
+SELECT TOP PERCENT and WITH TIES execute with ceiling percentage counts, peer
+inclusion by ORDER BY keys and captured 1062/1031/1014/127/1060 diagnostics; a
+tedious replay matches 48 of the 50 retained SQL Server cases, and the two
+differences are listed in [TOP PERCENT coverage](docs/select-top-percent.md).
 OFFSET/FETCH supports bound and expression counts with integer range checks;
 see [paging coverage](docs/paging.md).
 

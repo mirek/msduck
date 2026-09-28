@@ -178,7 +178,10 @@ by the initial smoke tests.
   reports cross-connection allocation state, including rollback and reopen.
 - TOP branch limits for UNION/INTERSECT/EXCEPT, including prepared queries,
   stored views and SELECT INTO; NULL/negative integer count validation and
-  OFFSET/FETCH conflict rejection; PERCENT/WITH TIES and full argument rules pending.
+  OFFSET/FETCH conflict rejection. SELECT TOP PERCENT/WITH TIES lower to ranked
+  QUALIFY filters replaying the retained capture (docs/select-top-percent.md);
+  character percentage conversion, noninteger tie counts, plain-TOP 127/1060
+  constants, DML TOP and full argument rules remain pending.
 - OFFSET/FETCH expression parsing, prepared counts, integer ranges and required
   query-clause checks, including nested FETCH count subqueries; noninteger typing
   and full diagnostics remain pending.

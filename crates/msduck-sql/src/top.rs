@@ -132,3 +132,708 @@ pub fn restore_fetch(statement: &mut Statement, expressions: &[Expr]) {
     }
     let _ = VisitMut::visit(statement, &mut Restore(expressions));
 }
+
+pub const TIES_WITHOUT_ORDER: &str =
+    "The TOP N WITH TIES clause is not allowed without a corresponding ORDER BY clause.";
+pub const PERCENT_RANGE: &str = "Percent values must be between 0 and 100.";
+pub const INVALID_VALUE: &str = "A TOP or FETCH clause contains an invalid value.";
+pub const NEGATIVE_COUNT: &str = "A TOP N or FETCH rowcount value may not be negative.";
+pub const NONINTEGER_COUNT: &str = "The number of rows provided for a TOP or FETCH clauses row count parameter must be an integer.";
+pub const DISTINCT_ORDER: &str =
+    "ORDER BY items must appear in the select list if SELECT DISTINCT is specified.";
+const POSITION_PREFIX: &str = "The ORDER BY position number ";
+const WILDCARD_ORDINAL: &str = "unsupported TOP PERCENT/WITH TIES ordinal ordering over a wildcard";
+const VOLATILE_KEY: &str = "unsupported TOP PERCENT/WITH TIES ordering by a volatile expression";
+/// Functions that return a different value on each evaluation. Ranking must
+/// not evaluate them separately from the projected value.
+const VOLATILE: [&str; 12] = [
+    "newid",
+    "newsequentialid",
+    "rand",
+    "crypt_gen_random",
+    "random",
+    "gen_random_uuid",
+    "uuid",
+    "nextval",
+    "setseed",
+    "uuidv4",
+    "uuidv7",
+    "currval",
+];
+const WINDOW_KEY: &str = "unsupported TOP PERCENT/WITH TIES ordering by a window function";
+const AMBIGUOUS_PREFIX: &str = "Ambiguous column name '";
+const MULTI_SOURCE_DISTINCT: &str = "unsupported TOP DISTINCT ordering by an expression with an unqualified column over several sources; qualify the column as in the select list";
+const COLUMN_IN_TOP_PREFIX: &str = "The reference to column \"";
+const INVALID_TOP: &str = "Invalid expression in a TOP or OFFSET clause.";
+/// SQL Server reports 4108 with class 15 in a TOP quantity but class 16
+/// elsewhere, so the TOP case carries a marker that `diagnostic` strips.
+const WINDOW_IN_TOP: &str =
+    "TOP quantity: Windowed functions can only appear in the SELECT or ORDER BY clauses.";
+/// T-SQL aggregates; SQL Server rejects them in a TOP quantity.
+const AGGREGATES: [&str; 15] = [
+    "count",
+    "count_big",
+    "sum",
+    "avg",
+    "min",
+    "max",
+    "stdev",
+    "stdevp",
+    "var",
+    "varp",
+    "string_agg",
+    "checksum_agg",
+    "grouping",
+    "grouping_id",
+    "approx_count_distinct",
+];
+
+/// Diagnostics captured in reference/select-top-percent.json use class 15.
+pub fn diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
+    let message = message
+        .strip_prefix("Invalid Input Error: ")
+        .unwrap_or(message);
+    if message.starts_with(POSITION_PREFIX) {
+        return Some(msduck_core::diagnostic::SqlError::new(108, 1, message));
+    }
+    let class_15 = match message {
+        _ if message.starts_with(COLUMN_IN_TOP_PREFIX) => Some(4115),
+        INVALID_TOP => Some(162),
+        WINDOW_IN_TOP => Some(4108),
+        _ => None,
+    };
+    if let Some(number) = class_15 {
+        let message = message.strip_prefix("TOP quantity: ").unwrap_or(message);
+        let mut error = msduck_core::diagnostic::SqlError::new(number, 1, message);
+        error.severity = 15;
+        return Some(error);
+    }
+    if message.starts_with(AMBIGUOUS_PREFIX) {
+        return Some(msduck_core::diagnostic::SqlError::new(209, 1, message));
+    }
+    let number = match message {
+        TIES_WITHOUT_ORDER => 1062,
+        PERCENT_RANGE => 1031,
+        INVALID_VALUE => 1014,
+        NEGATIVE_COUNT => 127,
+        NONINTEGER_COUNT => 1060,
+        DISTINCT_ORDER => 145,
+        _ => return None,
+    };
+    let mut error = msduck_core::diagnostic::SqlError::new(number, 1, message);
+    error.severity = 15;
+    Some(error)
+}
+
+enum Constant {
+    Null,
+    Number(f64),
+    Other,
+}
+
+fn constant(expr: &Expr) -> Constant {
+    match expr {
+        Expr::Nested(inner) => constant(inner),
+        Expr::Value(value) => match &value.value {
+            Value::Null => Constant::Null,
+            Value::Number(n, _) => n.parse().map_or(Constant::Other, Constant::Number),
+            _ => Constant::Other,
+        },
+        Expr::Cast { expr, .. } if matches!(constant(expr), Constant::Null) => Constant::Null,
+        Expr::Function(_) if crate::variant_cast::source(expr).is_some() => {
+            match crate::variant_cast::source(expr).map(constant) {
+                Some(Constant::Null) => Constant::Null,
+                _ => Constant::Other,
+            }
+        }
+        Expr::UnaryOp { op, expr } => match (op, constant(expr)) {
+            (UnaryOperator::Minus, Constant::Number(n)) => Constant::Number(-n),
+            (UnaryOperator::Plus, value @ Constant::Number(_)) => value,
+            (UnaryOperator::Minus | UnaryOperator::Plus, Constant::Null) => Constant::Null,
+            _ => Constant::Other,
+        },
+        _ => Constant::Other,
+    }
+}
+
+fn parse_expr(sql: &str) -> Expr {
+    sqlparser::parser::Parser::new(&sqlparser::dialect::GenericDialect {})
+        .try_with_sql(sql)
+        .and_then(|mut parser| parser.parse_expr())
+        .expect("static TOP lowering syntax")
+}
+
+fn string(text: &str) -> Expr {
+    Expr::Value(Value::SingleQuotedString(text.into()).into())
+}
+
+/// The percentage is converted and validated in an uncorrelated scalar
+/// subquery, so its expression is evaluated once for the statement.
+fn percent(quantity: Expr) -> Result<Expr, String> {
+    match constant(&quantity) {
+        Constant::Null => return Err(INVALID_VALUE.into()),
+        Constant::Number(n) if !(0.0..=100.0).contains(&n) => return Err(PERCENT_RANGE.into()),
+        _ => {}
+    }
+    let mut limit = parse_expr(
+        "(SELECT CASE WHEN __msduck_top_percent IS NULL THEN error(NULL) \
+         WHEN __msduck_top_percent < 0 OR __msduck_top_percent > 100 THEN error(NULL) \
+         ELSE __msduck_top_percent END \
+         FROM (SELECT CAST(NULL AS DOUBLE) AS __msduck_top_percent) AS __msduck_top_percent_value)",
+    );
+    let Expr::Subquery(query) = &mut limit else {
+        unreachable!()
+    };
+    let SetExpr::Select(select) = query.body.as_mut() else {
+        unreachable!()
+    };
+    if let SelectItem::UnnamedExpr(Expr::Case { conditions, .. }) = &mut select.projection[0] {
+        for (condition, message) in conditions.iter_mut().zip([INVALID_VALUE, PERCENT_RANGE]) {
+            condition.result = crate::expr::unary_function("error", string(message));
+        }
+    }
+    if let Some(TableFactor::Derived { subquery, .. }) =
+        select.from.first_mut().map(|from| &mut from.relation)
+        && let SetExpr::Select(inner) = subquery.body.as_mut()
+        && let SelectItem::ExprWithAlias {
+            expr: Expr::Cast { expr, .. },
+            ..
+        } = &mut inner.projection[0]
+    {
+        **expr = quantity;
+    }
+    Ok(limit)
+}
+
+fn count(quantity: Expr) -> Result<Expr, String> {
+    match constant(&quantity) {
+        Constant::Null => return Err(NONINTEGER_COUNT.into()),
+        Constant::Number(n) if n < 0.0 => return Err(NEGATIVE_COUNT.into()),
+        _ => {}
+    }
+    use crate::expr::{binary_function, number, unary_function};
+    let mut limit = parse_expr("(SELECT NULL)");
+    if let Expr::Subquery(query) = &mut limit
+        && let SetExpr::Select(select) = query.body.as_mut()
+    {
+        // The existing count validator reports runtime NULL and negative values.
+        select.projection[0] = SelectItem::UnnamedExpr(unary_function(
+            "__msduck_top_count",
+            binary_function("coalesce", quantity, number(-1)),
+        ));
+    }
+    Ok(limit)
+}
+
+fn window(function: &str, keys: Vec<OrderByExpr>) -> Expr {
+    let mut expr = parse_expr(&format!("{function}() OVER ()"));
+    if let Expr::Function(Function {
+        over: Some(WindowType::WindowSpec(spec)),
+        ..
+    }) = &mut expr
+    {
+        spec.order_by = keys;
+    }
+    expr
+}
+
+fn projected(item: &SelectItem) -> Result<&Expr, String> {
+    match item {
+        SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } => Ok(expr),
+        _ => Err("unsupported TOP PERCENT/WITH TIES ordering over a wildcard".into()),
+    }
+}
+
+/// An integer ORDER BY constant is a select-list position. Positions count
+/// output columns, so they cannot be resolved against an unexpanded wildcard.
+fn ordinal(expr: &Expr, projection: &[SelectItem]) -> Result<Option<usize>, String> {
+    let Expr::Value(value) = expr else {
+        return Ok(None);
+    };
+    let Value::Number(n, _) = &value.value else {
+        return Ok(None);
+    };
+    let Ok(n) = n.parse::<usize>() else {
+        return Ok(None);
+    };
+    if projection.iter().any(|item| {
+        matches!(
+            item,
+            SelectItem::Wildcard(_) | SelectItem::QualifiedWildcard(..)
+        )
+    }) {
+        return Err(WILDCARD_ORDINAL.into());
+    }
+    if !(1..=projection.len()).contains(&n) {
+        return Err(format!(
+            "{POSITION_PREFIX}{n} is out of range of the number of items in the select list."
+        ));
+    }
+    Ok(Some(n - 1))
+}
+
+fn volatile(expr: &Expr) -> bool {
+    let mut found = false;
+    let _ = visit_expressions(expr, |expr| {
+        if let Expr::Function(function) = expr
+            && VOLATILE
+                .iter()
+                .any(|name| function.name.to_string().eq_ignore_ascii_case(name))
+        {
+            found = true;
+            return std::ops::ControlFlow::Break(());
+        }
+        std::ops::ControlFlow::Continue(())
+    });
+    found
+}
+
+/// Whether an ORDER BY key is the same expression as a projected item: equal
+/// after column references are compared and function names are compared
+/// without regard to case. A bare column matches by output name, as in SQL
+/// Server. Inside an expression, an unqualified reference can match a
+/// qualified one only with a single source; with several sources SQL Server
+/// reports it as ambiguous, and the key is left unmatched.
+fn same_expression(projected: &Expr, key: &Expr, single_source: bool) -> bool {
+    let column = |expr: &Expr| matches!(expr, Expr::Identifier(_) | Expr::CompoundIdentifier(_));
+    if column(projected) && column(key) {
+        return same_column(projected, key);
+    }
+    fn shape(expr: &Expr) -> (String, Vec<Expr>) {
+        let mut columns = vec![];
+        let mut expr = expr.clone();
+        let _ = visit_expressions_mut(&mut expr, |expr| {
+            match expr {
+                Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
+                    columns.push(std::mem::replace(
+                        expr,
+                        Expr::Identifier(Ident::new("__msduck_column")),
+                    ));
+                }
+                Expr::Function(function) => {
+                    function.name = ObjectName::from(vec![Ident::new(
+                        function.name.to_string().to_uppercase(),
+                    )]);
+                }
+                _ => {}
+            }
+            std::ops::ControlFlow::<()>::Continue(())
+        });
+        (expr.to_string(), columns)
+    }
+    let (projected_shape, projected_columns) = shape(projected);
+    let (key_shape, key_columns) = shape(key);
+    projected_shape == key_shape
+        && projected_columns.len() == key_columns.len()
+        && projected_columns.iter().zip(&key_columns).all(|(a, b)| {
+            if single_source {
+                same_column(a, b)
+            } else {
+                a.to_string().to_lowercase() == b.to_string().to_lowercase()
+            }
+        })
+}
+
+/// Whether an ORDER BY key names a projected column. An unqualified name
+/// matches a qualified column with that name; qualified names must agree.
+fn same_column(projected: &Expr, key: &Expr) -> bool {
+    let parts = |expr: &Expr| -> Option<Vec<String>> {
+        match expr {
+            Expr::Identifier(id) => Some(vec![id.value.to_lowercase()]),
+            Expr::CompoundIdentifier(ids) => {
+                Some(ids.iter().map(|id| id.value.to_lowercase()).collect())
+            }
+            _ => None,
+        }
+    };
+    if projected == key {
+        return true;
+    }
+    match (parts(projected), parts(key)) {
+        (Some(a), Some(b)) if a.len() == 1 || b.len() == 1 => a.last() == b.last(),
+        (Some(a), Some(b)) => a == b,
+        _ => false,
+    }
+}
+
+/// A select-list alias named by an ORDER BY key. SQL Server rejects a name
+/// that more than one select-list alias defines.
+fn alias(expr: &Expr, projection: &[SelectItem]) -> Result<Option<usize>, String> {
+    let Expr::Identifier(id) = expr else {
+        return Ok(None);
+    };
+    let mut matches = projection.iter().enumerate().filter(|(_, item)| {
+        matches!(item, SelectItem::ExprWithAlias { alias, .. } if alias.value.eq_ignore_ascii_case(&id.value))
+    });
+    let first = matches.next().map(|(index, _)| index);
+    if matches.next().is_some() {
+        return Err(format!("{AMBIGUOUS_PREFIX}{}'.", id.value));
+    }
+    Ok(first)
+}
+
+/// The SQL Server compile error for the first column reference, aggregate or
+/// window function in a TOP quantity outside any subquery, as captured from
+/// SQL Server 2022. Variables (`@name`) are not columns, and a reference
+/// qualified by a name that is not a source of this SELECT is an outer-scope
+/// correlation, which SQL Server allows. An unqualified name is assumed to
+/// bind to this SELECT's sources, as SQL Server binds inner scopes first.
+fn invalid_quantity(quantity: &Expr, sources: &[String]) -> Option<String> {
+    struct Finder<'a> {
+        depth: usize,
+        found: Option<String>,
+        sources: &'a [String],
+    }
+    impl Visitor for Finder<'_> {
+        type Break = ();
+        fn pre_visit_query(&mut self, _: &Query) -> std::ops::ControlFlow<()> {
+            self.depth += 1;
+            std::ops::ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &Query) -> std::ops::ControlFlow<()> {
+            self.depth -= 1;
+            std::ops::ControlFlow::Continue(())
+        }
+        fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
+            let name = match expr {
+                Expr::Identifier(id) => Some(id),
+                Expr::CompoundIdentifier(ids)
+                    if ids.len() >= 2
+                        && !self
+                            .sources
+                            .contains(&ids[ids.len() - 2].value.to_lowercase()) =>
+                {
+                    None
+                }
+                Expr::CompoundIdentifier(ids) => ids.last(),
+                _ => None,
+            };
+            if self.depth > 0 {
+                return std::ops::ControlFlow::Continue(());
+            }
+            self.found = match expr {
+                Expr::Function(Function { over: Some(_), .. }) => Some(WINDOW_IN_TOP.into()),
+                Expr::Function(function)
+                    if function.name.0.len() == 1
+                        && AGGREGATES
+                            .iter()
+                            .any(|name| function.name.to_string().eq_ignore_ascii_case(name)) =>
+                {
+                    Some(INVALID_TOP.into())
+                }
+                _ => name.filter(|name| !name.value.starts_with('@')).map(|name| {
+                    format!(
+                        "{COLUMN_IN_TOP_PREFIX}{}\" is not allowed in an argument to a TOP, OFFSET, or FETCH clause. Only references to columns at an outer scope or standalone expressions and subqueries are allowed here.",
+                        name.value
+                    )
+                }),
+            };
+            if self.found.is_some() {
+                return std::ops::ControlFlow::Break(());
+            }
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    let mut finder = Finder {
+        depth: 0,
+        found: None,
+        sources,
+    };
+    let _ = quantity.visit(&mut finder);
+    finder.found
+}
+
+/// Lower-case names a column of this SELECT can be qualified with: table
+/// names and aliases, including those inside parenthesized joins.
+fn source_names(from: &[TableWithJoins]) -> Vec<String> {
+    fn factor(relation: &TableFactor, names: &mut Vec<String>) {
+        match relation {
+            TableFactor::Table { name, alias, .. } => {
+                if let Some(ObjectNamePart::Identifier(last)) = name.0.last() {
+                    names.push(last.value.to_lowercase());
+                }
+                if let Some(alias) = alias {
+                    names.push(alias.name.value.to_lowercase());
+                }
+            }
+            TableFactor::NestedJoin {
+                table_with_joins,
+                alias,
+            } => {
+                tables(std::slice::from_ref(table_with_joins.as_ref()), names);
+                if let Some(alias) = alias {
+                    names.push(alias.name.value.to_lowercase());
+                }
+            }
+            TableFactor::Derived {
+                alias: Some(alias), ..
+            }
+            | TableFactor::TableFunction {
+                alias: Some(alias), ..
+            }
+            | TableFactor::Function {
+                alias: Some(alias), ..
+            }
+            | TableFactor::UNNEST {
+                alias: Some(alias), ..
+            } => names.push(alias.name.value.to_lowercase()),
+            _ => {}
+        }
+    }
+    fn tables(from: &[TableWithJoins], names: &mut Vec<String>) {
+        for table in from {
+            factor(&table.relation, names);
+            for join in &table.joins {
+                factor(&join.relation, names);
+            }
+        }
+    }
+    let mut names = vec![];
+    tables(from, &mut names);
+    names
+}
+
+/// A ranking window cannot order by another window function.
+fn windowed(expr: &Expr) -> bool {
+    let mut found = false;
+    let _ = visit_expressions(expr, |expr| {
+        if matches!(expr, Expr::Function(Function { over: Some(_), .. })) {
+            found = true;
+            return std::ops::ControlFlow::Break(());
+        }
+        std::ops::ControlFlow::Continue(())
+    });
+    found
+}
+
+/// Rank ORDER BY keys as SQL Server resolves them: select-list aliases and
+/// ordinals refer to projected expressions; other keys see source columns.
+fn source_keys(
+    keys: &[OrderByExpr],
+    projection: &[SelectItem],
+) -> Result<Vec<OrderByExpr>, String> {
+    keys.iter()
+        .map(|key| {
+            let mut key = key.clone();
+            let index = match ordinal(&key.expr, projection)? {
+                Some(index) => Some(index),
+                None => alias(&key.expr, projection)?,
+            };
+            if let Some(index) = index {
+                key.expr = projected(&projection[index])?.clone();
+            }
+            // The ranking copy would be evaluated apart from the projection
+            // and from the final ORDER BY.
+            if volatile(&key.expr) {
+                return Err(VOLATILE_KEY.into());
+            }
+            if windowed(&key.expr) {
+                return Err(WINDOW_KEY.into());
+            }
+            Ok(key)
+        })
+        .collect()
+}
+
+fn output_name(item: &SelectItem) -> Option<&Ident> {
+    match item {
+        SelectItem::ExprWithAlias { alias, .. } => Some(alias),
+        SelectItem::UnnamedExpr(Expr::Identifier(id)) => Some(id),
+        SelectItem::UnnamedExpr(Expr::CompoundIdentifier(parts)) => parts.last(),
+        _ => None,
+    }
+}
+
+/// DISTINCT keys must name select-list items; they are then ordered by the
+/// derived output columns after duplicates are removed.
+fn distinct_keys(
+    keys: &[OrderByExpr],
+    projection: &[SelectItem],
+    single_source: bool,
+) -> Result<Vec<OrderByExpr>, String> {
+    for item in projection {
+        projected(item)?;
+    }
+    keys.iter()
+        .map(|key| {
+            let index = match ordinal(&key.expr, projection)? {
+                Some(index) => Some(index),
+                None => alias(&key.expr, projection)?,
+            }
+            .or_else(|| {
+                projection.iter().position(|item| {
+                    same_expression(
+                        projected(item).expect("checked projection"),
+                        &key.expr,
+                        single_source,
+                    )
+                })
+            })
+            .ok_or_else(|| {
+                // Deciding whether an unqualified reference inside an
+                // expression is ambiguous needs the catalog; with several
+                // sources, say so instead of claiming SQL Server's 145.
+                let relaxed = !single_source
+                    && projection.iter().any(|item| {
+                        same_expression(
+                            projected(item).expect("checked projection"),
+                            &key.expr,
+                            true,
+                        )
+                    });
+                if relaxed {
+                    MULTI_SOURCE_DISTINCT.to_owned()
+                } else {
+                    DISTINCT_ORDER.to_owned()
+                }
+            })?;
+            let name = output_name(&projection[index])
+                .ok_or("unsupported TOP DISTINCT ordering by an unnamed select-list item")?;
+            let duplicates = projection
+                .iter()
+                .filter_map(output_name)
+                .filter(|other| other.value.eq_ignore_ascii_case(&name.value))
+                .count();
+            if duplicates != 1 {
+                return Err("unsupported TOP DISTINCT ordering by a repeated output name".into());
+            }
+            let mut key = key.clone();
+            // Reference the derived column even when the alias was written as
+            // a T-SQL string literal (`AS 'x'`), which is not an identifier.
+            key.expr = Expr::Identifier(if name.quote_style == Some('\'') {
+                Ident::with_quote('"', name.value.clone())
+            } else {
+                name.clone()
+            });
+            Ok(key)
+        })
+        .collect()
+}
+
+/// Lower SELECT TOP PERCENT and TOP WITH TIES to a QUALIFY filter over the
+/// rows that TOP sees: after grouping, HAVING and DISTINCT. PERCENT counts are
+/// the ceiling of percentage times rows; WITH TIES keeps every row whose rank
+/// among the ORDER BY keys is within the count. Plain TOP is left unchanged.
+pub fn ranked(query: &mut Query) -> Result<(), String> {
+    let SetExpr::Select(select) = query.body.as_mut() else {
+        return Ok(());
+    };
+    if !select
+        .top
+        .as_ref()
+        .is_some_and(|top| top.percent || top.with_ties)
+    {
+        return Ok(());
+    }
+    let top = select.top.take().expect("checked TOP");
+    if query.limit_clause.is_some() || query.fetch.is_some() {
+        return Err("TOP cannot be combined with OFFSET/FETCH in the same query".into());
+    }
+    let keys = match &query.order_by {
+        None => vec![],
+        Some(OrderBy {
+            kind: OrderByKind::Expressions(keys),
+            ..
+        }) => keys.clone(),
+        Some(_) => return Err("unsupported TOP PERCENT/WITH TIES ORDER BY form".into()),
+    };
+    if top.with_ties && keys.is_empty() {
+        return Err(TIES_WITHOUT_ORDER.into());
+    }
+    let quantity = match top.quantity {
+        Some(TopQuantity::Constant(n)) => crate::expr::number(n),
+        Some(TopQuantity::Expr(expr)) => expr,
+        None => return Err("TOP requires a count".into()),
+    };
+    // The lowered quantity sits beside the source rows, where a column
+    // reference would bind per row and an aggregate would see one row.
+    if let Some(error) = invalid_quantity(&quantity, &source_names(&select.from)) {
+        return Err(error);
+    }
+    if select.qualify.is_some() {
+        return Err("unsupported TOP PERCENT/WITH TIES with QUALIFY".into());
+    }
+    let distinct = match &select.distinct {
+        None | Some(Distinct::All) => false,
+        Some(Distinct::Distinct) => true,
+        Some(_) => return Err("unsupported TOP PERCENT/WITH TIES DISTINCT form".into()),
+    };
+    let keys = if distinct {
+        // A parenthesized join is one top-level relation with its own joins.
+        let single_source = select.from.len() == 1
+            && select.from[0].joins.is_empty()
+            && !matches!(select.from[0].relation, TableFactor::NestedJoin { .. });
+        distinct_keys(&keys, &select.projection, single_source)?
+    } else {
+        source_keys(&keys, &select.projection)?
+    };
+    // Without ORDER BY, TOP may return any rows. A constant key satisfies the
+    // ranking function's ORDER BY requirement without imposing an order.
+    let rank_keys = if keys.is_empty() {
+        vec![OrderByExpr {
+            expr: Expr::Value(Value::Null.into()),
+            options: OrderByOptions {
+                sort: None,
+                nulls_first: None,
+            },
+            with_fill: None,
+        }]
+    } else {
+        keys.clone()
+    };
+    let rank = window(if top.with_ties { "rank" } else { "row_number" }, rank_keys);
+    let limit = if top.percent {
+        let rows = parse_expr("count(*) OVER ()");
+        let scaled = Expr::BinaryOp {
+            left: Box::new(Expr::BinaryOp {
+                left: Box::new(percent(quantity)?),
+                op: BinaryOperator::Multiply,
+                right: Box::new(rows),
+            }),
+            op: BinaryOperator::Divide,
+            right: Box::new(crate::expr::number(100)),
+        };
+        crate::expr::unary_function("ceil", scaled)
+    } else {
+        count(quantity)?
+    };
+    let filter = Expr::BinaryOp {
+        left: Box::new(rank),
+        op: BinaryOperator::LtEq,
+        right: Box::new(limit),
+    };
+    if distinct {
+        let into = select.into.take();
+        let inner = std::mem::replace(
+            query.body.as_mut(),
+            SetExpr::Values(Values {
+                explicit_row: false,
+                value_keyword: false,
+                rows: vec![],
+            }),
+        );
+        let mut outer = sqlparser::parser::Parser::new(&sqlparser::dialect::GenericDialect {})
+            .try_with_sql("SELECT * FROM (SELECT 1) AS __msduck_top_distinct")
+            .and_then(|mut parser| parser.parse_query())
+            .expect("static TOP lowering syntax");
+        let SetExpr::Select(outer_select) = outer.body.as_mut() else {
+            unreachable!()
+        };
+        if let TableFactor::Derived { subquery, .. } = &mut outer_select.from[0].relation {
+            *subquery.body = inner;
+        }
+        outer_select.into = into;
+        outer_select.qualify = Some(filter);
+        query.body = outer.body;
+        if let Some(OrderBy {
+            kind: OrderByKind::Expressions(order),
+            ..
+        }) = &mut query.order_by
+        {
+            *order = keys;
+        }
+    } else {
+        select.qualify = Some(filter);
+    }
+    Ok(())
+}
