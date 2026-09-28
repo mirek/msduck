@@ -5774,6 +5774,30 @@
       ],
       "issue": 548,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PU6fk"
+    },
+    {
+      "id": "identity-sequence-advance-v1",
+      "title": "Add atomic private identity-sequence advance for explicit inserts",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility goal and first-party retained IDENTITY_INSERT captures; prerequisite for later root INSERT/session runtime integration.",
+      "scope": [
+        "vendor/libduckdb-sys/build_bundled_cc.rs",
+        "vendor/libduckdb-sys/msduck_identity_advance.rs",
+        "vendor/libduckdb-sys/MSDUCK-PATCH.md",
+        "tests/identity_sequence_advance.rs"
+      ],
+      "acceptance": [
+        "Expose a bundled-only private SQL operation that atomically advances an existing msduck-managed, noncycling identity sequence when a validated explicit BIGINT value passes its directional high- or low-water mark; do not change ordinary DuckDB sequences or transactional table contents.",
+        "Use the existing sequence mutex and WAL usage path; preserve nextval/currval/duckdb_sequences last_value, correct positive/negative increments and terminal BIGINT exhaustion, non-rollback behavior, concurrent connections, checkpoint/reopen and WAL recovery. Reject non-private and out-of-range values without mutation.",
+        "Add root native integration tests for these allocator invariants, document the private bundled patch and remaining row-insert coordination requirement. Do not modify src/identity.rs, src/engine.rs, src/insert.rs, SQL crate exports or unrelated claimed paths. Run AGENTS.md Rust/client/audit checks at the exact revision."
+      ],
+      "dependencies": [
+        "identity-insert-reference-v1",
+        "identity-insert-rpc-reference-v1",
+        "identity-insert-runtime-plan-v1"
+      ],
+      "issue": 550,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PU9mv"
     }
   ]
 }
