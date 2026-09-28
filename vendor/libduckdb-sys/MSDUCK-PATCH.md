@@ -39,16 +39,22 @@ and rejects values outside the sequence's bounds. With the sequence mutex held,
 it compares a candidate against the current directional high/low-water mark.
 An advancing value updates the same last value, next counter and usage record
 that `nextval` uses; a nonadvancing value returns false without changing them.
-Both outcomes are distinguishable from an error. The existing WAL sequence-usage
-path persists advances despite transaction rollback, including terminal BIGINT
-values. Ordinary DuckDB sequences are not changed by this operation.
+Both outcomes are distinguishable from an error. For a previously committed
+private sequence, the operation also writes and flushes a standalone sequence
+WAL record. DuckDB discards transaction-owned `SEQUENCE_VALUE` records on
+rollback even though the in-memory counter survives; the standalone record
+preserves an explicit advance across rollback followed by an unclean exit.
+Newly created, uncommitted sequences are excluded because rollback removes
+them. Terminal BIGINT values use the same modular next-counter representation
+as private `nextval`. Ordinary DuckDB sequences are not changed by this operation.
 
 This native primitive does not make an explicit row insertion atomic with the
 allocator advance. The root adapter must coordinate its successful row write,
 session state and possible concurrent implicit allocation before exposing
 `IDENTITY_INSERT` as supported. The direct native regressions in
 `tests/identity_sequence_advance.rs` cover positive/negative sequences, bounds,
-endpoints, rollback, concurrent connections, clean reopen and unclean WAL replay.
+endpoints, rollback, concurrent connections, clean reopen, ordinary WAL replay
+and rollback followed by unclean WAL replay.
 
 
 During initial WAL replay, `catalog.cpp` now resolves an implicit catalog against

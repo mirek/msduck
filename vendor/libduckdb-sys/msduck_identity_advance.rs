@@ -25,10 +25,17 @@ pub fn apply(out_dir: &str) {
     replace(
         &root,
         "src/catalog/catalog_entry/sequence_catalog_entry.cpp",
+        "#include \"duckdb/transaction/duck_transaction.hpp\"",
+        "#include \"duckdb/transaction/duck_transaction.hpp\"\n#include \"duckdb/main/attached_database.hpp\"\n#include \"duckdb/storage/storage_manager.hpp\"\n#include \"duckdb/storage/write_ahead_log.hpp\"",
+    );
+    replace(
+        &root,
+        "src/catalog/catalog_entry/sequence_catalog_entry.cpp",
         "void SequenceCatalogEntry::ReplayValue(uint64_t v_usage_count, int64_t v_counter) {",
         r#"// Private IDENTITY_INSERT allocator operation. The same mutex and sequence
-// usage record as nextval make the high-water test and advance atomic, while
-// retaining DuckDB's non-transactional allocation and WAL behavior.
+// usage record as nextval make the high-water test and advance atomic. An
+// immediate WAL flush is necessary because rollback discards the transaction's
+// SEQUENCE_VALUE undo record even though the in-memory counter survives.
 bool SequenceCatalogEntry::MsduckAdvanceIdentity(DuckTransaction &transaction, int64_t candidate) {
     lock_guard<mutex> seqlock(lock);
     static constexpr const char *prefix = "__msduck_identity_";
@@ -56,6 +63,20 @@ bool SequenceCatalogEntry::MsduckAdvanceIdentity(DuckTransaction &transaction, i
     data.usage_count++;
     if (!temporary) {
         transaction.PushSequenceUsage(*this, data);
+        // Never WAL-log a sequence created by this uncommitted transaction:
+        // rollback removes the catalog entry, so replay would have no target.
+        // A committed private sequence needs its advance even when the caller
+        // rolls back and the process exits before another transaction commits.
+        if (timestamp.load() < TRANSACTION_ID_START) {
+            auto &db = ParentCatalog().GetAttached();
+            if (transaction.ShouldWriteToWAL(db)) {
+                auto &storage = db.GetStorageManager();
+                auto wal_lock = storage.GetWALLock();
+                auto wal = storage.GetWAL();
+                wal->WriteSequenceValue({this, data.usage_count, data.counter});
+                wal->Flush();
+            }
+        }
     }
     return true;
 }

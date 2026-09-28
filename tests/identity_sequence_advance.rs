@@ -179,3 +179,79 @@ fn unclean_exit_replays_explicit_advance_from_wal() {
     drop(db);
     std::fs::remove_file(file).unwrap();
 }
+
+#[test]
+fn rollback_then_unclean_exit_keeps_explicit_advance() {
+    const CHILD: &str = "MSDUCK_IDENTITY_ADVANCE_ROLLBACK_WAL_CHILD";
+    if let Ok(file) = std::env::var(CHILD) {
+        let db = Connection::open(file).unwrap();
+        db.execute_batch(&format!(
+            "CREATE SEQUENCE {PRIVATE} START 1 INCREMENT 1 MINVALUE 1 MAXVALUE 1000 NO CYCLE; \
+             CREATE TABLE rolled_back(v INT); CHECKPOINT"
+        ))
+        .unwrap();
+        db.execute_batch("BEGIN TRANSACTION").unwrap();
+        db.execute_batch("INSERT INTO rolled_back VALUES(7)")
+            .unwrap();
+        assert!(advance(&db, 200).unwrap());
+        db.execute_batch("ROLLBACK").unwrap();
+        assert_eq!(current(&db), 200);
+        std::process::exit(0);
+    }
+    let file = path("rollback-wal");
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "rollback_then_unclean_exit_keeps_explicit_advance",
+            "--exact",
+        ])
+        .env(CHILD, &file)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let db = Connection::open(&file).unwrap();
+    assert_eq!(current(&db), 200);
+    assert_eq!(next(&db).unwrap(), 201);
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM rolled_back", [], |row| row
+            .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    drop(db);
+    std::fs::remove_file(file).unwrap();
+}
+
+#[test]
+fn rolled_back_new_sequence_has_no_standalone_wal_record() {
+    const CHILD: &str = "MSDUCK_IDENTITY_ADVANCE_NEW_SEQUENCE_CHILD";
+    if let Ok(file) = std::env::var(CHILD) {
+        let db = Connection::open(file).unwrap();
+        db.execute_batch("CHECKPOINT; BEGIN TRANSACTION").unwrap();
+        db.execute_batch(&format!(
+            "CREATE SEQUENCE {PRIVATE} START 1 INCREMENT 1 MINVALUE 1 MAXVALUE 1000 NO CYCLE"
+        ))
+        .unwrap();
+        assert!(advance(&db, 200).unwrap());
+        db.execute_batch("ROLLBACK").unwrap();
+        std::process::exit(0);
+    }
+    let file = path("new-sequence-wal");
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "rolled_back_new_sequence_has_no_standalone_wal_record",
+            "--exact",
+        ])
+        .env(CHILD, &file)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let db = Connection::open(&file).unwrap();
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM duckdb_sequences()", [], |row| row
+            .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
+    drop(db);
+    std::fs::remove_file(file).unwrap();
+}
