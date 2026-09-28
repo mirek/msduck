@@ -129,44 +129,188 @@ fn document_backend_diagnostic(message: &str) -> Option<SqlError> {
     (message == error.backend_message()).then(|| SqlError::new(13609, 1, error.to_string()))
 }
 
-/// Locate a document error only after the extraction parser has rejected the
-/// input. The ASCII syntax projection keeps one byte per UTF-16 code unit, so
-/// serde_json's cursor can be translated back to the original source units.
+/// Locate a document error only after extraction has rejected the input. This
+/// cursor follows the same lexical grammar as `crate::json::prefix`, retaining
+/// only a stack of container states rather than materializing JSON values.
 fn document_syntax_error(source: &[u16]) -> Option<ExtractionError> {
-    let projected: String = source
-        .iter()
-        .map(|&unit| if unit <= 127 { unit as u8 as char } else { 'a' })
-        .collect();
-    let error = serde_json::from_str::<serde_json::Value>(&projected).err()?;
-    if !matches!(
-        error.classify(),
-        serde_json::error::Category::Syntax | serde_json::error::Category::Eof
-    ) {
-        return None;
+    #[derive(Clone, Copy)]
+    enum State {
+        Value,
+        ArrayFirst,
+        ArrayValue,
+        ArrayComma,
+        ObjectFirst,
+        ObjectKey,
+        ObjectColon,
+        ObjectComma,
     }
-    if error.is_eof() {
-        return Some(ExtractionError::DocumentSyntax {
-            character: u16::from(b'.'),
-            position: source.len(),
-        });
+    struct Cursor<'a> {
+        bytes: &'a [u8],
+        at: usize,
     }
-    let mut line = 1;
-    let mut line_start = 0;
-    for (at, &unit) in source.iter().enumerate() {
-        if line == error.line() {
-            break;
+    impl Cursor<'_> {
+        fn ws(&mut self) {
+            while self
+                .bytes
+                .get(self.at)
+                .is_some_and(|byte| matches!(byte, b' ' | b'\t' | b'\r' | b'\n'))
+            {
+                self.at += 1;
+            }
         }
-        if unit == u16::from(b'\n') {
-            line += 1;
-            line_start = at + 1;
+        fn take(&mut self, byte: u8) -> bool {
+            if self.bytes.get(self.at) == Some(&byte) {
+                self.at += 1;
+                true
+            } else {
+                false
+            }
+        }
+        fn string(&mut self) -> Result<(), usize> {
+            if !self.take(b'"') {
+                return Err(self.at);
+            }
+            loop {
+                let byte = *self.bytes.get(self.at).ok_or(self.at)?;
+                self.at += 1;
+                match byte {
+                    b'"' => return Ok(()),
+                    0..=31 => return Err(self.at - 1),
+                    b'\\' => {
+                        let escape = *self.bytes.get(self.at).ok_or(self.at)?;
+                        self.at += 1;
+                        match escape {
+                            b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r' | b't' => {}
+                            b'u' => {
+                                for _ in 0..4 {
+                                    if !self.bytes.get(self.at).is_some_and(u8::is_ascii_hexdigit) {
+                                        return Err(self.at);
+                                    }
+                                    self.at += 1;
+                                }
+                            }
+                            _ => return Err(self.at - 1),
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        fn digits(&mut self) -> bool {
+            let start = self.at;
+            while self.bytes.get(self.at).is_some_and(u8::is_ascii_digit) {
+                self.at += 1;
+            }
+            self.at > start
+        }
+        fn number(&mut self) -> Result<(), usize> {
+            self.take(b'-');
+            if !self.take(b'0') && !self.digits() {
+                return Err(self.at);
+            }
+            if self.take(b'.') && !self.digits() {
+                return Err(self.at);
+            }
+            if self.take(b'e') || self.take(b'E') {
+                if !self.take(b'+') {
+                    self.take(b'-');
+                }
+                if !self.digits() {
+                    return Err(self.at);
+                }
+            }
+            Ok(())
         }
     }
-    if line != error.line() || error.column() == 0 {
-        return None;
-    }
-    let position = line_start.checked_add(error.column() - 1)?;
+
+    let syntax = json_syntax(source);
+    let mut scan = Cursor {
+        bytes: &syntax,
+        at: 0,
+    };
+    let result = (|| -> Result<(), usize> {
+        let mut stack = vec![State::Value];
+        while let Some(state) = stack.pop() {
+            scan.ws();
+            match state {
+                State::Value => match scan.bytes.get(scan.at).ok_or(scan.at)? {
+                    b'{' => {
+                        scan.at += 1;
+                        stack.push(State::ObjectFirst);
+                    }
+                    b'[' => {
+                        scan.at += 1;
+                        stack.push(State::ArrayFirst);
+                    }
+                    b'"' => scan.string()?,
+                    b't' | b'f' | b'n' => {
+                        let literal: &[u8] = match scan.bytes[scan.at] {
+                            b't' => b"true",
+                            b'f' => b"false",
+                            _ => b"null",
+                        };
+                        for &byte in literal {
+                            if !scan.take(byte) {
+                                return Err(scan.at);
+                            }
+                        }
+                    }
+                    b'-' | b'0'..=b'9' => scan.number()?,
+                    _ => return Err(scan.at),
+                },
+                State::ArrayFirst => {
+                    if !scan.take(b']') {
+                        stack.push(State::ArrayComma);
+                        stack.push(State::Value);
+                    }
+                }
+                State::ArrayValue => {
+                    stack.push(State::ArrayComma);
+                    stack.push(State::Value);
+                }
+                State::ArrayComma => {
+                    if scan.take(b',') {
+                        stack.push(State::ArrayValue);
+                    } else if !scan.take(b']') {
+                        return Err(scan.at);
+                    }
+                }
+                State::ObjectFirst => {
+                    if !scan.take(b'}') {
+                        scan.string()?;
+                        stack.push(State::ObjectColon);
+                    }
+                }
+                State::ObjectKey => {
+                    scan.string()?;
+                    stack.push(State::ObjectColon);
+                }
+                State::ObjectColon => {
+                    if !scan.take(b':') {
+                        return Err(scan.at);
+                    }
+                    stack.push(State::ObjectComma);
+                    stack.push(State::Value);
+                }
+                State::ObjectComma => {
+                    if scan.take(b',') {
+                        stack.push(State::ObjectKey);
+                    } else if !scan.take(b'}') {
+                        return Err(scan.at);
+                    }
+                }
+            }
+        }
+        scan.ws();
+        if scan.at < scan.bytes.len() {
+            Err(scan.at)
+        } else {
+            Ok(())
+        }
+    })();
+    let position = result.err()?;
     Some(ExtractionError::DocumentSyntax {
-        character: *source.get(position)?,
+        character: source.get(position).copied().unwrap_or(u16::from(b'.')),
         position,
     })
 }

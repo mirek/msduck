@@ -108,3 +108,27 @@ fn document_cursor_counts_utf16_units_before_the_invalid_value() {
         "JSON text is not properly formatted. Unexpected character 'x' is found at position 6."
     );
 }
+
+#[test]
+fn document_cursor_follows_the_sql_json_lexer_after_large_valid_prefixes() {
+    for source in [
+        r#"["\uD800",x]"#.to_owned(),
+        "[1e400,x]".to_owned(),
+        format!("{}x{}", "[".repeat(160), "]".repeat(160)),
+        format!("[{},x]", "1,".repeat(20_000).trim_end_matches(',')),
+    ] {
+        let position = source
+            .encode_utf16()
+            .position(|unit| unit == u16::from(b'x'))
+            .unwrap();
+        let error = extract_detailed(&source, "$[*]", false).unwrap_err();
+        assert_eq!(
+            error,
+            msduck_core::json_path::ExtractionError::DocumentSyntax {
+                character: u16::from(b'x'),
+                position,
+            },
+            "{source}"
+        );
+    }
+}
