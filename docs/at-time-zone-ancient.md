@@ -21,9 +21,9 @@ derives exactly from the pinned fixture and joins continuously to the existing
 1000–1499 table.
 
 The native adapter combines this prefix with the 0001–0499, 1000–1499,
-1500–1799, 1800–1899, 1900–2050 and 2051–2100 tables. Named-zone UTC
-instants from 0001-01-01 through 2100-12-31 are in the captured range;
-`UTC` retains the full SQL temporal range. Dates from 2101 onward remain
+1500–1799, 1800–1899, 1900–2050, 2051–2100 and 2101–2500 tables.
+Named-zone UTC instants from 0001-01-01 through 2500-12-31 are in the captured range;
+`UTC` retains the full SQL temporal range. Dates from 2501 onward remain
 explicitly uncaptured for other names. The
 [SQL-facing regression](../tests/at_time_zone_ancient.rs) checks seasonal
 offsets for Pacific, Central European and Samoa zones and the year-0500

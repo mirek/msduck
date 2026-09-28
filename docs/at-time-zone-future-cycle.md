@@ -16,10 +16,14 @@ bounds, per-zone continuity, sample replay and the 2101 join to the pinned
 2051–2100 runtime table without starting SQL Server. A fresh capture must use
 a new output path; it cannot overwrite the retained evidence.
 
-The current native adapter still accepts captured named-zone instants only
-through 2100. Integrating this evidence into runtime behavior is separate
-work. The 400-year capture records SQL Server's observed Windows-zone outputs;
-it does not prove that rules repeat after 2500. Daily sampling could miss
-changes that cancel between sampled midnights, and minute refinement does not
-prove subminute boundaries. These limits remain visible rather than treating
+The [generated rule extension](../src/at_time_zone_rules_2101_2500.json) is
+now part of the native adapter, which accepts named-zone UTC instants through
+2500. A late-2500 local wall whose implied UTC instant falls in 2501 remains
+outside that captured range. The
+[SQL-facing regression](../tests/at_time_zone_future_cycle.rs)
+checks seasonal offsets and both ends of this interval. The 400-year capture
+records SQL Server's observed Windows-zone outputs; it does not prove that
+rules repeat after 2500. Daily sampling could miss changes that
+cancel between sampled midnights, and minute refinement does not prove
+subminute boundaries. These limits remain visible rather than treating
 the snapshot as full named-zone compatibility.

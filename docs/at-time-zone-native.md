@@ -23,7 +23,7 @@ bounds before accepting a query. It never reads the host's time-zone database.
 
 The original named-zone table covers UTC instants from 1900-01-01 through
 2050-12-31. The separately pinned historical and future tables extend the
-combined window to 0001-01-01 through 2100-12-31. UTC itself has no offset
+combined window to 0001-01-01 through 2500-12-31. UTC itself has no offset
 transitions and accepts the full SQL temporal range; other names remain
 explicit outside the proven window. The
 underlying daily scan can miss changes that cancel before the next midnight,
