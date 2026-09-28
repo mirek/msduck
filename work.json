@@ -5104,7 +5104,7 @@
     {
       "id": "at-time-zone-catalog-reference-v1",
       "title": "Capture SQL Server AT TIME ZONE catalog-wide behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing implementation goal and first-party reference #491; no external submission is input.",
       "scope": [
         "scripts/capture-at-time-zone-catalog.mjs",
