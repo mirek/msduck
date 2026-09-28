@@ -5144,6 +5144,29 @@
       ],
       "issue": 497,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PSfj_"
+    },
+    {
+      "id": "at-time-zone-transitions-2024-v1",
+      "title": "Capture 2024 SQL Server named-zone transition boundaries",
+      "state": "ready",
+      "authorization": "Mirek's continuing owner instruction and owner-run pinned SQL Server 2025 time-zone captures; no third-party issue or review content is input.",
+      "scope": [
+        "scripts/capture-at-time-zone-transitions.mjs",
+        "reference/at-time-zone-transitions-2024.json",
+        "docs/at-time-zone-transitions.md"
+      ],
+      "acceptance": [
+        "Using the pinned SQL Server 2025 image, scan UTC hour boundaries throughout 2024 for all 141 owner-captured sys.time_zone_info names; retain every offset change detected by that scan and refine each to its first changed minute.",
+        "Retain raw TDS metadata, rows, diagnostics and completion events around detected boundaries, including before/after offsets and wall-time rendering; compare name coverage and 2024 sample offsets to reference/at-time-zone-catalog.json without normalizing differences.",
+        "Provide a container-free source/fixture consistency check with pinned digest and explicit limitations of hourly/minute sampling and host rule-version dependence. Do not claim complete historical zone rules or SQL expression support.",
+        "Use a focused owner PR with exact-head CI and verified Codex review; source/fixture checks and fresh capture must pass. No Rust or server runtime file is in scope."
+      ],
+      "dependencies": [
+        "at-time-zone-catalog-reference-v1",
+        "at-time-zone-transition-core-v1"
+      ],
+      "issue": 499,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PSnMM"
     }
   ]
 }
