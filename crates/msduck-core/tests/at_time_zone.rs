@@ -198,3 +198,42 @@ fn transition_snapshot_validation_and_range_boundaries() {
             .is_err()
     );
 }
+
+#[test]
+fn long_history_and_nearby_transitions_use_the_correct_segment() {
+    const DAY: i64 = 864_000_000_000;
+    let base = ticks("2000-01-01T00:00:00");
+    let mut transitions = Vec::new();
+    let mut before = 0;
+    for index in 0..20_000 {
+        let after = if before == 0 { 60 } else { 0 };
+        transitions.push(Transition {
+            utc_ticks: base + i64::from(index) * 2 * DAY,
+            offset_before_minutes: before,
+            offset_after_minutes: after,
+        });
+        before = after;
+    }
+    let rules = Rules::new(0, &transitions).unwrap();
+    let instant = transitions.last().unwrap().utc_ticks + DAY;
+    let expected = rules.resolve_utc(instant).unwrap();
+    assert_eq!(rules.resolve_local(expected.local_ticks).unwrap(), expected);
+
+    // Two close changes can make a wall time lie inside a nominal spring gap
+    // while a later UTC segment still supplies a valid occurrence.
+    let close = [
+        Transition {
+            utc_ticks: ticks("2024-01-01T10:00:00"),
+            offset_before_minutes: 0,
+            offset_after_minutes: 60,
+        },
+        Transition {
+            utc_ticks: ticks("2024-01-01T10:10:00"),
+            offset_before_minutes: 60,
+            offset_after_minutes: 0,
+        },
+    ];
+    let rules = Rules::new(0, &close).unwrap();
+    let local = ticks("2024-01-01T10:20:00");
+    assert_eq!(rules.resolve_local(local).unwrap().utc_ticks, local);
+}

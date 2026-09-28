@@ -5,6 +5,7 @@
 use anyhow::{Result, ensure};
 
 const MINUTE_TICKS: i64 = 600_000_000;
+const MAX_OFFSET_TICKS: i64 = 840 * MINUTE_TICKS;
 const MAX_TICKS_EXCLUSIVE: i64 = 3_155_378_976_000_000_000;
 const MAX_TRANSITIONS: usize = 100_000;
 
@@ -119,10 +120,30 @@ impl<'a> Rules<'a> {
             valid_ticks(local_ticks),
             "local time outside DATETIME2 range"
         );
-        let mut segment_start = 0;
-        let mut offset_minutes = self.initial_offset_minutes;
+        // Any matching UTC instant is at most 14 hours from the requested
+        // local time. A gap-producing transition is in that same window.
+        // Binary-search its bounds so a long zone history is not scanned for
+        // every SQL row. Only transitions within this 28-hour window remain.
+        let earliest_utc = local_ticks - MAX_OFFSET_TICKS;
+        let latest_utc = local_ticks + MAX_OFFSET_TICKS;
+        let start = self
+            .transitions
+            .partition_point(|t| t.utc_ticks < earliest_utc);
+        let end = self
+            .transitions
+            .partition_point(|t| t.utc_ticks <= latest_utc);
+        let mut segment_start = if start == 0 {
+            0
+        } else {
+            self.transitions[start - 1].utc_ticks
+        };
+        let mut offset_minutes = if start == 0 {
+            self.initial_offset_minutes
+        } else {
+            self.transitions[start - 1].offset_after_minutes
+        };
         let mut first = None;
-        for transition in self.transitions {
+        for transition in &self.transitions[start..end] {
             let utc_ticks = shifted(local_ticks, -offset_minutes)?;
             if (segment_start..transition.utc_ticks).contains(&utc_ticks) && valid_ticks(utc_ticks)
             {
@@ -138,7 +159,11 @@ impl<'a> Rules<'a> {
         }
         if first.is_none() {
             let utc_ticks = shifted(local_ticks, -offset_minutes)?;
-            if (segment_start..MAX_TICKS_EXCLUSIVE).contains(&utc_ticks) {
+            let segment_end = self
+                .transitions
+                .get(end)
+                .map_or(MAX_TICKS_EXCLUSIVE, |t| t.utc_ticks);
+            if (segment_start..segment_end).contains(&utc_ticks) && valid_ticks(utc_ticks) {
                 first = Some(Resolution {
                     utc_ticks,
                     local_ticks,
@@ -153,7 +178,7 @@ impl<'a> Rules<'a> {
         // No UTC interval contains this local wall time. A positive jump makes
         // precisely this range nonexistent; the old offset identifies the UTC
         // instant while the new offset supplies its adjusted local display.
-        for transition in self.transitions {
+        for transition in &self.transitions[start..end] {
             if transition.offset_after_minutes <= transition.offset_before_minutes {
                 continue;
             }
