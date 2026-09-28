@@ -5654,6 +5654,28 @@
       ],
       "issue": 537,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PUV32"
+    },
+    {
+      "id": "sequence-core-export-v1",
+      "title": "Export deterministic sequence allocation core",
+      "state": "backlog",
+      "authorization": "Mirek's continuing SQL Server compatibility implementation goal and confirmed Codex review finding on owner PR #538",
+      "scope": [
+        "crates/msduck-core/src/lib.rs",
+        "crates/msduck-core/tests/sequence.rs",
+        "docs/sequence-core.md"
+      ],
+      "acceptance": [
+        "Export the staged sequence module from the msduck-core library after the shared lib.rs reservation is released.",
+        "Make the retained sequence test use the public msduck_core API rather than a path-imported private module, and update documentation to reflect that production adapters can import it.",
+        "Run formatting, strict Clippy, full workspace Rust tests, independent client tests and the diagnostic audit at the exact PR head; use owner PR CI and completed Codex review before merge."
+      ],
+      "dependencies": [
+        "sequence-core-v1",
+        "legacy-datetime-export-v1"
+      ],
+      "issue": 539,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PUdSv"
     }
   ]
 }
