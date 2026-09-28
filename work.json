@@ -5039,7 +5039,7 @@
     {
       "id": "conditional-mixed-flags-v1",
       "title": "Match folded mixed-family conditional nullable flags",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Direct owner continuing implementation goal and first-party expanded reference/conditional-literal-folding.json capture; no external submission is input.",
       "scope": [
         "crates/msduck-sql/src/projection.rs",
