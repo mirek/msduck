@@ -4998,7 +4998,7 @@
     {
       "id": "conditional-literal-folding-v1",
       "title": "Match constant-folded conditional literal metadata",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Direct owner continuing implementation goal and owner-run SQL Server comparison at main 000f928; no external submission is input.",
       "scope": [
         "crates/msduck-sql/src/result_types.rs",
