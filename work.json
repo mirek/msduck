@@ -5680,7 +5680,7 @@
     {
       "id": "dateformat-reference-v1",
       "title": "Capture SQL Server SET DATEFORMAT behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server compatibility implementation goal; first-party source gap and official SQL Server SET DATEFORMAT specification",
       "scope": [
         "scripts/capture-dateformat.mjs",
