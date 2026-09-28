@@ -5263,7 +5263,7 @@
     {
       "id": "at-time-zone-names-v1",
       "title": "Capture and match AT TIME ZONE named-zone lookup",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing implementation goal and first-party SQL Server 2025 AT TIME ZONE reference series; no external content is input.",
       "scope": [
         "scripts/capture-at-time-zone-names.mjs",
