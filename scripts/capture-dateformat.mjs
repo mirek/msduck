@@ -168,7 +168,26 @@ function validate(run) {
     { ...conversionDescriptors[3], name: 'dto' },
     conversionDescriptors[4], conversionDescriptors[5],
   ], 'ISO temporal descriptors changed')
-  assert.notDeepEqual(value('mdy ambiguous'), value('dmy ambiguous'), 'ambiguous input should follow order')
+  const dateValue = (day, nanos = false) => ({
+    kind: 'date', value: `2024-${day}T00:00:00.000Z`,
+    ...(nanos ? { nanosecondsDelta: 0 } : {}),
+  })
+  const completeRow = day => [
+    dateValue(day), dateValue(day), dateValue(day, true), dateValue(day, true),
+    `2024-${day} 00:00:00.0000000 +00:00`, 0,
+  ]
+  const ambiguousRows = {
+    mdy: completeRow('03-04'),
+    dmy: completeRow('04-03'),
+    ymd: completeRow('03-04'),
+    ydm: [null, dateValue('04-03'), null, null, null, null],
+    myd: [null, dateValue('03-04'), null, null, null, null],
+    dym: [null, dateValue('04-03'), null, null, null, null],
+  }
+  for (const [format, expected] of Object.entries(ambiguousRows)) {
+    assert.deepEqual(get(`${format} ambiguous`).sets[0].rows, [expected],
+      `${format}: ambiguous temporal row changed`)
+  }
   assert.deepEqual(get('ydm same date').sets[0].rows[0].slice(0, 4), [
     { kind: 'date', value: '2024-05-04T00:00:00.000Z' },
     { kind: 'date', value: '2024-04-05T00:00:00.000Z' },
