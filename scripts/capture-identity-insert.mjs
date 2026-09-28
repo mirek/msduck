@@ -2,7 +2,7 @@
 // Capture SQL Server's session-local IDENTITY_INSERT and allocator behavior.
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -26,6 +26,14 @@ async function canonicalOutput(path) {
   catch (error) {
     if (error.code !== 'ENOENT') throw error
     return join(await realpath(dirname(path)), basename(path))
+  }
+}
+
+async function existingFile(path) {
+  try { return await stat(path) }
+  catch (error) {
+    if (error.code === 'ENOENT') return null
+    throw error
   }
 }
 
@@ -223,6 +231,10 @@ else {
   const fixturePath = fileURLToPath(fixture)
   if (await canonicalOutput(output) === await canonicalOutput(fixturePath)) {
     throw Error('capture output must not be the retained fixture')
+  }
+  const [outputFile, retainedFile] = await Promise.all([existingFile(output), existingFile(fixturePath)])
+  if (outputFile && retainedFile && outputFile.dev === retainedFile.dev && outputFile.ino === retainedFile.ino) {
+    throw Error('capture output must not be a hard link to the retained fixture')
   }
   if (process.env.MSSQL_REFERENCE_IMAGE && process.env.MSSQL_REFERENCE_IMAGE !== referenceImage) {
     throw Error('reference image must be pinned')
