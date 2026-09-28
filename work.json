@@ -5259,6 +5259,31 @@
       ],
       "issue": 507,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PS6lN"
+    },
+    {
+      "id": "at-time-zone-names-v1",
+      "title": "Capture and match AT TIME ZONE named-zone lookup",
+      "state": "ready",
+      "authorization": "Mirek's continuing implementation goal and first-party SQL Server 2025 AT TIME ZONE reference series; no external content is input.",
+      "scope": [
+        "scripts/capture-at-time-zone-names.mjs",
+        "reference/at-time-zone-names.json",
+        "src/at_time_zone_native.rs",
+        "tests/at_time_zone_names.rs",
+        "docs/at-time-zone-names.md"
+      ],
+      "acceptance": [
+        "Capture pinned SQL Server 2025 raw TDS descriptors, rows, diagnostics, messages and completion events for canonical/mixed-case Windows names, padded names, empty/unknown names, IANA aliases, Unicode spellings and dynamic NVARCHAR expressions; retain @@VERSION and image digest.",
+        "Provide container-free fixture consistency validation and a fresh pinned-image capture; compare exact differences without normalization.",
+        "Align bounded native UTF-8/UTF-16 zone lookup with captured behavior, preserving the pinned 141-name catalog and rejecting unproven aliases; add SQL-facing regressions for successful rows/descriptors and supportable errors.",
+        "Document unresolved exact 9820/TDS diagnostic differences. If runtime semantics change, run formatting, strict Clippy, workspace Rust tests, independent client tests and diagnostic audit on exact head; use owner PR with required CI and completed Codex review."
+      ],
+      "dependencies": [
+        "at-time-zone-lowering-v1",
+        "at-time-zone-native-v1"
+      ],
+      "issue": 509,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PS9YU"
     }
   ]
 }
