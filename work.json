@@ -4979,7 +4979,7 @@
     {
       "id": "literal-result-width-v1",
       "title": "Declare direct string literal result widths",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing implementation goal and first-party comparison at main 000f928; no external submission is input.",
       "scope": [
         "crates/msduck-sql/src/result_types.rs",
