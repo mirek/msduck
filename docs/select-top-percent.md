@@ -104,14 +104,17 @@ the two-column metadata token, and reusing the handle then succeeds.
 - Outside a subquery, a TOP PERCENT/WITH TIES quantity cannot reference a
   column (error 4115), use an aggregate (162, "Invalid expression in a TOP or
   OFFSET clause.") or use a window function (4108). All three are class 15,
-  state 1, as captured from SQL Server 2022. Variables and self-contained
-  subqueries are accepted.
+  state 1, as captured from SQL Server 2022. Variables, self-contained
+  subqueries and references qualified by an outer-scope name (correlation)
+  are accepted. An unqualified column is taken to belong to this SELECT, as
+  SQL Server binds inner scopes first; an unqualified outer-scope column is
+  therefore rejected.
 - DISTINCT matches a bare ORDER BY column to a qualified select-list column by
   output name, as SQL Server does. Inside an expression, an unqualified
   reference matches a qualified one only when the query has a single source; a
-  parenthesized join counts as several.
-  With several sources, SQL Server 2022 reports 209 and then 145; msduck
-  reports 145 only.
+  parenthesized join counts as several. With several sources, whether the name
+  is ambiguous depends on the catalog, so msduck rejects such keys with an
+  explicit "qualify the column" error.
 - ORDER BY keys that are, or resolve to, a window function are rejected
   explicitly. The ranking window cannot nest another window.
 - Percentages are computed in double precision. Every captured boundary is

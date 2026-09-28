@@ -306,17 +306,18 @@ fn distinct_keys_match_qualified_and_unqualified_columns() {
         lower("SELECT DISTINCT TOP (50) PERCENT a.score FROM a CROSS JOIN b ORDER BY score")
             .is_ok()
     );
-    assert_eq!(
-        lower("SELECT DISTINCT TOP (50) PERCENT a.score + 1 AS x FROM a CROSS JOIN b ORDER BY score + 1")
-            .unwrap_err(),
-        top::DISTINCT_ORDER
-    );
+    // Whether it is ambiguous depends on the catalog, so it is unsupported.
+    let error = lower(
+        "SELECT DISTINCT TOP (50) PERCENT a.score + 1 AS x FROM a CROSS JOIN b ORDER BY score + 1",
+    )
+    .unwrap_err();
+    assert!(error.contains("qualify the column"), "{error}");
     // A parenthesized join is still two sources.
-    assert_eq!(
-        lower("SELECT DISTINCT TOP (50) PERCENT a.score + 1 AS x FROM (a CROSS JOIN b) ORDER BY score + 1")
-            .unwrap_err(),
-        top::DISTINCT_ORDER
-    );
+    let error = lower(
+        "SELECT DISTINCT TOP (50) PERCENT a.score + 1 AS x FROM (a CROSS JOIN b) ORDER BY score + 1",
+    )
+    .unwrap_err();
+    assert!(error.contains("qualify the column"), "{error}");
     // Expressions match when their column references do.
     for sql in [
         "SELECT DISTINCT TOP (50) PERCENT t.score + 1 AS x FROM t ORDER BY score + 1",
@@ -420,10 +421,30 @@ fn column_references_in_top_quantities_use_sql_server_error_4115() {
     }
     // Variables and self-contained subqueries are allowed.
     assert!(lower("SELECT TOP (@n) PERCENT id FROM t ORDER BY id").is_ok());
+    // Qualified outer-scope references are correlations, which SQL Server
+    // allows; qualifiers naming this SELECT's sources are not.
+    assert!(lower("SELECT TOP (o.n) PERCENT id FROM t ORDER BY id").is_ok());
+    for sql in [
+        "SELECT TOP (t.n) PERCENT id FROM t ORDER BY id",
+        "SELECT TOP (x.n) PERCENT id FROM t AS x ORDER BY id",
+        "SELECT TOP (b.n) PERCENT id FROM (a JOIN b ON a.k = b.k) ORDER BY id",
+        "SELECT TOP (q.n) PERCENT id FROM (SELECT 1 AS n, 2 AS id) AS q ORDER BY id",
+    ] {
+        assert!(lower(sql).unwrap_err().contains("is not allowed"), "{sql}");
+    }
     assert!(
         lower(
             "SELECT TOP ((SELECT count(*) FROM u WHERE u.k = 1)) WITH TIES id FROM t ORDER BY id"
         )
         .is_ok()
+    );
+}
+
+#[test]
+fn window_errors_outside_top_keep_their_own_class() {
+    // Only the TOP quantity form is class 15; other 4108 errors are class 16.
+    assert!(
+        top::diagnostic("Windowed functions can only appear in the SELECT or ORDER BY clauses.")
+            .is_none()
     );
 }

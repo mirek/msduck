@@ -162,9 +162,13 @@ const VOLATILE: [&str; 12] = [
 ];
 const WINDOW_KEY: &str = "unsupported TOP PERCENT/WITH TIES ordering by a window function";
 const AMBIGUOUS_PREFIX: &str = "Ambiguous column name '";
+const MULTI_SOURCE_DISTINCT: &str = "unsupported TOP DISTINCT ordering by an expression with an unqualified column over several sources; qualify the column as in the select list";
 const COLUMN_IN_TOP_PREFIX: &str = "The reference to column \"";
 const INVALID_TOP: &str = "Invalid expression in a TOP or OFFSET clause.";
-const WINDOW_IN_TOP: &str = "Windowed functions can only appear in the SELECT or ORDER BY clauses.";
+/// SQL Server reports 4108 with class 15 in a TOP quantity but class 16
+/// elsewhere, so the TOP case carries a marker that `diagnostic` strips.
+const WINDOW_IN_TOP: &str =
+    "TOP quantity: Windowed functions can only appear in the SELECT or ORDER BY clauses.";
 /// T-SQL aggregates; SQL Server rejects them in a TOP quantity.
 const AGGREGATES: [&str; 15] = [
     "count",
@@ -199,6 +203,7 @@ pub fn diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
         _ => None,
     };
     if let Some(number) = class_15 {
+        let message = message.strip_prefix("TOP quantity: ").unwrap_or(message);
         let mut error = msduck_core::diagnostic::SqlError::new(number, 1, message);
         error.severity = 15;
         return Some(error);
@@ -469,13 +474,17 @@ fn alias(expr: &Expr, projection: &[SelectItem]) -> Result<Option<usize>, String
 
 /// The SQL Server compile error for the first column reference, aggregate or
 /// window function in a TOP quantity outside any subquery, as captured from
-/// SQL Server 2022. Variables (`@name`) are not columns.
-fn invalid_quantity(quantity: &Expr) -> Option<String> {
-    struct Finder {
+/// SQL Server 2022. Variables (`@name`) are not columns, and a reference
+/// qualified by a name that is not a source of this SELECT is an outer-scope
+/// correlation, which SQL Server allows. An unqualified name is assumed to
+/// bind to this SELECT's sources, as SQL Server binds inner scopes first.
+fn invalid_quantity(quantity: &Expr, sources: &[String]) -> Option<String> {
+    struct Finder<'a> {
         depth: usize,
         found: Option<String>,
+        sources: &'a [String],
     }
-    impl Visitor for Finder {
+    impl Visitor for Finder<'_> {
         type Break = ();
         fn pre_visit_query(&mut self, _: &Query) -> std::ops::ControlFlow<()> {
             self.depth += 1;
@@ -488,6 +497,14 @@ fn invalid_quantity(quantity: &Expr) -> Option<String> {
         fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
             let name = match expr {
                 Expr::Identifier(id) => Some(id),
+                Expr::CompoundIdentifier(ids)
+                    if ids.len() >= 2
+                        && !self
+                            .sources
+                            .contains(&ids[ids.len() - 2].value.to_lowercase()) =>
+                {
+                    None
+                }
                 Expr::CompoundIdentifier(ids) => ids.last(),
                 _ => None,
             };
@@ -520,9 +537,60 @@ fn invalid_quantity(quantity: &Expr) -> Option<String> {
     let mut finder = Finder {
         depth: 0,
         found: None,
+        sources,
     };
     let _ = quantity.visit(&mut finder);
     finder.found
+}
+
+/// Lower-case names a column of this SELECT can be qualified with: table
+/// names and aliases, including those inside parenthesized joins.
+fn source_names(from: &[TableWithJoins]) -> Vec<String> {
+    fn factor(relation: &TableFactor, names: &mut Vec<String>) {
+        match relation {
+            TableFactor::Table { name, alias, .. } => {
+                if let Some(ObjectNamePart::Identifier(last)) = name.0.last() {
+                    names.push(last.value.to_lowercase());
+                }
+                if let Some(alias) = alias {
+                    names.push(alias.name.value.to_lowercase());
+                }
+            }
+            TableFactor::NestedJoin {
+                table_with_joins,
+                alias,
+            } => {
+                tables(std::slice::from_ref(table_with_joins.as_ref()), names);
+                if let Some(alias) = alias {
+                    names.push(alias.name.value.to_lowercase());
+                }
+            }
+            TableFactor::Derived {
+                alias: Some(alias), ..
+            }
+            | TableFactor::TableFunction {
+                alias: Some(alias), ..
+            }
+            | TableFactor::Function {
+                alias: Some(alias), ..
+            }
+            | TableFactor::UNNEST {
+                alias: Some(alias), ..
+            } => names.push(alias.name.value.to_lowercase()),
+            _ => {}
+        }
+    }
+    fn tables(from: &[TableWithJoins], names: &mut Vec<String>) {
+        for table in from {
+            factor(&table.relation, names);
+            for join in &table.joins {
+                factor(&join.relation, names);
+            }
+        }
+    }
+    let mut names = vec![];
+    tables(from, &mut names);
+    names
 }
 
 /// A ranking window cannot order by another window function.
@@ -601,7 +669,24 @@ fn distinct_keys(
                     )
                 })
             })
-            .ok_or(DISTINCT_ORDER)?;
+            .ok_or_else(|| {
+                // Deciding whether an unqualified reference inside an
+                // expression is ambiguous needs the catalog; with several
+                // sources, say so instead of claiming SQL Server's 145.
+                let relaxed = !single_source
+                    && projection.iter().any(|item| {
+                        same_expression(
+                            projected(item).expect("checked projection"),
+                            &key.expr,
+                            true,
+                        )
+                    });
+                if relaxed {
+                    MULTI_SOURCE_DISTINCT.to_owned()
+                } else {
+                    DISTINCT_ORDER.to_owned()
+                }
+            })?;
             let name = output_name(&projection[index])
                 .ok_or("unsupported TOP DISTINCT ordering by an unnamed select-list item")?;
             let duplicates = projection
@@ -662,7 +747,7 @@ pub fn ranked(query: &mut Query) -> Result<(), String> {
     };
     // The lowered quantity sits beside the source rows, where a column
     // reference would bind per row and an aggregate would see one row.
-    if let Some(error) = invalid_quantity(&quantity) {
+    if let Some(error) = invalid_quantity(&quantity, &source_names(&select.from)) {
         return Err(error);
     }
     if select.qualify.is_some() {
