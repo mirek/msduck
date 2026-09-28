@@ -5802,7 +5802,7 @@
     {
       "id": "identity-insert-errors-reference-v1",
       "title": "Capture IDENTITY_INSERT failure allocation and ON/OFF edge semantics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server compatibility goal and prior first-party IDENTITY_INSERT captures; independent SQL Server reference evidence for runtime integration.",
       "scope": [
         "scripts/capture-identity-insert-errors.mjs",
