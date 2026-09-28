@@ -5338,7 +5338,7 @@
     {
       "id": "at-time-zone-boundary-refresh-v1",
       "title": "Refresh time-zone boundary regression for future rules",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing implementation goal and first-party SQL Server 2025 reference work; no external content is input.",
       "scope": [
         "tests/at_time_zone_utc_range.rs",
