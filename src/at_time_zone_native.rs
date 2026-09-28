@@ -125,6 +125,16 @@ fn zone_name(
         .to_owned())
 }
 
+fn lookup_key(name: &str) -> String {
+    // SQL Server's Windows-zone lookup ignores NUL code units anywhere in the
+    // supplied name. Retain the original string for diagnostics; do not treat
+    // NUL as a terminator, since a suffix after NUL still affects lookup.
+    name.chars()
+        .filter(|character| *character != '\0')
+        .collect::<String>()
+        .to_ascii_lowercase()
+}
+
 struct Convert<const SCALE: u8, const INSTANT: bool>;
 impl<const SCALE: u8, const INSTANT: bool> VScalar for Convert<SCALE, INSTANT> {
     type State = Catalog;
@@ -181,10 +191,7 @@ impl<const SCALE: u8, const INSTANT: bool> VScalar for Convert<SCALE, INSTANT> {
                 return Err("invalid temporal payload".into());
             }
             let zone_name = zone_name(&name, unicode, row, len, stored.as_ref())?;
-            let zone = catalog
-                .0
-                .get(&zone_name.to_ascii_lowercase())
-                .ok_or(INVALID_ZONE)?;
+            let zone = catalog.0.get(&lookup_key(&zone_name)).ok_or(INVALID_ZONE)?;
             let rules = Rules::new(zone.initial, &zone.transitions)?;
             let value = unsafe { ticks.as_slice_with_len::<i64>(len)[row] };
             if INSTANT {
@@ -308,6 +315,23 @@ mod tests {
                     expected_offset
                 ),
                 "{local} in {zone}"
+            );
+        }
+    }
+
+    #[test]
+    fn name_lookup_ignores_nul_without_truncating_or_trimming() {
+        let db = db();
+        let local = "2024-07-01T12:34:56.1234567";
+        let utc = converted(&db, local, "UTC");
+        for name in ["uTc", "UT\0C", "\0UTC", "UTC\0"] {
+            assert_eq!(converted(&db, local, name), utc, "{name:?}");
+        }
+        for name in ["UTC\0garbage", " UTC", "UTC ", "Etc/UTC", "ＵＴＣ"] {
+            let sql = "SELECT __msduck_at_time_zone_local_7(__msduck_datetime2_cast_7(?1),?2)";
+            assert!(
+                db.query_row(sql, [local, name], |_| Ok(())).is_err(),
+                "{name:?}"
             );
         }
     }
