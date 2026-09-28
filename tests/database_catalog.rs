@@ -132,7 +132,7 @@ fn invalid_database_operations_use_sql_server_diagnostics() {
             )
         );
     }
-    for name in ["memory", "system", "temp"] {
+    for name in ["main", "memory", "system", "temp"] {
         assert!(catalog.create(&db, name).is_err());
     }
     assert!(catalog.create(&db, "").is_err());
@@ -518,4 +518,42 @@ fn primaries_sharing_a_stem_keep_separate_database_files() {
     assert!(directory.join("tenant.duckdb.5.sales.duckdb").exists());
     drop((first, second));
     std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
+fn concurrent_create_and_drop_leave_a_consistent_catalog() {
+    let server = Server::open(":memory:").unwrap();
+    let mut workers = vec![];
+    for worker in 0..4 {
+        let db = server.connection().unwrap();
+        workers.push(std::thread::spawn(move || {
+            for _ in 0..10 {
+                let catalog = db.databases().clone();
+                if worker % 2 == 0 {
+                    let _ = catalog.create(&db, "race");
+                } else {
+                    let _ = catalog.remove(&db, "race");
+                }
+            }
+        }));
+    }
+    for worker in workers {
+        worker.join().unwrap();
+    }
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    // The registry, the attachment and the file agree afterwards.
+    let listed = catalog.list(&db).unwrap().iter().any(|d| d.name == "race");
+    let attached: i64 = db
+        .query_row(
+            "SELECT count(*) FROM duckdb_databases() WHERE database_name = 'race'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(listed, attached == 1);
+    if listed {
+        catalog.remove(&db, "race").unwrap();
+    }
+    catalog.create(&db, "race").unwrap();
 }

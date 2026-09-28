@@ -22,7 +22,7 @@ const FIRST_USER_ID: i32 = 5;
 /// System databases msduck does not provide; their names stay reserved.
 const RESERVED: [&str; 4] = ["master", "tempdb", "model", "msdb"];
 /// DuckDB's own catalogs cannot be reused as attachment aliases.
-const BACKEND_RESERVED: [&str; 3] = ["memory", "system", "temp"];
+const BACKEND_RESERVED: [&str; 4] = ["main", "memory", "system", "temp"];
 const COLLATION: &str = "SQL_Latin1_General_CP1_CI_AS";
 const MAX_NAME: usize = 128;
 
@@ -36,6 +36,9 @@ pub struct Catalog {
     prefix: String,
     /// The directory belongs to an in-memory server and is removed with it.
     temporary: bool,
+    /// Serializes CREATE and DROP: each spans a registry change, file work
+    /// and an attach or detach that the registry key alone cannot order.
+    changes: std::sync::Mutex<()>,
 }
 
 impl Drop for Catalog {
@@ -117,6 +120,7 @@ impl Catalog {
                 directory,
                 prefix: "msduck".into(),
                 temporary: true,
+                changes: std::sync::Mutex::new(()),
             }
         } else {
             let file = Path::new(path);
@@ -129,6 +133,7 @@ impl Catalog {
                     .context("database path needs a UTF-8 file name")?
                     .to_owned(),
                 temporary: false,
+                changes: std::sync::Mutex::new(()),
             }
         };
         owner.execute_batch(&format!(
@@ -242,6 +247,10 @@ impl Catalog {
     /// a transaction because DuckDB attaches catalogs outside transactions.
     pub fn create(&self, db: &Connection, name: &str) -> Result<Database> {
         validate(name)?;
+        let _change = self
+            .changes
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let name_key = key(name);
         if RESERVED.contains(&name_key.as_str()) || self.registered(db, &name_key)? {
             return Err(exists(name));
@@ -310,6 +319,10 @@ impl Catalog {
     /// Detach a user database and remove its storage. The caller must make
     /// sure no session is using it; the connection must not be using it.
     pub fn remove(&self, db: &Connection, name: &str) -> Result<()> {
+        let _change = self
+            .changes
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let name_key = key(name);
         if name_key == MASTER {
             bail!(SqlError::new(
