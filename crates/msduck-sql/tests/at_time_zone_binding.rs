@@ -45,7 +45,8 @@ fn retained_result_descriptors_and_input_errors() {
                 assert_eq!(column["type"], "DateTimeOffset", "{name}");
                 assert_eq!(column["scale"], bound.result_scale(), "{name}");
                 assert!(bound.nullable, "{name}");
-                assert_eq!(column["flags"].as_u64().unwrap() & 1, 1, "{name}");
+                let expected_flags = if name == "invalid zone" { 33 } else { 1 };
+                assert_eq!(column["flags"], expected_flags, "{name}");
                 if name != "invalid zone" {
                     assert!(reference["errors"].as_array().unwrap().is_empty(), "{name}");
                 }
