@@ -4975,6 +4975,25 @@
       ],
       "issue": 482,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PR5IZ"
+    },
+    {
+      "id": "literal-result-width-v1",
+      "title": "Declare direct string literal result widths",
+      "state": "ready",
+      "authorization": "Direct owner continuing implementation goal and first-party comparison at main 000f928; no external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/result_types.rs",
+        "crates/msduck-sql/tests/literal_result_metadata.rs"
+      ],
+      "acceptance": [
+        "Infer SQL Server's bounded VARCHAR/NVARCHAR widths for direct projected string literals, including empty strings, supplementary Unicode, empty result sets and literal UNION ALL columns, using existing deterministic storage rules.",
+        "Keep wildcard and unknown expression barriers; do not broadly change conditional inference because first-party captures show distinct constant-folded metadata that requires a separate task.",
+        "Add focused pure SQL crate regressions, replay the captured cases against local client metadata, and run formatting, workspace Rust tests, strict Clippy, independent tedious tests and diagnostic local audit on the exact revision.",
+        "Open an owner-authored PR with exact-head CI and verified Codex review, then merge and mark Done under the contribution protocol."
+      ],
+      "dependencies": [],
+      "issue": 483,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PR6rx"
     }
   ]
 }
