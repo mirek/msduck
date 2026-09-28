@@ -5215,6 +5215,31 @@
       ],
       "issue": 503,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PSugD"
+    },
+    {
+      "id": "at-time-zone-lowering-v1",
+      "title": "Wire captured AT TIME ZONE temporal expressions into SQL execution",
+      "state": "ready",
+      "authorization": "Mirek's continuing implementation goal and first-party pinned SQL Server references #491 and #501 and merged adapter #503; no third-party content is input.",
+      "scope": [
+        "src/switchoffset.rs",
+        "crates/msduck-sql/src/datetimeoffset_compare.rs",
+        "tests/at_time_zone.rs",
+        "docs/at-time-zone-lowering.md"
+      ],
+      "acceptance": [
+        "Lower Expr::AtTimeZone through the existing root translator hook for captured DATETIME2(s) and DATETIMEOFFSET(s) inputs, selecting local-wall versus instant conversion from declared shape, preserving scales 0-7 and single evaluation.",
+        "Infer typed DATETIMEOFFSET(s) metadata for original and lowered successful, NULL and empty expressions without inspecting runtime values.",
+        "Replay retained SQL Server 2025 UTC, gap/overlap, chaining and prepared evidence through root server tests; preserve invalid-zone and descriptor differences explicitly.",
+        "Run formatting, workspace Rust tests, strict Clippy, independent clients and local audit on exact head; use owner PR with required CI and completed Codex review.",
+        "Document legacy DATETIME/SMALLDATETIME, unsupported input types, unproven dates and exact 8116/9820 integration as remaining work; do not claim complete AT TIME ZONE support."
+      ],
+      "dependencies": [
+        "at-time-zone-native-v1",
+        "at-time-zone-binding-v1"
+      ],
+      "issue": 505,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PS0iq"
     }
   ]
 }
