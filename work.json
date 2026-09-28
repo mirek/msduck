@@ -5737,7 +5737,7 @@
     {
       "id": "identity-insert-runtime-plan-v1",
       "title": "Plan SET IDENTITY_INSERT runtime from captured SQL Server behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party follow-up to the owner-authored identity-insert-reference-v1 capture, not an external submission.",
       "scope": [
         "docs/identity-insert-runtime-plan.md"
