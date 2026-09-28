@@ -81,7 +81,13 @@ fn unicode_promotion_changes_nullable_flag_after_four_thousand_characters() {
     let catalog = catalog();
     // Pinned SQL Server 2025 boundary capture also records row lengths:
     // artifacts/compatibility/mixed-literal-boundary-sqlserver-2025.jsonl.
-    for (width, nullable) in [(3999, false), (4000, false), (4001, true)] {
+    for (width, nullable) in [
+        (0, false),
+        (1, false),
+        (3999, false),
+        (4000, false),
+        (4001, true),
+    ] {
         let literal = "a".repeat(width);
         for (kind, sql) in [
             (

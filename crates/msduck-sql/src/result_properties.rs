@@ -329,10 +329,10 @@ pub(crate) fn bounded_literal_unicode_promotion<'a>(
         }
         match crate::expression_metadata::storage::kind(expr, &Default::default(), &|_| None)? {
             DataType::Varchar(Some(CharacterLength::IntegerLength { length, .. })) => {
-                Some((Family::Varchar, u16::try_from(length).ok()?))
+                Some((Family::Varchar, u16::try_from(length).ok()?.max(1)))
             }
             DataType::Nvarchar(Some(CharacterLength::IntegerLength { length, .. })) => {
-                Some((Family::Nvarchar, u16::try_from(length).ok()?))
+                Some((Family::Nvarchar, u16::try_from(length).ok()?.max(1)))
             }
             _ => None,
         }
