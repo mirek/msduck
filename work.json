@@ -5219,7 +5219,7 @@
     {
       "id": "at-time-zone-lowering-v1",
       "title": "Wire captured AT TIME ZONE temporal expressions into SQL execution",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing implementation goal and first-party pinned SQL Server references #491 and #501 and merged adapter #503; no third-party content is input.",
       "scope": [
         "src/switchoffset.rs",
