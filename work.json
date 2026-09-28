@@ -4869,7 +4869,7 @@
     {
       "id": "decompress-core-v1",
       "title": "Implement bounded deterministic DECOMPRESS decoder",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing implementation goal and first-party COMPRESS/DECOMPRESS reference successor; no external submission is input.",
       "scope": [
         "crates/msduck-core/src/decompress.rs",
