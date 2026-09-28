@@ -1,6 +1,7 @@
 // Capture catalog-wide SQL Server time-zone evidence on the Docker-capable
 // reference host. --check validates the retained fixture without a container.
 import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import { withReferenceContainer, referenceImage } from './lib/reference-container.mjs'
 import { connect, command, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
@@ -9,6 +10,8 @@ import { capture, canonical } from './lib/compatibility.mjs'
 const checking = process.argv[2] === '--check'
 const output = (checking ? process.argv[3] : process.argv[2]) ?? 'reference/at-time-zone-catalog.json'
 const namesQuery = 'SELECT name FROM sys.time_zone_info ORDER BY name'
+const pinnedNameCount = 141
+const pinnedNamesSha256 = '28653b74ec07656b5b49341691a0e37f8c08cdcd1c0238e2200266d7ecd66879'
 const dates = [
   '1900-01-15T12:00:00',
   '1970-07-15T12:00:00',
@@ -31,11 +34,12 @@ function namesFrom(result, column) {
   return names
 }
 
-function validate(fixture) {
+function validate(fixture, pinNames = false) {
   if (fixture.image !== referenceImage || !fixture.version?.sets?.length) throw new Error('reference image or version is missing')
   if (fixture.zoneNames.query !== namesQuery || !isDeepStrictEqual(fixture.results.map(({ name, query }) => ({ name, query })), cases)) throw new Error('queries differ from source')
   const names = namesFrom(fixture.zoneNames.reference, 0)
-  if (names.length < 100) throw new Error('unexpectedly small SQL Server time-zone catalog')
+  if (!names.length) throw new Error('empty SQL Server time-zone catalog')
+  if (pinNames && (names.length !== pinnedNameCount || createHash('sha256').update(JSON.stringify(names)).digest('hex') !== pinnedNamesSha256)) throw new Error('zone-name set differs from the retained SQL Server capture')
   if (fixture.zoneNames.reference.sets[0].columns.length !== 1) throw new Error('incomplete zone-name descriptor')
   for (const entry of fixture.results) {
     const reference = entry.reference
@@ -48,7 +52,7 @@ function validate(fixture) {
 
 if (checking) {
   const fixture = JSON.parse(await readFile(output, 'utf8'))
-  console.log(`checked ${validate(fixture)} zones across ${cases.length} conversions`)
+  console.log(`checked ${validate(fixture, true)} zones across ${cases.length} conversions`)
 } else {
   await refuseExistingFixture(output)
   await withReferenceContainer(async (config, container) => {
