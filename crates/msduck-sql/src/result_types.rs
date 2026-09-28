@@ -255,7 +255,8 @@ fn has_max_operand(values: &[&Expr]) -> bool {
 
 // SQL Server keeps the selected Unicode literal's width. If an ANSI branch
 // wins while another branch is Unicode, conversion to the common Unicode
-// family retains the widest branch declaration before constant selection.
+// family retains the widest branch declaration before constant selection,
+// capped at NVARCHAR's 4,000-character bound.
 fn folded_character_result(selected: Option<&Expr>, values: &[&Expr]) -> Option<Descriptor> {
     let declarations: Vec<_> = values.iter().map(|value| projected(value)).collect();
     let mut ansi = false;
@@ -288,7 +289,7 @@ fn folded_character_result(selected: Option<&Expr>, values: &[&Expr]) -> Option<
             })
             | Descriptor::Null => Some(Descriptor::Known(ResultType::character(
                 Family::Nvarchar,
-                Length::Bounded(widest),
+                Length::Bounded(widest.min(4000)),
             ))),
             _ => None,
         };

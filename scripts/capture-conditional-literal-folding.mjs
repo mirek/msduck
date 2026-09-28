@@ -10,6 +10,7 @@ import { start } from '../tests/support/client.mjs'
 
 const replay = process.argv[2] === '--replay'
 const output = (replay ? process.argv[3] : process.argv[2]) ?? 'reference/conditional-literal-folding.json'
+const longAnsi = 'a'.repeat(5000)
 const cases = [
   ['CASE true Unicode', "SELECT CASE WHEN 1=1 THEN N'a' ELSE N'longer' END AS value"],
   ['CASE false Unicode', "SELECT CASE WHEN 1=0 THEN N'a' ELSE N'longer' END AS value"],
@@ -20,6 +21,7 @@ const cases = [
   ['mixed family selected ANSI', "SELECT CASE WHEN 1=1 THEN 'a' ELSE N'longer' END AS case_result,IIF(1=1,'a',N'longer') AS iif_result,COALESCE('a',N'longer') AS coalesce_result"],
   ['mixed family selected Unicode', "SELECT CASE WHEN 1=1 THEN N'a' ELSE 'longer' END AS case_result,IIF(1=1,N'a','longer') AS iif_result,COALESCE(N'a','longer') AS coalesce_result"],
   ['mixed family three branches', "SELECT CASE WHEN 1=1 THEN 'a' WHEN 1=0 THEN 'verylong' ELSE N'x' END AS case_result,COALESCE('a','verylong',N'x') AS coalesce_result"],
+  ['mixed family over Unicode bound', `SELECT CASE WHEN 1=1 THEN '${longAnsi}' ELSE N'x' END AS value`],
   ['mixed family typed NULL', "SELECT CASE WHEN 1=1 THEN 'a' ELSE CAST(NULL AS NVARCHAR(12)) END AS case_result,IIF(1=1,'a',CAST(NULL AS NVARCHAR(12))) AS iif_result,COALESCE('a',CAST(NULL AS NVARCHAR(12))) AS coalesce_result"],
   ['CASE typed NULL', "SELECT CASE WHEN 1=1 THEN CAST(NULL AS NVARCHAR(12)) ELSE N'🦆' END AS value"],
   ['CASE MAX branch', "SELECT CASE WHEN 1=1 THEN N'a' ELSE CAST(N'longer' AS NVARCHAR(MAX)) END AS value"],
