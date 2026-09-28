@@ -4953,6 +4953,28 @@
       ],
       "issue": 480,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PR2Tr"
+    },
+    {
+      "id": "hashbytes-exports-v1",
+      "title": "Export deterministic HASHBYTES modules after shared-file claims finish",
+      "state": "backlog",
+      "authorization": "Direct owner continuing implementation goal using retained first-party HASHBYTES capture and merged deterministic modules; no external submission is input.",
+      "scope": [
+        "crates/msduck-core/src/lib.rs",
+        "crates/msduck-sql/src/lib.rs"
+      ],
+      "acceptance": [
+        "After compression-exports-v1 completes, promote this task to ready through the protected registry and acquire a new exclusive claim. Do not adopt or supersede other workers' claims.",
+        "Export the existing deterministic hashbytes digest and SQL-binding modules without changing their semantics or unrelated exports. Preserve SQL-to-core dependency direction and keep DuckDB/Arrow/I/O out of both crates.",
+        "Run formatting, strict workspace Clippy, workspace Rust tests and independent client tests on the exact revision. Open an owner PR linked to issue 482, obtain exact-head CI and Codex review, then merge and mark Done. Runtime lowering, collation-aware source bytes and TDS metadata remain separate work."
+      ],
+      "dependencies": [
+        "compression-exports-v1",
+        "hashbytes-core-v1",
+        "hashbytes-binding-v1"
+      ],
+      "issue": 482,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PR5IZ"
     }
   ]
 }
