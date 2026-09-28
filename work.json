@@ -5597,7 +5597,7 @@
     {
       "id": "at-time-zone-catalog-cache-v1",
       "title": "Reuse validated AT TIME ZONE catalog across connections",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing implementation goal and owner-authored issue #533; current native adapter loads the same immutable 345,109-transition table for every connection.",
       "scope": [
         "src/at_time_zone_native.rs",
