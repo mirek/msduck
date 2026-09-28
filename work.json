@@ -5240,6 +5240,25 @@
       ],
       "issue": 505,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PS0iq"
+    },
+    {
+      "id": "at-time-zone-native-doc-v1",
+      "title": "Align native AT TIME ZONE adapter notes with SQL lowering",
+      "state": "ready",
+      "authorization": "Mirek's continuing implementation goal and verified owner-initiated Codex finding on owner PR #506, review commit dcb94b0; no third-party input.",
+      "scope": [
+        "docs/at-time-zone-native.md"
+      ],
+      "acceptance": [
+        "Remove stale status text that says no SQL lowering calls the native adapter; link the SQL-facing lowering guide and describe captured DATETIME2/DATETIMEOFFSET support conditionally on PR #506 landing.",
+        "Preserve explicit gaps for legacy temporal inputs, nondeclared columns, exact 8116/9820 diagnostics and dates outside the pinned snapshot.",
+        "Source-review documentation and use an owner PR with required CI and completed Codex review; no Rust or reference fixture changes."
+      ],
+      "dependencies": [
+        "at-time-zone-native-v1"
+      ],
+      "issue": 507,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PS6lN"
     }
   ]
 }
