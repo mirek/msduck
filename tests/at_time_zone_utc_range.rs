@@ -8,7 +8,7 @@ fn first_offset(bytes: &[u8], scale: u8) -> Option<DateTimeOffset> {
 }
 
 #[test]
-fn utc_uses_the_full_sql_temporal_range_without_extrapolating_other_zones() {
+fn utc_uses_the_full_sql_temporal_range() {
     let fixture: serde_json::Value =
         serde_json::from_str(include_str!("../reference/at-time-zone-utc-range.json")).unwrap();
     let expected = [
@@ -39,13 +39,13 @@ fn utc_uses_the_full_sql_temporal_range_without_extrapolating_other_zones() {
         assert_eq!(reference["sets"][0]["columns"][0]["scale"], 7, "{name}");
         assert_eq!(reference["sets"][0]["columns"][0]["flags"], 33, "{name}");
         assert!(reference["errors"].as_array().unwrap().is_empty(), "{name}");
-        let (bytes, ok) = session.batch_response(
-            case["query"].as_str().unwrap(),
-            &Default::default(),
-            false,
-            None,
-        );
         if let Some(expected) = expected.get(index) {
+            let (bytes, ok) = session.batch_response(
+                case["query"].as_str().unwrap(),
+                &Default::default(),
+                false,
+                None,
+            );
             assert!(ok, "{name}: {bytes:?}");
             assert!(bytes.windows(2).any(|pair| pair == [0x2b, 7]), "{name}");
             assert_eq!(
@@ -59,11 +59,33 @@ fn utc_uses_the_full_sql_temporal_range_without_extrapolating_other_zones() {
                 "{name}"
             );
         } else {
-            assert!(
-                !ok,
-                "uncaptured named-zone rules must remain explicit: {name}"
+            // These SQL Server rows are retained evidence for a separately
+            // captured named-zone extension, whose positive regression owns
+            // the server-side assertion.
+            assert!(name.contains("Pacific"), "{name}");
+            assert_eq!(
+                reference["sets"][0]["rows"].as_array().unwrap().len(),
+                1,
+                "{name}"
             );
         }
+    }
+}
+
+#[test]
+fn named_zones_beyond_the_planned_rule_window_remain_explicit() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    for sql in [
+        "SELECT CAST('2101-01-01T12:00:00' AS DATETIME2(7)) AT TIME ZONE 'Pacific Standard Time'",
+        "SELECT CAST('2101-01-01T12:00:00+00:00' AS DATETIMEOFFSET(7)) AT TIME ZONE 'Pacific Standard Time'",
+    ] {
+        assert!(
+            !session
+                .batch_response(sql, &Default::default(), false, None)
+                .1,
+            "{sql}"
+        );
     }
 }
 
