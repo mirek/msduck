@@ -4828,7 +4828,7 @@
     {
       "id": "json-extraction-document-diagnostic-v1",
       "title": "Preserve captured JSON extraction malformed-document diagnostics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server-compatible Rust/DuckDB goal; owner-run JSON advanced-path and wildcard reference fixtures; owner-authored issue #471. No third-party content is input.",
       "scope": [
         "crates/msduck-core/src/json_path.rs",
@@ -4853,7 +4853,7 @@
     {
       "id": "json-document-client-assertion-v1",
       "title": "Align tedious 13609 assertion with captured SQL Server diagnostic",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server compatibility goal; owner-run SQL Server 2025 advanced-path fixture and owner PR #472 client failure; owner-authored issue #473.",
       "scope": [
         "tests/tedious.test.mjs"
