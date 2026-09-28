@@ -5308,6 +5308,32 @@
       ],
       "issue": 511,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PTDsZ"
+    },
+    {
+      "id": "at-time-zone-future-rules-v1",
+      "title": "Extend captured AT TIME ZONE named-zone rules through 2100",
+      "state": "ready",
+      "authorization": "Mirek's continuing implementation goal and first-party SQL Server 2025 reference work; no external content is input.",
+      "scope": [
+        "scripts/capture-at-time-zone-history-2051-2100.mjs",
+        "reference/at-time-zone-history-2051-2100.json",
+        "scripts/generate-at-time-zone-future-rules.mjs",
+        "src/at_time_zone_rules_2051_2100.json",
+        "src/at_time_zone_native.rs",
+        "tests/at_time_zone_future.rs",
+        "docs/at-time-zone-future.md"
+      ],
+      "acceptance": [
+        "Capture pinned SQL Server 2025 raw TDS descriptors, rows, diagnostics and completion for all 141 names from 2051 through 2100, retaining image digest and @@VERSION; validate ordered names, bounds, transition continuity and retained sample outcomes.",
+        "Generate a compact versioned rule extension from the raw fixture; verify the artifact digest and exact continuity with the existing 1900-2050 snapshot without rewriting prior evidence.",
+        "Extend the native adapter's proven range through 2100 for named zones, retain the full-range UTC exception, reject later uncaptured ranges, and add SQL-facing boundary and seasonal regressions.",
+        "Document capture limits and remaining differences; run fixture checks, formatting, strict workspace Clippy, workspace Rust tests, independent client tests and diagnostic audit on exact head, then owner PR required CI and completed Codex review."
+      ],
+      "dependencies": [
+        "at-time-zone-utc-range-v1"
+      ],
+      "issue": 513,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PTIr4"
     }
   ]
 }
