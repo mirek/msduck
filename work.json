@@ -3751,7 +3751,7 @@
     {
       "id": "select-top-percent-ties-v1",
       "title": "Execute SELECT TOP PERCENT and WITH TIES from captured SQL Server behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner goal of 2026-09-27: continue development on this repo. First-party successor to the owner-authored reference/select-top-percent.json captures merged in #375 and #377; no external submission is input. src/engine.rs is otherwise held only by blocked result-alignment-v1; edits there are limited to the TOP call site and error-number mapping.",
       "scope": [
         "crates/msduck-sql/src/top.rs",
