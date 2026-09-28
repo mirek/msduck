@@ -5078,6 +5078,28 @@
       "dependencies": [],
       "issue": 491,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PSUsr"
+    },
+    {
+      "id": "at-time-zone-transition-core-v1",
+      "title": "Implement deterministic AT TIME ZONE transition resolution",
+      "state": "ready",
+      "authorization": "Owner continuing implementation goal and first-party SQL Server reference capture #491; no external submission is input.",
+      "scope": [
+        "crates/msduck-core/src/at_time_zone.rs",
+        "crates/msduck-core/tests/at_time_zone.rs",
+        "docs/at-time-zone-core.md"
+      ],
+      "acceptance": [
+        "Resolve UTC instants and offset-free local times using explicit, validated, ordered offset transitions; no OS, clock, environment or global state access.",
+        "Match pinned SQL Server 2025 reference #491 normal times, Central European and Pacific gap/overlap cases, and offset-aware instant preservation at 100ns precision.",
+        "Reject malformed transition snapshots and out-of-range results with bounded checked arithmetic. Document staging boundary and later Windows-rule adapter and export tasks; do not claim current SQL expression support.",
+        "Run deterministic and appropriate workspace checks on the exact revision, then use an owner PR with exact-head CI and verified review."
+      ],
+      "dependencies": [
+        "at-time-zone-reference-v1"
+      ],
+      "issue": 493,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PSX8m"
     }
   ]
 }
