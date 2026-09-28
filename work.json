@@ -5633,6 +5633,27 @@
       "dependencies": [],
       "issue": 535,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PUPSY"
+    },
+    {
+      "id": "sequence-core-v1",
+      "title": "Implement deterministic sequence allocation core",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server compatibility implementation goal and owner-authored issue #537",
+      "scope": [
+        "crates/msduck-core/src/sequence.rs",
+        "crates/msduck-core/tests/sequence.rs",
+        "docs/sequence-core.md"
+      ],
+      "acceptance": [
+        "Validate explicit signed integer sequence bounds/start/increment and compute first, subsequent, exhaustion and cycle values without overflow, including positive and negative increments and tinyint/smallint/int/bigint edge values.",
+        "Given an explicit sequence identity and caller-owned row state, repeated references in one result row share one allocation while independent rows allocate separately; test the retained 10/12/14/16 and 0/-1/-2 captures.",
+        "Keep state explicit, deterministic and free of database/session/global effects; document persistence, transaction rollback independence, concurrency, SQL binding, TDS diagnostics and catalog exposure as root integration work; run standalone and required workspace checks."
+      ],
+      "dependencies": [
+        "sequence-reference-v1"
+      ],
+      "issue": 537,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PUV32"
     }
   ]
 }
