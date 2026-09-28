@@ -5536,6 +5536,28 @@
       ],
       "issue": 527,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PT6VY"
+    },
+    {
+      "id": "at-time-zone-future-cycle-reference-v1",
+      "title": "Capture 2101–2500 SQL Server named-zone rules",
+      "state": "ready",
+      "authorization": "Mirek's continuing implementation goal, owner-authored issue #529, and pinned SQL Server 2025 named-zone evidence through year 2100.",
+      "scope": [
+        "scripts/capture-at-time-zone-history-2101-2500.mjs",
+        "reference/at-time-zone-history-2101-2500.json",
+        "docs/at-time-zone-future-cycle.md"
+      ],
+      "acceptance": [
+        "Retain the pinned SQL Server image and @@VERSION, all 141 ordered catalog names, baseline and seasonal samples, bounded daily scans, and hour/minute refinements of every detected change, with raw TDS descriptors, rows, diagnostics and completion.",
+        "Validate source and catalog provenance, zone coverage, offset bounds, transition continuity, sample replay and the 2101 join to the existing 2051–2100 table; preserve observed differences rather than normalizing them.",
+        "Provide --check validation without a container and refuse to overwrite pinned evidence during a fresh capture; document sampling limits and avoid claiming an unproven recurrence beyond 2500.",
+        "Run source verification and capture check, review raw evidence, and use owner PR exact-head CI plus completed Codex review before merge."
+      ],
+      "dependencies": [
+        "at-time-zone-first-centuries-runtime-v1"
+      ],
+      "issue": 529,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PUBw4"
     }
   ]
 }
