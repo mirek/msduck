@@ -16,7 +16,8 @@ mod transition_core;
 use transition_core::{Rules, Transition};
 
 const INVALID_ZONE: &str = "The time zone ID provided to AT TIME ZONE clause is invalid.";
-const START: i64 = 599_266_080_000_000_000; // 1900-01-01 UTC
+const START: i64 = 567_709_344_000_000_000; // 1800-01-01 UTC
+const BASE_START: i64 = 599_266_080_000_000_000; // 1900-01-01 UTC
 const FUTURE_START: i64 = 646_917_408_000_000_000; // 2051-01-01 UTC
 const END: i64 = 662_695_776_000_000_000; // 2101-01-01 UTC, exclusive
 
@@ -37,7 +38,7 @@ fn load() -> Result<Catalog, Box<dyn std::error::Error>> {
         || document["utcStart"]
             .as_str()
             .and_then(|value| value.parse::<i64>().ok())
-            != Some(START)
+            != Some(BASE_START)
         || document["utcEndExclusive"]
             .as_str()
             .and_then(|value| value.parse::<i64>().ok())
@@ -84,6 +85,90 @@ fn load() -> Result<Catalog, Box<dyn std::error::Error>> {
         {
             return Err("duplicate time-zone name".into());
         }
+    }
+    let historical: serde_json::Value =
+        serde_json::from_str(include_str!("at_time_zone_rules_1800_1899.json"))?;
+    if historical["version"] != 1
+        || historical["image"] != document["image"]
+        || historical["sourceSha256"]
+            != "e6683618f8d80f58dd48edfb7042dbe4296402b1f68e5d0a626ec7c4232ff3d1"
+        || historical["followingSourceSha256"] != document["sourceSha256"]
+        || historical["utcStart"]
+            .as_str()
+            .and_then(|value| value.parse::<i64>().ok())
+            != Some(START)
+        || historical["utcEndExclusive"]
+            .as_str()
+            .and_then(|value| value.parse::<i64>().ok())
+            != Some(BASE_START)
+    {
+        return Err("invalid historical AT TIME ZONE rule snapshot provenance".into());
+    }
+    let historical_records = historical["zones"]
+        .as_array()
+        .ok_or("missing historical zone table")?;
+    if historical_records.len() != zones.len() {
+        return Err("incomplete historical AT TIME ZONE zone table".into());
+    }
+    let mut seen_historical = HashSet::with_capacity(historical_records.len());
+    let mut historical_count = 0;
+    for record in historical_records {
+        let name = record["name"]
+            .as_str()
+            .ok_or("invalid historical zone name")?;
+        let key = name.to_ascii_lowercase();
+        if !seen_historical.insert(key.clone()) {
+            return Err("duplicate historical time-zone name".into());
+        }
+        let zone = zones
+            .get_mut(&key)
+            .ok_or("unknown historical time-zone name")?;
+        let initial = i16::try_from(
+            record["initial"]
+                .as_i64()
+                .ok_or("invalid historical baseline")?,
+        )?;
+        let entries = record["transitions"]
+            .as_array()
+            .ok_or("missing historical transitions")?;
+        historical_count += entries.len();
+        let mut transitions = Vec::with_capacity(entries.len() + zone.transitions.len());
+        for entry in entries {
+            let fields = entry.as_array().ok_or("invalid historical transition")?;
+            if fields.len() != 3 {
+                return Err("invalid historical transition".into());
+            }
+            let transition = Transition {
+                utc_ticks: fields[0]
+                    .as_str()
+                    .ok_or("invalid historical instant")?
+                    .parse()?,
+                offset_before_minutes: i16::try_from(
+                    fields[1].as_i64().ok_or("invalid historical offset")?,
+                )?,
+                offset_after_minutes: i16::try_from(
+                    fields[2].as_i64().ok_or("invalid historical offset")?,
+                )?,
+            };
+            if !(START..BASE_START).contains(&transition.utc_ticks) {
+                return Err("historical time-zone transition outside captured range".into());
+            }
+            transitions.push(transition);
+        }
+        if transitions
+            .last()
+            .map_or(initial, |entry| entry.offset_after_minutes)
+            != zone.initial
+        {
+            return Err("historical time-zone baseline differs from following rules".into());
+        }
+        transitions.extend(std::mem::take(&mut zone.transitions));
+        Rules::new(initial, &transitions)?;
+        zone.initial = initial;
+        zone.transitions = transitions;
+    }
+    if historical_count != 15_200 {
+        return Err("incomplete historical time-zone transitions".into());
     }
     let future: serde_json::Value =
         serde_json::from_str(include_str!("at_time_zone_rules_2051_2100.json"))?;
@@ -348,7 +433,7 @@ mod tests {
                 .values()
                 .map(|zone| zone.transitions.len())
                 .sum::<usize>(),
-            24_414
+            39_614
         );
         let db = db();
         assert_eq!(
@@ -469,7 +554,7 @@ mod tests {
         }
         for (stamp, zone) in [
             ("2024-01-01", "Not A Time Zone"),
-            ("1899-12-31", "Pacific Standard Time"),
+            ("1799-12-31", "Pacific Standard Time"),
             ("2101-01-01", "Pacific Standard Time"),
         ] {
             let sql = format!(
