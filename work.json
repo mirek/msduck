@@ -5756,7 +5756,7 @@
     {
       "id": "identity-insert-rpc-reference-v1",
       "title": "Capture IDENTITY_INSERT RPC scope and descending allocation",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party follow-up to merged owner-authored identity-insert reference and runtime plan, not an external submission.",
       "scope": [
         "scripts/capture-identity-insert-rpc.mjs",
