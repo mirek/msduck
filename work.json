@@ -4994,6 +4994,29 @@
       "dependencies": [],
       "issue": 483,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PR6rx"
+    },
+    {
+      "id": "conditional-literal-folding-v1",
+      "title": "Match constant-folded conditional literal metadata",
+      "state": "backlog",
+      "authorization": "Direct owner continuing implementation goal and owner-run SQL Server comparison at main 000f928; no external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/result_types.rs",
+        "crates/msduck-sql/tests/conditional_literal_folding.rs",
+        "reference/conditional-literal-folding.json",
+        "scripts/capture-conditional-literal-folding.mjs"
+      ],
+      "acceptance": [
+        "Start only after literal-result-width-v1 merges and is marked done; owner must promote this backlog snapshot to ready before a new claim.",
+        "Capture pinned SQL Server metadata and rows for literal-only CASE, COALESCE and IIF against runtime predicates, typed NULL and MAX operands, empty strings, surrogate pairs, prepared declarations and set composition; retain raw differences.",
+        "Implement only reference-supported deterministic fold inference with explicit inputs; preserve unknown barriers and compile metadata independent of runtime parameter values.",
+        "Add pure regressions and focused client replay; run required formatting, strict Clippy, workspace/client tests and local diagnostic audit on the exact revision. Use an owner PR with exact-head CI and verified review."
+      ],
+      "dependencies": [
+        "literal-result-width-v1"
+      ],
+      "issue": 485,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PR8q0"
     }
   ]
 }
