@@ -4824,6 +4824,31 @@
       ],
       "issue": 469,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRl3d"
+    },
+    {
+      "id": "json-extraction-document-diagnostic-v1",
+      "title": "Preserve captured JSON extraction malformed-document diagnostics",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server-compatible Rust/DuckDB goal; owner-run JSON advanced-path and wildcard reference fixtures; owner-authored issue #471. No third-party content is input.",
+      "scope": [
+        "crates/msduck-core/src/json_path.rs",
+        "crates/msduck-core/tests/json_advanced_path.rs",
+        "crates/msduck-core/tests/json_extraction_wildcard.rs",
+        "src/json_extract.rs",
+        "tests/json_advanced_path.rs",
+        "docs/json-advanced-path.md",
+        "docs/json-extraction-wildcard.md"
+      ],
+      "acceptance": [
+        "Preserve captured 13609 state, unexpected character and UTF-16 position through structured deterministic extraction errors, without hidden process-global state or unverified text substitutions.",
+        "Replay both retained advanced-path and wildcard fixture runs through core UTF-8 and UTF-16 detailed APIs and representative captured 13609 cases over TDS, respecting observed early-match and full-document validation behavior.",
+        "Keep JSON_PATH_EXISTS and ordinary paths evidence-based, document remaining uncaptured grammar differences, and run exact-head workspace Rust, independent-client and audit checks."
+      ],
+      "dependencies": [
+        "json-extraction-path-diagnostic-v1"
+      ],
+      "issue": 471,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRpAq"
     }
   ]
 }
