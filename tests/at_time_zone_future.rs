@@ -1,0 +1,96 @@
+//! SQL-facing checks of the pinned 2051–2100 named-zone rule extension.
+use msduck::{datetimeoffset::DateTimeOffset, engine::Session, server::Server};
+
+fn first_offset(bytes: &[u8]) -> Option<DateTimeOffset> {
+    let row = bytes.iter().position(|byte| *byte == 0xd1)?;
+    let len = usize::from(*bytes.get(row + 1)?);
+    DateTimeOffset::decode(bytes.get(row + 2..row + 2 + len)?, 7).ok()
+}
+
+#[test]
+fn named_zone_seasons_match_retained_sql_server_offsets() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../reference/at-time-zone-history-2051-2100.json"
+    ))
+    .unwrap();
+    let dates = [
+        "2051-01-15",
+        "2051-07-15",
+        "2075-01-15",
+        "2075-07-15",
+        "2100-01-15",
+        "2100-07-15",
+    ];
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    for (sample, date) in fixture["samples"].as_array().unwrap().iter().zip(dates) {
+        assert!(sample["query"].as_str().unwrap().contains(date));
+        let rows = sample["reference"]["sets"][0]["rows"].as_array().unwrap();
+        assert_eq!(rows.len(), 141);
+        for zone in [
+            "Pacific Standard Time",
+            "Central European Standard Time",
+            "Samoa Standard Time",
+        ] {
+            let row = rows.iter().find(|row| row[0] == zone).unwrap();
+            let minutes = row[1].as_i64().unwrap();
+            let sign = if minutes < 0 { '-' } else { '+' };
+            let absolute = minutes.abs();
+            let expected = format!(
+                "{date}T12:00:00.0000000{sign}{:02}:{:02}",
+                absolute / 60,
+                absolute % 60
+            );
+            let sql = format!(
+                "SELECT CAST('{date}T12:00:00' AS DATETIME2(7)) AT TIME ZONE '{zone}' AS value"
+            );
+            let (bytes, ok) = session.batch_response(&sql, &Default::default(), false, None);
+            assert!(ok, "{date} {zone}: {bytes:?}");
+            assert!(bytes.windows(2).any(|pair| pair == [0x2b, 7]));
+            assert_eq!(
+                first_offset(&bytes),
+                Some(DateTimeOffset::parse_iso(&expected).unwrap()),
+                "{date} {zone}"
+            );
+        }
+    }
+}
+
+#[test]
+fn named_zone_range_crosses_2051_and_rejects_2101() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    for (sql, expected) in [
+        (
+            "SELECT CAST('2051-01-01T12:00:00' AS DATETIME2(7)) AT TIME ZONE 'Pacific Standard Time'",
+            "2051-01-01T12:00:00.0000000-08:00",
+        ),
+        (
+            "SELECT CAST('2051-01-01T00:00:00+00:00' AS DATETIMEOFFSET(7)) AT TIME ZONE 'Pacific Standard Time'",
+            "2050-12-31T16:00:00.0000000-08:00",
+        ),
+        (
+            "SELECT CAST('2100-12-31T12:00:00' AS DATETIME2(7)) AT TIME ZONE 'Pacific Standard Time'",
+            "2100-12-31T12:00:00.0000000-08:00",
+        ),
+    ] {
+        let (bytes, ok) = session.batch_response(sql, &Default::default(), false, None);
+        assert!(ok, "{sql}: {bytes:?}");
+        assert_eq!(
+            first_offset(&bytes),
+            Some(DateTimeOffset::parse_iso(expected).unwrap()),
+            "{sql}"
+        );
+    }
+    for sql in [
+        "SELECT CAST('2101-01-01T12:00:00' AS DATETIME2(7)) AT TIME ZONE 'Pacific Standard Time'",
+        "SELECT CAST('2101-01-01T12:00:00+00:00' AS DATETIMEOFFSET(7)) AT TIME ZONE 'Pacific Standard Time'",
+    ] {
+        assert!(
+            !session
+                .batch_response(sql, &Default::default(), false, None)
+                .1,
+            "{sql}"
+        );
+    }
+}
