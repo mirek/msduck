@@ -5062,7 +5062,7 @@
     {
       "id": "at-time-zone-reference-v1",
       "title": "Capture SQL Server AT TIME ZONE reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing implementation goal and first-party ROADMAP gap; no external submission or third-party content is input.",
       "scope": [
         "scripts/capture-at-time-zone.mjs",
