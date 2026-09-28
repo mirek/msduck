@@ -20,7 +20,7 @@ impl ResultType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 enum Descriptor {
     Unknown,
     Null,
@@ -253,6 +253,52 @@ fn has_max_operand(values: &[&Expr]) -> bool {
     })
 }
 
+// SQL Server keeps the selected Unicode literal's width. If an ANSI branch
+// wins while another branch is Unicode, conversion to the common Unicode
+// family retains the widest branch declaration before constant selection.
+fn folded_character_result(selected: Option<&Expr>, values: &[&Expr]) -> Option<Descriptor> {
+    let declarations: Vec<_> = values.iter().map(|value| projected(value)).collect();
+    let mut ansi = false;
+    let mut unicode = false;
+    let mut widest = 1;
+    for declaration in &declarations {
+        match declaration {
+            Descriptor::Null => {}
+            Descriptor::Known(ResultType::Character {
+                family: family @ (Family::Varchar | Family::Nvarchar),
+                length: Length::Bounded(width),
+            }) => {
+                ansi |= *family == Family::Varchar;
+                unicode |= *family == Family::Nvarchar;
+                widest = widest.max(*width);
+            }
+            _ => return None,
+        }
+    }
+    let selected = selected.map(projected).unwrap_or(Descriptor::Null);
+    if ansi && unicode {
+        return match selected {
+            Descriptor::Known(ResultType::Character {
+                family: Family::Nvarchar,
+                ..
+            }) => Some(selected),
+            Descriptor::Known(ResultType::Character {
+                family: Family::Varchar,
+                ..
+            })
+            | Descriptor::Null => Some(Descriptor::Known(ResultType::character(
+                Family::Nvarchar,
+                Length::Bounded(widest),
+            ))),
+            _ => None,
+        };
+    }
+    Some(match selected {
+        Descriptor::Null => declarations.into_iter().fold(Descriptor::Null, common),
+        other => other,
+    })
+}
+
 fn folded_case(conditions: &[CaseWhen], else_result: Option<&Expr>) -> Option<Descriptor> {
     let values: Vec<_> = conditions
         .iter()
@@ -274,37 +320,18 @@ fn folded_case(conditions: &[CaseWhen], else_result: Option<&Expr>) -> Option<De
             break;
         }
     }
-    let selected = selected.or(else_result);
-    match selected {
-        Some(value) if literal_nullness(value) == Some(false) => Some(projected(value)),
-        Some(value) if literal_nullness(value) == Some(true) => {
-            let type_from_all = values
-                .into_iter()
-                .map(projected)
-                .fold(Descriptor::Null, common);
-            Some(match projected(value) {
-                Descriptor::Known(kind) => Descriptor::Known(kind),
-                _ => type_from_all,
-            })
-        }
-        None => Some(
-            values
-                .into_iter()
-                .map(projected)
-                .fold(Descriptor::Null, common),
-        ),
-        _ => None,
-    }
+    folded_character_result(selected.or(else_result), &values)
 }
 
 fn folded_coalesce(values: &[&Expr]) -> Option<Descriptor> {
     if values.iter().any(|value| literal_nullness(value).is_none()) || has_max_operand(values) {
         return None;
     }
-    values
+    let selected = values
         .iter()
-        .find(|value| literal_nullness(value) == Some(false))
-        .map(|value| projected(value))
+        .copied()
+        .find(|value| literal_nullness(value) == Some(false))?;
+    folded_character_result(Some(selected), values)
 }
 
 // Runtime conditions must combine branch declarations even when every result
@@ -546,7 +573,11 @@ fn expression(expr: &Expr) -> Descriptor {
                     && literal_nullness(no).is_some()
                     && let Some(truth) = literal_truth(predicate)
                 {
-                    return projected(if truth { yes } else { no });
+                    if let Some(folded) =
+                        folded_character_result(Some(if truth { yes } else { no }), &values)
+                    {
+                        return folded;
+                    }
                 }
                 return common_operands(values.into_iter(), literal_truth(predicate).is_none());
             }

@@ -77,3 +77,21 @@ fn unknown_predicates_and_values_cannot_be_folded_from_parameter_values() {
         assert_eq!(result_types::projection(&statement), vec![None], "{query}");
     }
 }
+
+#[test]
+fn fixed_character_branches_keep_their_common_padding_width() {
+    for query in [
+        "SELECT CASE WHEN 1=1 THEN CAST(NULL AS NCHAR(2)) ELSE CAST(NULL AS NCHAR(4)) END",
+        "SELECT IIF(1=1,CAST(NULL AS NCHAR(2)),CAST(NULL AS NCHAR(4)))",
+    ] {
+        let statement = Parser::parse_sql(&ServerDialect, query).unwrap().remove(0);
+        assert_eq!(
+            result_types::projection(&statement),
+            vec![Some(ResultType::Character {
+                family: Family::Nchar,
+                length: Length::Bounded(4),
+            })],
+            "{query}"
+        );
+    }
+}

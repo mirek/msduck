@@ -17,9 +17,14 @@ const cases = [
   ['CASE runtime predicate', "SELECT id,CASE WHEN id=1 THEN N'a' ELSE N'longer' END AS value FROM (VALUES(1),(2)) v(id) ORDER BY id"],
   ['CASE empty input', "SELECT CASE WHEN id=1 THEN N'a' ELSE N'longer' END AS value FROM (VALUES(1)) v(id) WHERE 1=0"],
   ['CASE ANSI', "SELECT CASE WHEN 1=1 THEN 'a' ELSE 'longer' END AS value"],
+  ['mixed family selected ANSI', "SELECT CASE WHEN 1=1 THEN 'a' ELSE N'longer' END AS case_result,IIF(1=1,'a',N'longer') AS iif_result,COALESCE('a',N'longer') AS coalesce_result"],
+  ['mixed family selected Unicode', "SELECT CASE WHEN 1=1 THEN N'a' ELSE 'longer' END AS case_result,IIF(1=1,N'a','longer') AS iif_result,COALESCE(N'a','longer') AS coalesce_result"],
+  ['mixed family three branches', "SELECT CASE WHEN 1=1 THEN 'a' WHEN 1=0 THEN 'verylong' ELSE N'x' END AS case_result,COALESCE('a','verylong',N'x') AS coalesce_result"],
+  ['mixed family typed NULL', "SELECT CASE WHEN 1=1 THEN 'a' ELSE CAST(NULL AS NVARCHAR(12)) END AS case_result,IIF(1=1,'a',CAST(NULL AS NVARCHAR(12))) AS iif_result,COALESCE('a',CAST(NULL AS NVARCHAR(12))) AS coalesce_result"],
   ['CASE typed NULL', "SELECT CASE WHEN 1=1 THEN CAST(NULL AS NVARCHAR(12)) ELSE N'🦆' END AS value"],
   ['CASE MAX branch', "SELECT CASE WHEN 1=1 THEN N'a' ELSE CAST(N'longer' AS NVARCHAR(MAX)) END AS value"],
   ['IIF true and false', "SELECT IIF(1=1,N'a',N'longer') AS yes,IIF(1=0,N'a',N'longer') AS no"],
+  ['IIF selected untyped NULL', "SELECT IIF(1=1,NULL,N'x') AS unicode_result,IIF(1=1,NULL,'abc') AS ansi_result"],
   ['IIF runtime predicate', "SELECT id,IIF(id=1,N'a',N'longer') AS value FROM (VALUES(1),(2)) v(id) ORDER BY id"],
   ['IIF typed NULL and MAX', "SELECT IIF(1=1,CAST(NULL AS NVARCHAR(12)),N'🦆') AS bounded,IIF(1=1,N'a',CAST(N'longer' AS NVARCHAR(MAX))) AS unbounded"],
   ['COALESCE first nonnull', "SELECT COALESCE(N'a',N'longer') AS short,COALESCE(NULL,N'longer') AS long,COALESCE(N'',N'🦆') AS empty"],
@@ -85,17 +90,19 @@ if (replay) {
   const close = []
   const connection = await start({ after: fn => close.push(fn) })
   try {
+    let mismatches = 0
     for (const test of fixture.results) {
       const delta = differences(canonical(await capture(connection, test.query)), test.reference)
-      if (delta.length) throw new Error(`${test.name}: ${JSON.stringify(delta.slice(0, 8))} (${delta.length} differences)`)
-      console.log(`matched: ${test.name}`)
+      mismatches += delta.length
+      console.log(delta.length ? JSON.stringify({ name: test.name, differences: delta }) : `matched: ${test.name}`)
     }
     const runs = await preparedCapture(connection, fixture.prepared.query, fixture.prepared.runs.map(run => run.parameters))
     for (const [index, run] of runs.entries()) {
       const delta = differences(run, fixture.prepared.runs[index])
-      if (delta.length) throw new Error(`prepared ${index}: ${JSON.stringify(delta.slice(0, 8))} (${delta.length} differences)`)
-      console.log(`matched: prepared ${index}`)
+      mismatches += delta.length
+      console.log(delta.length ? JSON.stringify({ name: `prepared ${index}`, differences: delta }) : `matched: prepared ${index}`)
     }
+    if (mismatches) process.exitCode = 1
   } finally { for (const fn of close.reverse()) fn() }
 } else {
   await withReferenceContainer(async (config, container) => {
