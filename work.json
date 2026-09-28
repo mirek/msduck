@@ -5695,6 +5695,25 @@
       "dependencies": [],
       "issue": 540,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PUeq6"
+    },
+    {
+      "id": "dateformat-runtime-plan-v1",
+      "title": "Plan DATEFORMAT session runtime and deterministic conversion stages",
+      "state": "ready",
+      "authorization": "Mirek's continuing fully compatible SQL Server/Rust/DuckDB implementation goal and first-party reference PR #541",
+      "scope": [
+        "docs/dateformat-runtime-plan.md"
+      ],
+      "acceptance": [
+        "Map current parser, batch execution, session state, prepared/RPC path, temporal cast lowering, and typed/error response paths to source symbols, distinguishing proven behavior from gaps.",
+        "Specify a deterministic DATEFORMAT and LANGUAGE setting interface with explicit session input, execute-time application, invalid-setting recovery, and type-specific conversion rules; keep effects in root adapters and unsupported syntax explicit.",
+        "Propose bounded, ordered implementation tasks with non-overlapping file scopes, dependencies and exact reference-backed regressions; account for reserved root engine and crate export files without changing Rust code or claiming compatibility completion."
+      ],
+      "dependencies": [
+        "dateformat-reference-v1"
+      ],
+      "issue": 542,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PUv0G"
     }
   ]
 }
