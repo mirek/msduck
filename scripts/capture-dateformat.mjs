@@ -33,11 +33,13 @@ const isoSql = `SELECT CAST(N'2024-03-04T05:06:07.1234567' AS DATETIME2(7)) AS d
 
 async function captureWithDoneTokens(connection, sql) {
   const doneTokens = []
+  const events = []
   const createParser = connection.createTokenStreamParser
   connection.createTokenStreamParser = function (message, handler) {
     const parser = createParser.call(this, message, handler)
     assert.equal(typeof parser.parser?.prependListener, 'function', 'Tedious token stream unavailable')
     parser.parser.prependListener('data', token => {
+      if (typeof token.name === 'string') events.push({ kind: token.name })
       if (['DONE', 'DONEINPROC', 'DONEPROC'].includes(token.name)) {
         doneTokens.push({
           kind: token.name,
@@ -55,7 +57,9 @@ async function captureWithDoneTokens(connection, sql) {
   try {
     const result = await capture(connection, sql)
     assert.equal(doneTokens.length, result.done.length, 'incomplete decoded DONE tokens')
-    return { ...result, doneTokens }
+    assert.deepEqual(events.filter(event => ['DONE', 'DONEINPROC', 'DONEPROC'].includes(event.kind)).map(event => event.kind),
+      doneTokens.map(token => token.kind), 'wire and callback DONE order differ')
+    return { ...result, doneTokens, events }
   } finally {
     connection.createTokenStreamParser = createParser
   }
@@ -126,9 +130,10 @@ function validate(run) {
     return entry.result
   }
   for (const { name, result } of run) {
-    for (const key of ['sets', 'done', 'doneTokens', 'errors', 'info']) assert(Array.isArray(result[key]), `${name}: missing ${key}`)
+    for (const key of ['sets', 'done', 'doneTokens', 'events', 'errors', 'info']) assert(Array.isArray(result[key]), `${name}: missing ${key}`)
     assert(result.done.length > 0, `${name}: missing completion`)
     assert.equal(result.doneTokens.length, result.done.length, `${name}: missing decoded DONE status`)
+    assert(result.events.length > 0, `${name}: missing wire event order`)
     for (const set of result.sets) {
       assert(Array.isArray(set.columns) && Array.isArray(set.rows), `${name}: incomplete result set`)
       for (const column of set.columns) assert(typeof column.type === 'string' && typeof column.flags === 'number', `${name}: incomplete descriptor`)
@@ -154,6 +159,10 @@ function validate(run) {
       serverError: false, rowCount: null, command,
     }], `${name}: decoded DONE_ERROR status and command`)
   }
+  assertSameCapture(get('ydm strict date failure').events.map(event => event.kind),
+    ['COLMETADATA', 'ERROR', 'DONE'], 'strict DATE metadata, error and DONE order')
+  assertSameCapture(get('invalid format').events.map(event => event.kind),
+    ['ERROR', 'DONE'], 'invalid DATEFORMAT error and DONE order')
   assert.equal(get('prepared execute-time setting').errors.length, 0)
   assert.equal(get('prepared execute-time setting').sets.length, 3)
   assert.deepEqual(get('prepared execute-time setting').sets[0].rows, [], 'sp_prepare emits metadata without rows')

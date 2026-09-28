@@ -5,8 +5,8 @@ execution time. The [pinned SQL Server 2025 capture](../reference/dateformat.jso
 records 42 observations from each of two independent containers. It checks every
 documented order (`mdy`, `dmy`, `ymd`, `ydm`, `myd`, `dym`) against ambiguous text and
 an order-specific spelling. It retains `DATE`, `DATETIME`, `DATETIME2(7)` and
-`DATETIMEOFFSET(7)` descriptors, rows, conversion errors and completion events,
-including decoded DONE status bits and command codes.
+`DATETIMEOFFSET(7)` descriptors, rows, conversion errors and ordered wire-token
+events, including decoded DONE status bits and command codes.
 
 For `03/04/2024`, `mdy` returns March 4 and `dmy` returns April 3 in all four
 target types. `ymd` returns March 4 for this input. Under `ydm`, `myd` and `dym`,
@@ -17,7 +17,8 @@ newer types return May 4. For `2024/31/12` under `ydm`, strict `DATE` conversion
 emits error 241 (state 1, severity 16) after a `Date` descriptor and no row;
 strict `DATETIME` returns December 31. The failed `DATE` conversion emits a
 `DONE_ERROR` token with command 193; invalid DATEFORMAT uses the same error bit
-with command 249. Neither has an attention or server-error bit.
+with command 249. Neither has an attention or server-error bit. Their ordered
+wire events are `COLMETADATA, ERROR, DONE` and `ERROR, DONE`, respectively.
 
 The same ISO timestamp results under `dmy`, `ydm` and `mdy`. The capture retains
 the typed DATETIMEOFFSET value, a text rendering with its original `+02:00`
