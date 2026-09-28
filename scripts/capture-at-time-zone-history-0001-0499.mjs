@@ -13,7 +13,7 @@ const catalog = JSON.parse(await readFile(new URL('../reference/at-time-zone-cat
 const following = JSON.parse(await readFile(new URL('../src/at_time_zone_rules_0500_0999.json', import.meta.url), 'utf8'))
 const names = catalog.zoneNames.reference.sets[0].rows.map(row => row[0])
 const pinnedNamesSha256 = '28653b74ec07656b5b49341691a0e37f8c08cdcd1c0238e2200266d7ecd66879'
-const pinnedCaptureSha256 = '84b3382e1056aa72463e78947430c3ff422dadc35e2c46c0e08f39ae501f8b0a'
+const pinnedCaptureSha256 = '36b37a517847d6214dc8d7ed1a9971d76c8a82f35878e527eb8d97197d85dc8e'
 const sampleDates = ['0001-01-15', '0001-07-15', '0250-01-15', '0250-07-15', '0499-01-15', '0499-07-15']
 const years = Array.from({ length: 50 }, (_, index) => 1 + index * 10)
 const batchSize = 100

@@ -7,7 +7,9 @@ records `@@VERSION`, the pinned container image, and all 141 ordered
 errors, and none at 14:00), a UTC baseline at the first representable
 instant, six seasonal samples, 50 bounded scans, and hour/minute refinements
 of every detected daily offset change. Each query's TDS descriptors, rows,
-diagnostics, and completion remain in the fixture. The scan found 75,895
+diagnostics, and completion remain in the fixture. The scan and individual
+local probes used separate containers of the same pinned image and `@@VERSION`.
+The scan found 75,895
 changes, including 1,567 in 0001–0010 and 47 on the first day alone.
 
 The lower boundary is not a simple extrapolation of later rules. At
