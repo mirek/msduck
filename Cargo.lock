@@ -930,6 +930,8 @@ name = "msduck-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "crc32fast",
+ "flate2",
  "num-bigint",
  "serde_json",
 ]

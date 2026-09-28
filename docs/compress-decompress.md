@@ -177,3 +177,10 @@ These are proposals only. They do not claim that msduck implements anything.
    then DONE with rowCount null), and check the output against the fixture over
    batches, sp_executesql and sp_prepare/sp_execute. It would also bound
    decompressed output against a configured memory limit before allocation.
+
+## Deterministic decoder implementation
+
+`decompress-core-v1` implements a bounded deterministic DECOMPRESS decoder in
+`crates/msduck-core/src/decompress.rs`. Its standalone test replays the retained
+hand-built GZIP cases. The module is not yet exported or called by the server;
+SQL typing, runtime integration and a byte-exact COMPRESS encoder remain open.
