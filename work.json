@@ -5452,7 +5452,7 @@
     {
       "id": "at-time-zone-history-0500-0999-v1",
       "title": "Capture and support AT TIME ZONE named-zone rules for 0500–0999",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing implementation goal and first-party pinned SQL Server 2025 reference probe.",
       "scope": [
         "scripts/capture-at-time-zone-history-0500-0999.mjs",
