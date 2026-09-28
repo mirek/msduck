@@ -2,7 +2,7 @@
 // Capture SQL Server's session-local IDENTITY_INSERT and allocator behavior.
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -29,8 +29,8 @@ async function canonicalOutput(path) {
   }
 }
 
-async function existingFile(path) {
-  try { return await stat(path) }
+async function existingFile(path, inspect = stat) {
+  try { return await inspect(path) }
   catch (error) {
     if (error.code === 'ENOENT') return null
     throw error
@@ -228,6 +228,9 @@ if (check) await checkFixture()
 else {
   if (writeFixture) await refuseExistingFixture(fixture)
   await mkdir(dirname(output), { recursive: true })
+  if ((await existingFile(output, lstat))?.isSymbolicLink()) {
+    throw Error('capture output must not be a symbolic link')
+  }
   const fixturePath = fileURLToPath(fixture)
   if (await canonicalOutput(output) === await canonicalOutput(fixturePath)) {
     throw Error('capture output must not be the retained fixture')
