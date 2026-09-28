@@ -36,9 +36,10 @@ Known differences remain explicit:
 - The malformed `'$[*].'` path has SQL error 13607/state 14 with an offset;
   the detailed core APIs and TDS adapter preserve its captured character,
   UTF-16 position, state and message. The legacy core API still returns `PATH`.
-- Malformed JSON reports SQL 13609 with an unexpected character and position;
-  the core's `DOCUMENT` diagnostic does not retain that detail. Root adapters,
-  descriptors and event ordering have not been compared against this fixture.
+- Captured malformed JSON reports SQL 13609 with an unexpected character and
+  UTF-16 position through the detailed core APIs and TDS. The legacy core API
+  still returns `DOCUMENT`. Other malformed JSON forms and complete root
+  descriptor and event ordering parity remain unproven by this fixture.
 
 This implements the captured wildcard subset, not the full SQL Server 2025
 advanced JSON path grammar or wire-level parity.

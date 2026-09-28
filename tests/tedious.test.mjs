@@ -6444,7 +6444,7 @@ test('JSON diagnostics retain states canonical messages and catch rethrow contex
     ["JSON_VALUE(N'{\"a\":{}}','strict $.a')",13623,2,'Scalar value cannot be found in the specified JSON path.'],
     ["JSON_QUERY(N'{\"a\":1}','strict $.a')",13624,2,'Object or array cannot be found in the specified JSON path.'],
     ["JSON_VALUE(N'{}','strict $.a')",13608,1,'Property cannot be found on the specified JSON path.'],
-    ["JSON_QUERY(N'{bad}')",13609,1,'JSON text is not properly formatted.'],
+    ["JSON_QUERY(N'[x,1]',N'$[0 to 1]')",13609,1,"JSON text is not properly formatted. Unexpected character 'x' is found at position 1."],
     ["JSON_VALUE(N'{}','$.[')",13607,1,'JSON path is not properly formatted.']
   ]
   for(const [expr,number,state,message] of cases){
