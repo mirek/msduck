@@ -5334,6 +5334,27 @@
       ],
       "issue": 513,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PTIr4"
+    },
+    {
+      "id": "at-time-zone-boundary-refresh-v1",
+      "title": "Refresh time-zone boundary regression for future rules",
+      "state": "ready",
+      "authorization": "Mirek's continuing implementation goal and first-party SQL Server 2025 reference work; no external content is input.",
+      "scope": [
+        "tests/at_time_zone_utc_range.rs",
+        "docs/at-time-zone-native.md",
+        "docs/at-time-zone-utc-range.md"
+      ],
+      "acceptance": [
+        "Retain pinned 2051 Pacific reference rows and descriptors while making the UTC-range regression compatible with a separate future named-zone extension; assert explicit rejection at 2101 instead.",
+        "Clarify the original snapshot range and full-range UTC exception in both guides without asserting unmerged named-zone behavior.",
+        "Run formatting, workspace Rust tests, strict Clippy and independent client tests on exact head; use owner PR required CI and completed Codex review."
+      ],
+      "dependencies": [
+        "at-time-zone-utc-range-v1"
+      ],
+      "issue": 514,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PTJsf"
     }
   ]
 }
