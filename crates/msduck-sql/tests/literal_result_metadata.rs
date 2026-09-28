@@ -53,3 +53,14 @@ fn set_operation_merges_literal_widths() {
     assert!(projection("SELECT *, N'a' FROM t").is_empty());
     assert_eq!(projection("SELECT unknown_column"), vec![None]);
 }
+
+#[test]
+fn unconverted_ansi_literals_keep_the_existing_unknown_adapter_path() {
+    // SQL Server best-fits these literals before sending VARCHAR. The root
+    // adapter does not yet perform that conversion for direct projections.
+    for sql in ["SELECT 'Ā'", "SELECT '🦆'", "SELECT ('Ā')"] {
+        assert_eq!(projection(sql), vec![None], "{sql}");
+    }
+    assert_eq!(projection("SELECT '€'"), vec![text(Family::Varchar, 1)]);
+    assert_eq!(projection("SELECT N'Ā'"), vec![text(Family::Nvarchar, 1)]);
+}

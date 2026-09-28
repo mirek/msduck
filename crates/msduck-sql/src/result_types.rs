@@ -72,7 +72,7 @@ fn body(expr: &SetExpr) -> Option<Vec<Descriptor>> {
                 SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } => {
                     // A projected literal has its own bounded declaration even
                     // when no runtime column or cast supplies a type.
-                    Some(operand(expr))
+                    Some(projected(expr))
                 }
                 // Wildcards change output positions after binding. Do not guess.
                 _ => None,
@@ -139,6 +139,25 @@ pub(crate) fn common_character(
             msduck_core::character::CharacterType::new(family, length).ok()
         }
         _ => None,
+    }
+}
+
+// Keep unconverted ANSI literals on the existing unknown adapter path until
+// best-fit conversion runs before the wire's strict Windows-1252 encoder.
+fn projected(expr: &Expr) -> Descriptor {
+    fn unconverted_ansi(expr: &Expr) -> bool {
+        match expr {
+            Expr::Nested(inner) | Expr::Collate { expr: inner, .. } => unconverted_ansi(inner),
+            Expr::Value(value) => {
+                matches!(&value.value, Value::SingleQuotedString(s) if msduck_core::encoding::encode_cp1252(s).is_err())
+            }
+            _ => false,
+        }
+    }
+    if unconverted_ansi(expr) {
+        expression(expr)
+    } else {
+        operand(expr)
     }
 }
 
