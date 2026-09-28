@@ -4909,6 +4909,29 @@
       ],
       "issue": 477,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRyi9"
+    },
+    {
+      "id": "compression-exports-v1",
+      "title": "Export deterministic compression modules after shared-file claims finish",
+      "state": "backlog",
+      "authorization": "Direct owner continuing implementation goal using merged owner-authored PRs #476 and #478; no external submission is input.",
+      "scope": [
+        "crates/msduck-core/src/lib.rs",
+        "crates/msduck-sql/src/lib.rs"
+      ],
+      "acceptance": [
+        "After legacy-datetime-export-v1 and string-agg-rules-v1 complete, promote this task to ready through the protected registry and acquire a new exclusive claim. Do not adopt or supersede the current owners' claims.",
+        "Export the existing deterministic decompress and compression modules without changing their semantics or unrelated exports. Keep dependency direction from msduck-sql to msduck-core; no DuckDB, Arrow or I/O in either crate.",
+        "Run formatting, strict workspace Clippy, workspace Rust tests and independent client tests on the exact revision. Open an owner PR linked to issue 479, obtain exact-head CI and Codex review, then merge and mark Done. Root runtime wiring remains a separate successor."
+      ],
+      "dependencies": [
+        "legacy-datetime-export-v1",
+        "string-agg-rules-v1",
+        "decompress-core-v1",
+        "compression-binding-v1"
+      ],
+      "issue": 479,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PR2EK"
     }
   ]
 }
