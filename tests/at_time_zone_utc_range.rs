@@ -59,15 +59,25 @@ fn utc_uses_the_full_sql_temporal_range() {
                 "{name}"
             );
         } else {
-            // These SQL Server rows are retained evidence for a separately
-            // captured named-zone extension, whose positive regression owns
-            // the server-side assertion.
             assert!(name.contains("Pacific"), "{name}");
             assert_eq!(
                 reference["sets"][0]["rows"].as_array().unwrap().len(),
                 1,
                 "{name}"
             );
+            if name.contains("before snapshot") {
+                let (_, ok) = session.batch_response(
+                    case["query"].as_str().unwrap(),
+                    &Default::default(),
+                    false,
+                    None,
+                );
+                assert!(!ok, "pre-1900 named-zone history is not captured: {name}");
+            } else {
+                // The separately captured future extension owns the positive
+                // server assertion for these retained 2051 reference rows.
+                assert!(name.contains("after snapshot"), "{name}");
+            }
         }
     }
 }
