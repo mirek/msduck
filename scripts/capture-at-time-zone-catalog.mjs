@@ -12,6 +12,7 @@ const output = (checking ? process.argv[3] : process.argv[2]) ?? 'reference/at-t
 const namesQuery = 'SELECT name FROM sys.time_zone_info ORDER BY name'
 const pinnedNameCount = 141
 const pinnedNamesSha256 = '28653b74ec07656b5b49341691a0e37f8c08cdcd1c0238e2200266d7ecd66879'
+const pinnedCaptureSha256 = 'aa7f646d73662bd0934f9174a566cdb34e381a7acb34f0bfaedb183193dc2fc1'
 const dates = [
   '1900-01-15T12:00:00',
   '1970-07-15T12:00:00',
@@ -52,7 +53,9 @@ function validate(fixture, pinNames = false) {
 
 if (checking) {
   const fixture = JSON.parse(await readFile(output, 'utf8'))
-  console.log(`checked ${validate(fixture, true)} zones across ${cases.length} conversions`)
+  const count = validate(fixture, true)
+  if (createHash('sha256').update(JSON.stringify(fixture)).digest('hex') !== pinnedCaptureSha256) throw new Error('retained SQL Server capture differs from the pinned evidence')
+  console.log(`checked ${count} zones across ${cases.length} conversions`)
 } else {
   await refuseExistingFixture(output)
   await withReferenceContainer(async (config, container) => {
