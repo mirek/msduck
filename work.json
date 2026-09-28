@@ -5718,7 +5718,7 @@
     {
       "id": "identity-insert-reference-v1",
       "title": "Capture SQL Server SET IDENTITY_INSERT session and allocation behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party reference capture for the unfinished SET IDENTITY_INSERT feature, not an external submission.",
       "scope": [
         "scripts/capture-identity-insert.mjs",
