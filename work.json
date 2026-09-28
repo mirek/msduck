@@ -5507,7 +5507,7 @@
     {
       "id": "at-time-zone-first-centuries-runtime-v1",
       "title": "Integrate year-1 named-zone AT TIME ZONE rules and boundary semantics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing implementation goal, owner-authored issue #527, and pinned raw SQL Server 2025 evidence in reference/at-time-zone-history-0001-0499.json.",
       "scope": [
         "scripts/generate-at-time-zone-history-0001-0499.mjs",
