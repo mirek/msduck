@@ -13,10 +13,12 @@ use duckdb::{
 
 #[path = "../crates/msduck-core/src/at_time_zone.rs"]
 mod transition_core;
-use transition_core::{Rules, Transition};
+use transition_core::{Resolution, Rules, Transition};
 
 const INVALID_ZONE: &str = "The time zone ID provided to AT TIME ZONE clause is invalid.";
-const START: i64 = 157_469_184_000_000_000; // 0500-01-01 UTC
+const START: i64 = 0; // 0001-01-01 UTC
+const FIRST_CENTURIES_END: i64 = 157_469_184_000_000_000; // 0500-01-01 UTC
+const MINUTE_TICKS: i64 = 600_000_000;
 const MEDIEVAL_START: i64 = 315_253_728_000_000_000; // 1000-01-01 UTC
 const EARLY_START: i64 = 473_038_272_000_000_000; // 1500-01-01 UTC
 const HISTORICAL_START: i64 = 567_709_344_000_000_000; // 1800-01-01 UTC
@@ -231,9 +233,21 @@ fn load() -> Result<Catalog, Box<dyn std::error::Error>> {
             json: include_str!("at_time_zone_rules_0500_0999.json"),
             source_sha: "b8861eaf6c208d1249eb02e6d343162e9ac85021fe6b9bd3fdafeb726037931c",
             following_sha: "86e987fb51060e398456bf875e56fd0b710613f5413ba5aaf99fcab2fdb0f20e",
-            start: START,
+            start: FIRST_CENTURIES_END,
             end: MEDIEVAL_START,
             expected_count: 76_000,
+        },
+    )?;
+    prepend_history(
+        &mut zones,
+        &document["image"],
+        HistorySnapshot {
+            json: include_str!("at_time_zone_rules_0001_0499.json"),
+            source_sha: "36b37a517847d6214dc8d7ed1a9971d76c8a82f35878e527eb8d97197d85dc8e",
+            following_sha: "b8861eaf6c208d1249eb02e6d343162e9ac85021fe6b9bd3fdafeb726037931c",
+            start: START,
+            end: FIRST_CENTURIES_END,
+            expected_count: 75_895,
         },
     )?;
     let future: serde_json::Value =
@@ -366,6 +380,32 @@ fn lookup_key(name: &str) -> String {
         .to_ascii_lowercase()
 }
 
+fn resolve_local(
+    zone: &Zone,
+    rules: &Rules<'_>,
+    local_ticks: i64,
+) -> Result<Resolution, Box<dyn std::error::Error>> {
+    // SQL Server uses the real negative offset for a year-1 local wall time.
+    // Its UTC-instant conversion temporarily reports zero until that offset
+    // yields a representable local date. That synthetic interval is not an
+    // ordinary overlap, whose earlier zero-offset occurrence would win.
+    if let Some(first) = zone.transitions.first() {
+        let after = i64::from(first.offset_after_minutes);
+        if zone.initial == 0
+            && first.offset_before_minutes == 0
+            && after < 0
+            && first.utc_ticks == -after * MINUTE_TICKS
+            && local_ticks < first.utc_ticks
+        {
+            let utc_ticks = local_ticks
+                .checked_sub(after * MINUTE_TICKS)
+                .ok_or("year-one local time outside DATETIME2 range")?;
+            return Ok(rules.resolve_utc(utc_ticks)?);
+        }
+    }
+    Ok(rules.resolve_local(local_ticks)?)
+}
+
 struct Convert<const SCALE: u8, const INSTANT: bool>;
 impl<const SCALE: u8, const INSTANT: bool> VScalar for Convert<SCALE, INSTANT> {
     type State = Catalog;
@@ -453,7 +493,7 @@ impl<const SCALE: u8, const INSTANT: bool> VScalar for Convert<SCALE, INSTANT> {
                 }
                 rules.resolve_utc(value)?
             } else {
-                let resolved = rules.resolve_local(value)?;
+                let resolved = resolve_local(zone, rules, value)?;
                 if key != "utc" && !(START..END).contains(&resolved.utc_ticks) {
                     return Err("AT TIME ZONE instant outside captured rule range".into());
                 }
@@ -508,7 +548,7 @@ mod tests {
                 .values()
                 .map(|zone| zone.transitions.len())
                 .sum::<usize>(),
-            237_214
+            313_109
         );
         let db = db();
         assert_eq!(
@@ -629,7 +669,7 @@ mod tests {
         }
         for (stamp, zone) in [
             ("2024-01-01", "Not A Time Zone"),
-            ("0499-12-31", "Pacific Standard Time"),
+            ("0001-01-01", "Central European Standard Time"),
             ("2101-01-01", "Pacific Standard Time"),
         ] {
             let sql = format!(
