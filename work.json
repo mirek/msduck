@@ -5082,7 +5082,7 @@
     {
       "id": "at-time-zone-transition-core-v1",
       "title": "Implement deterministic AT TIME ZONE transition resolution",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing implementation goal and first-party SQL Server reference capture #491; no external submission is input.",
       "scope": [
         "crates/msduck-core/src/at_time_zone.rs",
