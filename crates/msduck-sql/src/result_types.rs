@@ -70,7 +70,9 @@ fn body(expr: &SetExpr) -> Option<Vec<Descriptor>> {
             .iter()
             .map(|item| match item {
                 SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } => {
-                    Some(expression(expr))
+                    // A projected literal has its own bounded declaration even
+                    // when no runtime column or cast supplies a type.
+                    Some(operand(expr))
                 }
                 // Wildcards change output positions after binding. Do not guess.
                 _ => None,
@@ -140,8 +142,8 @@ pub(crate) fn common_character(
     }
 }
 
-// Conditional operands need literal declarations even when the top-level
-// literal result takes a separate adapter path. Reuse the shared storage rule.
+// Projected and conditional operands need literal declarations. Reuse the
+// shared storage rule so their widths agree with other SQL binding paths.
 fn operand(expr: &Expr) -> Descriptor {
     if let Expr::Nested(inner) | Expr::Collate { expr: inner, .. } = expr {
         return operand(inner);
