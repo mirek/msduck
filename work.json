@@ -5752,6 +5752,28 @@
       ],
       "issue": 546,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PU3pT"
+    },
+    {
+      "id": "identity-insert-rpc-reference-v1",
+      "title": "Capture IDENTITY_INSERT RPC scope and descending allocation",
+      "state": "ready",
+      "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party follow-up to merged owner-authored identity-insert reference and runtime plan, not an external submission.",
+      "scope": [
+        "scripts/capture-identity-insert-rpc.mjs",
+        "reference/identity-insert-rpc.json",
+        "docs/identity-insert-rpc-reference.md"
+      ],
+      "acceptance": [
+        "Capture two fresh-database SQL Server 2025 runs and an independent-container replay for SET IDENTITY_INSERT effects through sp_executesql and sp_prepare/sp_execute, including caller state before/after and exact rows, descriptors, diagnostics and ordered DONE tokens.",
+        "Probe a descending integer identity sequence with explicit high/low values and subsequent generated allocation, keeping transaction and session boundaries explicit.",
+        "Validate the fixture and salient outcomes without normalizing raw evidence; document behavior proven by the capture and distinguish failures or unprobed cases from runtime support. No shared helpers or Rust files are changed."
+      ],
+      "dependencies": [
+        "identity-insert-reference-v1",
+        "identity-insert-runtime-plan-v1"
+      ],
+      "issue": 548,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PU6fk"
     }
   ]
 }
