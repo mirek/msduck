@@ -6,8 +6,9 @@ interprets tagged `DATETIME2` ticks as a named-zone wall time; the second
 interprets tagged `DATETIMEOFFSET` UTC ticks as an instant. Both return the
 tagged `DATETIMEOFFSET` representation already used by the server: UTC ticks
 and offset minutes. The adapter passes an explicit immutable rule table to the
-deterministic transition resolver. SQL expression lowering does not yet call
-these functions, so `AT TIME ZONE` is still not a supported public feature.
+deterministic transition resolver. The [SQL-facing lowering](at-time-zone-lowering.md)
+in PR #506 connects captured `DATETIME2(s)` and `DATETIMEOFFSET(s)` expressions
+to these functions; the native adapter on its own remains internal.
 
 The compact [rule table](../src/at_time_zone_rules_1900_2050.json) contains
 141 Windows names and 20,414 minute-resolved transitions detected from the
@@ -26,11 +27,12 @@ source can also change independently of the pinned image. `AT TIME ZONE` is
 therefore marked volatile in DuckDB even though this particular table is
 immutable.
 
-Before public support, the staged SQL declaration binder and core resolver
-need exported crate entry points, the root expression pass needs to choose
-the local or instant function while preserving legacy `DATETIME` and
-`SMALLDATETIME` scales, and the error path needs SQL Server's 9820 invalid-zone
-diagnostic and exact descriptor behavior. Public differential tests should
-then replay the retained rows, metadata, errors and completion tokens, plus
-newly captured case and boundary probes. Native tests here establish only the
-internal adapter behavior.
+The SQL-facing work in PR #506 chooses local-wall versus instant conversion
+for captured exact temporal inputs and replays selected rows and descriptors.
+It does not cover legacy `DATETIME` and `SMALLDATETIME`, columns whose temporal
+declaration is unavailable to the lowering pass, or dates outside the captured
+range. The staged declaration binder and core resolver still need exported
+crate entry points, and the error path still needs exact SQL Server 8116 and
+9820 diagnostics and invalid-zone descriptor behavior. Further differential
+tests must retain exact rows, metadata, errors and completion tokens for those
+forms and for newly captured case and boundary probes.
