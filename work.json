@@ -4803,7 +4803,7 @@
     {
       "id": "json-extraction-path-diagnostic-v1",
       "title": "Preserve captured JSON extraction path syntax diagnostics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server-compatible Rust/DuckDB goal; owner-run reference/json-advanced-path.json and reference/json-extraction-wildcard.json. No external submission is input.",
       "scope": [
         "crates/msduck-core/src/json_path.rs",
