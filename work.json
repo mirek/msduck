@@ -5821,6 +5821,30 @@
       ],
       "issue": 552,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVFcM"
+    },
+    {
+      "id": "identity-insert-binding-v1",
+      "title": "Bind deterministic IDENTITY_INSERT operations and session state",
+      "state": "ready",
+      "authorization": "Owner's continuing full SQL Server compatibility goal and owner-controlled IDENTITY_INSERT fixtures. No external submissions.",
+      "scope": [
+        "crates/msduck-sql/src/identity_insert.rs",
+        "crates/msduck-sql/tests/identity_insert.rs",
+        "docs/identity-insert-binding.md"
+      ],
+      "acceptance": [
+        "Extract typed SET IDENTITY_INSERT ON/OFF operations from the real sqlparser AST and retain identifier parts for root catalog resolution; reject unsupported target shapes explicitly without text substitution or backend effects.",
+        "Model one active resolved table per session from explicit stable catalog identities: repeated ON of the active table and OFF of another table preserve the correct state; ON of a different table reports a conflict without changing the active table; RPC caller/callee state is passed or copied explicitly rather than hidden globally.",
+        "Replay applicable cases from the three retained owner-authored IDENTITY_INSERT fixtures and test malformed syntax, quoted names, case/alias resolution boundaries, two independent sessions and prepare-time no-effect behavior. Use path-based tests while msduck-sql lib.rs remains claimed; document root integration and unsupported catalog/error behavior.",
+        "Run formatting, focused SQL crate tests, workspace Rust tests, strict workspace Clippy, independent tedious tests and the local audit on the exact revision; publish a focused owner PR with exact-head CI and completed Codex review."
+      ],
+      "dependencies": [
+        "identity-insert-reference-v1",
+        "identity-insert-rpc-reference-v1",
+        "identity-insert-errors-reference-v1"
+      ],
+      "issue": 554,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVG65"
     }
   ]
 }
