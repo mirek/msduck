@@ -31,12 +31,42 @@ const conversions = value => {
 const isoOffset = "CAST(N'2024-03-04T05:06:07.1234567+02:00' AS DATETIMEOFFSET(7))"
 const isoSql = `SELECT CAST(N'2024-03-04T05:06:07.1234567' AS DATETIME2(7)) AS dt2,${isoOffset} AS dto,CONVERT(NVARCHAR(48),${isoOffset}) AS dto_text,DATEPART(TZOFFSET,${isoOffset}) AS dto_offset_minutes`
 
+async function captureWithDoneTokens(connection, sql) {
+  const doneTokens = []
+  const createParser = connection.createTokenStreamParser
+  connection.createTokenStreamParser = function (message, handler) {
+    const parser = createParser.call(this, message, handler)
+    assert.equal(typeof parser.parser?.prependListener, 'function', 'Tedious token stream unavailable')
+    parser.parser.prependListener('data', token => {
+      if (['DONE', 'DONEINPROC', 'DONEPROC'].includes(token.name)) {
+        doneTokens.push({
+          kind: token.name,
+          more: token.more,
+          sqlError: token.sqlError,
+          attention: token.attention,
+          serverError: token.serverError,
+          rowCount: token.rowCount ?? null,
+          command: token.curCmd,
+        })
+      }
+    })
+    return parser
+  }
+  try {
+    const result = await capture(connection, sql)
+    assert.equal(doneTokens.length, result.done.length, 'incomplete decoded DONE tokens')
+    return { ...result, doneTokens }
+  } finally {
+    connection.createTokenStreamParser = createParser
+  }
+}
+
 async function observe(primary, config) {
   const databaseName = (await capture(primary, 'SELECT DB_NAME() AS name')).sets[0].rows[0][0]
   const secondary = await connect({ ...config, options: { ...config.options, database: databaseName } })
   const run = []
   async function record(name, sql, session = 'A') {
-    const result = canonical(await capture(session === 'A' ? primary : secondary, sql))
+    const result = canonical(await captureWithDoneTokens(session === 'A' ? primary : secondary, sql))
     run.push({ name, sql, session, result })
     console.log(name)
     return result
@@ -96,8 +126,9 @@ function validate(run) {
     return entry.result
   }
   for (const { name, result } of run) {
-    for (const key of ['sets', 'done', 'errors', 'info']) assert(Array.isArray(result[key]), `${name}: missing ${key}`)
+    for (const key of ['sets', 'done', 'doneTokens', 'errors', 'info']) assert(Array.isArray(result[key]), `${name}: missing ${key}`)
     assert(result.done.length > 0, `${name}: missing completion`)
+    assert.equal(result.doneTokens.length, result.done.length, `${name}: missing decoded DONE status`)
     for (const set of result.sets) {
       assert(Array.isArray(set.columns) && Array.isArray(set.rows), `${name}: incomplete result set`)
       for (const column of set.columns) assert(typeof column.type === 'string' && typeof column.flags === 'number', `${name}: incomplete descriptor`)
@@ -117,6 +148,12 @@ function validate(run) {
   assert(isoRow[2].includes('+02:00'), 'original ISO offset text lost')
   assert.equal(get('ydm strict date failure').errors.length, 1)
   assert.equal(get('invalid format').errors.length, 1)
+  for (const [name, command] of [['ydm strict date failure', 193], ['invalid format', 249]]) {
+    assertSameCapture(get(name).doneTokens, [{
+      kind: 'DONE', more: false, sqlError: true, attention: false,
+      serverError: false, rowCount: null, command,
+    }], `${name}: decoded DONE_ERROR status and command`)
+  }
   assert.equal(get('prepared execute-time setting').errors.length, 0)
   assert.equal(get('prepared execute-time setting').sets.length, 3)
   assert.deepEqual(get('prepared execute-time setting').sets[0].rows, [], 'sp_prepare emits metadata without rows')
