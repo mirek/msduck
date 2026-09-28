@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
+import { Request } from 'tedious'
 import { withReferenceContainer, referenceImage } from './lib/reference-container.mjs'
 import { connect, isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 import { capture, canonical } from './lib/compatibility.mjs'
@@ -14,7 +15,7 @@ const writeFixture = args.includes('--write-fixture')
 const paths = args.filter(arg => !['--check', '--write-fixture'].includes(arg))
 if (paths.length > 1 || (check && writeFixture)) throw Error('usage: capture-sequence-reference.mjs [--check | --write-fixture] [output]')
 const output = resolve(paths[0] ?? 'artifacts/compatibility/sequence-reference/capture.json')
-const catalog = name => `SELECT name,TYPE_NAME(user_type_id) AS type_name,CONVERT(VARCHAR(40),start_value) AS start_value,CONVERT(VARCHAR(40),increment) AS increment_value,CONVERT(VARCHAR(40),minimum_value) AS minimum_value,CONVERT(VARCHAR(40),maximum_value) AS maximum_value,CONVERT(VARCHAR(40),current_value) AS current_value,is_cycling,is_cached,is_exhausted FROM sys.sequences WHERE name='${name}'`
+const catalog = name => `SELECT name,TYPE_NAME(user_type_id) AS type_name,start_value,increment AS increment_value,minimum_value,maximum_value,current_value,is_cycling,is_cached,is_exhausted FROM sys.sequences WHERE name='${name}'`
 const cases = [
   ['server version', "SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)) AS product_version", 'A'],
   ['create ascending', 'CREATE SEQUENCE dbo.msduck_seq AS BIGINT START WITH 10 INCREMENT BY 2 MINVALUE 10 MAXVALUE 16 NO CYCLE NO CACHE', 'A'],
@@ -42,9 +43,55 @@ const cases = [
   ['connection reusable after errors', 'SELECT 1 AS reusable', 'A'],
 ]
 
+function captureEvents(connection, sql) {
+  return new Promise(resolve => {
+    const result = { sets: [], done: [], errors: [], info: [], events: [], returnStatus: null }
+    const request = new Request(sql, (error, rowCount) => {
+      connection.off('errorMessage', onError)
+      connection.off('infoMessage', onInfo)
+      result.rowCount = rowCount
+      if (error && !result.errors.length) result.errors.push({ message: error.message, number: error.number ?? null })
+      resolve(result)
+    })
+    const onError = error => {
+      result.errors.push({ number: error.number, state: error.state, class: error.class, lineNumber: error.lineNumber, message: error.message })
+      result.events.push({ kind: 'ERROR', number: error.number, state: error.state, class: error.class })
+    }
+    const onInfo = info => {
+      result.info.push({ number: info.number, state: info.state, class: info.class, lineNumber: info.lineNumber, message: info.message })
+      result.events.push({ kind: 'INFO', number: info.number })
+    }
+    connection.on('errorMessage', onError)
+    connection.on('infoMessage', onInfo)
+    request.on('columnMetadata', metadata => {
+      result.sets.push({
+        columns: metadata.map(c => ({ name: c.colName, type: c.type.name, length: c.dataLength ?? null, precision: c.precision ?? null, scale: c.scale ?? null, flags: c.flags, collation: canonical(c.collation ?? null) })), rows: [],
+      })
+      result.events.push({ kind: 'COLMETADATA', columns: metadata.length })
+    })
+    request.on('row', row => {
+      result.sets.at(-1).rows.push(row.map(c => c.value))
+      result.events.push({ kind: 'ROW' })
+    })
+    for (const name of ['done', 'doneInProc', 'doneProc']) request.on(name, (rowCount, more) => {
+      result.done.push({ kind: name, rowCount: rowCount ?? null, more })
+      result.events.push({ kind: name.toUpperCase(), rowCount: rowCount ?? null, more })
+    })
+    request.on('doneProc', (_count, _more, status) => { result.returnStatus = status })
+    try { connection.execSqlBatch(request) }
+    catch (error) {
+      connection.off('errorMessage', onError)
+      connection.off('infoMessage', onInfo)
+      result.errors.push({ message: error.message, number: error.number ?? null })
+      resolve(result)
+    }
+  })
+}
+
 function shape(result, name) {
   for (const key of ['sets', 'done', 'errors', 'info']) assert(Array.isArray(result?.[key]), `${name}: missing ${key}`)
   assert(result.done.length > 0, `${name}: missing completion`)
+  assert(Array.isArray(result.events) && result.events.length > 0, `${name}: missing event order`)
   for (const set of result.sets) {
     assert(Array.isArray(set.columns) && Array.isArray(set.rows), `${name}: missing descriptors or rows`)
     for (const column of set.columns) assert(typeof column.type === 'string' && typeof column.flags === 'number', `${name}: incomplete descriptor`)
@@ -65,6 +112,11 @@ function validate(run) {
     assert.equal(result.sets.length, 1, `${name}: descriptor before error`)
     assertSameCapture(result.sets[0].rows, [], `${name}: no partial row`)
     assertSameCapture(result.done, [{ kind: 'done', rowCount: null, more: false }], `${name}: final completion`)
+    assertSameCapture(result.events, [
+      { kind: 'COLMETADATA', columns: 1 },
+      { kind: 'ERROR', number: 11728, state: 1, class: 16 },
+      { kind: 'DONE', rowCount: null, more: false },
+    ], `${name}: metadata, error and DONE order`)
   }
   for (const { name, result } of run) {
     if (!['exhaustion', 'descending exhaustion'].includes(name)) assert.equal(result.errors.length, 0, `${name}: unexpected error`)
@@ -82,11 +134,15 @@ function validate(run) {
   assertSameCapture(rows('catalog after exhaustion'), [['msduck_seq', 'bigint', '10', '2', '10', '16', '16', false, false, true]], 'exhausted catalog')
   assertSameCapture(rows('catalog after cycle'), [['msduck_seq', 'bigint', '16', '2', '10', '16', '10', true, false, false]], 'cycled catalog')
   assertSameCapture(rows('descending rows'), [[1, 0], [2, -1], [3, -2]], 'descending sequence')
-  assertSameCapture(rows('descending catalog'), [['msduck_desc', 'smallint', '0', '-1', '-2', '0', '-2', false, false, true]], 'descending catalog')
+  assertSameCapture(rows('descending catalog'), [['msduck_desc', 'smallint', 0, -1, -2, 0, -2, false, false, true]], 'descending catalog')
   assertSameCapture(rows('catalog after drop'), [], 'dropped catalog rows')
   assertSameCapture(rows('connection reusable after errors'), [[1]], 'connection reuse')
   assert.equal(get('first value').sets[0].columns[0].type, 'BigInt')
   assert.equal(get('descending rows').sets[0].columns[1].type, 'SmallInt')
+  for (const name of ['catalog before allocation', 'catalog after exhaustion', 'catalog after cycle', 'descending catalog']) {
+    assertSameCapture(get(name).sets[0].columns.slice(2, 7).map(column => column.type),
+      Array(5).fill('Variant'), `${name}: native SQL_VARIANT catalog descriptors`)
+  }
   assert.equal(get('exhaustion').sets[0].columns[0].type, 'BigInt')
   assert.equal(get('descending exhaustion').sets[0].columns[0].type, 'SmallInt')
   assertSameCapture(get('allocation inside rollback').done.map(({ kind, rowCount, more }) => [kind, rowCount, more]), [
@@ -100,7 +156,7 @@ async function observe(primary, config) {
   try {
     const run = []
     for (const [name, sql, session] of cases) {
-      const result = canonical(await capture(session === 'A' ? primary : secondary, sql))
+      const result = canonical(await captureEvents(session === 'A' ? primary : secondary, sql))
       run.push({ name, sql, session, result })
       console.log(name)
     }
