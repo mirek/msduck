@@ -5167,6 +5167,29 @@
       ],
       "issue": 499,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PSnMM"
+    },
+    {
+      "id": "at-time-zone-history-1900-2050-v1",
+      "title": "Capture SQL Server Windows-zone transition history, 1900–2050",
+      "state": "ready",
+      "authorization": "Mirek's continuing owner instruction and owner-run pinned SQL Server 2025 captures; no third-party issue or review content is input.",
+      "scope": [
+        "scripts/capture-at-time-zone-history.mjs",
+        "reference/at-time-zone-history-1900-2050.json",
+        "docs/at-time-zone-history.md"
+      ],
+      "acceptance": [
+        "Scan UTC days from 1900-01-01 through 2050-12-31 for every one of the 141 pinned SQL Server Windows zone names, using bounded decade chunks. Refine each detected offset change to the first changed UTC hour and minute; retain raw TDS metadata, rows, diagnostics and completion events for all stages.",
+        "Capture a baseline offset for every zone; validate per-zone transition continuity and offset bounds, compare the historical catalog sample offsets and all 2024 transitions against the retained owner-run fixtures without normalizing differences.",
+        "Provide a container-free source/fixture consistency check with a pinned full-content digest and a fresh pinned-image capture. Document that daily/hourly/minute sampling can miss cancelling changes or subminute boundaries and that dates outside 1900-2050 remain unproven.",
+        "Use a focused owner PR with exact-head CI and verified Codex review. No server runtime, Rust, or shared export file is in scope."
+      ],
+      "dependencies": [
+        "at-time-zone-catalog-reference-v1",
+        "at-time-zone-transitions-2024-v1"
+      ],
+      "issue": 501,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PSq2I"
     }
   ]
 }
