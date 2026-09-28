@@ -4936,7 +4936,7 @@
     {
       "id": "hashbytes-binding-v1",
       "title": "Bind HASHBYTES argument families and result declaration",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing implementation goal from first-party reference/hashbytes-checksum.json and merged hashbytes-core-v1; no external submission is input.",
       "scope": [
         "crates/msduck-sql/src/hashbytes.rs",
