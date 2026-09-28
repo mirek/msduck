@@ -1,6 +1,9 @@
 //! Native execution against an explicit SQL Server 2025 Windows-zone snapshot.
 //! Public AT TIME ZONE syntax is bound separately; these functions are internal.
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use duckdb::{
     core::{DataChunkHandle, LogicalTypeHandle, LogicalTypeId as Id},
@@ -14,7 +17,8 @@ use transition_core::{Rules, Transition};
 
 const INVALID_ZONE: &str = "The time zone ID provided to AT TIME ZONE clause is invalid.";
 const START: i64 = 599_266_080_000_000_000; // 1900-01-01 UTC
-const END: i64 = 646_917_408_000_000_000; // 2051-01-01 UTC, exclusive
+const FUTURE_START: i64 = 646_917_408_000_000_000; // 2051-01-01 UTC
+const END: i64 = 662_695_776_000_000_000; // 2101-01-01 UTC, exclusive
 
 struct Zone {
     initial: i16,
@@ -37,7 +41,7 @@ fn load() -> Result<Catalog, Box<dyn std::error::Error>> {
         || document["utcEndExclusive"]
             .as_str()
             .and_then(|value| value.parse::<i64>().ok())
-            != Some(END)
+            != Some(FUTURE_START)
     {
         return Err("invalid AT TIME ZONE rule snapshot provenance".into());
     }
@@ -80,6 +84,82 @@ fn load() -> Result<Catalog, Box<dyn std::error::Error>> {
         {
             return Err("duplicate time-zone name".into());
         }
+    }
+    let future: serde_json::Value =
+        serde_json::from_str(include_str!("at_time_zone_rules_2051_2100.json"))?;
+    if future["version"] != 1
+        || future["image"] != document["image"]
+        || future["sourceSha256"]
+            != "e7f7798940c1664048626907a4e9b52357053ae9c72e41582e29c58a1d2d3f6c"
+        || future["priorSourceSha256"] != document["sourceSha256"]
+        || future["utcStart"]
+            .as_str()
+            .and_then(|value| value.parse::<i64>().ok())
+            != Some(FUTURE_START)
+        || future["utcEndExclusive"]
+            .as_str()
+            .and_then(|value| value.parse::<i64>().ok())
+            != Some(END)
+    {
+        return Err("invalid future AT TIME ZONE rule snapshot provenance".into());
+    }
+    let future_records = future["zones"]
+        .as_array()
+        .ok_or("missing future zone table")?;
+    if future_records.len() != zones.len() {
+        return Err("incomplete future AT TIME ZONE zone table".into());
+    }
+    let mut seen = HashSet::with_capacity(future_records.len());
+    let mut future_count = 0;
+    for record in future_records {
+        let name = record["name"].as_str().ok_or("invalid future zone name")?;
+        let key = name.to_ascii_lowercase();
+        if !seen.insert(key.clone()) {
+            return Err("duplicate future time-zone name".into());
+        }
+        let zone = zones.get_mut(&key).ok_or("unknown future time-zone name")?;
+        let terminal = zone
+            .transitions
+            .last()
+            .map_or(zone.initial, |entry| entry.offset_after_minutes);
+        if i16::try_from(
+            record["initial"]
+                .as_i64()
+                .ok_or("invalid future baseline")?,
+        )? != terminal
+        {
+            return Err("future time-zone baseline differs from prior rules".into());
+        }
+        let entries = record["transitions"]
+            .as_array()
+            .ok_or("missing future transitions")?;
+        future_count += entries.len();
+        for entry in entries {
+            let fields = entry.as_array().ok_or("invalid future transition")?;
+            if fields.len() != 3 {
+                return Err("invalid future transition".into());
+            }
+            let transition = Transition {
+                utc_ticks: fields[0]
+                    .as_str()
+                    .ok_or("invalid future instant")?
+                    .parse()?,
+                offset_before_minutes: i16::try_from(
+                    fields[1].as_i64().ok_or("invalid future offset")?,
+                )?,
+                offset_after_minutes: i16::try_from(
+                    fields[2].as_i64().ok_or("invalid future offset")?,
+                )?,
+            };
+            if !(FUTURE_START..END).contains(&transition.utc_ticks) {
+                return Err("future time-zone transition outside captured range".into());
+            }
+            zone.transitions.push(transition);
+        }
+        Rules::new(zone.initial, &zone.transitions)?;
+    }
+    if future_count != 4000 {
+        return Err("incomplete future time-zone transitions".into());
     }
     Ok(Catalog(Arc::new(zones)))
 }
@@ -268,7 +348,7 @@ mod tests {
                 .values()
                 .map(|zone| zone.transitions.len())
                 .sum::<usize>(),
-            20_414
+            24_414
         );
         let db = db();
         assert_eq!(
@@ -305,6 +385,30 @@ mod tests {
                 "Samoa Standard Time",
                 "2011-12-31T22:00:00",
                 840,
+            ),
+            (
+                "2051-01-15T12:00:00",
+                "Pacific Standard Time",
+                "2051-01-15T20:00:00",
+                -480,
+            ),
+            (
+                "2051-07-15T12:00:00",
+                "Pacific Standard Time",
+                "2051-07-15T19:00:00",
+                -420,
+            ),
+            (
+                "2075-07-15T12:00:00",
+                "Central European Standard Time",
+                "2075-07-15T10:00:00",
+                120,
+            ),
+            (
+                "2100-07-15T12:00:00",
+                "Samoa Standard Time",
+                "2100-07-14T23:00:00",
+                780,
             ),
         ] {
             assert_eq!(
@@ -366,7 +470,7 @@ mod tests {
         for (stamp, zone) in [
             ("2024-01-01", "Not A Time Zone"),
             ("1899-12-31", "Pacific Standard Time"),
-            ("2051-01-01", "Pacific Standard Time"),
+            ("2101-01-01", "Pacific Standard Time"),
         ] {
             let sql = format!(
                 "SELECT __msduck_at_time_zone_local_7(__msduck_datetime2_cast_7('{stamp}'),'{zone}')"
