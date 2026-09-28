@@ -5355,6 +5355,36 @@
       ],
       "issue": 514,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PTJsf"
+    },
+    {
+      "id": "at-time-zone-history-1800-1899-v1",
+      "title": "Capture and support AT TIME ZONE named-zone rules for 1800–1899",
+      "state": "ready",
+      "authorization": "Mirek's continuing implementation goal and first-party pinned SQL Server 2025 reference probe.",
+      "scope": [
+        "scripts/capture-at-time-zone-history-1800-1899.mjs",
+        "reference/at-time-zone-history-1800-1899.json",
+        "scripts/generate-at-time-zone-history-1800-1899.mjs",
+        "src/at_time_zone_rules_1800_1899.json",
+        "src/at_time_zone_native.rs",
+        "tests/at_time_zone_historical.rs",
+        "tests/at_time_zone_utc_range.rs",
+        "docs/at-time-zone-historical.md",
+        "docs/at-time-zone-utc-range.md",
+        "docs/at-time-zone-native.md",
+        "docs/at-time-zone-future.md"
+      ],
+      "acceptance": [
+        "Capture pinned SQL Server 2025 raw TDS descriptors, rows, diagnostics and completion for all 141 names from 1800 through 1899, with baseline, seasonal samples and minute-refined daily changes; validate ordered names, bounds, transition continuity, samples and exact join to the 1900 snapshot.",
+        "Generate a compact source-pinned 1800-1899 table and prepend it to the native 1900-2100 adapter without rewriting earlier evidence; retain UTC full range and explicit rejection before 1800 and after 2100.",
+        "Add SQL-facing boundary and seasonal regressions, refresh the 1899 rejection test and current-range documentation, and state remaining capture limits.",
+        "Run fixture checks, formatting, workspace Rust tests, strict Clippy, independent client tests and diagnostic audit at exact PR head; require owner PR CI and completed Codex review before merge."
+      ],
+      "dependencies": [
+        "at-time-zone-future-rules-v1"
+      ],
+      "issue": 517,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PTVSG"
     }
   ]
 }
