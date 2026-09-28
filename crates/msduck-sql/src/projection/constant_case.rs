@@ -29,7 +29,14 @@ pub(super) fn properties(
         // provenance or a literal's NOT NULL metadata.
         let result = member_expression(catalog, value, sources, scope)?;
         let input = member_expression(catalog, selected, sources, scope)?;
-        if result != input {
+        let bounded_unicode_promotion = result.system_type_id == Some(231)
+            && input.system_type_id == Some(167)
+            && matches!(value, Expr::Case { conditions, else_result: Some(else_result), .. }
+            if crate::result_properties::bounded_literal_unicode_promotion(
+                selected,
+                conditions.iter().map(|branch| &branch.result).chain(std::iter::once(else_result.as_ref()))
+            ));
+        if result != input && !bounded_unicode_promotion {
             return Some(Properties::expression(true));
         }
         Some(properties(
