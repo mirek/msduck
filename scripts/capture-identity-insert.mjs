@@ -2,9 +2,10 @@
 // Capture SQL Server's session-local IDENTITY_INSERT and allocator behavior.
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { withReferenceContainer, referenceImage } from './lib/reference-container.mjs'
 import { connect, isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 import { capture, canonical } from './lib/compatibility.mjs'
@@ -19,6 +20,14 @@ const writeFixture = args.includes('--write-fixture')
 const paths = args.filter(arg => !['--check', '--write-fixture'].includes(arg))
 if (paths.length > 1 || (check && writeFixture)) throw Error('usage: capture-identity-insert.mjs [--check | --write-fixture] [output]')
 const output = resolve(paths[0] ?? 'artifacts/compatibility/identity-insert/capture.json')
+
+async function canonicalOutput(path) {
+  try { return await realpath(path) }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return join(await realpath(dirname(path)), basename(path))
+  }
+}
 
 const snapshot = "SELECT id,v FROM dbo.alpha ORDER BY id; SELECT id,v FROM dbo.beta ORDER BY id; SELECT CONVERT(VARCHAR(40),IDENT_CURRENT('dbo.alpha')) AS alpha_current, CONVERT(VARCHAR(40),IDENT_CURRENT('dbo.beta')) AS beta_current"
 const plan = [
@@ -211,7 +220,15 @@ if (check) await checkFixture()
 else {
   if (writeFixture) await refuseExistingFixture(fixture)
   await mkdir(dirname(output), { recursive: true })
+  const fixturePath = fileURLToPath(fixture)
+  if (await canonicalOutput(output) === await canonicalOutput(fixturePath)) {
+    throw Error('capture output must not be the retained fixture')
+  }
+  if (process.env.MSSQL_REFERENCE_IMAGE && process.env.MSSQL_REFERENCE_IMAGE !== referenceImage) {
+    throw Error('reference image must be pinned')
+  }
   await withReferenceContainer(async (config, container) => {
+    assert.equal(container.image, referenceImage, 'reference image must be pinned')
     const runs = []
     for (let repeat = 0; repeat < 2; repeat++) {
       const run = await isolatedReference(config, primary => observe(primary, config))
