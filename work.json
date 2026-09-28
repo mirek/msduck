@@ -5288,7 +5288,7 @@
     {
       "id": "at-time-zone-utc-range-v1",
       "title": "Support UTC AT TIME ZONE across SQL temporal range",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing implementation goal and first-party SQL Server 2025 reference work; no external content is input.",
       "scope": [
         "src/at_time_zone_native.rs",
