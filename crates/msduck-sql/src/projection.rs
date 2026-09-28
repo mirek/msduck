@@ -636,6 +636,15 @@ fn body_fields(
                         .filter(|value| !conditional::literal_null(value))
                         .map(|value| member_expression(catalog, value, &sources, scope))
                         .collect::<Option<Vec<_>>>();
+                    let bounded_unicode_promotion = first_info
+                        .as_ref()
+                        .is_some_and(|first| first.system_type_id == Some(167))
+                        && first.is_some_and(|first| {
+                            crate::result_properties::bounded_literal_unicode_promotion(
+                                first,
+                                values.iter().copied(),
+                            )
+                        });
                     if first_info
                         .as_ref()
                         .zip(arguments.as_ref())
@@ -643,6 +652,7 @@ fn body_fields(
                             crate::result_properties::coalesce_conversion(first, arguments)
                         })
                         != Some(false)
+                        && !bounded_unicode_promotion
                     {
                         properties.null_extend();
                     }

@@ -309,6 +309,58 @@ pub(crate) fn coalesce_conversion(
     Some(highest > first || decimal_conversion || max_conversion)
 }
 
+/// A literal VARCHAR promoted to NVARCHAR remains non-NULL only while every
+/// literal fits the bounded Unicode declaration. Above 4,000 characters SQL
+/// Server truncates the selected value and marks the result nullable.
+pub(crate) fn bounded_literal_unicode_promotion<'a>(
+    selected: &Expr,
+    values: impl IntoIterator<Item = &'a Expr>,
+) -> bool {
+    use msduck_core::character::Family;
+
+    fn literal(expr: &Expr) -> Option<(Family, u16)> {
+        let mut expr = expr;
+        for _ in 0..64 {
+            match expr {
+                Expr::Nested(inner) => expr = inner,
+                _ => break,
+            }
+        }
+        let Expr::Value(value) = expr else {
+            return None;
+        };
+        match &value.value {
+            Value::SingleQuotedString(text) if text.is_ascii() => {}
+            Value::NationalStringLiteral(_) => {}
+            _ => return None,
+        }
+        match crate::expression_metadata::storage::kind(expr, &Default::default(), &|_| None)? {
+            DataType::Varchar(Some(CharacterLength::IntegerLength { length, .. })) => {
+                Some((Family::Varchar, u16::try_from(length).ok()?.max(1)))
+            }
+            DataType::Nvarchar(Some(CharacterLength::IntegerLength { length, .. })) => {
+                Some((Family::Nvarchar, u16::try_from(length).ok()?.max(1)))
+            }
+            _ => None,
+        }
+    }
+
+    if !matches!(literal(selected), Some((Family::Varchar, 1..=4000))) {
+        return false;
+    }
+    let mut unicode = false;
+    for value in values {
+        let Some((family, width)) = literal(value) else {
+            return false;
+        };
+        if width > 4000 {
+            return false;
+        }
+        unicode |= family == Family::Nvarchar;
+    }
+    unicode
+}
+
 pub(crate) fn literal_null(expr: &Expr) -> bool {
     if let Some(source) = crate::variant_cast::source(expr) {
         return literal_null(source);
