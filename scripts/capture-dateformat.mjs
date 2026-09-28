@@ -193,6 +193,21 @@ function validate(run) {
     assert.deepEqual(get(`${format} ambiguous`).sets[0].rows, [expected],
       `${format}: ambiguous temporal row changed`)
   }
+  const sameDateRows = {
+    mdy: completeRow('04-05'),
+    dmy: completeRow('04-05'),
+    ymd: completeRow('04-05'),
+    ydm: [
+      dateValue('05-04'), dateValue('04-05'), dateValue('05-04', true),
+      dateValue('05-04', true), '2024-05-04 00:00:00.0000000 +00:00', 0,
+    ],
+    myd: completeRow('04-05'),
+    dym: completeRow('04-05'),
+  }
+  for (const [format, expected] of Object.entries(sameDateRows)) {
+    assert.deepEqual(get(`${format} same date`).sets[0].rows, [expected],
+      `${format}: order-specific temporal row changed`)
+  }
   const singleDateRows = day => [[dateValue(day)]]
   assert.deepEqual(get('runtime changes in one batch').sets.map(set => set.rows),
     [singleDateRows('04-03'), singleDateRows('03-04')], 'same-batch format change lost')
@@ -280,8 +295,14 @@ if (check) {
       image ??= container.image
       assert.equal(container.image, image)
       const run = await isolatedReference(config, primary => observe(primary, config))
-      if (runs.length) assertSameCapture(run, runs[0], 'independent DATEFORMAT captures differ')
       runs.push(run)
+      if (runs.length === 2) {
+        try { assertSameCapture(runs[1], runs[0], 'independent DATEFORMAT captures differ') }
+        catch (error) {
+          await writeFile(output, JSON.stringify({ image, independentContainers: 2, divergentRuns: runs }) + '\n', { flag: 'wx' })
+          throw error
+        }
+      }
     })
   }
   const actual = { image, independentContainers: 2, results: runs[0] }

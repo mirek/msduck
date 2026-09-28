@@ -43,10 +43,11 @@ independent containers and fresh private databases, comparing their complete
 records before writing. The script uses exclusive writes to refuse replacing
 either the output or the retained fixture; `--write-fixture` only creates a
 missing fixture. It writes the requested output before comparing with the
-retained fixture, so drift remains available for inspection. The retained
-capture was made on `linux.local`; the local Docker VM exposed only 2 GiB and
-SQL Server exited before login readiness. This is a resource limit of that
-VM, not a DATEFORMAT result.
+retained fixture, so drift remains available for inspection. If the two fresh
+containers disagree, it writes both records under `divergentRuns` before
+failing. The retained capture was made on `linux.local`; the local Docker VM
+exposed only 2 GiB and SQL Server exited before login readiness. This is a
+resource limit of that VM, not a DATEFORMAT result.
 
 The current server has no explicit DATEFORMAT session setting in its engine
 source. This fixture is reference evidence for follow-up binding and runtime
