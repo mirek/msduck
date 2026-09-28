@@ -5035,6 +5035,29 @@
       "dependencies": [],
       "issue": 486,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PSAZO"
+    },
+    {
+      "id": "conditional-mixed-flags-v1",
+      "title": "Match folded mixed-family conditional nullable flags",
+      "state": "backlog",
+      "authorization": "Direct owner continuing implementation goal and first-party expanded reference/conditional-literal-folding.json capture; no external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/projection.rs",
+        "crates/msduck-sql/src/projection/constant_case.rs",
+        "crates/msduck-sql/src/result_properties.rs",
+        "crates/msduck-sql/tests/conditional_literal_flags.rs"
+      ],
+      "acceptance": [
+        "Start only after conditional-literal-folding-v1 merges and is marked done; owner must promote this backlog snapshot to ready before a new claim.",
+        "Use the retained SQL Server fixture without editing it. Remove only the four fNullable 33-versus-32 differences in mixed-family selected-ANSI CASE/COALESCE cases reported by the focused replay, preserving exact types, widths, rows and completion events.",
+        "Derive flags from captured compile-time syntax and declarations, not runtime values. Preserve nullable conversion and parameter cases, unknown barriers, and fixed NCHAR conditional padding.",
+        "Add meaningful deterministic property tests and focused raw client replay; run formatting, strict Clippy, workspace tests, independent clients and local diagnostic audit at the exact revision; use an owner PR with exact-head CI and verified review."
+      ],
+      "dependencies": [
+        "conditional-literal-folding-v1"
+      ],
+      "issue": 489,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PSFkA"
     }
   ]
 }
