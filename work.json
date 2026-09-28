@@ -5798,6 +5798,29 @@
       ],
       "issue": 550,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PU9mv"
+    },
+    {
+      "id": "identity-insert-errors-reference-v1",
+      "title": "Capture IDENTITY_INSERT failure allocation and ON/OFF edge semantics",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility goal and prior first-party IDENTITY_INSERT captures; independent SQL Server reference evidence for runtime integration.",
+      "scope": [
+        "scripts/capture-identity-insert-errors.mjs",
+        "reference/identity-insert-errors.json",
+        "docs/identity-insert-errors-reference.md"
+      ],
+      "acceptance": [
+        "Capture two fresh-database runs on the pinned SQL Server 2025 image and an independent-container replay for repeated ON/OFF, OFF on another table, missing/nonidentity targets and DEFAULT VALUES while ON.",
+        "Probe explicit identity writes that fail UNIQUE, CHECK, NOT NULL or source conversion checks, plus explicit values rolled back in a transaction. After each boundary, record IDENT_CURRENT, rows and later generated values to separate allocator advancement from row publication.",
+        "Retain exact rows, column descriptors, error number/state/class/message, ordered TDS event kinds and raw DONE words/commands without normalizing evidence. Add fixture checksum/validator, refuse output alias and unpinned image, and document what is proven versus unprobed/runtime unsupported. Do not edit any claimed Rust, parser or native allocator files."
+      ],
+      "dependencies": [
+        "identity-insert-reference-v1",
+        "identity-insert-rpc-reference-v1",
+        "identity-sequence-advance-v1"
+      ],
+      "issue": 552,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVFcM"
     }
   ]
 }
