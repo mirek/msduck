@@ -5614,6 +5614,25 @@
       ],
       "issue": 533,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PUKSY"
+    },
+    {
+      "id": "sequence-reference-v1",
+      "title": "Capture SQL Server sequence allocation and catalog semantics",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server compatibility implementation goal and owner-authored issue #535",
+      "scope": [
+        "scripts/capture-sequence-reference.mjs",
+        "reference/sequence-reference.json",
+        "docs/sequence-reference.md"
+      ],
+      "acceptance": [
+        "Capture exact ordered rows, result descriptors, errors, DONE tokens and relevant sys.sequences properties for CREATE/NEXT VALUE FOR/ALTER/DROP on private sequences.",
+        "Probe same-statement repeated references, multiple rows, rollback-independent allocation, bounded exhaustion/cycle, restart, cross-session observation and connection reuse after errors; use NO CACHE for persistence observations.",
+        "Pin the SQL Server image, validate capture completeness, replay independent fresh databases, refuse in-place fixture overwrite and document implementation gaps without equating DuckDB nextval with SQL Server semantics."
+      ],
+      "dependencies": [],
+      "issue": 535,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PUPSY"
     }
   ]
 }
