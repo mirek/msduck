@@ -5699,7 +5699,7 @@
     {
       "id": "dateformat-runtime-plan-v1",
       "title": "Plan DATEFORMAT session runtime and deterministic conversion stages",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing fully compatible SQL Server/Rust/DuckDB implementation goal and first-party reference PR #541",
       "scope": [
         "docs/dateformat-runtime-plan.md"
