@@ -5312,7 +5312,7 @@
     {
       "id": "at-time-zone-future-rules-v1",
       "title": "Extend captured AT TIME ZONE named-zone rules through 2100",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing implementation goal and first-party SQL Server 2025 reference work; no external content is input.",
       "scope": [
         "scripts/capture-at-time-zone-history-2051-2100.mjs",
