@@ -147,7 +147,34 @@ function validate(run) {
     }
   }
   const value = name => get(name).sets[0].rows[0][0]
+  const descriptor = name => get(name).sets[0].columns.map(({ name: column, type, length, precision, scale, flags }) =>
+    ({ name: column, type, length, precision, scale, flags }))
+  const conversionDescriptors = [
+    { name: 'value_0', type: 'Date', length: null, precision: null, scale: null, flags: 33 },
+    { name: 'value_1', type: 'DateTimeN', length: 8, precision: null, scale: null, flags: 33 },
+    { name: 'value_2', type: 'DateTime2', length: null, precision: null, scale: 7, flags: 33 },
+    { name: 'value_3', type: 'DateTimeOffset', length: null, precision: null, scale: 7, flags: 33 },
+    { name: 'dto_text', type: 'NVarChar', length: 96, precision: null, scale: null, flags: 33 },
+    { name: 'dto_offset_minutes', type: 'IntN', length: 4, precision: null, scale: null, flags: 33 },
+  ]
+  for (const name of ['mdy ambiguous', 'dmy ambiguous', 'ydm same date']) {
+    assert.deepEqual(descriptor(name), conversionDescriptors, `${name}: temporal descriptors changed`)
+  }
+  assert.deepEqual(descriptor('ydm strict date failure'), [
+    { ...conversionDescriptors[0], name: 'value' },
+  ], 'failed DATE descriptor changed')
+  assert.deepEqual(descriptor('ISO timestamp under mdy'), [
+    { ...conversionDescriptors[2], name: 'dt2' },
+    { ...conversionDescriptors[3], name: 'dto' },
+    conversionDescriptors[4], conversionDescriptors[5],
+  ], 'ISO temporal descriptors changed')
   assert.notDeepEqual(value('mdy ambiguous'), value('dmy ambiguous'), 'ambiguous input should follow order')
+  assert.deepEqual(get('ydm same date').sets[0].rows[0].slice(0, 4), [
+    { kind: 'date', value: '2024-05-04T00:00:00.000Z' },
+    { kind: 'date', value: '2024-04-05T00:00:00.000Z' },
+    { kind: 'date', value: '2024-05-04T00:00:00.000Z', nanosecondsDelta: 0 },
+    { kind: 'date', value: '2024-05-04T00:00:00.000Z', nanosecondsDelta: 0 },
+  ], 'ydm DATE/DATETIME/DATETIME2/DATETIMEOFFSET type split changed')
   assert.deepEqual(value('A retains dmy'), value('A unchanged by B'), 'other session changed A')
   assert.deepEqual(value('B own setting'), get('ymd same date').sets[0].rows[0][0], 'B did not adopt ymd')
   assert.notDeepEqual(value('B own setting'), value('B ymd spelling under mdy'), 'B setting indistinguishable from mdy')
@@ -160,8 +187,14 @@ function validate(run) {
   const isoRow = get('ISO timestamp under dmy').sets[0].rows[0]
   assert.equal(isoRow[3], 120, 'original ISO offset minutes lost')
   assert(isoRow[2].includes('+02:00'), 'original ISO offset text lost')
-  assert.equal(get('ydm strict date failure').errors.length, 1)
-  assert.equal(get('invalid format').errors.length, 1)
+  assert.deepEqual(get('ydm strict date failure').errors, [{
+    number: 241, state: 1, class: 16, lineNumber: 1,
+    message: 'Conversion failed when converting date and/or time from character string.',
+  }], 'strict DATE diagnostic changed')
+  assert.deepEqual(get('invalid format').errors, [{
+    number: 2741, state: 1, class: 16, lineNumber: 1,
+    message: "SET DATEFORMAT date order 'xyz' is invalid.",
+  }], 'invalid DATEFORMAT diagnostic changed')
   for (const [name, command] of [['ydm strict date failure', 193], ['invalid format', 249]]) {
     assertSameCapture(get(name).doneTokens, [{
       kind: 'DONE', more: false, sqlError: true, attention: false,
