@@ -57,10 +57,14 @@ fn ancient_named_zone_seasons_match_retained_sql_server_offsets() {
 }
 
 #[test]
-fn ancient_range_crosses_0500_and_1000_but_rejects_0499() {
+fn ancient_range_crosses_0499_0500_and_1000() {
     let server = Server::open(":memory:").unwrap();
     let mut session = Session::new(server.connection().unwrap()).unwrap();
     for (sql, expected) in [
+        (
+            "SELECT CAST('0499-12-31T12:00:00' AS DATETIME2(7)) AT TIME ZONE 'Pacific Standard Time'",
+            "0499-12-31T12:00:00.0000000-08:00",
+        ),
         (
             "SELECT CAST('0500-01-01T12:00:00' AS DATETIME2(7)) AT TIME ZONE 'Pacific Standard Time'",
             "0500-01-01T12:00:00.0000000-08:00",
@@ -83,17 +87,6 @@ fn ancient_range_crosses_0500_and_1000_but_rejects_0499() {
         assert_eq!(
             first_offset(&bytes),
             Some(DateTimeOffset::parse_iso(expected).unwrap()),
-            "{sql}"
-        );
-    }
-    for sql in [
-        "SELECT CAST('0499-12-31T12:00:00' AS DATETIME2(7)) AT TIME ZONE 'Pacific Standard Time'",
-        "SELECT CAST('0499-12-31T12:00:00+00:00' AS DATETIMEOFFSET(7)) AT TIME ZONE 'Pacific Standard Time'",
-    ] {
-        assert!(
-            !session
-                .batch_response(sql, &Default::default(), false, None)
-                .1,
             "{sql}"
         );
     }

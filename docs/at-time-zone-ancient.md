@@ -20,17 +20,18 @@ that the compact [runtime prefix](../src/at_time_zone_rules_0500_0999.json)
 derives exactly from the pinned fixture and joins continuously to the existing
 1000–1499 table.
 
-The native adapter combines this prefix with the 1000–1499, 1500–1799,
-1800–1899, 1900–2050 and 2051–2100 tables. Named-zone UTC instants from 0500-01-01
-through 2100-12-31 are in the captured range; `UTC` retains the full SQL
-temporal range. Dates before 0500 and from 2101 onward remain explicitly
-uncaptured for other names. The [SQL-facing regression](../tests/at_time_zone_ancient.rs)
-checks seasonal offsets for Pacific, Central European and Samoa zones, both
-ends of the new range, and explicit rejection before it.
+The native adapter combines this prefix with the 0001–0499, 1000–1499,
+1500–1799, 1800–1899, 1900–2050 and 2051–2100 tables. Named-zone UTC
+instants from 0001-01-01 through 2100-12-31 are in the captured range;
+`UTC` retains the full SQL temporal range. Dates from 2101 onward remain
+explicitly uncaptured for other names. The
+[SQL-facing regression](../tests/at_time_zone_ancient.rs) checks seasonal
+offsets for Pacific, Central European and Samoa zones and the year-0500
+join. The first-century regression covers the lower boundary.
 
 A daily scan could miss changes that cancel between sampled midnights; minute
-refinement does not prove subminute boundaries. The pinned SQL Server image
-accepts named-zone inputs as early as year 1, so 0001–0499 remains a genuine
-compatibility gap. Exact invalid-zone error 9820 and some TDS result flags
-remain separate gaps. This extension preserves them as differences rather
+refinement does not prove subminute boundaries. Some year-1 local-wall inputs
+fail; exact error 9813 token parity remains a separate gap. Exact invalid-zone
+error 9820 and some TDS result flags remain separate gaps. This extension
+preserves them as differences rather
 than treating a partial snapshot as full parity.

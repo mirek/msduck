@@ -16,7 +16,7 @@ plus offset-bearing inputs before 1900 and after 2050. An offset-bearing
 
 The original transition snapshot covers 1900-01-01 through 2050-12-31
 for 141 named zones; pinned historical and future extensions now bring the
-combined captured named-zone window to 0500-01-01 through 2100-12-31. UTC has
+combined captured named-zone window to 0001-01-01 through 2100-12-31. UTC has
 offset zero and no transitions in those tables.
 The adapter now skips the snapshot-range guard **only** for the exact `UTC`
 catalog key after the previously captured case/NUL lookup normalization. The

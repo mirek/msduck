@@ -31,11 +31,14 @@ to the next rule table. The script uses `setUTCFullYear` for years 1–99;
 fresh capture writes a new file rather than replacing pinned evidence, so
 changed SQL Server output can be compared raw.
 
-The runtime adapter still accepts named-zone UTC instants only from
-0500-01-01 through 2100-12-31; `UTC` retains the full SQL temporal range.
-This reference task does not extend runtime behavior. A separately claimed
-successor should generate and integrate rules only after accounting for the
-year-1 boundary and SQL Server's local-wall error behavior.
+The [source-pinned runtime prefix](../src/at_time_zone_rules_0001_0499.json)
+and native adapter now accept named-zone UTC instants from 0001-01-01 through
+2100-12-31; `UTC` retains the full SQL temporal range. The
+[SQL-facing regression](../tests/at_time_zone_first_centuries.rs) checks
+seasonal offsets, the year-1 instant and local-wall distinction, all 423
+captured local-wall boundary probes, and the year-0500 join. Early
+positive-offset local walls remain explicitly rejected.
+Exact error 9813 token parity remains a separate compatibility gap.
 
 Daily sampling can miss changes that cancel between sampled midnights, and
 minute refinement does not prove subminute boundaries. These limitations
