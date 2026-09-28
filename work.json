@@ -5171,7 +5171,7 @@
     {
       "id": "at-time-zone-history-1900-2050-v1",
       "title": "Capture SQL Server Windows-zone transition history, 1900–2050",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing owner instruction and owner-run pinned SQL Server 2025 captures; no third-party issue or review content is input.",
       "scope": [
         "scripts/capture-at-time-zone-history.mjs",
