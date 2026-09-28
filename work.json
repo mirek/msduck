@@ -5618,7 +5618,7 @@
     {
       "id": "sequence-reference-v1",
       "title": "Capture SQL Server sequence allocation and catalog semantics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server compatibility implementation goal and owner-authored issue #535",
       "scope": [
         "scripts/capture-sequence-reference.mjs",
