@@ -5194,7 +5194,7 @@
     {
       "id": "at-time-zone-native-v1",
       "title": "Implement native named-zone AT TIME ZONE adapter from pinned history",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing owner implementation goal and first-party pinned SQL Server history #501; no external submission is input.",
       "scope": [
         "scripts/generate-at-time-zone-rules.mjs",
