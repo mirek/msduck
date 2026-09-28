@@ -1,5 +1,7 @@
 #[path = "msduck_pending_drain.rs"]
 mod msduck_pending_drain;
+#[path = "msduck_identity_advance.rs"]
+mod msduck_identity_advance;
 
 use crate::{is_compiler, link_windows_system_libs, win_target, write_bindings};
 use std::{
@@ -132,6 +134,7 @@ static int64_t MSDuckIdentityBits(uint64_t bits) {
         sequence = sequence.replace(before, after);
     }
     std::fs::write(sequence_path, sequence).expect("patch private identity sequence state");
+    msduck_identity_advance::apply(out_dir);
 
     // During initial WAL replay the session default database does not exist
     // yet. Default-expression binders already have the owning table's catalog.

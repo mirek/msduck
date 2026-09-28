@@ -32,6 +32,24 @@ cycling DuckDB sequences.
 Regression: identity reopen/current-value assertions, concurrent connection
 lookups, WAL recovery subprocess test and tedious IDENT_CURRENT exhaustion tests.
 
+`__msduck_identity_advance(sequence_name, explicit_bigint)` is a bundled-only
+private scalar operation for a later `SET IDENTITY_INSERT` adapter. It accepts
+only noncycling sequences named `__msduck_identity_` followed by 32 hex digits,
+and rejects values outside the sequence's bounds. With the sequence mutex held,
+it compares a candidate against the current directional high/low-water mark.
+An advancing value updates the same last value, next counter and usage record
+that `nextval` uses; a nonadvancing value returns false without changing them.
+Both outcomes are distinguishable from an error. The existing WAL sequence-usage
+path persists advances despite transaction rollback, including terminal BIGINT
+values. Ordinary DuckDB sequences are not changed by this operation.
+
+This native primitive does not make an explicit row insertion atomic with the
+allocator advance. The root adapter must coordinate its successful row write,
+session state and possible concurrent implicit allocation before exposing
+`IDENTITY_INSERT` as supported. The direct native regressions in
+`tests/identity_sequence_advance.rs` cover positive/negative sequences, bounds,
+endpoints, rollback, concurrent connections, clean reopen and unclean WAL replay.
+
 
 During initial WAL replay, `catalog.cpp` now resolves an implicit catalog against
 the catalog retriever's explicit default when the database manager has no default
