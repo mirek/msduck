@@ -35,6 +35,10 @@ pub const NULL_PATHS: [&str; 3] = [
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExtractionError {
     Static(&'static str),
+    DocumentSyntax {
+        character: u16,
+        position: usize,
+    },
     Syntax {
         character: u16,
         position: usize,
@@ -50,6 +54,7 @@ impl ExtractionError {
     pub fn marker(&self) -> &'static str {
         match self {
             Self::Static(message) => message,
+            Self::DocumentSyntax { .. } => DOCUMENT,
             Self::Syntax { .. } => PATH,
             Self::PartialRange { .. } => RANGE_PARTIAL,
         }
@@ -59,6 +64,10 @@ impl ExtractionError {
     /// a bounded native marker so the root adapter can recover its SQL identity.
     pub fn backend_message(&self) -> String {
         match self {
+            Self::DocumentSyntax {
+                character,
+                position,
+            } => format!("__msduck_json_document_syntax_v1:{position}:{character}"),
             Self::Syntax {
                 character,
                 position,
@@ -77,6 +86,14 @@ impl std::fmt::Display for ExtractionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Static(message) => f.write_str(message),
+            Self::DocumentSyntax {
+                character,
+                position,
+            } => write!(
+                f,
+                "{DOCUMENT} Unexpected character '{}' is found at position {position}.",
+                char::from_u32(u32::from(*character)).unwrap_or(char::REPLACEMENT_CHARACTER)
+            ),
             Self::Syntax {
                 character,
                 position,
@@ -98,6 +115,61 @@ impl std::fmt::Display for ExtractionError {
     }
 }
 impl std::error::Error for ExtractionError {}
+
+fn document_backend_diagnostic(message: &str) -> Option<SqlError> {
+    let fields = message.strip_prefix("__msduck_json_document_syntax_v1:")?;
+    if fields.len() > 64 {
+        return None;
+    }
+    let (position, character) = fields.split_once(':')?;
+    let error = ExtractionError::DocumentSyntax {
+        position: position.parse().ok()?,
+        character: character.parse().ok()?,
+    };
+    (message == error.backend_message()).then(|| SqlError::new(13609, 1, error.to_string()))
+}
+
+/// Locate a document error only after the extraction parser has rejected the
+/// input. The ASCII syntax projection keeps one byte per UTF-16 code unit, so
+/// serde_json's cursor can be translated back to the original source units.
+fn document_syntax_error(source: &[u16]) -> Option<ExtractionError> {
+    let projected: String = source
+        .iter()
+        .map(|&unit| if unit <= 127 { unit as u8 as char } else { 'a' })
+        .collect();
+    let error = serde_json::from_str::<serde_json::Value>(&projected).err()?;
+    if !matches!(
+        error.classify(),
+        serde_json::error::Category::Syntax | serde_json::error::Category::Eof
+    ) {
+        return None;
+    }
+    if error.is_eof() {
+        return Some(ExtractionError::DocumentSyntax {
+            character: u16::from(b'.'),
+            position: source.len(),
+        });
+    }
+    let mut line = 1;
+    let mut line_start = 0;
+    for (at, &unit) in source.iter().enumerate() {
+        if line == error.line() {
+            break;
+        }
+        if unit == u16::from(b'\n') {
+            line += 1;
+            line_start = at + 1;
+        }
+    }
+    if line != error.line() || error.column() == 0 {
+        return None;
+    }
+    let position = line_start.checked_add(error.column() - 1)?;
+    Some(ExtractionError::DocumentSyntax {
+        character: *source.get(position)?,
+        position,
+    })
+}
 
 fn syntax_backend_diagnostic(message: &str) -> Option<SqlError> {
     let fields = message.strip_prefix("__msduck_json_path_syntax_v1:")?;
@@ -189,6 +261,7 @@ pub fn diagnostic(message: &str) -> Option<SqlError> {
     })
     .or_else(|| partial_range_message(message).then(|| SqlError::new(13659, 1, message)))
     .or_else(|| syntax_backend_diagnostic(message))
+    .or_else(|| document_backend_diagnostic(message))
 }
 /// Trim only JSON whitespace.
 pub fn trim(s: &str) -> &str {
@@ -444,6 +517,21 @@ fn exists_inner(source: &str, path_text: &str) -> Option<bool> {
 /// Extract JSON_VALUE (`query = false`) or JSON_QUERY (`query = true`) with
 /// structured errors for backend adapters.
 pub fn extract_detailed(
+    source: &str,
+    path_text: &str,
+    query: bool,
+) -> Result<Option<String>, ExtractionError> {
+    extract_detailed_inner(source, path_text, query).map_err(|error| {
+        if matches!(&error, ExtractionError::Static(message) if *message == DOCUMENT) {
+            let units = source.encode_utf16().collect::<Vec<_>>();
+            document_syntax_error(&units).unwrap_or(error)
+        } else {
+            error
+        }
+    })
+}
+
+fn extract_detailed_inner(
     source: &str,
     path_text: &str,
     query: bool,
@@ -992,6 +1080,20 @@ fn extract_advanced_utf16(
 /// Extract exact UTF-16 scalar units or unchanged container source text with
 /// structured errors for backend adapters.
 pub fn extract_utf16_detailed(
+    source: &[u16],
+    path: &[u16],
+    query: bool,
+) -> Result<Option<Vec<u16>>, ExtractionError> {
+    extract_utf16_detailed_inner(source, path, query).map_err(|error| {
+        if matches!(&error, ExtractionError::Static(message) if *message == DOCUMENT) {
+            document_syntax_error(source).unwrap_or(error)
+        } else {
+            error
+        }
+    })
+}
+
+fn extract_utf16_detailed_inner(
     source: &[u16],
     path: &[u16],
     query: bool,

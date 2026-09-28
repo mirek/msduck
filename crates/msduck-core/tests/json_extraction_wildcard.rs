@@ -49,9 +49,16 @@ fn captured_wildcard_results_and_core_diagnostics_match_both_reference_runs() {
                     assert_eq!(identity.state, reference["state"], "{name}/query={query}");
                 }
                 if identity.number == 13607 {
-                    let error = detailed.unwrap_err();
+                    let error = detailed.as_ref().unwrap_err();
                     let exact = diagnostic(&error.backend_message()).unwrap();
                     assert_eq!(exact.number, 13607, "{name}/query={query}");
+                    assert_eq!(exact.state, reference["state"], "{name}/query={query}");
+                    assert_eq!(exact.message, reference["message"], "{name}/query={query}");
+                }
+                if identity.number == 13609 {
+                    let error = detailed.as_ref().unwrap_err();
+                    let exact = diagnostic(&error.backend_message()).unwrap();
+                    assert_eq!(exact.number, 13609, "{name}/query={query}");
                     assert_eq!(exact.state, reference["state"], "{name}/query={query}");
                     assert_eq!(exact.message, reference["message"], "{name}/query={query}");
                 }
@@ -85,4 +92,19 @@ fn wildcard_existence_is_unchanged_and_large_arrays_are_iterative() {
     let many = format!("[{}]", "1,".repeat(20_000).trim_end_matches(','));
     assert_eq!(extract(&many, path, false), Ok(None));
     assert_eq!(extract(&many, path, true), Ok(None));
+}
+
+#[test]
+fn document_cursor_counts_utf16_units_before_the_invalid_value() {
+    let source = "[\"😀\",x]";
+    let path = "$[*]";
+    let utf8 = extract_detailed(source, path, false).unwrap_err();
+    let source_units = source.encode_utf16().collect::<Vec<_>>();
+    let path_units = path.encode_utf16().collect::<Vec<_>>();
+    let utf16 = extract_utf16_detailed(&source_units, &path_units, false).unwrap_err();
+    assert_eq!(utf8, utf16);
+    assert_eq!(
+        diagnostic(&utf8.backend_message()).unwrap().message,
+        "JSON text is not properly formatted. Unexpected character 'x' is found at position 6."
+    );
 }

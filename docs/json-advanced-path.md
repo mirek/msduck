@@ -28,18 +28,20 @@ The deterministic core now evaluates ranges with source-preserving slices,
 UTF-16 path and value handling, and an explicit bounded array traversal.
 The fixture test matches the result or diagnostic identity of all 284
 observations through both the UTF-8 and UTF-16 entry points, including the
-complete dynamic 13659 message and captured 13607 malformed-path diagnostics.
-Structured core errors carry range bounds or the unexpected path character,
-UTF-16 position and state to the root adapter. The TDS integration test matches
-the captured 13659 and 13607 errors' numbers, states, classes and messages,
+complete dynamic 13659 message and captured 13607 malformed-path and 13609
+malformed-document diagnostics. Structured core errors carry range bounds or
+the unexpected character and UTF-16 position to the root adapter. The TDS integration test matches
+the captured 13659, 13607 and 13609 errors' numbers, states, classes and messages,
 then checks a successful range result and its column type on the same connection. The
 ordinary public path parser and `JSON_PATH_EXISTS` still reject ranges.
 
 Remaining differences are recorded rather than hidden:
 
-- Malformed document errors retain generic 13609 text rather than SQL
-  Server's character and position. The captured malformed-path forms match,
-  but this does not establish complete 13607 coverage for other path grammar.
+- The captured malformed-document and malformed-path forms match, but this does
+  not establish complete 13609 coverage for other JSON grammar or complete
+  13607 coverage for other path grammar. The document cursor is derived only
+  after the extraction parser rejects the input; early selected values retain
+  the observed behavior even when a later document suffix is malformed.
 - The 13659 wire test covers the captured error fields and one successful
   result descriptor. It does not establish full adapter, descriptor or event
   ordering parity for every advanced path. The raw reference fixture

@@ -45,6 +45,13 @@ fn captured_range_results_and_diagnostic_identities_match_both_runs() {
                     assert_eq!(exact.state, reference["state"], "{name}/query={query}");
                     assert_eq!(exact.message, reference["message"], "{name}/query={query}");
                 }
+                if identity.number == 13609 {
+                    let error = detailed.as_ref().unwrap_err();
+                    let exact = diagnostic(&error.backend_message()).unwrap();
+                    assert_eq!(exact.number, 13609, "{name}/query={query}");
+                    assert_eq!(exact.state, reference["state"], "{name}/query={query}");
+                    assert_eq!(exact.message, reference["message"], "{name}/query={query}");
+                }
                 if identity.number == 13659 {
                     let message = detailed.unwrap_err().to_string();
                     assert_eq!(message, reference["message"], "{name}/query={query}");
@@ -105,6 +112,26 @@ fn syntax_identity_requires_a_complete_canonical_backend_marker() {
         "__msduck_json_path_syntax_v1:21:0:84",
         "__msduck_json_path_syntax_v1:21:4:84:1",
         "prefix __msduck_json_path_syntax_v1:21:4:84",
+    ] {
+        assert!(diagnostic(malformed).is_none(), "{malformed}");
+    }
+}
+
+#[test]
+fn document_identity_requires_a_complete_canonical_backend_marker() {
+    let canonical = "__msduck_json_document_syntax_v1:3:120";
+    let identity = diagnostic(canonical).unwrap();
+    assert_eq!(identity.number, 13609);
+    assert_eq!(identity.state, 1);
+    assert_eq!(
+        identity.message,
+        "JSON text is not properly formatted. Unexpected character 'x' is found at position 3."
+    );
+    for malformed in [
+        "__msduck_json_document_syntax_v1:03:120",
+        "__msduck_json_document_syntax_v1:3:0120",
+        "__msduck_json_document_syntax_v1:3:120:1",
+        "prefix __msduck_json_document_syntax_v1:3:120",
     ] {
         assert!(diagnostic(malformed).is_none(), "{malformed}");
     }
