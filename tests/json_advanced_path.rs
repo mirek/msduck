@@ -5,7 +5,7 @@ use tokio::net::TcpStream;
 use tokio_util::compat::TokioAsyncWriteCompatExt;
 
 #[tokio::test]
-async fn strict_partial_ranges_preserve_captured_wire_errors_and_connection() {
+async fn captured_range_and_path_syntax_errors_preserve_wire_fields_and_connection() {
     let fixture: serde_json::Value =
         serde_json::from_str(include_str!("../reference/json-advanced-path.json")).unwrap();
     let server = Server::open(":memory:").unwrap();
@@ -60,6 +60,45 @@ async fn strict_partial_ranges_preserve_captured_wire_errors_and_connection() {
         compared += 1;
     }
     assert_eq!(compared, 18);
+
+    let wildcard_fixture: serde_json::Value =
+        serde_json::from_str(include_str!("../reference/json-extraction-wildcard.json")).unwrap();
+    let mut syntax_errors = 0;
+    for fixture in [&fixture, &wildcard_fixture] {
+        for record in fixture["containers"][0]["runs"][0].as_array().unwrap() {
+            let reference = &record["result"]["errors"][0];
+            if reference["number"] != 13607 {
+                continue;
+            }
+            assert!(record["result"]["sets"].as_array().unwrap().is_empty());
+            let sql = record["sql"].as_str().unwrap();
+            let error = match client.simple_query(sql).await {
+                Err(error) => error,
+                Ok(stream) => stream.into_results().await.unwrap_err(),
+            };
+            let Error::Server(error) = error else {
+                panic!("expected SQL Server error for {sql}: {error}");
+            };
+            assert_eq!(error.code(), 13607, "{sql}");
+            assert_eq!(
+                error.state(),
+                reference["state"].as_u64().unwrap() as u8,
+                "{sql}"
+            );
+            assert_eq!(
+                error.class(),
+                reference["class"].as_u64().unwrap() as u8,
+                "{sql}"
+            );
+            assert_eq!(
+                error.message(),
+                reference["message"].as_str().unwrap(),
+                "{sql}"
+            );
+            syntax_errors += 1;
+        }
+    }
+    assert_eq!(syntax_errors, 14);
 
     for sql in [
         "SELECT JSON_VALUE('[1]','strict $[0 to 2]') AS value",

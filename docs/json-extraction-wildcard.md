@@ -24,17 +24,18 @@ the full document, then walks wildcard branches in source order with an
 explicit stack holding one array iterator per nesting level. It retains source
 slices for containers and lexical numbers, decodes strings only when selected,
 and uses the same UTF-16 selection logic for both UTF-8 and raw UTF-16 inputs.
-The core fixture test matches 196 records across the two runs; the other 16
-records exercise advanced non-wildcard path forms deliberately left unsupported.
+The core fixture test matches the result or diagnostic identity of all 212
+records across the two runs, including advanced non-wildcard paths now handled
+by the range evaluator.
 
 Known differences remain explicit:
 
-- SQL Server 2025 accepts captured `[0 to 1]` and `[0 to 0]` range paths,
-  yielding NULL and `1` respectively. The core returns `PATH` for ranges.
-- SQL Server reports 13660 with distinct states for captured `[last]` and
-  `[0,1]` paths. The core returns `PATH`.
+- The captured range results and 13660 states for `[last]` and `[0,1]` now
+  match in the extraction APIs; this fixture alone does not cover the full
+  advanced path grammar.
 - The malformed `'$[*].'` path has SQL error 13607/state 14 with an offset;
-  the core currently provides generic `PATH` mapped to state 1.
+  the detailed core APIs and TDS adapter preserve its captured character,
+  UTF-16 position, state and message. The legacy core API still returns `PATH`.
 - Malformed JSON reports SQL 13609 with an unexpected character and position;
   the core's `DOCUMENT` diagnostic does not retain that detail. Root adapters,
   descriptors and event ordering have not been compared against this fixture.
