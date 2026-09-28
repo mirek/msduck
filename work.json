@@ -5021,7 +5021,7 @@
     {
       "id": "parameter-metadata-provenance-v1",
       "title": "Preserve bound parameter provenance in result metadata",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing implementation goal and owner-run SQL Server prepared capture during conditional-literal-folding-v1; no external submission is input.",
       "scope": [
         "src/result_types.rs"
