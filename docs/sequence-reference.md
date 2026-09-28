@@ -7,7 +7,10 @@ first call returns 10. Two references to the same sequence in one row both
 return 12 and consume **one** value. An ordered two-row query returns 14, then
 16. A further call emits a `BIGINT` result descriptor before error 11728,
 state 1, class 16, followed by a final DONE with a null row count; no row is
-emitted. The event trace preserves COLMETADATA, ERROR and DONE in that order.
+emitted. The event trace preserves COLMETADATA, ERROR and DONE in that order;
+the parsed DONE token has `sqlError=true`, `attention=false`,
+`serverError=false` and command 193. The fixture also retains these decoded
+status fields for every other DONE token.
 `sys.sequences.current_value` remains 16 and `is_exhausted` becomes true. The
 catalog's start, increment, bounds and current value columns have native
 `SQL_VARIANT` wire descriptors. Separate `SQL_VARIANT_PROPERTY(..., 'BaseType')`
@@ -20,4 +23,4 @@ After `ALTER SEQUENCE ... RESTART WITH 10`, a call inside a transaction returns 
 
 Microsoft's [CREATE SEQUENCE documentation](https://learn.microsoft.com/en-us/sql/t-sql/statements/create-sequence-transact-sql?view=sql-server-ver17) states that numbers are consumed outside transaction rollback, and its [sequence-number guide](https://learn.microsoft.com/en-us/sql/relational-databases/sequence-numbers/sequence-numbers?view=sql-server-ver17) describes the one-value-per-row behavior for repeated references. The raw capture pins the precise rows, descriptors and completion sequence for this image. It does not prove every supported placement, data type, cache option, concurrency interleaving or diagnostic.
 
-msduck currently uses private DuckDB sequences for identity allocation; it does not expose SQL Server `CREATE SEQUENCE`, `NEXT VALUE FOR`, `ALTER SEQUENCE`, `DROP SEQUENCE` or `sys.sequences` as a compatible public feature. Implementing this fixture requires SQL Server syntax and declaration binding, database-wide non-rollback allocation, statement-row allocation sharing, transactional sequence DDL, typed catalog rows and exact TDS errors. DuckDB `nextval` alone does not establish those contracts.
+msduck currently uses private DuckDB sequences for identity allocation; it does not expose SQL Server `CREATE SEQUENCE`, `NEXT VALUE FOR`, `ALTER SEQUENCE`, `DROP SEQUENCE` or `sys.sequences` as a compatible public feature. Implementing this fixture requires SQL Server syntax and declaration binding, database-wide non-rollback allocation, statement-row allocation sharing, typed catalog rows and exact TDS errors. DuckDB `nextval` alone does not establish those contracts. Sequence DDL behavior inside a transaction remains unmeasured by this capture.

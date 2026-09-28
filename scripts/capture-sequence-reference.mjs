@@ -45,8 +45,28 @@ const cases = [
 
 function captureEvents(connection, sql) {
   return new Promise(resolve => {
-    const result = { sets: [], done: [], errors: [], info: [], events: [], returnStatus: null }
+    const result = { sets: [], done: [], doneTokens: [], errors: [], info: [], events: [], returnStatus: null }
+    const createParser = connection.createTokenStreamParser
+    connection.createTokenStreamParser = function (message, handler) {
+      const parser = createParser.call(this, message, handler)
+      assert.equal(typeof parser.parser?.prependListener, 'function', 'Tedious token stream unavailable')
+      parser.parser.prependListener('data', token => {
+        if (['DONE', 'DONEINPROC', 'DONEPROC'].includes(token.name)) {
+          result.doneTokens.push({
+            kind: token.name,
+            more: token.more,
+            sqlError: token.sqlError,
+            attention: token.attention,
+            serverError: token.serverError,
+            rowCount: token.rowCount ?? null,
+            command: token.curCmd,
+          })
+        }
+      })
+      return parser
+    }
     const request = new Request(sql, (error, rowCount) => {
+      connection.createTokenStreamParser = createParser
       connection.off('errorMessage', onError)
       connection.off('infoMessage', onInfo)
       result.rowCount = rowCount
@@ -80,6 +100,7 @@ function captureEvents(connection, sql) {
     request.on('doneProc', (_count, _more, status) => { result.returnStatus = status })
     try { connection.execSqlBatch(request) }
     catch (error) {
+      connection.createTokenStreamParser = createParser
       connection.off('errorMessage', onError)
       connection.off('infoMessage', onInfo)
       result.errors.push({ message: error.message, number: error.number ?? null })
@@ -92,6 +113,7 @@ function shape(result, name) {
   for (const key of ['sets', 'done', 'errors', 'info']) assert(Array.isArray(result?.[key]), `${name}: missing ${key}`)
   assert(result.done.length > 0, `${name}: missing completion`)
   assert(Array.isArray(result.events) && result.events.length > 0, `${name}: missing event order`)
+  assert.equal(result.doneTokens?.length, result.done.length, `${name}: incomplete decoded DONE tokens`)
   for (const set of result.sets) {
     assert(Array.isArray(set.columns) && Array.isArray(set.rows), `${name}: missing descriptors or rows`)
     for (const column of set.columns) assert(typeof column.type === 'string' && typeof column.flags === 'number', `${name}: incomplete descriptor`)
@@ -112,6 +134,10 @@ function validate(run) {
     assert.equal(result.sets.length, 1, `${name}: descriptor before error`)
     assertSameCapture(result.sets[0].rows, [], `${name}: no partial row`)
     assertSameCapture(result.done, [{ kind: 'done', rowCount: null, more: false }], `${name}: final completion`)
+    assertSameCapture(result.doneTokens, [{
+      kind: 'DONE', more: false, sqlError: true, attention: false,
+      serverError: false, rowCount: null, command: 193,
+    }], `${name}: decoded DONE_ERROR status and command`)
     assertSameCapture(result.events, [
       { kind: 'COLMETADATA', columns: 1 },
       { kind: 'ERROR', number: 11728, state: 1, class: 16 },
