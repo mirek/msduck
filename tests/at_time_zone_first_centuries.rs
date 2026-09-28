@@ -102,7 +102,7 @@ fn first_century_utc_instants_and_local_walls_keep_distinct_year_one_rules() {
     for sql in [
         "SELECT CAST('0001-01-01T00:00:00' AS DATETIME2(7)) AT TIME ZONE 'Central European Standard Time'",
         "SELECT CAST('0001-01-01T00:00:00' AS DATETIME2(7)) AT TIME ZONE 'Line Islands Standard Time'",
-        "SELECT CAST('2101-01-01T12:00:00' AS DATETIME2(7)) AT TIME ZONE 'Pacific Standard Time'",
+        "SELECT CAST('2501-01-01T12:00:00' AS DATETIME2(7)) AT TIME ZONE 'Pacific Standard Time'",
     ] {
         let (bytes, ok) = session.batch_response(sql, &Default::default(), false, None);
         assert!(!ok, "{sql}: {bytes:?}");

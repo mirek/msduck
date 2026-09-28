@@ -33,7 +33,7 @@ changed SQL Server output can be compared raw.
 
 The [source-pinned runtime prefix](../src/at_time_zone_rules_0001_0499.json)
 and native adapter now accept named-zone UTC instants from 0001-01-01 through
-2100-12-31; `UTC` retains the full SQL temporal range. The
+2500-12-31; `UTC` retains the full SQL temporal range. The
 [SQL-facing regression](../tests/at_time_zone_first_centuries.rs) checks
 seasonal offsets, the year-1 instant and local-wall distinction, all 423
 captured local-wall boundary probes, and the year-0500 join. Early

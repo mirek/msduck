@@ -24,7 +24,8 @@ const EARLY_START: i64 = 473_038_272_000_000_000; // 1500-01-01 UTC
 const HISTORICAL_START: i64 = 567_709_344_000_000_000; // 1800-01-01 UTC
 const BASE_START: i64 = 599_266_080_000_000_000; // 1900-01-01 UTC
 const FUTURE_START: i64 = 646_917_408_000_000_000; // 2051-01-01 UTC
-const END: i64 = 662_695_776_000_000_000; // 2101-01-01 UTC, exclusive
+const FUTURE_CYCLE_START: i64 = 662_695_776_000_000_000; // 2101-01-01 UTC
+const END: i64 = 788_923_584_000_000_000; // 2501-01-01 UTC, exclusive
 
 struct Zone {
     initial: i16,
@@ -38,6 +39,15 @@ struct HistorySnapshot<'a> {
     json: &'a str,
     source_sha: &'a str,
     following_sha: &'a str,
+    start: i64,
+    end: i64,
+    expected_count: usize,
+}
+
+struct FutureSnapshot<'a> {
+    json: &'a str,
+    source_sha: &'a str,
+    prior_sha: &'a str,
     start: i64,
     end: i64,
     expected_count: usize,
@@ -129,6 +139,88 @@ fn prepend_history(
     }
     if count != snapshot.expected_count {
         return Err("incomplete historical time-zone transitions".into());
+    }
+    Ok(())
+}
+
+fn append_future(
+    zones: &mut HashMap<String, Zone>,
+    image: &serde_json::Value,
+    snapshot: FutureSnapshot<'_>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let future: serde_json::Value = serde_json::from_str(snapshot.json)?;
+    if future["version"] != 1
+        || future["image"] != *image
+        || future["sourceSha256"] != snapshot.source_sha
+        || future["priorSourceSha256"] != snapshot.prior_sha
+        || future["utcStart"]
+            .as_str()
+            .and_then(|value| value.parse::<i64>().ok())
+            != Some(snapshot.start)
+        || future["utcEndExclusive"]
+            .as_str()
+            .and_then(|value| value.parse::<i64>().ok())
+            != Some(snapshot.end)
+    {
+        return Err("invalid future AT TIME ZONE rule snapshot provenance".into());
+    }
+    let records = future["zones"]
+        .as_array()
+        .ok_or("missing future zone table")?;
+    if records.len() != zones.len() {
+        return Err("incomplete future AT TIME ZONE zone table".into());
+    }
+    let mut seen = HashSet::with_capacity(records.len());
+    let mut count = 0;
+    for record in records {
+        let name = record["name"].as_str().ok_or("invalid future zone name")?;
+        let key = name.to_ascii_lowercase();
+        if !seen.insert(key.clone()) {
+            return Err("duplicate future time-zone name".into());
+        }
+        let zone = zones.get_mut(&key).ok_or("unknown future time-zone name")?;
+        let terminal = zone
+            .transitions
+            .last()
+            .map_or(zone.initial, |entry| entry.offset_after_minutes);
+        if i16::try_from(
+            record["initial"]
+                .as_i64()
+                .ok_or("invalid future baseline")?,
+        )? != terminal
+        {
+            return Err("future time-zone baseline differs from prior rules".into());
+        }
+        let entries = record["transitions"]
+            .as_array()
+            .ok_or("missing future transitions")?;
+        count += entries.len();
+        for entry in entries {
+            let fields = entry.as_array().ok_or("invalid future transition")?;
+            if fields.len() != 3 {
+                return Err("invalid future transition".into());
+            }
+            let transition = Transition {
+                utc_ticks: fields[0]
+                    .as_str()
+                    .ok_or("invalid future instant")?
+                    .parse()?,
+                offset_before_minutes: i16::try_from(
+                    fields[1].as_i64().ok_or("invalid future offset")?,
+                )?,
+                offset_after_minutes: i16::try_from(
+                    fields[2].as_i64().ok_or("invalid future offset")?,
+                )?,
+            };
+            if !(snapshot.start..snapshot.end).contains(&transition.utc_ticks) {
+                return Err("future time-zone transition outside captured range".into());
+            }
+            zone.transitions.push(transition);
+        }
+        Rules::new(zone.initial, &zone.transitions)?;
+    }
+    if count != snapshot.expected_count {
+        return Err("incomplete future time-zone transitions".into());
     }
     Ok(())
 }
@@ -250,82 +342,30 @@ fn load() -> Result<Catalog, Box<dyn std::error::Error>> {
             expected_count: 75_895,
         },
     )?;
-    let future: serde_json::Value =
-        serde_json::from_str(include_str!("at_time_zone_rules_2051_2100.json"))?;
-    if future["version"] != 1
-        || future["image"] != document["image"]
-        || future["sourceSha256"]
-            != "e7f7798940c1664048626907a4e9b52357053ae9c72e41582e29c58a1d2d3f6c"
-        || future["priorSourceSha256"] != document["sourceSha256"]
-        || future["utcStart"]
-            .as_str()
-            .and_then(|value| value.parse::<i64>().ok())
-            != Some(FUTURE_START)
-        || future["utcEndExclusive"]
-            .as_str()
-            .and_then(|value| value.parse::<i64>().ok())
-            != Some(END)
-    {
-        return Err("invalid future AT TIME ZONE rule snapshot provenance".into());
-    }
-    let future_records = future["zones"]
-        .as_array()
-        .ok_or("missing future zone table")?;
-    if future_records.len() != zones.len() {
-        return Err("incomplete future AT TIME ZONE zone table".into());
-    }
-    let mut seen = HashSet::with_capacity(future_records.len());
-    let mut future_count = 0;
-    for record in future_records {
-        let name = record["name"].as_str().ok_or("invalid future zone name")?;
-        let key = name.to_ascii_lowercase();
-        if !seen.insert(key.clone()) {
-            return Err("duplicate future time-zone name".into());
-        }
-        let zone = zones.get_mut(&key).ok_or("unknown future time-zone name")?;
-        let terminal = zone
-            .transitions
-            .last()
-            .map_or(zone.initial, |entry| entry.offset_after_minutes);
-        if i16::try_from(
-            record["initial"]
-                .as_i64()
-                .ok_or("invalid future baseline")?,
-        )? != terminal
-        {
-            return Err("future time-zone baseline differs from prior rules".into());
-        }
-        let entries = record["transitions"]
-            .as_array()
-            .ok_or("missing future transitions")?;
-        future_count += entries.len();
-        for entry in entries {
-            let fields = entry.as_array().ok_or("invalid future transition")?;
-            if fields.len() != 3 {
-                return Err("invalid future transition".into());
-            }
-            let transition = Transition {
-                utc_ticks: fields[0]
-                    .as_str()
-                    .ok_or("invalid future instant")?
-                    .parse()?,
-                offset_before_minutes: i16::try_from(
-                    fields[1].as_i64().ok_or("invalid future offset")?,
-                )?,
-                offset_after_minutes: i16::try_from(
-                    fields[2].as_i64().ok_or("invalid future offset")?,
-                )?,
-            };
-            if !(FUTURE_START..END).contains(&transition.utc_ticks) {
-                return Err("future time-zone transition outside captured range".into());
-            }
-            zone.transitions.push(transition);
-        }
-        Rules::new(zone.initial, &zone.transitions)?;
-    }
-    if future_count != 4000 {
-        return Err("incomplete future time-zone transitions".into());
-    }
+    append_future(
+        &mut zones,
+        &document["image"],
+        FutureSnapshot {
+            json: include_str!("at_time_zone_rules_2051_2100.json"),
+            source_sha: "e7f7798940c1664048626907a4e9b52357053ae9c72e41582e29c58a1d2d3f6c",
+            prior_sha: "2ecb9841cb43d0c0251f99e7e3ebd70c9f259473d12232fa6f6fb24e3dc226b9",
+            start: FUTURE_START,
+            end: FUTURE_CYCLE_START,
+            expected_count: 4_000,
+        },
+    )?;
+    append_future(
+        &mut zones,
+        &document["image"],
+        FutureSnapshot {
+            json: include_str!("at_time_zone_rules_2101_2500.json"),
+            source_sha: "4e1b4e322045da71d5ffedbac2bfb644bda6c33fa2d2d07902b44e38676afa70",
+            prior_sha: "e7f7798940c1664048626907a4e9b52357053ae9c72e41582e29c58a1d2d3f6c",
+            start: FUTURE_CYCLE_START,
+            end: END,
+            expected_count: 32_000,
+        },
+    )?;
     Ok(Catalog(Arc::new(zones)))
 }
 
@@ -548,7 +588,7 @@ mod tests {
                 .values()
                 .map(|zone| zone.transitions.len())
                 .sum::<usize>(),
-            313_109
+            345_109
         );
         let db = db();
         assert_eq!(
@@ -670,7 +710,7 @@ mod tests {
         for (stamp, zone) in [
             ("2024-01-01", "Not A Time Zone"),
             ("0001-01-01", "Central European Standard Time"),
-            ("2101-01-01", "Pacific Standard Time"),
+            ("2501-01-01", "Pacific Standard Time"),
         ] {
             let sql = format!(
                 "SELECT __msduck_at_time_zone_local_7(__msduck_datetime2_cast_7('{stamp}'),'{zone}')"

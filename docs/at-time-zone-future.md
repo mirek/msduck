@@ -19,14 +19,14 @@ derives exactly from the pinned raw fixture and joins continuously to the
 original 20,414-transition table.
 
 The native adapter uses this extension together with the earlier 1900–2050
-table and the 0001–0499, 0500–0999, 1000–1499, 1500–1799 and 1800–1899
-historical prefixes for named-zone UTC instants from 0001-01-01 through
-2100-12-31. It still accepts `UTC` across
-the full SQL temporal range because UTC has no transition history. It rejects
-uncaptured named-zone instants from 2101 onward rather than
-inventing offsets. The [SQL-facing regression](../tests/at_time_zone_future.rs)
-checks retained seasonal offsets for Pacific, Central European and Samoa zones,
-the 2051 boundary, and the end of the new range.
+table, the 0001–1899 historical prefixes and the separately pinned 2101–2500
+extension. Named-zone UTC instants from 0001-01-01 through 2500-12-31 are in
+the captured range. `UTC` still accepts the full SQL temporal range because
+it has no transition history. The adapter rejects uncaptured named-zone
+instants from 2501 onward. The
+[SQL-facing regression](../tests/at_time_zone_future.rs) checks retained
+seasonal offsets and the 2051 and 2100 boundaries; the 2101–2500 regression
+checks the later range.
 
 This remains a versioned observation, not complete named-zone support. A daily
 scan could miss changes that cancel between sampled midnights; minute refinement

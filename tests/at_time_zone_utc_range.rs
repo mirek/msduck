@@ -93,12 +93,12 @@ fn utc_uses_the_full_sql_temporal_range() {
 }
 
 #[test]
-fn named_zones_beyond_the_planned_rule_window_remain_explicit() {
+fn named_zones_beyond_the_captured_rule_window_remain_explicit() {
     let server = Server::open(":memory:").unwrap();
     let mut session = Session::new(server.connection().unwrap()).unwrap();
     for sql in [
-        "SELECT CAST('2101-01-01T12:00:00' AS DATETIME2(7)) AT TIME ZONE 'Pacific Standard Time'",
-        "SELECT CAST('2101-01-01T12:00:00+00:00' AS DATETIMEOFFSET(7)) AT TIME ZONE 'Pacific Standard Time'",
+        "SELECT CAST('2501-01-01T12:00:00' AS DATETIME2(7)) AT TIME ZONE 'Pacific Standard Time'",
+        "SELECT CAST('2501-01-01T12:00:00+00:00' AS DATETIMEOFFSET(7)) AT TIME ZONE 'Pacific Standard Time'",
     ] {
         assert!(
             !session
