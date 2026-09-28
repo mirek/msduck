@@ -38,6 +38,13 @@ fn captured_range_results_and_diagnostic_identities_match_both_runs() {
                 if identity.number != 13607 {
                     assert_eq!(identity.state, reference["state"], "{name}/query={query}");
                 }
+                if identity.number == 13607 {
+                    let error = detailed.as_ref().unwrap_err();
+                    let exact = diagnostic(&error.backend_message()).unwrap();
+                    assert_eq!(exact.number, 13607, "{name}/query={query}");
+                    assert_eq!(exact.state, reference["state"], "{name}/query={query}");
+                    assert_eq!(exact.message, reference["message"], "{name}/query={query}");
+                }
                 if identity.number == 13659 {
                     let message = detailed.unwrap_err().to_string();
                     assert_eq!(message, reference["message"], "{name}/query={query}");
@@ -79,6 +86,27 @@ fn dynamic_range_identity_requires_a_complete_canonical_message() {
         ] {
             assert!(diagnostic(&altered).is_none(), "{altered}");
         }
+    }
+}
+
+#[test]
+fn syntax_identity_requires_a_complete_canonical_backend_marker() {
+    let canonical = "__msduck_json_path_syntax_v1:21:4:84";
+    let identity = diagnostic(canonical).unwrap();
+    assert_eq!(identity.number, 13607);
+    assert_eq!(identity.state, 21);
+    assert_eq!(
+        identity.message,
+        "JSON path is not properly formatted. Unexpected character 'T' is found at position 4."
+    );
+    for malformed in [
+        "__msduck_json_path_syntax_v1:21:04:84",
+        "__msduck_json_path_syntax_v1:1:4:84",
+        "__msduck_json_path_syntax_v1:21:0:84",
+        "__msduck_json_path_syntax_v1:21:4:84:1",
+        "prefix __msduck_json_path_syntax_v1:21:4:84",
+    ] {
+        assert!(diagnostic(malformed).is_none(), "{malformed}");
     }
 }
 

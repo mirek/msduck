@@ -35,6 +35,11 @@ pub const NULL_PATHS: [&str; 3] = [
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExtractionError {
     Static(&'static str),
+    Syntax {
+        character: u16,
+        position: usize,
+        state: u8,
+    },
     PartialRange {
         index: usize,
         position: usize,
@@ -45,7 +50,21 @@ impl ExtractionError {
     pub fn marker(&self) -> &'static str {
         match self {
             Self::Static(message) => message,
+            Self::Syntax { .. } => PATH,
             Self::PartialRange { .. } => RANGE_PARTIAL,
+        }
+    }
+
+    /// DuckDB's scalar callback stringifies errors. Keep the syntax state in
+    /// a bounded native marker so the root adapter can recover its SQL identity.
+    pub fn backend_message(&self) -> String {
+        match self {
+            Self::Syntax {
+                character,
+                position,
+                state,
+            } => format!("__msduck_json_path_syntax_v1:{state}:{position}:{character}"),
+            _ => self.to_string(),
         }
     }
 }
@@ -58,6 +77,15 @@ impl std::fmt::Display for ExtractionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Static(message) => f.write_str(message),
+            Self::Syntax {
+                character,
+                position,
+                ..
+            } => write!(
+                f,
+                "{PATH} Unexpected character '{}' is found at position {position}.",
+                char::from_u32(u32::from(*character)).unwrap_or(char::REPLACEMENT_CHARACTER)
+            ),
             Self::PartialRange {
                 index,
                 position,
@@ -70,6 +98,28 @@ impl std::fmt::Display for ExtractionError {
     }
 }
 impl std::error::Error for ExtractionError {}
+
+fn syntax_backend_diagnostic(message: &str) -> Option<SqlError> {
+    let fields = message.strip_prefix("__msduck_json_path_syntax_v1:")?;
+    if fields.len() > 64 {
+        return None;
+    }
+    let mut fields = fields.split(':');
+    let (state, position, character) = (
+        fields.next()?.parse::<u8>().ok()?,
+        fields.next()?.parse::<usize>().ok()?,
+        fields.next()?.parse::<u16>().ok()?,
+    );
+    if fields.next().is_some() || !matches!(state, 14 | 15 | 16 | 21) || position == 0 {
+        return None;
+    }
+    let error = ExtractionError::Syntax {
+        character,
+        position,
+        state,
+    };
+    (message == error.backend_message()).then(|| SqlError::new(13607, state, error.to_string()))
+}
 
 fn partial_range_message(message: &str) -> bool {
     if message.len() > 128 {
@@ -138,6 +188,7 @@ pub fn diagnostic(message: &str) -> Option<SqlError> {
         })
     })
     .or_else(|| partial_range_message(message).then(|| SqlError::new(13659, 1, message)))
+    .or_else(|| syntax_backend_diagnostic(message))
 }
 /// Trim only JSON whitespace.
 pub fn trim(s: &str) -> &str {
@@ -190,6 +241,52 @@ fn range_selector(text: &[u8]) -> Result<Option<(usize, usize)>, &'static str> {
         return Err(RANGE_REVERSED);
     }
     Ok(Some((first, last)))
+}
+
+fn selector_syntax_error(selector: &[u8], offset: usize) -> Option<ExtractionError> {
+    let leading = selector.iter().take_while(|&&b| b == b' ').count();
+    let selector = &selector[leading..];
+    let offset = offset + leading;
+    let unexpected = |at: usize, state: u8| {
+        selector.get(at).map(|&character| ExtractionError::Syntax {
+            character: u16::from(character),
+            position: offset + at,
+            state,
+        })
+    };
+    if selector.first() == Some(&b'-') {
+        return unexpected(0, 21);
+    }
+    if selector.starts_with(b"last-") {
+        return unexpected(4, 21);
+    }
+    let start_digits = selector.iter().take_while(|b| b.is_ascii_digit()).count();
+    if start_digits == 0 {
+        return None;
+    }
+    if start_digits > 10 {
+        return unexpected(10, 16);
+    }
+    if selector.get(start_digits) == Some(&b't') {
+        return unexpected(start_digits, 15);
+    }
+    if selector.get(start_digits..start_digits + 2) == Some(b" T") {
+        return unexpected(start_digits + 1, 21);
+    }
+    if selector.get(start_digits..start_digits + 4) != Some(b" to ") {
+        return None;
+    }
+    let end_start = start_digits + 4;
+    if selector.get(end_start) == Some(&b'-') {
+        return unexpected(end_start, 21);
+    }
+    let end_digits = selector[end_start..]
+        .iter()
+        .take_while(|b| b.is_ascii_digit())
+        .count();
+    (end_digits > 10)
+        .then(|| unexpected(end_start + 10, 16))
+        .flatten()
 }
 fn parse_path(text: &str, wildcard: bool, range: bool) -> Result<(bool, Vec<Step>), &'static str> {
     let text = trim(text);
@@ -351,7 +448,16 @@ pub fn extract_detailed(
     path_text: &str,
     query: bool,
 ) -> Result<Option<String>, ExtractionError> {
-    let (strict, steps) = parse_path(path_text, true, true)?;
+    let (strict, steps) = match parse_path(path_text, true, true) {
+        Ok(parsed) => parsed,
+        Err(PATH) => {
+            let path_units = path_text.encode_utf16().collect::<Vec<_>>();
+            return Err(parse_path_utf16_detailed(&path_units, true, true)
+                .err()
+                .unwrap_or(ExtractionError::Static(PATH)));
+        }
+        Err(error) => return Err(error.into()),
+    };
     if steps
         .iter()
         .any(|step| matches!(step, Step::All | Step::Range { .. }))
@@ -506,6 +612,13 @@ fn parse_path_utf16(
     wildcard: bool,
     range: bool,
 ) -> Result<(bool, Vec<Utf16Step>), &'static str> {
+    parse_path_utf16_detailed(text, wildcard, range).map_err(|error| error.marker())
+}
+fn parse_path_utf16_detailed(
+    text: &[u16],
+    wildcard: bool,
+    range: bool,
+) -> Result<(bool, Vec<Utf16Step>), ExtractionError> {
     let syntax = json_syntax(text);
     let mut at = skip_ws(&syntax, 0, syntax.len());
     let mut end = syntax.len();
@@ -527,7 +640,7 @@ fn parse_path_utf16(
         }
     }
     if syntax.get(at) != Some(&b'$') {
-        return Err(PATH);
+        return Err(PATH.into());
     }
     at += 1;
     let mut steps = Vec::new();
@@ -535,10 +648,17 @@ fn parse_path_utf16(
         match syntax[at] {
             b'.' => {
                 at += 1;
+                if at == end {
+                    return Err(ExtractionError::Syntax {
+                        character: u16::from(b'.'),
+                        position: at,
+                        state: 14,
+                    });
+                }
                 if syntax.get(at) == Some(&b'"') {
                     let (kind, len) = prefix(&syntax[at..end]).ok_or(PATH)?;
                     if kind != Kind::String {
-                        return Err(PATH);
+                        return Err(PATH.into());
                     }
                     steps.push(Utf16Step::Key(
                         decode_utf16(&text[at..at + len]).map_err(|_| PATH)?,
@@ -558,7 +678,7 @@ fn parse_path_utf16(
                                 || (i > 0 && c.is_ascii_digit())
                         })
                     {
-                        return Err(PATH);
+                        return Err(PATH.into());
                     }
                     steps.push(Utf16Step::Key(text[start..at].to_vec()));
                 }
@@ -570,31 +690,51 @@ fn parse_path_utf16(
                     at += 1;
                 }
                 if at == end {
-                    return Err(PATH);
+                    return Err(PATH.into());
                 }
                 if wildcard && &syntax[start..at] == b"*" {
                     steps.push(Utf16Step::All);
-                } else if range && let Some((first, last)) = range_selector(&syntax[start..at])? {
-                    steps.push(Utf16Step::Range { first, last });
                 } else {
+                    let selector = &syntax[start..at];
+                    let parsed_range = if range {
+                        match range_selector(selector) {
+                            Ok(value) => value,
+                            Err(PATH) => {
+                                return Err(selector_syntax_error(selector, start)
+                                    .unwrap_or(ExtractionError::Static(PATH)));
+                            }
+                            Err(error) => return Err(error.into()),
+                        }
+                    } else {
+                        None
+                    };
+                    if let Some((first, last)) = parsed_range {
+                        steps.push(Utf16Step::Range { first, last });
+                        at += 1;
+                        continue;
+                    }
                     if start == at {
-                        return Err(PATH);
+                        return Err(PATH.into());
                     }
                     let mut index = 0usize;
-                    for &digit in &syntax[start..at] {
+                    for &digit in selector {
                         if !digit.is_ascii_digit() {
-                            return Err(PATH);
+                            return Err(selector_syntax_error(selector, start)
+                                .unwrap_or(ExtractionError::Static(PATH)));
                         }
                         index = index
                             .checked_mul(10)
                             .and_then(|n| n.checked_add(usize::from(digit - b'0')))
-                            .ok_or(PATH)?;
+                            .ok_or_else(|| {
+                                selector_syntax_error(selector, start)
+                                    .unwrap_or(ExtractionError::Static(PATH))
+                            })?;
                     }
                     steps.push(Utf16Step::Index(index));
                 }
                 at += 1;
             }
-            _ => return Err(PATH),
+            _ => return Err(PATH.into()),
         }
     }
     Ok((strict, steps))
@@ -856,7 +996,7 @@ pub fn extract_utf16_detailed(
     path: &[u16],
     query: bool,
 ) -> Result<Option<Vec<u16>>, ExtractionError> {
-    let (strict, mut steps) = parse_path_utf16(path, true, true)?;
+    let (strict, mut steps) = parse_path_utf16_detailed(path, true, true)?;
     let document = Utf16Document::new(source);
     let opening = skip_ws(&document.syntax, 0, source.len());
     if !matches!(document.syntax.get(opening), Some(b'{' | b'[')) {

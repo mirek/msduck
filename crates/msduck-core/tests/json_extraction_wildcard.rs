@@ -1,4 +1,7 @@
-use msduck_core::json_path::{PATH, diagnostic, exists, exists_utf16, extract, extract_utf16};
+use msduck_core::json_path::{
+    PATH, diagnostic, exists, exists_utf16, extract, extract_detailed, extract_utf16,
+    extract_utf16_detailed,
+};
 
 #[test]
 fn captured_wildcard_results_and_core_diagnostics_match_both_reference_runs() {
@@ -28,6 +31,15 @@ fn captured_wildcard_results_and_core_diagnostics_match_both_reference_runs() {
             let utf16 = extract_utf16(&source_units, &path_units, query)
                 .map(|value| value.map(|units| String::from_utf16(&units).unwrap()));
             assert_eq!(actual, utf16, "UTF-16 parity: {name}/query={query}");
+            let detailed = extract_detailed(source, path, query);
+            let detailed_utf16 = extract_utf16_detailed(&source_units, &path_units, query)
+                .map(|value| value.map(|units| String::from_utf16(&units).unwrap()));
+            assert_eq!(detailed, detailed_utf16, "detailed UTF-16 parity: {name}");
+            assert_eq!(
+                actual,
+                detailed.clone().map_err(|error| error.marker()),
+                "legacy extraction parity: {name}"
+            );
             let errors = record["result"]["errors"].as_array().unwrap();
             if let Some(reference) = errors.first() {
                 let error = actual.unwrap_err();
@@ -35,6 +47,13 @@ fn captured_wildcard_results_and_core_diagnostics_match_both_reference_runs() {
                 assert_eq!(identity.number, reference["number"], "{name}/query={query}");
                 if name != "wildcard invalid suffix" {
                     assert_eq!(identity.state, reference["state"], "{name}/query={query}");
+                }
+                if identity.number == 13607 {
+                    let error = detailed.unwrap_err();
+                    let exact = diagnostic(&error.backend_message()).unwrap();
+                    assert_eq!(exact.number, 13607, "{name}/query={query}");
+                    assert_eq!(exact.state, reference["state"], "{name}/query={query}");
+                    assert_eq!(exact.message, reference["message"], "{name}/query={query}");
                 }
                 if identity.number != 13609 && identity.number != 13607 {
                     assert_eq!(

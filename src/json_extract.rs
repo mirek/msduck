@@ -4,8 +4,21 @@ use duckdb::{
     vscalar::{ScalarFunctionSignature, VScalar},
     vtab::arrow::WritableVector,
 };
-use msduck_core::{diagnostic::SqlError, json_path::extract_detailed};
+use msduck_core::{
+    diagnostic::SqlError,
+    json_path::{ExtractionError, extract_detailed},
+};
 use sqlparser::ast::*;
+
+#[derive(Debug)]
+struct BackendExtractionError(ExtractionError);
+impl std::fmt::Display for BackendExtractionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0.backend_message())
+    }
+}
+impl std::error::Error for BackendExtractionError {}
+
 /// Recover the native diagnostic after DuckDB adds its scalar-error wrapper.
 /// Exact matching avoids treating user text embedded in unrelated errors as JSON.
 pub fn diagnostic(message: &str) -> Option<SqlError> {
@@ -166,7 +179,9 @@ impl<const MODE: u8> VScalar for Extract<MODE> {
                 unsafe {
                     result.as_mut_slice_with_len::<i32>(len)[row] = present;
                 }
-            } else if let Some(value) = extract_detailed(&texts[0], &texts[1], MODE == 1)? {
+            } else if let Some(value) =
+                extract_detailed(&texts[0], &texts[1], MODE == 1).map_err(BackendExtractionError)?
+            {
                 result.insert(row, value.as_str());
             } else {
                 result.set_null(row);
@@ -238,7 +253,8 @@ fn extract_unicode<const MODE: u8>(
                 output.flat_vector().as_mut_slice_with_len::<i32>(len)[row] = present;
             }
         } else if let Some(value) =
-            msduck_core::json_path::extract_utf16_detailed(&units[0], &units[1], MODE == 1)?
+            msduck_core::json_path::extract_utf16_detailed(&units[0], &units[1], MODE == 1)
+                .map_err(BackendExtractionError)?
         {
             let size = value
                 .len()
