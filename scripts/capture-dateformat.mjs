@@ -3,13 +3,16 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { withReferenceContainer, referenceImage } from './lib/reference-container.mjs'
 import { connect, isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/dateformat.json', import.meta.url)
-const fixtureSha256 = '836c2cf16c12f318fc4a35d8c07531ea1f3cf0e3d266cca4b453a296c20efeb3'
+const fixtureSha256 = '59652a3bec0cc75ad008982ac846e70c5d374587bf14bb45f28f47d9953b954a'
+const StreamParser = createRequire(import.meta.url)('tedious/lib/token/stream-parser.js')
+const rawDoneKinds = new Map([[0xFD, 'DONE'], [0xFE, 'DONEPROC'], [0xFF, 'DONEINPROC']])
 const args = process.argv.slice(2)
 const check = args.includes('--check')
 const writeFixture = args.includes('--write-fixture')
@@ -74,8 +77,24 @@ const casePlan = [
 
 async function captureWithDoneTokens(connection, sql) {
   const doneTokens = []
+  const rawDone = []
   const events = []
   const createParser = connection.createTokenStreamParser
+  const readToken = StreamParser.prototype.readToken
+  const recordRawDone = (parser, type) => {
+    assert(parser.options.tdsVersion >= '7_2', 'unexpected TDS version')
+    const at = parser.position
+    if (parser.buffer.length < at + 12) return parser.waitForChunk().then(() => recordRawDone(parser, type))
+    rawDone.push({
+      kind: rawDoneKinds.get(type),
+      status: parser.buffer.readUInt16LE(at),
+      command: parser.buffer.readUInt16LE(at + 2),
+    })
+    return readToken.call(parser, type)
+  }
+  StreamParser.prototype.readToken = function (type) {
+    return rawDoneKinds.has(type) ? recordRawDone(this, type) : readToken.call(this, type)
+  }
   connection.createTokenStreamParser = function (message, handler) {
     const parser = createParser.call(this, message, handler)
     assert.equal(typeof parser.parser?.prependListener, 'function', 'Tedious token stream unavailable')
@@ -98,11 +117,18 @@ async function captureWithDoneTokens(connection, sql) {
   try {
     const result = await capture(connection, sql)
     assert.equal(doneTokens.length, result.done.length, 'incomplete decoded DONE tokens')
+    assert.equal(rawDone.length, doneTokens.length, 'incomplete raw DONE status')
+    for (let index = 0; index < doneTokens.length; index++) {
+      assert.equal(rawDone[index].kind, doneTokens[index].kind, 'raw and decoded DONE kinds differ')
+      assert.equal(rawDone[index].command, doneTokens[index].command, 'raw and decoded DONE commands differ')
+      doneTokens[index].status = rawDone[index].status
+    }
     assert.deepEqual(events.filter(event => ['DONE', 'DONEINPROC', 'DONEPROC'].includes(event.kind)).map(event => event.kind),
       doneTokens.map(token => token.kind), 'wire and callback DONE order differ')
     return { ...result, doneTokens, events }
   } finally {
     connection.createTokenStreamParser = createParser
+    StreamParser.prototype.readToken = readToken
   }
 }
 
@@ -118,12 +144,6 @@ async function observe(primary, config) {
   }
   try {
     for (const { name, sql, session } of casePlan) await record(name, sql, session)
-    try { validate(run) }
-    catch (error) {
-      await mkdir(dirname(output), { recursive: true })
-      await writeFile(resolve(dirname(output), `failed-${Date.now()}.json`), JSON.stringify(run) + '\n', { flag: 'wx' })
-      throw error
-    }
     return run
   } finally {
     if (!secondary.closed) await new Promise(resolve => { secondary.once('end', resolve); secondary.close() })
@@ -145,6 +165,10 @@ function validate(run) {
     }
     assert(result.done.length > 0, `${name}: missing completion`)
     assert.equal(result.doneTokens.length, result.done.length, `${name}: missing decoded DONE status`)
+    for (const token of result.doneTokens) {
+      assert(Number.isInteger(token.status) && token.status >= 0 && token.status <= 0xffff,
+        `${name}: missing raw DONE status word`)
+    }
     assert(result.events.length > 0, `${name}: missing wire event order`)
     for (const set of result.sets) {
       assert(Array.isArray(set.columns) && Array.isArray(set.rows), `${name}: incomplete result set`)
@@ -258,7 +282,7 @@ function validate(run) {
   for (const [name, command] of [['ydm strict date failure', 193], ['invalid format', 249]]) {
     assertSameCapture(get(name).doneTokens, [{
       kind: 'DONE', more: false, sqlError: true, attention: false,
-      serverError: false, rowCount: null, command,
+      serverError: false, rowCount: null, command, status: 2,
     }], `${name}: decoded DONE_ERROR status and command`)
   }
   assertSameCapture(get('ydm strict date failure').events.map(event => event.kind),
@@ -296,12 +320,12 @@ if (check) {
       assert.equal(container.image, image)
       const run = await isolatedReference(config, primary => observe(primary, config))
       runs.push(run)
-      if (runs.length === 2) {
-        try { assertSameCapture(runs[1], runs[0], 'independent DATEFORMAT captures differ') }
-        catch (error) {
-          await writeFile(output, JSON.stringify({ image, independentContainers: 2, divergentRuns: runs }) + '\n', { flag: 'wx' })
-          throw error
-        }
+      try {
+        validate(run)
+        if (runs.length === 2) assertSameCapture(runs[1], runs[0], 'independent DATEFORMAT captures differ')
+      } catch (error) {
+        await writeFile(output, JSON.stringify({ image, independentContainers: runs.length, divergentRuns: runs }) + '\n', { flag: 'wx' })
+        throw error
       }
     })
   }

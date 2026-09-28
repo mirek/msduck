@@ -6,7 +6,7 @@ records 43 observations from each of two independent containers. It checks every
 documented order (`mdy`, `dmy`, `ymd`, `ydm`, `myd`, `dym`) against ambiguous text and
 an order-specific spelling. It retains `DATE`, `DATETIME`, `DATETIME2(7)` and
 `DATETIMEOFFSET(7)` descriptors, rows, conversion errors and ordered wire-token
-events, including decoded DONE status bits and command codes.
+events, including raw DONE status words, decoded bits and command codes.
 
 For `03/04/2024`, `mdy` returns March 4 and `dmy` returns April 3 in all four
 target types. `ymd` returns March 4 for this input. Under `ydm`, `myd` and `dym`,
@@ -44,10 +44,11 @@ records before writing. The script uses exclusive writes to refuse replacing
 either the output or the retained fixture; `--write-fixture` only creates a
 missing fixture. It writes the requested output before comparing with the
 retained fixture, so drift remains available for inspection. If the two fresh
-containers disagree, it writes both records under `divergentRuns` before
-failing. The retained capture was made on `linux.local`; the local Docker VM
-exposed only 2 GiB and SQL Server exited before login readiness. This is a
-resource limit of that VM, not a DATEFORMAT result.
+containers disagree or a run fails validation, it writes the available complete
+runs under `divergentRuns` before failing. The retained capture was made on
+`linux.local`; the local Docker VM exposed only 2 GiB and SQL Server exited
+before login readiness. This is a resource limit of that VM, not a DATEFORMAT
+result.
 
 The current server has no explicit DATEFORMAT session setting in its engine
 source. This fixture is reference evidence for follow-up binding and runtime
