@@ -5416,6 +5416,38 @@
       ],
       "issue": 519,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PTbXX"
+    },
+    {
+      "id": "at-time-zone-history-1000-1499-v1",
+      "title": "Capture and support AT TIME ZONE named-zone rules for 1000–1499",
+      "state": "backlog",
+      "authorization": "Mirek's continuing implementation goal and first-party pinned SQL Server 2025 reference probe.",
+      "scope": [
+        "scripts/capture-at-time-zone-history-1000-1499.mjs",
+        "reference/at-time-zone-history-1000-1499.json",
+        "scripts/generate-at-time-zone-history-1000-1499.mjs",
+        "src/at_time_zone_rules_1000_1499.json",
+        "src/at_time_zone_native.rs",
+        "tests/at_time_zone_medieval.rs",
+        "tests/at_time_zone_early_history.rs",
+        "docs/at-time-zone-medieval.md",
+        "docs/at-time-zone-early-history.md",
+        "docs/at-time-zone-historical.md",
+        "docs/at-time-zone-native.md",
+        "docs/at-time-zone-utc-range.md",
+        "docs/at-time-zone-future.md"
+      ],
+      "acceptance": [
+        "After at-time-zone-history-1500-1799-v1 completes, capture pinned SQL Server 2025 raw TDS descriptors, rows, diagnostics and completion for all 141 names from 1000 through 1499 with baseline, seasonal samples and minute-refined daily changes; validate checksum, ordered names, bounds, transition continuity, samples and exact join to the 1500 snapshot.",
+        "Generate a compact source-pinned 1000-1499 table and prepend it to the native 1500-2100 adapter without rewriting prior evidence; retain UTC full range and explicit rejection before 1000 and after 2100.",
+        "Add SQL-facing boundary and seasonal regressions, move the 1499 rejection to 0999, update current-range documentation, and state remaining capture limits.",
+        "Run fixture checks, formatting, workspace Rust tests, strict Clippy, independent client tests and diagnostic audit at exact PR head; require owner PR CI and completed Codex review before merge."
+      ],
+      "dependencies": [
+        "at-time-zone-history-1500-1799-v1"
+      ],
+      "issue": 521,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PTiQY"
     }
   ]
 }
