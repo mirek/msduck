@@ -16,7 +16,8 @@ mod transition_core;
 use transition_core::{Rules, Transition};
 
 const INVALID_ZONE: &str = "The time zone ID provided to AT TIME ZONE clause is invalid.";
-const START: i64 = 473_038_272_000_000_000; // 1500-01-01 UTC
+const START: i64 = 315_253_728_000_000_000; // 1000-01-01 UTC
+const EARLY_START: i64 = 473_038_272_000_000_000; // 1500-01-01 UTC
 const HISTORICAL_START: i64 = 567_709_344_000_000_000; // 1800-01-01 UTC
 const BASE_START: i64 = 599_266_080_000_000_000; // 1900-01-01 UTC
 const FUTURE_START: i64 = 646_917_408_000_000_000; // 2051-01-01 UTC
@@ -205,9 +206,21 @@ fn load() -> Result<Catalog, Box<dyn std::error::Error>> {
             json: include_str!("at_time_zone_rules_1500_1799.json"),
             source_sha: "60aba524ce29c1199b54c99e32bcb0616a59fff99fa8927049b9aaab1173af79",
             following_sha: "e6683618f8d80f58dd48edfb7042dbe4296402b1f68e5d0a626ec7c4232ff3d1",
-            start: START,
+            start: EARLY_START,
             end: HISTORICAL_START,
             expected_count: 45_600,
+        },
+    )?;
+    prepend_history(
+        &mut zones,
+        &document["image"],
+        HistorySnapshot {
+            json: include_str!("at_time_zone_rules_1000_1499.json"),
+            source_sha: "86e987fb51060e398456bf875e56fd0b710613f5413ba5aaf99fcab2fdb0f20e",
+            following_sha: "60aba524ce29c1199b54c99e32bcb0616a59fff99fa8927049b9aaab1173af79",
+            start: START,
+            end: EARLY_START,
+            expected_count: 76_000,
         },
     )?;
     let future: serde_json::Value =
@@ -473,7 +486,7 @@ mod tests {
                 .values()
                 .map(|zone| zone.transitions.len())
                 .sum::<usize>(),
-            85_214
+            161_214
         );
         let db = db();
         assert_eq!(
@@ -594,7 +607,7 @@ mod tests {
         }
         for (stamp, zone) in [
             ("2024-01-01", "Not A Time Zone"),
-            ("1499-12-31", "Pacific Standard Time"),
+            ("0999-12-31", "Pacific Standard Time"),
             ("2101-01-01", "Pacific Standard Time"),
         ] {
             let sql = format!(
