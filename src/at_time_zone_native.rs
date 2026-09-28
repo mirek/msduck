@@ -2,7 +2,7 @@
 //! Public AT TIME ZONE syntax is bound separately; these functions are internal.
 use std::{
     collections::{HashMap, HashSet},
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 use duckdb::{
@@ -551,12 +551,18 @@ impl<const SCALE: u8, const INSTANT: bool> VScalar for Convert<SCALE, INSTANT> {
 }
 
 pub(super) fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
-    let catalog = load().map_err(|_| duckdb::Error::InvalidQuery)?;
+    // The bundled snapshots are immutable. Validate them once, including a
+    // failed validation, then share the resulting Arc across connections.
+    static CATALOG: OnceLock<Result<Catalog, String>> = OnceLock::new();
+    let catalog = CATALOG
+        .get_or_init(|| load().map_err(|error| error.to_string()))
+        .as_ref()
+        .map_err(|_| duckdb::Error::InvalidQuery)?;
     macro_rules! register {($($s:literal),*)=>{$(
         db.register_scalar_function_with_state::<Convert<$s, false>>(
-            concat!("__msduck_at_time_zone_local_", stringify!($s)), &catalog)?;
+            concat!("__msduck_at_time_zone_local_", stringify!($s)), catalog)?;
         db.register_scalar_function_with_state::<Convert<$s, true>>(
-            concat!("__msduck_at_time_zone_instant_", stringify!($s)), &catalog)?;
+            concat!("__msduck_at_time_zone_instant_", stringify!($s)), catalog)?;
     )*};}
     register!(0, 1, 2, 3, 4, 5, 6, 7);
     Ok(())
