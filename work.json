@@ -4888,6 +4888,27 @@
       ],
       "issue": 475,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PRv1G"
+    },
+    {
+      "id": "compression-binding-v1",
+      "title": "Bind COMPRESS and DECOMPRESS argument and result types",
+      "state": "ready",
+      "authorization": "Direct owner continuing implementation goal and first-party compression capture; no external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/compression.rs",
+        "crates/msduck-sql/tests/compression_binding.rs"
+      ],
+      "acceptance": [
+        "Implement deterministic binding for exactly one argument: COMPRESS accepts captured character/binary families and untyped NULL; DECOMPRESS accepts captured binary families and untyped NULL. Reject captured invalid families with exact 8116 state 1 class 16 diagnostics, and wrong arity with 174 state 1 class 15.",
+        "Expose the captured nullable VARBINARY(MAX) result declaration and nondeterministic computed-column property. Return explicit Unsupported for uncaptured type families instead of guessing.",
+        "Test against the retained fixture's named arity/type cases, including RPC and prepared parameter declarations, without connecting to DuckDB. Keep the new module unregistered because msduck-sql/src/lib.rs is reserved by another worker; root integration and COMPRESS encoding are separate successors.",
+        "Run formatting, strict SQL-crate Clippy and tests, plus required full workspace/client/audit checks for semantic Rust changes on the exact revision."
+      ],
+      "dependencies": [
+        "compress-decompress-reference-v1"
+      ],
+      "issue": 477,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PRyi9"
     }
   ]
 }
