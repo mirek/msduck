@@ -38,13 +38,15 @@ prepared, then produces April 3 and March 4 when executed under successive
 Run `node scripts/capture-dateformat.mjs --check` to validate the pinned capture
 without starting SQL Server. The check pins the fixture's SHA-256 as well as
 the named case plan and key observed results; a changed capture needs a new
-two-container replay before updating that digest. A new capture uses two independent containers and
-fresh private databases, comparing their complete records before writing. The
-script uses exclusive writes to refuse replacing either the output or the retained fixture;
-`--write-fixture` only creates a missing fixture. The retained capture was made
-on `linux.local`; the local Docker VM exposed only 2 GiB and SQL Server exited
-before login readiness. This is a resource limit of that VM, not a DATEFORMAT
-result.
+two-container replay before updating that digest. A new capture uses two
+independent containers and fresh private databases, comparing their complete
+records before writing. The script uses exclusive writes to refuse replacing
+either the output or the retained fixture; `--write-fixture` only creates a
+missing fixture. It writes the requested output before comparing with the
+retained fixture, so drift remains available for inspection. The retained
+capture was made on `linux.local`; the local Docker VM exposed only 2 GiB and
+SQL Server exited before login readiness. This is a resource limit of that
+VM, not a DATEFORMAT result.
 
 The current server has no explicit DATEFORMAT session setting in its engine
 source. This fixture is reference evidence for follow-up binding and runtime

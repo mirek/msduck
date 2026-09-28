@@ -140,6 +140,9 @@ function validate(run) {
   }
   for (const { name, result } of run) {
     for (const key of ['sets', 'done', 'doneTokens', 'events', 'errors', 'info']) assert(Array.isArray(result[key]), `${name}: missing ${key}`)
+    if (!['ydm strict date failure', 'invalid format'].includes(name)) {
+      assert.deepEqual(result.errors, [], `${name}: unexpected SQL Server diagnostic`)
+    }
     assert(result.done.length > 0, `${name}: missing completion`)
     assert.equal(result.doneTokens.length, result.done.length, `${name}: missing decoded DONE status`)
     assert(result.events.length > 0, `${name}: missing wire event order`)
@@ -282,11 +285,11 @@ if (check) {
     })
   }
   const actual = { image, independentContainers: 2, results: runs[0] }
+  await writeFile(output, JSON.stringify(actual) + '\n', { flag: 'wx' })
   let retained
   try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
   catch (error) { if (error.code !== 'ENOENT') throw error }
   if (retained) assertSameCapture(actual, retained, 'fresh DATEFORMAT capture differs from retained fixture')
-  await writeFile(output, JSON.stringify(actual) + '\n', { flag: 'wx' })
   if (writeFixture) await writeNewFixture(fixture, actual)
   console.log(`Captured ${actual.results.length} DATEFORMAT observations in two independent containers${retained ? ' and matched the retained fixture' : ''}`)
 }
