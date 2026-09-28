@@ -5100,6 +5100,28 @@
       ],
       "issue": 493,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PSX8m"
+    },
+    {
+      "id": "at-time-zone-catalog-reference-v1",
+      "title": "Capture SQL Server AT TIME ZONE catalog-wide behavior",
+      "state": "ready",
+      "authorization": "Owner continuing implementation goal and first-party reference #491; no external submission is input.",
+      "scope": [
+        "scripts/capture-at-time-zone-catalog.mjs",
+        "reference/at-time-zone-catalog.json",
+        "docs/at-time-zone-catalog.md"
+      ],
+      "acceptance": [
+        "Capture pinned SQL Server 2025 image and @@VERSION, raw sys.time_zone_info name metadata, sorted unique names, TDS descriptors, rows, errors, messages and completion events.",
+        "For every exposed zone name where supported, retain representative offset-free conversions across 1900, 1970, 2000, winter/summer 2024, 2030 and 2050, plus one offset-aware instant, with SQL-side wall-time and offset-minute columns.",
+        "Run the capture and a source/fixture consistency check; document external rule-version dependence and bounded adapter follow-ups without claiming msduck SQL support.",
+        "Use an owner PR with exact-head CI and verified review. No Rust server edit is in this scope."
+      ],
+      "dependencies": [
+        "at-time-zone-reference-v1"
+      ],
+      "issue": 495,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PSbQ6"
     }
   ]
 }
