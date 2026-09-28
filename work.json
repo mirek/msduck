@@ -5058,6 +5058,26 @@
       ],
       "issue": 489,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PSFkA"
+    },
+    {
+      "id": "at-time-zone-reference-v1",
+      "title": "Capture SQL Server AT TIME ZONE reference behavior",
+      "state": "ready",
+      "authorization": "Owner continuing implementation goal and first-party ROADMAP gap; no external submission or third-party content is input.",
+      "scope": [
+        "scripts/capture-at-time-zone.mjs",
+        "reference/at-time-zone.json",
+        "docs/at-time-zone.md"
+      ],
+      "acceptance": [
+        "Capture pinned SQL Server 2025 @@VERSION/image and raw rows, TDS descriptors, errors, messages and completion events for AT TIME ZONE without normalizing differences.",
+        "Cover offset-free datetime, smalldatetime and datetime2, offset-aware datetimeoffset, UTC and Windows-named zones, chained conversion, DST gaps and overlaps, NULL and invalid inputs, and repeated prepared bindings where valid.",
+        "Document external time-zone-rule dependence and bounded implementation follow-ups; do not claim msduck supports the feature yet.",
+        "Run the capture and source/fixture consistency checks; use an owner PR with exact-head CI and verified review. No Rust server edit is in this scope."
+      ],
+      "dependencies": [],
+      "issue": 491,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PSUsr"
     }
   ]
 }
