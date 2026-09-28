@@ -15,7 +15,7 @@ const writeFixture = args.includes('--write-fixture')
 const paths = args.filter(arg => !['--check', '--write-fixture'].includes(arg))
 if (paths.length > 1 || (check && writeFixture)) throw Error('usage: capture-sequence-reference.mjs [--check | --write-fixture] [output]')
 const output = resolve(paths[0] ?? 'artifacts/compatibility/sequence-reference/capture.json')
-const catalog = name => `SELECT name,TYPE_NAME(user_type_id) AS type_name,start_value,increment AS increment_value,minimum_value,maximum_value,current_value,is_cycling,is_cached,is_exhausted FROM sys.sequences WHERE name='${name}'`
+const catalog = name => `SELECT name,TYPE_NAME(user_type_id) AS type_name,start_value,increment AS increment_value,minimum_value,maximum_value,current_value,is_cycling,is_cached,is_exhausted,CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(start_value,'BaseType')) AS start_base_type,CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(increment,'BaseType')) AS increment_base_type,CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(minimum_value,'BaseType')) AS minimum_base_type,CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(maximum_value,'BaseType')) AS maximum_base_type,CONVERT(NVARCHAR(128),SQL_VARIANT_PROPERTY(current_value,'BaseType')) AS current_base_type FROM sys.sequences WHERE name='${name}'`
 const cases = [
   ['server version', "SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)) AS product_version", 'A'],
   ['create ascending', 'CREATE SEQUENCE dbo.msduck_seq AS BIGINT START WITH 10 INCREMENT BY 2 MINVALUE 10 MAXVALUE 16 NO CYCLE NO CACHE', 'A'],
@@ -130,11 +130,12 @@ function validate(run) {
   assertSameCapture(rows('first session observes shared allocation'), [['14']], 'sequence is database-wide')
   assertSameCapture(rows('cycle maximum value'), [['16']], 'cycle at maximum')
   assertSameCapture(rows('cycle wraps to minimum'), [['10']], 'cycle wraps to minimum')
-  assertSameCapture(rows('catalog before allocation'), [['msduck_seq', 'bigint', '10', '2', '10', '16', '10', false, false, false]], 'initial catalog')
-  assertSameCapture(rows('catalog after exhaustion'), [['msduck_seq', 'bigint', '10', '2', '10', '16', '16', false, false, true]], 'exhausted catalog')
-  assertSameCapture(rows('catalog after cycle'), [['msduck_seq', 'bigint', '16', '2', '10', '16', '10', true, false, false]], 'cycled catalog')
+  const bigintTypes = Array(5).fill('bigint')
+  assertSameCapture(rows('catalog before allocation'), [['msduck_seq', 'bigint', '10', '2', '10', '16', '10', false, false, false, ...bigintTypes]], 'initial catalog')
+  assertSameCapture(rows('catalog after exhaustion'), [['msduck_seq', 'bigint', '10', '2', '10', '16', '16', false, false, true, ...bigintTypes]], 'exhausted catalog')
+  assertSameCapture(rows('catalog after cycle'), [['msduck_seq', 'bigint', '16', '2', '10', '16', '10', true, false, false, ...bigintTypes]], 'cycled catalog')
   assertSameCapture(rows('descending rows'), [[1, 0], [2, -1], [3, -2]], 'descending sequence')
-  assertSameCapture(rows('descending catalog'), [['msduck_desc', 'smallint', 0, -1, -2, 0, -2, false, false, true]], 'descending catalog')
+  assertSameCapture(rows('descending catalog'), [['msduck_desc', 'smallint', 0, -1, -2, 0, -2, false, false, true, ...Array(5).fill('smallint')]], 'descending catalog')
   assertSameCapture(rows('catalog after drop'), [], 'dropped catalog rows')
   assertSameCapture(rows('connection reusable after errors'), [[1]], 'connection reuse')
   assert.equal(get('first value').sets[0].columns[0].type, 'BigInt')
@@ -142,6 +143,8 @@ function validate(run) {
   for (const name of ['catalog before allocation', 'catalog after exhaustion', 'catalog after cycle', 'descending catalog']) {
     assertSameCapture(get(name).sets[0].columns.slice(2, 7).map(column => column.type),
       Array(5).fill('Variant'), `${name}: native SQL_VARIANT catalog descriptors`)
+    assertSameCapture(get(name).sets[0].columns.slice(10, 15).map(column => column.type),
+      Array(5).fill('NVarChar'), `${name}: base-type probe descriptors`)
   }
   assert.equal(get('exhaustion').sets[0].columns[0].type, 'BigInt')
   assert.equal(get('descending exhaustion').sets[0].columns[0].type, 'SmallInt')
