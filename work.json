@@ -4892,7 +4892,7 @@
     {
       "id": "compression-binding-v1",
       "title": "Bind COMPRESS and DECOMPRESS argument and result types",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing implementation goal and first-party compression capture; no external submission is input.",
       "scope": [
         "crates/msduck-sql/src/compression.rs",
