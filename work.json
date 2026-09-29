@@ -6213,7 +6213,7 @@
     {
       "id": "percentile-note-reference-v1",
       "title": "Update percentile implementation note for live SQL Server reference",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server compatibility goal and verified owner-initiated Codex review finding on owner PR #588; first-party documentation only",
       "scope": [
         "docs/percentiles.md"
