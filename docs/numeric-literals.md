@@ -30,3 +30,7 @@ Live SQL Server [numeric-literal descriptor and division probes](numeric-literal
 now distinguish implicit literals, explicit DECIMAL/NUMERIC casts and prepared
 INT divisors. The retained comparison still shows msduck descriptor gaps;
 broader numeric-literal compatibility remains unverified.
+The [contextual arithmetic capture](numeric-arithmetic-context.md) further shows
+that a bare integer divisor and an explicitly cast or bound `INT` divisor yield
+different decimal precision and scale. It also identifies an existing root test
+expectation that disagrees with the pinned SQL Server result.
