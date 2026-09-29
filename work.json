@@ -6470,7 +6470,7 @@
     {
       "id": "sys-databases-descriptors-v2",
       "title": "Align sys.databases result descriptors with SQL Server",
-      "state": "ready",
+      "state": "done",
       "authorization": "mirek's continuing implementation goal, owner-authored issue #611, and merged multi-database-catalog-v1 predecessor",
       "scope": [
         "src/query_catalog.rs",
