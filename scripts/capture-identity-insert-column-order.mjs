@@ -173,6 +173,9 @@ function validate(run) {
   ]
   for (const [name, rows, current] of states) {
     assertSameCapture(get(name).sets.map(set => set.rows), [rows, [[current, 0, 1]]], `${name}: rows or allocator changed`)
+    assert.equal(get(name).sets[0].columns[1].flags,
+      ['baseline state', 'state after OFF errors', 'final state'].includes(name) ? 16 : 24,
+      `${name}: stored identity descriptor flags changed`)
     assertSameCapture(get(name).doneTokens.map(({ kind, status, command, rowCount }) =>
       [kind, status, command, rowCount]),
     [['DONE', 17, 193, rows.length], ['DONE', 16, 193, 1]], `${name}: state completion changed`)
