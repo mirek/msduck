@@ -3,6 +3,9 @@ use msduck_core::diagnostic::SqlError;
 use sqlparser::ast::*;
 use std::ops::ControlFlow;
 
+mod session_context;
+pub use session_context::*;
+
 /// Non-null INT session counters. Runtime values are supplied by the shell.
 pub fn counter_type(name: &str) -> Option<DataType> {
     ["@@ROWCOUNT", "@@TRANCOUNT", "@@ERROR"]
@@ -13,6 +16,27 @@ pub fn counter_type(name: &str) -> Option<DataType> {
 
 pub fn is_xact_state(function: &Function) -> bool {
     matches!(function.name.0.as_slice(), [ObjectNamePart::Identifier(id)] if id.value.eq_ignore_ascii_case("XACT_STATE"))
+}
+/// SESSIONPROPERTY and SESSION_CONTEXT: one argument, nullable sql_variant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VariantFunction {
+    SessionProperty,
+    SessionContext,
+}
+pub fn variant_function(function: &Function) -> Option<VariantFunction> {
+    let [ObjectNamePart::Identifier(id)] = function.name.0.as_slice() else {
+        return None;
+    };
+    if id.value.eq_ignore_ascii_case("SESSIONPROPERTY") {
+        Some(VariantFunction::SessionProperty)
+    } else if id.value.eq_ignore_ascii_case("SESSION_CONTEXT") {
+        Some(VariantFunction::SessionContext)
+    } else {
+        None
+    }
+}
+pub fn variant_type() -> DataType {
+    DataType::Custom(ObjectName::from(vec![Ident::new("SQL_VARIANT")]), vec![])
 }
 pub fn is_original_login(function: &Function) -> bool {
     matches!(function.name.0.as_slice(), [ObjectNamePart::Identifier(id)] if id.value.eq_ignore_ascii_case("ORIGINAL_LOGIN"))
@@ -113,6 +137,8 @@ pub fn result_type(function: &Function) -> Option<DataType> {
         Some(database_type(database))
     } else if is_original_login(function) {
         Some(login_type())
+    } else if variant_function(function).is_some() {
+        Some(variant_type())
     } else {
         error_type(function)
     }
@@ -181,7 +207,15 @@ fn check(function: &Function) -> Result<(), SqlError> {
     if wildcard {
         return Err(SqlError::syntax(102, 1, "Incorrect syntax near '*'."));
     }
-    if database_function(function).is_some() {
+    if variant_function(function).is_some() {
+        if args.args.len() != 1 {
+            return Err(SqlError::syntax(
+                174,
+                1,
+                format!("The {canonical} function requires 1 argument(s)."),
+            ));
+        }
+    } else if database_function(function).is_some() {
         if args.args.len() > 1 {
             return Err(SqlError::syntax(
                 189,
