@@ -6352,7 +6352,7 @@
     {
       "id": "statistical-precision-diagnostics-v1",
       "title": "Diagnose statistical aggregate floating-point differences",
-      "state": "ready",
+      "state": "done",
       "authorization": "mirek's continuing implementation goal, owner-authored issue #603 and reference/statistical-aggregates.json",
       "scope": [
         "scripts/compare-statistical-reference.mjs",
