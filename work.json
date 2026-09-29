@@ -5825,7 +5825,7 @@
     {
       "id": "identity-insert-binding-v1",
       "title": "Bind deterministic IDENTITY_INSERT operations and session state",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner's continuing full SQL Server compatibility goal and owner-controlled IDENTITY_INSERT fixtures. No external submissions.",
       "scope": [
         "crates/msduck-sql/src/identity_insert.rs",
