@@ -7065,6 +7065,29 @@
       ],
       "issue": 659,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYmW3"
+    },
+    {
+      "id": "tvp-materialize-v1",
+      "title": "Materialize bound TVP cells into isolated connection-local relations",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server-compatible Rust/DuckDB goal. First-party PR660 binder is merged; this root effect adapter is a prerequisite for procedure execution while engine/RPC reservations remain untouched.",
+      "scope": [
+        "src/tvp_binding.rs",
+        "src/tvp_materialize.rs",
+        "tests/tvp_materialize.rs",
+        "docs/tvp-materialize.md"
+      ],
+      "dependencies": [
+        "tvp-catalog-binding-v1"
+      ],
+      "acceptance": [
+        "Expose a root materialization API under tvp_binding using explicit caller-owned connection, relation identity, limits and transaction mode; create only a new connection-local temporary relation, never replace another table. Preserve declared INT, bounded NVARCHAR raw UTF16 carrier and VARBINARY storage and NULL/empty distinctions using bound values.",
+        "Revalidate caller-constructible BoundTvp shapes, nullability, widths and allocation bounds before writes. Own-transaction mode rolls back on failure; caller-owned transaction mode neither commits nor rolls back unrelated work and makes failure/cleanup requirements explicit. Resolve collision and connection isolation safely.",
+        "Test retained fixture cell shapes, empty omitted/default origins, raw surrogates, quoting/hostile names, collisions, cross-connection visibility, malformed input without writes, cleanup, transaction rollback/commit and caller transaction preservation. Do not fabricate TVP READONLY enforcement, stored procedure dispatch or wire interoperability.",
+        "Run format, strict workspace Clippy, workspace tests, all-targets build, 503 independent clients and diagnostic audit on exact revision; preserve raw differences, obtain review or verified owner-authorized Codex availability fallback, merge and complete registry/project."
+      ],
+      "issue": 661,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYuFj"
     }
   ]
 }
