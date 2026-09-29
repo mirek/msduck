@@ -6230,7 +6230,7 @@
     {
       "id": "percentile-range-diagnostic-v1",
       "title": "Align percentile literal range diagnostics with SQL Server",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing full SQL Server compatibility goal and owner-run SQL Server percentile reference #588; first-party gap in the deterministic lowerer",
       "scope": [
         "scripts/capture-percentile-reference.mjs",
