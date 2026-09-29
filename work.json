@@ -6837,7 +6837,7 @@
     {
       "id": "float-aggregate-runtime-v1",
       "title": "Reject FLOAT SUM AVG overflow with bounded deterministic arithmetic",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server compatibility goal; two pinned FLOAT/REAL reference captures and current-server Infinity observations from PR #643",
       "scope": [
         "crates/msduck-core/src/bounded_aggregate.rs",
@@ -6864,7 +6864,7 @@
     {
       "id": "float-values-binding-v1",
       "title": "Preserve FLOAT REAL declarations through VALUES operand binding",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server compatibility goal; runtime task #644 captured replay shows FLOAT VALUES columns unresolved by first-party binder",
       "scope": [
         "crates/msduck-sql/src/aggregate_columns.rs",
