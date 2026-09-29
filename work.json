@@ -6493,7 +6493,7 @@
     {
       "id": "guid-conversion-order-reference-v1",
       "title": "Capture SQL Server uniqueidentifier ordering and text conversion",
-      "state": "ready",
+      "state": "done",
       "authorization": "mirek's continuing implementation goal and owner-authored issue #614",
       "scope": [
         "scripts/capture-guid-conversion-order.mjs",
