@@ -5954,6 +5954,27 @@
       ],
       "issue": 564,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVXhv"
+    },
+    {
+      "id": "identity-insert-name-errors-reference-v1",
+      "title": "Capture IDENTITY_INSERT target-name diagnostics from SQL Server",
+      "state": "ready",
+      "authorization": "Mirek continuing full SQL Server compatibility goal; prior catalog resolver documents this unprobed first-party evidence gap.",
+      "scope": [
+        "scripts/capture-identity-insert-name-errors.mjs",
+        "reference/identity-insert-name-errors.json",
+        "docs/identity-insert-name-errors-reference.md"
+      ],
+      "acceptance": [
+        "Capture unqualified, schema-qualified, quoted and case-varied missing/nonidentity SET IDENTITY_INSERT target forms against the pinned SQL Server reference in two fresh databases; preserve exact error number, state, class, message, ordered TDS event kinds and raw DONE status/command words.",
+        "Validate fixture checksum, case plan, descriptors and exact repeated observations without normalizing semantic differences; refuse output aliases, hard links, symlinks or unpinned images.",
+        "Document proven spelling and resolution behavior and remaining unknowns, leaving runtime files untouched; verify exact-head CI and completed Codex review on an owner PR."
+      ],
+      "dependencies": [
+        "identity-insert-catalog-v1"
+      ],
+      "issue": 566,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVchK"
     }
   ]
 }
