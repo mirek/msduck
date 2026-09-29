@@ -5867,6 +5867,29 @@
       ],
       "issue": 556,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVJ4R"
+    },
+    {
+      "id": "identity-insert-gate-v1",
+      "title": "Preflight INSERT identity permission from explicit session and catalog inputs",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility goal and owner-controlled IDENTITY_INSERT fixtures; no external submissions.",
+      "scope": [
+        "crates/msduck-sql/src/identity_insert_gate.rs",
+        "crates/msduck-sql/tests/identity_insert_gate.rs",
+        "docs/identity-insert-gate.md"
+      ],
+      "acceptance": [
+        "Use the parsed INSERT AST, an explicit resolved table identity, the caller's active setting, an identity-column position and a caller-supplied column resolver; return generated, permitted explicit or not-applicable outcomes without catalog I/O, DuckDB, session/global state or runtime-value evaluation.",
+        "For captured shapes, preserve 544 explicit while OFF, 545 omitted/DEFAULT VALUES while ON, and 8101 explicit positional values without a column list while ON, including number/state/class, exact message from explicit qualified/base names, and observed DONE command. Unknown column/target/source shapes fail closed rather than fabricate a diagnostic precedence.",
+        "Replay applicable owner-authored batch, setting/error, RPC and multi-row fixtures; test alias identity, two session settings, prepared parse without effects and permission before source-conversion/constraint execution. Use path imports while SQL lib.rs remains claimed; document root wiring and uncaptured limits.",
+        "Run formatting, focused SQL crate tests, strict workspace Clippy, workspace Rust tests, independent tedious tests and local audit on the exact revision. Publish a focused owner PR with exact-head CI and completed Codex review."
+      ],
+      "dependencies": [
+        "identity-insert-binding-v1",
+        "identity-insert-multirow-reference-v1"
+      ],
+      "issue": 558,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVLQf"
     }
   ]
 }
