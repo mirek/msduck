@@ -45,6 +45,7 @@ fn runtime_diagnostic(message: &str) -> Option<SqlError> {
         .or_else(|| msduck_sql::recursive_lower::diagnostic(message))
         .or_else(|| msduck_sql::top::diagnostic(message))
         .or_else(|| crate::money_range::diagnostic(message))
+        .or_else(|| crate::ntile::diagnostic(message))
         .or_else(|| {
             msduck_core::diagnostic::numeric(
                 message
@@ -2065,6 +2066,7 @@ impl Session {
         diagnostics: Option<&crate::statement_diagnostics::Scope>,
     ) -> Result<Execution> {
         validate_transaction_syntax(&statement)?;
+        crate::ntile::validate_constants(&statement)?;
         if let Some(execution) = self.database_statement(&statement)? {
             return Ok(execution);
         }
