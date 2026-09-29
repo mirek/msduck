@@ -41,6 +41,10 @@ fn is_default(value: &Expr) -> bool {
     matches!(value, Expr::Identifier(id) if id.quote_style.is_none() && id.value.eq_ignore_ascii_case("DEFAULT"))
 }
 
+fn is_null(value: &Expr) -> bool {
+    matches!(value, Expr::Value(v) if matches!(v.value, Value::Null))
+}
+
 /// Classify one INSERT from AST shape and declared catalog/session inputs.
 /// Unknown target or source shapes are returned to the caller as unsupported,
 /// since SQL Server's diagnostic precedence has not been captured for them.
@@ -207,15 +211,34 @@ pub fn preflight<K: Eq>(
         [source] => Some(*source),
         _ => return Err(GateError::Unsupported("duplicate identity target column")),
     };
-    if let (Some(source_column), Some(SetExpr::Values(values))) = (source_column, source)
-        && values
+    if let (Some(source_column), Some(SetExpr::Values(values))) = (source_column, source) {
+        if values.rows.iter().any(|row| is_null(&row[source_column])) {
+            if is_on
+                && values.rows.len() == 1
+                && values.rows[0].iter().enumerate().all(|(index, value)| {
+                    index == source_column
+                        || matches!(value, Expr::Value(v) if matches!(v.value, Value::Number(_, _)))
+                })
+            {
+                return Err(GateError::diagnostic(
+                    339,
+                    253,
+                    "DEFAULT or NULL are not allowed as explicit identity values.".to_owned(),
+                ));
+            }
+            return Err(GateError::Unsupported(
+                "explicit identity NULL precedence is unprobed",
+            ));
+        }
+        if values
             .rows
             .iter()
             .any(|row| is_default(&row[source_column]))
-    {
-        return Err(GateError::Unsupported(
-            "explicit identity DEFAULT is unprobed",
-        ));
+        {
+            return Err(GateError::Unsupported(
+                "explicit identity DEFAULT is unprobed",
+            ));
+        }
     }
     match (is_on, source_column) {
         (true, Some(source_column)) => Ok(Permit::Explicit { source_column }),
