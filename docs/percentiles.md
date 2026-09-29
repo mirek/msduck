@@ -25,7 +25,7 @@ parameters. Additional native tests compare every supported numeric layout
 and decimal storage width with DuckDB casts across chunks, including NULLs,
 negative decimals and 128-bit decimals. A sequence verifies single evaluation.
 The audit captures msduck values and descriptors for comparison. A separate
-[live SQL Server 2025 reference](https://github.com/mirek/msduck/blob/d98306b0919ebb76b5a9849ce05632513125148f/docs/percentile-reference.md) records integer,
+[live SQL Server 2025 reference](percentile-reference.md) records integer,
 decimal, FLOAT and BIT interpolation, discrete text/date selection, NULLs,
 partitions, descending order, invalid fractions and prepared bindings. It
 includes the observed FLOAT interpolation value `0.15000000000000002` for
@@ -35,12 +35,19 @@ mssqlite source.
 
 Remaining gaps include exact character widths/collations,
 all sortable DISC types, signed literal edge cases, compatibility-level gating,
-precise diagnostics for rejected percentile forms and broader reference
+precise diagnostics for other rejected percentile forms and broader reference
 verification of floating-point interpolation across types and values. Missing
 OVER/WITHIN GROUP and forbidden frames use 10753/10754/4106; several other
 invalid forms currently use the generic unsupported-operation diagnostic. A
 complete live msduck-versus-SQL Server
 comparison has not been run.
+
+Literal fractions below zero, above one, or NULL now use the captured error
+8727, state 1 and severity 16. This is still a pre-execution lowering error;
+SQL Server emits a typed result descriptor and ORDER token before reporting
+8727 for the captured nonempty queries. That completion sequence remains a
+compatibility gap. Character fractions such as the reference's `'0.5'` remain
+unsupported by the current lowerer.
 
 References: Microsoft [PERCENTILE_CONT](https://learn.microsoft.com/en-us/sql/t-sql/functions/percentile-cont-transact-sql)
 and [PERCENTILE_DISC](https://learn.microsoft.com/en-us/sql/t-sql/functions/percentile-disc-transact-sql).

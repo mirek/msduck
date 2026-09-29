@@ -12,7 +12,7 @@ import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFi
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/percentile-reference.json', import.meta.url)
-const fixtureSha256 = '57f1a731bd6f0713d5a985d17cd57f0e565db08cfda6be5d88c4bb5fdaf444cc'
+const fixtureSha256 = '618a007ffa8ac0362c189579cc146ecde3704a26d7de5f8e5b32c1e24507d12b'
 const StreamParser = createRequire(import.meta.url)('tedious/lib/token/stream-parser.js')
 const doneKinds = new Map([[0xFD, 'DONE'], [0xFE, 'DONEPROC'], [0xFF, 'DONEINPROC']])
 const args = process.argv.slice(2)
@@ -73,6 +73,10 @@ const plan = [
     ['negative fraction', '-0.1'], ['above one fraction', '1.1'],
     ['NULL fraction', 'NULL'], ['character fraction', "'0.5'"],
   ].map(([name, fraction]) => ({ name, sql: orderedInteger('PERCENTILE_CONT', fraction) })),
+  ...[
+    ['negative fraction discrete', '-0.1'], ['above one fraction discrete', '1.1'],
+    ['NULL fraction discrete', 'NULL'],
+  ].map(([name, fraction]) => ({ name, sql: orderedInteger('PERCENTILE_DISC', fraction) })),
   { name: 'empty text continuous', sql: `SELECT PERCENTILE_CONT(.5) WITHIN GROUP (ORDER BY CAST(n AS VARCHAR(8))) OVER () AS p FROM ${integerRows} WHERE 1=0` },
   { name: 'session reusable', sql: 'SELECT 1 AS reusable' },
 ]
@@ -292,11 +296,16 @@ function validate(run) {
     assertSameCapture(events(result), ['ERROR', 'DONE'], `${name}: events changed`)
     assertSameCapture(done(result), [['DONE', 2, 253]], `${name}: completion changed`)
   }
-  for (const name of ['negative fraction', 'above one fraction', 'NULL fraction']) {
+  for (const name of [
+    'negative fraction', 'above one fraction', 'NULL fraction',
+    'negative fraction discrete', 'above one fraction discrete', 'NULL fraction discrete',
+  ]) {
     const result = get(name)
     assertSameCapture(diagnostics(result), [[8727, 1, 16,
       'Input parameter of percentile function is outside of range [0, 1].']], `${name}: diagnostic changed`)
-    assertSameCapture(shape(result)[0][1], ['FloatN', 8, null, null, 1], `${name}: descriptor changed`)
+    assertSameCapture(shape(result)[0][1], name.endsWith('discrete')
+      ? ['Int', null, null, null, 0]
+      : ['FloatN', 8, null, null, 1], `${name}: descriptor changed`)
     assertSameCapture(rows(result), [[]], `${name}: unexpected rows`)
     assertSameCapture(events(result), ['COLMETADATA', 'ORDER', 'ERROR', 'DONE'], `${name}: events changed`)
     assertSameCapture(done(result), [['DONE', 2, 193]], `${name}: completion changed`)
