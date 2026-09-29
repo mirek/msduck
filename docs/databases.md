@@ -12,7 +12,8 @@ and IDs are not reused after a drop.
 name, the lower-case key used for case-insensitive lookup, the ID, the file name,
 the create date and whether publication finished. The key uses the captured
 `SQL_Latin1_General_CP1_CI_AS` lower-case mapping of UTF-16 units, not generic
-Unicode casing, so `İ` and `i` name the same database. This approximates the
+Unicode casing, so `İ` and `i` name the same database. The SQL helpers behind
+database ID lookups apply the same mapping with `translate`. This approximates the
 collation's comparison; other equivalences of its sort weights are not modelled.
 A new database is listed in `sys.databases` and selectable only after its
 catalog objects and every catalog's `sys.databases` view are in place. A file-backed server re-attaches every registered database
@@ -41,7 +42,8 @@ absolute path, `..`, master's file or another database's file, makes the
 database unavailable, and neither recovery nor DROP touches the file. Any
 prefix is accepted, so renaming the primary file keeps its databases. `My App` is stored as
 `msduck.duckdb.5.my%20app.duckdb`. The registry records the file name.
-Creation refuses to adopt an existing file with that name. A database file or
+Creation refuses to adopt an existing file or WAL with that name, and leaves
+it in place. A database file or
 WAL that is a symbolic link, or not a regular file, is never opened: recovery
 leaves the database unavailable and CREATE fails. DROP removes the link itself.
 The check precedes the open, so it does not guard against a process that swaps

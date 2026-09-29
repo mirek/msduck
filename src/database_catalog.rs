@@ -196,7 +196,7 @@ impl Catalog {
     }
 
     fn resolve_published(&self, db: &Connection, name: &str) -> Result<Option<String>> {
-        if name.eq_ignore_ascii_case(MASTER) {
+        if key(name) == MASTER {
             return Ok(Some(self.primary.clone()));
         }
         let alias = db
@@ -283,11 +283,15 @@ impl Catalog {
         )?;
         let file = file_name(&self.prefix, database_id, &name_key);
         let path = self.directory.join(&file);
-        ensure!(
-            !present(&path)?,
-            "Cannot create database '{name}' because file '{}' already exists.",
-            path.display()
-        );
+        // Neither the file nor a WAL may exist: CREATE owns, and on failure
+        // deletes, only storage it made itself.
+        for path in [&path, &wal(&path)] {
+            ensure!(
+                !present(path)?,
+                "Cannot create database '{name}' because file '{}' already exists.",
+                path.display()
+            );
+        }
         // The primary key serializes concurrent creators before any attach.
         let inserted = db.execute(
             &format!(
@@ -396,12 +400,15 @@ impl Catalog {
         // DuckDB creates missing files; recovery must not replace lost data
         // with an empty database. `present` rejects symbolic links, so a
         // replaced file cannot redirect DuckDB outside the data directory.
-        let exists = present(&path)?;
-        match mode {
-            Attach::Recover => ensure!(exists, "database file '{}' is missing", path.display()),
-            Attach::Create => ensure!(!exists, "database file '{}' already exists", path.display()),
+        // CREATE checked, under the change lock, that neither path exists.
+        if mode == Attach::Recover {
+            ensure!(
+                present(&path)?,
+                "database file '{}' is missing",
+                path.display()
+            );
+            present(&wal(&path))?;
         }
-        present(&wal(&path))?;
         bootstrap_file(&path)?;
         let path = path.to_str().context("database path is not UTF-8")?;
         db.execute_batch(&format!("ATTACH {} AS {}", literal(path), quote(name)))?;
@@ -453,14 +460,19 @@ impl Catalog {
                  FROM {registry} r JOIN duckdb_databases() d ON d.database_name=r.name
                  WHERE r.published
              );
+             CREATE OR REPLACE MACRO {target}.main.__msduck_db_key(value) AS
+                 translate(CAST(value AS VARCHAR), {upper}, {lower});
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_id(value) AS
-                 (SELECT database_id FROM {target}.sys.databases WHERE lower(name)=lower(CAST(value AS VARCHAR)));
+                 (SELECT database_id FROM {target}.sys.databases
+                  WHERE {target}.main.__msduck_db_key(name)={target}.main.__msduck_db_key(value));
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_name(value) AS
                  (SELECT name FROM {target}.sys.databases WHERE database_id=value);
              CREATE OR REPLACE MACRO {target}.main.__msduck_current_db_name() AS
                  CASE WHEN current_database()={primary} THEN '{MASTER}' ELSE current_database() END",
             registry = self.registry(),
             primary = literal(&self.primary),
+            upper = literal(&KEY_MAP.0),
+            lower = literal(&KEY_MAP.1),
         ))?;
         Ok(())
     }
@@ -555,6 +567,19 @@ fn key(name: &str) -> String {
     // The mapping leaves surrogates unchanged, so the units stay valid.
     String::from_utf16_lossy(&units)
 }
+
+/// `key` as the two argument strings of SQL `translate`: every BMP character
+/// the captured mapping changes, and its lower-case form at the same position.
+/// Surrogates, and so supplementary characters, map to themselves.
+static KEY_MAP: std::sync::LazyLock<(String, String)> = std::sync::LazyLock::new(|| {
+    (0..=u16::MAX)
+        .filter_map(|unit| {
+            let lower = Family::SqlLatin1.map_unit(Direction::Lower, unit);
+            Some((char::from_u32(unit.into())?, char::from_u32(lower.into())?))
+        })
+        .filter(|(unit, lower)| unit != lower)
+        .unzip()
+});
 
 /// Whether a database file exists, without following a symbolic link. Only
 /// regular files are accepted.
@@ -735,6 +760,22 @@ mod tests {
         // Generic Unicode lowercases İ to i and a combining dot.
         assert_eq!(key("İ"), "i");
         assert_eq!(key("ΣẞıI🦆"), "σẞıi🦆");
+    }
+
+    #[test]
+    fn the_sql_key_map_matches_key() {
+        let (upper, lower) = &*KEY_MAP;
+        assert_eq!(upper.chars().count(), lower.chars().count());
+        let translated: String = "İKΣ"
+            .chars()
+            .map(|c| {
+                upper
+                    .chars()
+                    .position(|u| u == c)
+                    .map_or(c, |i| lower.chars().nth(i).unwrap())
+            })
+            .collect();
+        assert_eq!(translated, key("İKΣ"));
     }
 
     #[test]

@@ -662,8 +662,37 @@ fn database_names_compare_under_the_server_collation() {
     let catalog = db.databases().clone();
     catalog.create(&db, "İstanbul").unwrap();
     assert_eq!(catalog.select(&db, "istanbul").unwrap(), "İstanbul");
+    // The SQL helpers use the same mapping as the catalog: the Kelvin sign
+    // is not a case variant of k under this collation.
+    catalog.create(&db, "\u{212A}").unwrap();
+    let id = |name: &str| -> Option<i32> {
+        db.query_row("SELECT __msduck_db_id(?)", [name], |row| row.get(0))
+            .unwrap()
+    };
+    assert_eq!(id("ISTANBUL"), Some(5));
+    assert_eq!(id("istanbul"), Some(5));
+    assert_eq!(id("MASTER"), Some(1));
+    assert_eq!(id("\u{212A}"), Some(6));
+    assert_eq!(id("k"), None);
     assert_eq!(
         sql_error(catalog.create(&db, "ISTANBUL").unwrap_err()).0,
         1801
     );
+}
+
+#[test]
+fn a_leftover_wal_blocks_create_and_is_kept() {
+    let directory = scratch_directory("stale-wal");
+    let primary = directory.join("msduck.duckdb");
+    let server = Server::open(primary.to_str().unwrap()).unwrap();
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    let wal = directory.join("msduck.duckdb.5.app.duckdb.wal");
+    std::fs::write(&wal, b"stale").unwrap();
+    assert!(catalog.create(&db, "app").is_err());
+    assert_eq!(std::fs::read(&wal).unwrap(), b"stale");
+    assert!(!directory.join("msduck.duckdb.5.app.duckdb").exists());
+    assert_eq!(catalog.list(&db).unwrap(), [database("master", 1)]);
+    drop((db, server));
+    std::fs::remove_dir_all(&directory).unwrap();
 }
