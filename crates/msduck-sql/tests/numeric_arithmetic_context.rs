@@ -94,6 +94,8 @@ fn direct_division_lowering_uses_operand_declarations_not_parameter_values() {
         ("CAST(2 AS DECIMAL(5,2))/3", (9, 6)),
         ("CAST(2 AS DECIMAL(5,2))/CAST(3 AS INT)", (16, 13)),
         ("CAST(2147483649 AS DECIMAL(10,0))/@divisor", (21, 11)),
+        ("(2147483649/2)/2", (18, 8)),
+        ("2147483649/(2/2)", (21, 11)),
     ] {
         let mut expr = expression(sql);
         decimal_division::lower(&mut expr, &parameters, &|_| None);
@@ -110,4 +112,19 @@ fn direct_division_lowering_uses_operand_declarations_not_parameter_values() {
     let original = integer.clone();
     decimal_division::lower(&mut integer, &parameters, &|_| None);
     assert_eq!(integer, original);
+}
+
+#[test]
+fn nested_division_inference_preserves_integer_truncation_and_unknowns() {
+    let parameters = HashMap::new();
+    let mut nested = expression("2147483649/(3/2)");
+    decimal_division::lower(&mut nested, &parameters, &|_| None);
+    let rendered = nested.to_string();
+    assert!(rendered.contains("3 / 2"), "{rendered}");
+    assert!(rendered.contains("DECIMAL(21,11)"), "{rendered}");
+
+    let mut unknown = expression("2147483649/(unknown/2)");
+    let original = unknown.clone();
+    decimal_division::lower(&mut unknown, &parameters, &|_| None);
+    assert_eq!(unknown, original);
 }

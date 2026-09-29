@@ -40,6 +40,47 @@ fn decimal(kind: &DataType) -> bool {
     matches!(kind, DataType::Decimal(_) | DataType::Numeric(_))
 }
 
+// The outer expression is visited before its children are lowered. Infer a
+// division child's declaration from its original tree so an intermediate bare
+// integer keeps the precision SQL Server assigns in decimal arithmetic.
+fn division_kind(
+    expr: &Expr,
+    parameters: &HashMap<String, Parameter>,
+    column: &impl Fn(&Expr) -> Option<DataType>,
+) -> Option<DataType> {
+    match expr {
+        Expr::Nested(inner) => division_kind(inner, parameters, column),
+        Expr::BinaryOp {
+            left,
+            op: BinaryOperator::Divide,
+            right,
+        } => {
+            let mut left_kind = division_kind(left, parameters, column)?;
+            let mut right_kind = division_kind(right, parameters, column)?;
+            if decimal(&right_kind) {
+                left_kind = bare_integer_decimal_type(left).unwrap_or(left_kind);
+            }
+            if decimal(&left_kind) {
+                right_kind = bare_integer_decimal_type(right).unwrap_or(right_kind);
+            }
+            if let Some(result) =
+                arithmetic::decimal_type(&BinaryOperator::Divide, &left_kind, &right_kind)
+            {
+                Some(result)
+            } else if matches!(left_kind, DataType::Int(_))
+                && matches!(right_kind, DataType::Int(_))
+            {
+                // Integer division truncates before an enclosing decimal cast.
+                Some(DataType::Int(None))
+            } else {
+                // Leave other unbound shapes unknown.
+                None
+            }
+        }
+        _ => storage::kind(expr, parameters, column),
+    }
+}
+
 fn operand(kind: &DataType) -> Option<DataType> {
     let (precision, scale) = match crate::sql_type::declaration(kind).ok()? {
         Type::Decimal(d) => (d.precision(), d.scale()),
@@ -77,10 +118,10 @@ pub fn lower(
     else {
         return;
     };
-    let Some(mut left_kind) = storage::kind(left, parameters, column) else {
+    let Some(mut left_kind) = division_kind(left, parameters, column) else {
         return;
     };
-    let Some(mut right_kind) = storage::kind(right, parameters, column) else {
+    let Some(mut right_kind) = division_kind(right, parameters, column) else {
         return;
     };
     if decimal(&right_kind) {
