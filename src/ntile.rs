@@ -14,12 +14,13 @@ pub const TYPE: &str = "Invalid NTILE bucket argument type: ";
 /// and other expressions remain runtime inputs; no value is evaluated.
 pub fn validate_constants(statement: &Statement) -> Result<(), msduck_core::diagnostic::SqlError> {
     fn null(expr: &Expr) -> bool {
+        let expr = msduck_sql::variant_cast::source(expr).unwrap_or(expr);
         match expr {
             Expr::Value(value) => matches!(value.value, Value::Null),
             Expr::Nested(expr) => null(expr),
             Expr::Cast {
                 expr,
-                data_type: DataType::Int(_) | DataType::BigInt(_),
+                data_type: DataType::Int(_) | DataType::Integer(_) | DataType::BigInt(_),
                 ..
             } => null(expr),
             _ => false,
