@@ -6674,6 +6674,28 @@
       ],
       "issue": 628,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PXslq"
+    },
+    {
+      "id": "nested-decimal-division-v1",
+      "title": "Preserve contextual declarations through nested decimal division",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server compatibility goal and first-party reference/numeric-arithmetic-context.json",
+      "scope": [
+        "crates/msduck-sql/src/decimal_division.rs",
+        "crates/msduck-sql/tests/numeric_arithmetic_context.rs",
+        "src/decimal_division.rs",
+        "docs/numeric-arithmetic-context.md"
+      ],
+      "acceptance": [
+        "Lower nested decimal divisions using child contextual declarations: chained (2147483649/2)/2 stores DECIMAL(18,8) and 536870912.25000000, and mixed 2147483649/(2/2) stores DECIMAL(21,11) and 2147483649.00000000000; note remaining NumericN wire-family gap explicitly.",
+        "Preserve inner integer division truncation, explicit CAST INT width, and parameter-value-independent inference; leave unknown expression declarations unresolved.",
+        "Add deterministic SQL-lowering and root execution regressions from pinned owner reference; run formatting, strict Clippy, workspace tests, independent tedious tests and local audit on exact revision."
+      ],
+      "dependencies": [
+        "numeric-literal-division-direct-v1"
+      ],
+      "issue": 630,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PX1lW"
     }
   ]
 }
