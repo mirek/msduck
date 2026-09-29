@@ -239,6 +239,100 @@ pub fn error_number(message: &str) -> Option<i32> {
     }
 }
 
+// Read explicit declarations before lowering; never evaluate an operand to
+// discover its type. Unknown source expressions remain unknown.
+fn floating_input_kind(expr: &Expr, parameters: &HashMap<String, Parameter>) -> Option<DataType> {
+    if let Some(kind) = crate::expression_metadata::storage::kind(expr, parameters, &|_| None) {
+        return Some(kind);
+    }
+    match expr {
+        Expr::Nested(value)
+        | Expr::Collate { expr: value, .. }
+        | Expr::UnaryOp {
+            expr: value,
+            op: UnaryOperator::Plus | UnaryOperator::Minus,
+        } => floating_input_kind(value, parameters),
+        Expr::BinaryOp { left, op, right }
+            if matches!(
+                op,
+                BinaryOperator::Plus
+                    | BinaryOperator::Minus
+                    | BinaryOperator::Multiply
+                    | BinaryOperator::Divide
+            ) =>
+        {
+            crate::expression_metadata::arithmetic::set_type(
+                &floating_input_kind(left, parameters)?,
+                &floating_input_kind(right, parameters)?,
+            )
+        }
+        Expr::Function(function) => {
+            let name = function.name.to_string().to_ascii_lowercase();
+            if matches!(
+                name.as_str(),
+                "__msduck_list_sum_float"
+                    | "__msduck_list_avg_float"
+                    | "stdev"
+                    | "stdevp"
+                    | "var"
+                    | "varp"
+            ) {
+                return Some(DataType::Double(ExactNumberInfo::None));
+            }
+            if name == "isnull"
+                && let FunctionArguments::List(args) = &function.args
+                && let Some(FunctionArg::Unnamed(FunctionArgExpr::Expr(value))) = args.args.first()
+            {
+                if crate::expression_metadata::conditional::literal_null(value) {
+                    let FunctionArg::Unnamed(FunctionArgExpr::Expr(replacement)) =
+                        args.args.get(1)?
+                    else {
+                        return None;
+                    };
+                    return floating_input_kind(replacement, parameters);
+                }
+                return floating_input_kind(value, parameters);
+            }
+            if matches!(name.as_str(), "sum" | "avg" | "min" | "max")
+                && let FunctionArguments::List(args) = &function.args
+                && let Some(FunctionArg::Unnamed(FunctionArgExpr::Expr(value))) = args.args.first()
+                && let Some(kind) = floating_input_kind(value, parameters)
+                && matches!(
+                    crate::sql_type::declaration(&kind),
+                    Ok(msduck_core::types::Type::Real | msduck_core::types::Type::Float)
+                )
+            {
+                return Some(if matches!(name.as_str(), "sum" | "avg") {
+                    DataType::Double(ExactNumberInfo::None)
+                } else {
+                    kind
+                });
+            }
+            floating_conditional_kind(expr, parameters)
+        }
+        Expr::Case { .. } => floating_conditional_kind(expr, parameters),
+        _ => None,
+    }
+}
+fn floating_conditional_kind(
+    expr: &Expr,
+    parameters: &HashMap<String, Parameter>,
+) -> Option<DataType> {
+    if !crate::expression_metadata::conditional::candidate(expr) {
+        return None;
+    }
+    let mut values = crate::expression_metadata::conditional::values(expr)
+        .into_iter()
+        .filter(|value| !crate::expression_metadata::conditional::literal_null(value));
+    let first = floating_input_kind(values.next()?, parameters)?;
+    values.try_fold(first, |kind, value| {
+        crate::expression_metadata::arithmetic::set_type(
+            &kind,
+            &floating_input_kind(value, parameters)?,
+        )
+    })
+}
+
 pub fn mark(expr: &mut Expr, parameters: &HashMap<String, Parameter>) -> Result<(), String> {
     let Expr::Function(function) = expr else {
         return Ok(());
@@ -338,7 +432,7 @@ pub fn mark(expr: &mut Expr, parameters: &HashMap<String, Parameter>) -> Result<
     let floating = if matches!(name.as_str(), "sum" | "avg")
         && let FunctionArguments::List(args) = &function.args
         && let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] = args.args.as_slice()
-        && let Some(kind) = crate::expression_metadata::storage::kind(value, parameters, &|_| None)
+        && let Some(kind) = floating_input_kind(value, parameters)
         && matches!(
             crate::sql_type::declaration(&kind),
             Ok(msduck_core::types::Type::Real | msduck_core::types::Type::Float)

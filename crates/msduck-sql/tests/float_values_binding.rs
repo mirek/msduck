@@ -13,10 +13,7 @@ fn float_values_declarations_reach_aggregate_operands_without_native_effects() {
             "float(53)",
         ),
         ("(CAST(0.1 AS REAL)),(CAST(0.2 AS REAL))", "real"),
-        (
-            "(CAST(0.1 AS FLOAT(24))),(CAST(0.2 AS FLOAT(24)))",
-            "float(24)",
-        ),
+        ("(CAST(0.1 AS FLOAT(24))),(CAST(0.2 AS FLOAT(24)))", "real"),
         ("(CAST(1 AS REAL)),(2),(NULL)", "real"),
         ("(CAST(1 AS REAL)),(CAST(2 AS FLOAT))", "float(53)"),
         ("(CAST(1 AS REAL)),(CAST(2 AS DECIMAL(5,2)))", "real"),

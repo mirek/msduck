@@ -83,3 +83,32 @@ fn float_lowering_keeps_typed_distinct_windows_and_one_observed_operand() {
         }
     }
 }
+
+#[test]
+fn explicit_floating_expression_types_select_native_aggregate_without_values() {
+    for input in [
+        "CAST(v AS REAL)+1",
+        "CASE WHEN flag=1 THEN CAST(v AS REAL) ELSE CAST(0 AS REAL) END",
+        "COALESCE(CAST(v AS REAL),CAST(0 AS REAL))",
+        "ISNULL(CAST(v AS REAL),CAST(0 AS FLOAT))",
+        "AVG(CAST(v AS REAL))",
+    ] {
+        let sql = format!("SELECT SUM({input}) OVER()");
+        let mut statement = Parser::parse_sql(&ServerDialect, &sql).unwrap().remove(0);
+        struct Mark;
+        impl VisitorMut for Mark {
+            type Break = String;
+            fn pre_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<String> {
+                match aggregate::mark(expr, &Default::default()) {
+                    Ok(()) => std::ops::ControlFlow::Continue(()),
+                    Err(error) => std::ops::ControlFlow::Break(error),
+                }
+            }
+        }
+        assert!(VisitMut::visit(&mut statement, &mut Mark).is_continue());
+        assert!(
+            statement.to_string().contains("__msduck_list_sum_float"),
+            "{statement}"
+        );
+    }
+}

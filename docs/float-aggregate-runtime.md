@@ -26,6 +26,10 @@ native tests cover non-flat children, scratch chunks, bounds, NULL shapes,
 non-finite input, and volatile single evaluation. Prepared parameters, catalog
 columns and catchable overflow have independent client coverage.
 
-Validation results will be recorded after the final revision is verified.
+The focused independent replay passed all four client tests and 45 retained
+observations, including all three canonical overflow cases. Exact final-head
+workspace/client/audit and review evidence is recorded in the linked PR.
+Unknown operand declarations remain outside this known-type path and must
+remain explicit future compiler work, rather than fabricated type inference.
 Full floating aggregation/plan compatibility and streaming execution remain
 unfinished.

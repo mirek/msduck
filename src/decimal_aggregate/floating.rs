@@ -110,6 +110,9 @@ unsafe extern "C" fn invoke(
         duckdb_vector_ensure_validity_writable(output);
         let output_validity = duckdb_vector_get_validity(output);
         let destination = duckdb_vector_get_data(output).cast::<f64>();
+        if destination.is_null() {
+            return Err(INTERNAL);
+        }
         for row in 0..duckdb_data_chunk_get_size(input) {
             if !validity.is_null() && !duckdb_validity_row_is_valid(validity, row) {
                 duckdb_validity_set_row_invalid(output_validity, row);

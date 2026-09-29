@@ -121,3 +121,13 @@ test('FLOAT aggregates preserve prepared parameters catalog declarations and cat
   const caught = await query(connection, "BEGIN TRY SELECT SUM(v) FROM (VALUES(CAST('1e308' AS FLOAT)),(CAST('1e308' AS FLOAT))) d(v); END TRY BEGIN CATCH SELECT ERROR_NUMBER(),ERROR_STATE(); END CATCH")
   assert.deepEqual(caught.rows, [[8115,2]])
 })
+
+test('FLOAT expression operands use checked aggregates without changing ISNULL precedence', async t => {
+  const connection = await start(t)
+  for (const operand of ["CAST(v AS FLOAT)+CAST(0 AS FLOAT)", "CASE WHEN id=1 THEN CAST(v AS FLOAT) ELSE CAST(v AS FLOAT) END", "COALESCE(CAST(v AS FLOAT),CAST(0 AS FLOAT))", "ISNULL(CAST(v AS FLOAT),CAST(0 AS FLOAT))"]) {
+    await assert.rejects(query(connection, `SELECT SUM(${operand}) FROM (VALUES(1,CAST('1e308' AS FLOAT)),(2,CAST('1e308' AS FLOAT))) d(id,v)`), error => error.number === 8115 && error.state === 2)
+  }
+  const integer = await query(connection, 'SELECT SUM(ISNULL(CAST(v AS INT),CAST(1.25 AS REAL))) AS s FROM (VALUES(1),(2)) d(v)')
+  assert.deepEqual(integer.rows, [[3]])
+  assert.equal(integer.columns[0][0].type.name, 'IntN')
+})
