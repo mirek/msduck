@@ -6489,6 +6489,25 @@
       ],
       "issue": 611,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PW7UK"
+    },
+    {
+      "id": "guid-conversion-order-reference-v1",
+      "title": "Capture SQL Server uniqueidentifier ordering and text conversion",
+      "state": "ready",
+      "authorization": "mirek's continuing implementation goal and owner-authored issue #614",
+      "scope": [
+        "scripts/capture-guid-conversion-order.mjs",
+        "reference/guid-conversion-order.json",
+        "docs/guid-conversion-order.md"
+      ],
+      "acceptance": [
+        "Capture pinned SQL Server 2025 ORDER BY and comparison behavior on fixed GUID values chosen to distinguish candidate byte and lexical orders, including typed result descriptors and completion tokens",
+        "Capture CAST and TRY_CONVERT from varchar and nvarchar for canonical, case-varied, overlong, malformed, and NULL inputs with exact errors and recovery",
+        "Retain identical observations from two independent fresh containers, validate fixture integrity in check mode, and document observations and implementation gaps without changing runtime semantics"
+      ],
+      "dependencies": [],
+      "issue": 614,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PXH78"
     }
   ]
 }
