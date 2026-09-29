@@ -6020,6 +6020,28 @@
       ],
       "issue": 570,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVhbe"
+    },
+    {
+      "id": "identity-insert-write-adapter-v1",
+      "title": "Compose IDENTITY_INSERT INSERT permission with live catalog",
+      "state": "ready",
+      "authorization": "Mirek continuing full SQL Server compatibility goal; first-party IDENTITY_INSERT fixtures and merged pure permission/session rules.",
+      "scope": [
+        "src/identity_insert_write.rs",
+        "tests/identity_insert_write.rs",
+        "docs/identity-insert-write-adapter.md"
+      ],
+      "acceptance": [
+        "Path-import the pure INSERT permission gate and root session adapter; resolve ordinary one/two-part INSERT targets, physical column names/count and identity position from the live catalog using bound queries. Do not execute source expressions or change state in preflight.",
+        "Replay captured 544, 545, 8101 diagnostics and DONE commands plus generated/explicit decisions against a real Server catalog for aliases, identity in a non-first column, other active table, missing/nonidentity targets and unsupported shapes. Leave missing/nonidentity targets to ordinary INSERT handling rather than fabricating SET diagnostics.",
+        "Document later engine, allocator and TDS integration boundary. Run AGENTS.md Rust/client/audit checks on exact revision and publish owner PR with exact-head CI and completed Codex review."
+      ],
+      "dependencies": [
+        "identity-insert-session-adapter-v1",
+        "identity-insert-shapes-gate-v1"
+      ],
+      "issue": 572,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVkkB"
     }
   ]
 }
