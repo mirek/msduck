@@ -6411,6 +6411,28 @@
       ],
       "issue": 607,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PWtqe"
+    },
+    {
+      "id": "statistical-state-core-v1",
+      "title": "Implement deterministic statistical accumulation state",
+      "state": "ready",
+      "authorization": "mirek's continuing implementation goal, owner-authored issue #609 and pinned statistical precision/transition references",
+      "scope": [
+        "crates/msduck-core/src/bounded_aggregate.rs",
+        "crates/msduck-core/tests/statistical_state.rs",
+        "docs/statistical-state.md"
+      ],
+      "acceptance": [
+        "Implement an explicitly sequential binary64 count/sum/squared-sum state over one converted input per update, with SQL Server sample/population NULL and positive-zero rules",
+        "Detect non-finite input/intermediate/final arithmetic and count overflow as sticky failures; preserve exact bit patterns for selected pinned long-order, cancellation, singleton, empty and extreme-value vectors",
+        "Document that typed DISTINCT occurs upstream and that native registration, physical aggregate order, parallel combination, diagnostics and wire metadata remain separate integration work"
+      ],
+      "dependencies": [
+        "statistical-accumulation-reference-v1",
+        "statistical-transition-reference-v1"
+      ],
+      "issue": 609,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PWw_G"
     }
   ]
 }
