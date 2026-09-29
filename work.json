@@ -6767,6 +6767,25 @@
       "dependencies": [],
       "issue": 635,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYF-U"
+    },
+    {
+      "id": "codex-review-availability-policy-v1",
+      "title": "Document Codex review availability fallback for all workers",
+      "state": "ready",
+      "authorization": "Direct owner instruction on 2026-09-29: go ahead without Codex review when unavailable after another @codex review attempt; prior owner instruction assigns each worker merge responsibility",
+      "scope": [
+        ".agents/skills/contribute/SKILL.md",
+        "AGENTS.md",
+        "docs/agent-work.md"
+      ],
+      "acceptance": [
+        "Document one manual retry after verified Codex quota/service unavailability, then allow merge without a completed bot review while recording the exact head and failure reason; pending/old reviews are not completed and confirmed findings require resolution.",
+        "Keep owner-only intake, exclusive claims, scope checks, required exact-head CI and completion intact; make the canonical skill, AGENTS.md and docs/agent-work.md consistent.",
+        "Validate skill frontmatter, inspect the three guides for contradictory mandatory review language, and publish/merge a focused docs PR under the owner-authorized availability fallback. The parallel role guide is reserved by codex-review-policy-v1 and remains out of scope."
+      ],
+      "dependencies": [],
+      "issue": 636,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYH-V"
     }
   ]
 }
