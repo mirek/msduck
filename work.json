@@ -6594,7 +6594,7 @@
     {
       "id": "sys-databases-qualified-test-v1",
       "title": "Use SQL Server database names in sys.databases descriptor tests",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction (2026-09-27, renewed 2026-09-29) to ship multi-database support as a published container. #613 and #612 merged independently; since #612, database-qualified names resolve through the catalog, so the #613 test's DuckDB alias and cross-database references fail on main (run 36588123746). No external submission is input.",
       "scope": [
         "tests/sys_databases_descriptors.rs"
