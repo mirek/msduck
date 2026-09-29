@@ -6466,6 +6466,29 @@
       ],
       "issue": 428,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQdWF"
+    },
+    {
+      "id": "sys-databases-descriptors-v2",
+      "title": "Align sys.databases result descriptors with SQL Server",
+      "state": "ready",
+      "authorization": "mirek's continuing implementation goal, owner-authored issue #611, and merged multi-database-catalog-v1 predecessor",
+      "scope": [
+        "src/query_catalog.rs",
+        "scripts/capture-sys-databases.mjs",
+        "reference/sys-databases.json",
+        "tests/sys_databases_descriptors.rs",
+        "docs/sys-databases-descriptors.md"
+      ],
+      "acceptance": [
+        "Capture pinned SQL Server 2025 sys.all_columns declarations and empty/nonempty TDS descriptors for the 13 sys.databases columns msduck publishes, retaining source rows, metadata and diagnostics across independent fresh containers",
+        "Map only those published columns through system_catalog_fields so SELECT *, projections, aliases and empty results retain SQL Server logical types, widths, nullability and collations without fabricating unsupported columns",
+        "Add root-side regression tests, run required Rust and client checks, and document exact remaining sys.databases schema/value gaps"
+      ],
+      "dependencies": [
+        "multi-database-catalog-v1"
+      ],
+      "issue": 611,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PW7UK"
     }
   ]
 }
