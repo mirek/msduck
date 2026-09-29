@@ -5915,7 +5915,7 @@
     {
       "id": "identity-insert-shapes-gate-v1",
       "title": "Align IDENTITY_INSERT positional INSERT preflight with SQL Server",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing full SQL Server compatibility goal and owner-controlled identity-insert-shapes reference; no external submission.",
       "scope": [
         "crates/msduck-sql/src/identity_insert_gate.rs",
