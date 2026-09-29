@@ -344,6 +344,21 @@ fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Fiel
         Vec::new()
     };
     let definitions = match view.as_str() {
+        "databases" => vec![
+            ("name", 231, 256, 256, 0, 0, false, false),
+            ("database_id", 56, 56, 4, 10, 0, false, false),
+            ("source_database_id", 56, 56, 4, 10, 0, true, false),
+            ("create_date", 61, 61, 8, 23, 3, false, false),
+            ("compatibility_level", 48, 48, 1, 3, 0, false, false),
+            ("collation_name", 231, 256, 256, 0, 0, true, true),
+            ("user_access", 48, 48, 1, 3, 0, true, true),
+            ("user_access_desc", 231, 231, 120, 0, 0, true, true),
+            ("is_read_only", 104, 104, 1, 1, 0, true, true),
+            ("state", 48, 48, 1, 3, 0, true, true),
+            ("state_desc", 231, 231, 120, 0, 0, true, true),
+            ("recovery_model", 48, 48, 1, 3, 0, true, true),
+            ("recovery_model_desc", 231, 231, 120, 0, 0, true, true),
+        ],
         "schemas" => vec![
             ("name", 231, 256, 256, 0, 0, false, false),
             ("schema_id", 56, 56, 4, 10, 0, false, false),
@@ -518,10 +533,10 @@ fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Fiel
     fields.extend(definitions.into_iter().map(
         |(name, system, user, length, precision, scale, nullable, computed)| {
             let collation_name = matches!(system, 175 | 231).then(|| {
-                if name != "name" {
-                    "Latin1_General_CI_AS_KS_WS"
-                } else {
+                if name == "name" || (view == "databases" && name == "collation_name") {
                     catalog_collation
+                } else {
+                    "Latin1_General_CI_AS_KS_WS"
                 }
                 .to_owned()
             });
