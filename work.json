@@ -6369,6 +6369,27 @@
       ],
       "issue": 603,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PWi1-"
+    },
+    {
+      "id": "statistical-accumulation-reference-v1",
+      "title": "Capture adversarial statistical accumulation reference",
+      "state": "ready",
+      "authorization": "mirek's continuing implementation goal, owner-authored issue #605 and statistical precision replay evidence",
+      "scope": [
+        "scripts/capture-statistical-precision-reference.mjs",
+        "reference/statistical-precision.json",
+        "docs/statistical-precision-reference.md"
+      ],
+      "acceptance": [
+        "Capture exact binary64 rows, typed descriptors, diagnostics, token order and raw DONE fields for STDEV/STDEVP/VAR/VARP over large nearby exact values, mixed signs and magnitudes, altered input order, NULL/singleton/empty sets, grouped and ordered windows, and DISTINCT before floating conversion",
+        "Replay in two independent pinned SQL Server containers and fresh databases, retain an immutable fixture checksum, and distinguish stable observations from evaluation-order uncertainty",
+        "Use the captured bits to support or falsify candidate accumulation and rounding formulas, then define a bounded numerical implementation task that preserves typed DISTINCT input identity and single evaluation; do not change numerical lowering in this capture task"
+      ],
+      "dependencies": [
+        "statistical-precision-diagnostics-v1"
+      ],
+      "issue": 605,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PWk0x"
     }
   ]
 }
