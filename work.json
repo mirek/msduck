@@ -6390,6 +6390,27 @@
       ],
       "issue": 605,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PWk0x"
+    },
+    {
+      "id": "statistical-transition-reference-v1",
+      "title": "Capture statistical transition order and extreme-value reference",
+      "state": "ready",
+      "authorization": "mirek's continuing implementation goal, owner-authored issue #607 and statistical precision reference in PR #606",
+      "scope": [
+        "scripts/capture-statistical-transition-reference.mjs",
+        "reference/statistical-transition.json",
+        "docs/statistical-transition-reference.md"
+      ],
+      "acceptance": [
+        "Capture exact FLOAT(53) result bits, typed descriptors, errors, warnings, event order and raw DONE fields for STDEV/STDEVP/VAR/VARP over long ordered and reversed sequences, negative zero, extreme finite/overflow values, and cancellation near the zero clamp",
+        "Replay in two independent pinned SQL Server containers and fresh databases, retain fixture checksum, and distinguish stable observations from evaluation-order uncertainty",
+        "Compare candidate accumulation and rounding algorithms with captured bits, report counterexamples and define implementation implications without changing runtime lowering"
+      ],
+      "dependencies": [
+        "statistical-accumulation-reference-v1"
+      ],
+      "issue": 607,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PWtqe"
     }
   ]
 }
