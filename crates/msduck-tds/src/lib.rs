@@ -8,6 +8,7 @@ pub mod framing;
 pub mod request_lifecycle;
 pub mod return_value;
 pub mod smp;
+pub mod tvp;
 
 pub const MAX_MESSAGE: usize = 16 * 1024 * 1024;
 pub const COLLATION: [u8; 5] = [0x09, 0x04, 0xd0, 0x00, 0x34];
