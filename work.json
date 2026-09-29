@@ -7007,7 +7007,7 @@
     {
       "id": "percentile-order-type-reference-v1",
       "title": "Capture percentile ordering type descriptors and binding diagnostics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing fully functional SQL Server compatibility goal; retained complete percentile replay proves DISC descriptor and CONT nonnumeric binding diagnostic gaps requiring explicit source-type evidence.",
       "scope": [
         "scripts/capture-percentile-order-type.mjs",
