@@ -120,6 +120,8 @@ pub fn instrument<T: VisitMut>(
                         | "__msduck_list_stddev_pop"
                         | "__msduck_list_var_samp"
                         | "__msduck_list_var_pop"
+                        | "__msduck_list_sum_float"
+                        | "__msduck_list_avg_float"
                 )
                 && let FunctionArguments::List(outer) = &mut function.args
                 && let [FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Function(values)))] =

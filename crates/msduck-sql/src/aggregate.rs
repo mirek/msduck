@@ -335,7 +335,23 @@ pub fn mark(expr: &mut Expr, parameters: &HashMap<String, Parameter>) -> Result<
         function.name = ObjectName::from(vec![Ident::new(format!("__msduck_{name}_money"))]);
         return Ok(());
     }
-    if let Some(target) = statistical {
+    let floating = if matches!(name.as_str(), "sum" | "avg")
+        && let FunctionArguments::List(args) = &function.args
+        && let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] = args.args.as_slice()
+        && let Some(kind) = crate::expression_metadata::storage::kind(value, parameters, &|_| None)
+        && matches!(
+            crate::sql_type::declaration(&kind),
+            Ok(msduck_core::types::Type::Real | msduck_core::types::Type::Float)
+        ) {
+        Some(if name == "sum" {
+            "sum_float"
+        } else {
+            "avg_float"
+        })
+    } else {
+        None
+    };
+    if let Some(target) = statistical.or(floating) {
         // LIST retains the original typed DISTINCT identity and window order.
         // Its operand occurs once; the native scalar converts the completed
         // list to DOUBLE and accumulates sequentially without a parallel combine.
