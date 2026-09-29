@@ -5849,7 +5849,7 @@
     {
       "id": "identity-insert-multirow-reference-v1",
       "title": "Capture IDENTITY_INSERT multi-row atomicity and OUTPUT behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing SQL Server compatibility goal and first-party IDENTITY_INSERT captures; no external submissions.",
       "scope": [
         "scripts/capture-identity-insert-multirow.mjs",
