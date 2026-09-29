@@ -4,9 +4,12 @@
 retains 34 batch observations and four executions of one prepared statement from
 each of two independent pinned SQL Server 2025 containers. Both reported product
 version `17.0.4065.4`. The two canonical captures are byte-identical (SHA-256
-`9cec0650f48d6ce0d73a0f11d170bb4d0efe0bebfb8ecb828c65970e9151329e`).
+`53b4db12496c6c038e07ccb77c3d7fec20fd02ee6144e8effe47f6d84fc79519`).
 The fixture retains rows, exact `VARCHAR(100)` renderings, column descriptors,
-errors, informational messages and completion events without normalizing them.
+errors, informational messages, completion events, decoded DONE fields, and raw
+DONE status bits and command identifiers without normalizing them. The failed
+conversion ends with command 193 and status `0x0002` (`DONE_ERROR`); an ordinary
+SELECT ends with command 193 and status `0x0010` (`DONE_COUNT`).
 
 | Expression | First descriptor | Exact rendering |
 | --- | --- | --- |

@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { basename, dirname, join, resolve } from 'node:path'
 import { Request, TYPES } from 'tedious'
 import { fileURLToPath } from 'node:url'
@@ -11,7 +12,9 @@ import { withReferenceContainer, referenceImage } from './lib/reference-containe
 import { assertSameCapture, isolatedReference, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 
 const fixture = new URL('../reference/numeric-arithmetic-context.json', import.meta.url)
-const fixtureSha256 = '4151c73088b502858b4184df746995242b142c4c4fb71f240e9e14643e37e3ea'
+const fixtureSha256 = '173b693c7109f49032f7b2abef962b2ca658cd8958da126db964cde9f94ee2ef'
+const StreamParser = createRequire(import.meta.url)('tedious/lib/token/stream-parser.js')
+const rawDoneKinds = new Map([[0xFD, 'DONE'], [0xFE, 'DONEPROC'], [0xFF, 'DONEINPROC']])
 const args = process.argv.slice(2)
 const check = args.includes('--check')
 const writeFixture = args.includes('--write-fixture')
@@ -65,6 +68,57 @@ function descriptor(column) {
     collation: canonical(column.collation ?? null) }
 }
 
+// Request completion events omit SQL_ERROR and the command identifier. Capture
+// the pinned tedious decoder's DONE fields before its request-event projection.
+function observeDoneTokens(connection, doneTokens, rawDone) {
+  const createParser = connection.createTokenStreamParser
+  const readToken = StreamParser.prototype.readToken
+  const recordRawDone = (parser, type) => {
+    assert(parser.options.tdsVersion >= '7_2', 'unexpected TDS version')
+    const at = parser.position
+    if (parser.buffer.length < at + 12) return parser.waitForChunk().then(() => recordRawDone(parser, type))
+    rawDone.push({
+      kind: rawDoneKinds.get(type),
+      status: parser.buffer.readUInt16LE(at),
+      command: parser.buffer.readUInt16LE(at + 2),
+    })
+    return readToken.call(parser, type)
+  }
+  StreamParser.prototype.readToken = function (type) {
+    return rawDoneKinds.has(type) ? recordRawDone(this, type) : readToken.call(this, type)
+  }
+  connection.createTokenStreamParser = function (message, handler) {
+    const parser = createParser.call(this, message, handler)
+    assert.equal(typeof parser.parser?.prependListener, 'function', 'Tedious token stream unavailable')
+    parser.parser.prependListener('data', token => {
+      if (['DONE', 'DONEINPROC', 'DONEPROC'].includes(token.name)) {
+        doneTokens.push({
+          kind: token.name, more: token.more, sqlError: token.sqlError,
+          attention: token.attention, serverError: token.serverError,
+          rowCount: token.rowCount ?? null, command: token.curCmd,
+        })
+      }
+    })
+    return parser
+  }
+  return () => {
+    connection.createTokenStreamParser = createParser
+    StreamParser.prototype.readToken = readToken
+  }
+}
+
+async function captureBatch(connection, sql) {
+  const doneTokens = []
+  const rawDone = []
+  const restore = observeDoneTokens(connection, doneTokens, rawDone)
+  try {
+    const result = await capture(connection, sql)
+    assert.equal(doneTokens.length, result.done.length, 'incomplete decoded DONE tokens')
+    assert.equal(rawDone.length, doneTokens.length, 'incomplete raw DONE fields')
+    return canonical({ ...result, doneTokens, rawDone })
+  } finally { restore() }
+}
+
 async function preparedCapture(connection) {
   const runs = []
   let result
@@ -91,12 +145,17 @@ async function preparedCapture(connection) {
       connection.prepare(request)
     })
     for (const value of preparedValues) {
-      result = { sets: [], done: [], errors: [], info: [], returnStatus: null }
-      await new Promise((done, fail) => {
-        complete = (error, rowCount) => { result.rowCount = rowCount; error ? fail(error) : done() }
-        request.error = undefined
-        connection.execute(request, { divisor: value })
-      })
+      result = { sets: [], done: [], doneTokens: [], rawDone: [], errors: [], info: [], returnStatus: null }
+      const restore = observeDoneTokens(connection, result.doneTokens, result.rawDone)
+      try {
+        await new Promise((done, fail) => {
+          complete = (error, rowCount) => { result.rowCount = rowCount; error ? fail(error) : done() }
+          request.error = undefined
+          connection.execute(request, { divisor: value })
+        })
+        assert.equal(result.doneTokens.length, result.done.length, 'incomplete prepared DONE tokens')
+        assert.equal(result.rawDone.length, result.doneTokens.length, 'incomplete prepared raw DONE fields')
+      } finally { restore() }
       runs.push({ divisor: value, result: canonical(result) })
     }
     result = undefined
@@ -116,8 +175,10 @@ function validate(run) {
   assert.equal(run.prepared.sql, preparedSql)
   assertSameCapture(run.prepared.runs.map(({ divisor }) => divisor), preparedValues, 'prepared bindings changed')
   for (const { name, result } of run.batches) {
-    assert(Array.isArray(result.sets) && Array.isArray(result.done) && Array.isArray(result.errors) && Array.isArray(result.info), `${name}: incomplete capture`)
+    assert(Array.isArray(result.sets) && Array.isArray(result.done) && Array.isArray(result.doneTokens) && Array.isArray(result.rawDone) && Array.isArray(result.errors) && Array.isArray(result.info), `${name}: incomplete capture`)
     assert(result.done.length > 0, `${name}: missing completion token`)
+    assert.equal(result.doneTokens.length, result.done.length, `${name}: incomplete decoded DONE tokens`)
+    assert.equal(result.rawDone.length, result.doneTokens.length, `${name}: incomplete raw DONE fields`)
     assert.equal(result.errors.length, name === 'invalid numeric text conversion' ? 1 : 0, `${name}: unexpected errors`)
     for (const set of result.sets) for (const column of set.columns) assert(typeof column.type === 'string' && typeof column.flags === 'number', `${name}: incomplete descriptor`)
   }
@@ -131,6 +192,13 @@ function validate(run) {
   assert.equal(get('empty contextual metadata').rows.length, 0)
   const error = run.batches.find(entry => entry.name === 'invalid numeric text conversion').result.errors[0]
   assertSameCapture([error.number, error.state, error.class], [8114, 5, 16], 'conversion diagnostic changed')
+  assertSameCapture(run.batches.find(entry => entry.name === 'invalid numeric text conversion').result.doneTokens, [{
+    kind: 'DONE', more: false, sqlError: true, attention: false,
+    serverError: false, rowCount: null, command: 193,
+  }], 'conversion DONE_ERROR changed')
+  assertSameCapture(run.batches.find(entry => entry.name === 'invalid numeric text conversion').result.rawDone, [{
+    kind: 'DONE', status: 2, command: 193,
+  }], 'conversion raw DONE_ERROR changed')
   for (const name of plan.map(([name]) => name).filter(name => !['server version', 'invalid numeric text conversion', 'recovery after conversion error'].includes(name))) {
     const [type, precision, scale] = kind(name)
     assert(type === 'DecimalN' || type === 'NumericN' || type === 'IntN', `${name}: unexpected type`)
@@ -168,7 +236,9 @@ function validate(run) {
   assertSameCapture(get('explicit decimal over bare small').rows, [[1073741824.5, '1073741824.500000']], 'bare divisor quotient changed')
   assertSameCapture(get('explicit decimal over cast int').rows, [[1073741824.5, '1073741824.50000000000']], 'cast divisor quotient changed')
   for (const { divisor, result } of run.prepared.runs) {
-    assert(Array.isArray(result.sets) && Array.isArray(result.done) && Array.isArray(result.errors) && Array.isArray(result.info), `prepared ${divisor}: incomplete capture`)
+    assert(Array.isArray(result.sets) && Array.isArray(result.done) && Array.isArray(result.doneTokens) && Array.isArray(result.rawDone) && Array.isArray(result.errors) && Array.isArray(result.info), `prepared ${divisor}: incomplete capture`)
+    assert.equal(result.doneTokens.length, result.done.length, `prepared ${divisor}: incomplete decoded DONE tokens`)
+    assert.equal(result.rawDone.length, result.doneTokens.length, `prepared ${divisor}: incomplete raw DONE fields`)
     assert.equal(result.errors.length, 0, `prepared ${divisor}: unexpected error`)
     assert.equal(result.sets.length, 1, `prepared ${divisor}: missing result`)
     assert.equal(result.sets[0].rows.length, 1, `prepared ${divisor}: missing row`)
@@ -180,7 +250,7 @@ function validate(run) {
 async function observe(connection) {
   const batches = []
   for (const [name, sql] of plan) {
-    batches.push({ name, sql, result: canonical(await capture(connection, sql)) })
+    batches.push({ name, sql, result: await captureBatch(connection, sql) })
     console.log(name)
   }
   const run = { batches, prepared: { sql: preparedSql, runs: await preparedCapture(connection) } }
