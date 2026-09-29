@@ -6209,6 +6209,23 @@
       "dependencies": [],
       "issue": 587,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PWAq_"
+    },
+    {
+      "id": "percentile-note-reference-v1",
+      "title": "Update percentile implementation note for live SQL Server reference",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server compatibility goal and verified owner-initiated Codex review finding on owner PR #588; first-party documentation only",
+      "scope": [
+        "docs/percentiles.md"
+      ],
+      "acceptance": [
+        "Remove the stale assertion that no live SQL Server comparison exists and qualify floating-point interpolation verification to the measured reference cases.",
+        "Link the separate SQL Server reference capture, distinguish its observations from msduck parity, and preserve remaining gaps without overclaiming.",
+        "Verify the source text and publish an owner PR through exact-head CI and completed Codex review, then merge and mark Done."
+      ],
+      "dependencies": [],
+      "issue": 589,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PWC8o"
     }
   ]
 }
