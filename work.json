@@ -6330,7 +6330,7 @@
     {
       "id": "statistical-distinct-warning-v1",
       "title": "Emit statistical DISTINCT NULL warnings and exact signature messages",
-      "state": "ready",
+      "state": "done",
       "authorization": "mirek's continuing implementation goal, owner-authored issue #601 and reference/statistical-aggregates.json",
       "scope": [
         "crates/msduck-sql/src/aggregate.rs",
