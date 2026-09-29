@@ -6437,7 +6437,7 @@
     {
       "id": "multi-database-statements-v2",
       "title": "Execute CREATE DATABASE, DROP DATABASE, USE and DB_NAME/DB_ID and accept any existing LOGIN7 database",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction (2026-09-27, renewed 2026-09-29) to support CREATE DATABASE, USE and sys.databases and ship it as a container. Successor of the unclaimed backlog task multi-database-statements-v1, whose package.json scope is held by a ready task; client coverage is registered in the CI client shard list instead. No external submission is input.",
       "scope": [
         "src/engine.rs",
