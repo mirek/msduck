@@ -2,7 +2,7 @@
 
 `node scripts/compare-statistical-reference.mjs` builds no code. Run it from a
 clean Git checkout with a matching `target/debug/msduck` and tedious installed.
-It derives the source revision from Git and rejects tracked changes. It starts
+It derives the source revision from Git and rejects uncommitted source. It starts
 msduck on an ephemeral localhost port and writes the full
 reference and local observations, exact structural differences, and IEEE-754
 hex bits to `artifacts/compatibility/statistical-precision/comparison.json`.

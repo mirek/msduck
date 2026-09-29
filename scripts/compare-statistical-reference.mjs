@@ -20,7 +20,7 @@ if (process.argv.length !== 2) throw Error('usage: node scripts/compare-statisti
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
 const sourceRevision = git('rev-parse', 'HEAD')
 assert.match(sourceRevision, /^[0-9a-f]{40}$/, 'Git head is not a full commit SHA')
-assert.equal(git('status', '--porcelain=v1', '--untracked-files=no'), '', 'tracked checkout is dirty')
+assert.equal(git('status', '--porcelain=v1'), '', 'Git checkout is dirty')
 const StreamParser = createRequire(import.meta.url)('tedious/lib/token/stream-parser.js')
 const doneKinds = new Map([[0xFD, 'DONE'], [0xFE, 'DONEPROC'], [0xFF, 'DONEINPROC']])
 
