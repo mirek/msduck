@@ -6171,6 +6171,25 @@
       "dependencies": [],
       "issue": 428,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQdWF"
+    },
+    {
+      "id": "ntile-types-reference-v1",
+      "title": "Capture SQL Server NTILE bucket type and conversion matrix",
+      "state": "ready",
+      "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party NTILE type fidelity gap recorded in docs/ntile.md and owner-run PR #584. No external submission.",
+      "scope": [
+        "scripts/capture-ntile-types.mjs",
+        "reference/ntile-types.json",
+        "docs/ntile-types-reference.md"
+      ],
+      "acceptance": [
+        "Capture NTILE integer-family, decimal/float, character, binary, date, bit and NULL bucket expressions plus valid and invalid prepared RPC rebinding on the pinned SQL Server 2025 image in two fresh databases and an independent container replay.",
+        "Retain rows, typed descriptors, exact diagnostics, ordered events and raw DONE status/command words; validate a fixed case plan and fixture checksum without overwriting or aliasing retained evidence.",
+        "Document observed type/conversion behavior and precedence limits without claiming msduck runtime support; verify fixture and live replay, then publish an owner PR with exact-head required CI and completed Codex review."
+      ],
+      "dependencies": [],
+      "issue": 585,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PV5kD"
     }
   ]
 }
