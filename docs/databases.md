@@ -34,7 +34,7 @@ UTF-8 byte written as `%XX`. It is cut at a whole character after 64 bytes, so
 long non-ASCII names stay within file-name limits. A primary file name longer than 64
 bytes is cut the same way and followed by `~` and a 64-bit FNV-1a hash of the
 full name, so servers whose file names share a prefix do not collide. A `\` in
-the primary file name, legal on Unix, is written as `%5C`. The registry
+the primary file name, legal on Unix, is written as `%5C`, and a `%` as `%25`. The registry
 is ordinary SQL data, so a stored file name is used only if it is a single
 file-name component that ends with the `.<database_id>.<fragment>.duckdb`
 suffix generated for that row's ID and name. Any other value, such as an

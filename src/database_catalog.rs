@@ -616,7 +616,8 @@ fn file_name(prefix: &str, database_id: i32, name_key: &str) -> String {
     // bound so that the whole component fits. A shortened prefix keeps a hash
     // of the full prefix, so servers whose file names share a start do not
     // collide.
-    let escaped = prefix.replace('\\', "%5C");
+    // Escaping `%` first keeps the mapping injective.
+    let escaped = prefix.replace('%', "%25").replace('\\', "%5C");
     let prefix = escaped.as_str();
     let prefix = if prefix.len() > FILE_NAME_FRAGMENT {
         let mut end = FILE_NAME_FRAGMENT;
@@ -752,6 +753,10 @@ mod tests {
     #[test]
     fn generated_names_pass_their_own_validation() {
         assert_eq!(file_name("a\\b.duckdb", 5, "x"), "a%5Cb.duckdb.5.x.duckdb");
+        assert_eq!(
+            file_name("a%5Cb.duckdb", 5, "x"),
+            "a%255Cb.duckdb.5.x.duckdb"
+        );
     }
 
     #[test]
