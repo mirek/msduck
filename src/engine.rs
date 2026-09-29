@@ -812,6 +812,7 @@ impl Session {
         parameters: &HashMap<String, Parameter>,
     ) -> Result<duckdb::core::LogicalTypeId> {
         self.lower_database_functions(&mut expression)?;
+        self.qualify_databases(&mut expression)?;
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
             .map_err(anyhow::Error::msg)?;
@@ -1802,9 +1803,13 @@ impl Session {
 
     fn execute(
         &mut self,
-        statement: Statement,
+        mut statement: Statement,
         parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Execution> {
+        // Resolve database names before any DDL dispatch or catalog
+        // bookkeeping, which see only two-part names.
+        self.lower_database_functions(&mut statement)?;
+        self.qualify_databases(&mut statement)?;
         if !matches!(
             statement,
             Statement::Rollback { .. }
@@ -3033,6 +3038,7 @@ impl Session {
     ) -> Result<Value> {
         self.sync_datefirst()?;
         self.lower_database_functions(&mut expression)?;
+        self.qualify_databases(&mut expression)?;
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
             .map_err(anyhow::Error::msg)?;
