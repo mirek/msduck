@@ -6001,7 +6001,7 @@
     {
       "id": "identity-insert-session-adapter-v1",
       "title": "Compose IDENTITY_INSERT catalog and session transition adapter",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek continuing full SQL Server compatibility goal; first-party identity-insert references and merged binding/catalog modules.",
       "scope": [
         "src/identity_insert_session.rs",
