@@ -65,8 +65,33 @@ a later `SELECT 1` succeeds on the same connection. The fixture retains
 the descriptor, completion tokens and diagnostic details. This capture format
 does not record their interleaving order.
 
+The expanded [character conversion capture](../reference/guid-character-conversion.json)
+retains 95 requests from each of two independent fresh SQL Server 2025
+containers. Its SHA-256 is
+`cbf75c6230252f12fec7519993425d069f5a28c228424b3c2d37c857554ddd41`.
+`node scripts/capture-guid-character-conversion.mjs --check` validates the
+fixture and its controls without starting a container. The capture covers
+both character families through `CAST` and `TRY_CONVERT`, and preserves a
+successful query after every failed `CAST`.
+
+In this capture, a complete brace-wrapped GUID converts, including when
+characters follow its closing brace. An unbraced canonical 36-character
+prefix also converts regardless of later characters, even non-ASCII text.
+Missing or incorrect closing braces, parentheses, leading space, malformed
+hex or hyphens, short text, hyphenless text and empty text fail. Invalid
+`CAST` reports 8169/2/16; `TRY_CONVERT` returns a typed NULL. Typed input
+NULL propagates as NULL. Successful projections and invalid TRY results keep
+`UniqueIdentifier` width 16 and flags 33.
+
+`msduck_core::types::uniqueidentifier::{parse_varchar,parse_nvarchar}` now
+implements those observed syntax and truncation rules without a database or
+locale. The `varchar` entry accepts CP1252 bytes; the `nvarchar` entry accepts
+raw UTF-16 units and never replaces an isolated surrogate. Both return the
+mixed-endian 16-byte representation or a typed 8169/2/16 error. Callers must
+handle SQL NULL before parsing and map a parser error to typed NULL for
+`TRY_CONVERT`. The fixture-backed test checks every retained row and error.
+
 msduck currently transports GUID values and maps `NEWID()` to DuckDB's UUID
-generator; see [GUID RPC and result types](guid-rpc.md). This reference does
-not claim that msduck matches the ordering or character conversion cases.
-Runtime comparison, conversion and broader differential tests remain separate
-implementation work.
+generator; see [GUID RPC and result types](guid-rpc.md). Root execution still
+needs to apply the core comparison and conversion rules. These core tests do
+not establish runtime compatibility or cover every GUID conversion context.
