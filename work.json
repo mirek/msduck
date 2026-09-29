@@ -6721,7 +6721,7 @@
     {
       "id": "login-database-error-v1",
       "title": "Match SQL Server LOGIN7 failure for a nonexistent database",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-09-29): logging in with a nonexistent database must produce the same communication and error codes as SQL Server",
       "scope": [
         "scripts/capture-login-database-error.mjs",
