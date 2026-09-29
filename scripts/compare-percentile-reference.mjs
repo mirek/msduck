@@ -260,7 +260,10 @@ if (check) {
       matched: cases.filter(entry => !entry.differences.length && !entry.bitDifferences.length).length,
       different: cases.filter(entry => entry.differences.length || entry.bitDifferences.length).length,
       differences: cases.reduce((sum, entry) => sum + entry.differences.length, 0),
-      floatBitDifferences: cases.reduce((sum, entry) => sum + entry.bitDifferences.length, 0) }
+      floatBitDifferences: cases.flatMap(entry => entry.bitDifferences).filter(delta =>
+        typeof delta.local === 'string' && typeof delta.reference === 'string').length,
+      floatShapeDifferences: cases.flatMap(entry => entry.bitDifferences).filter(delta =>
+        typeof delta.local !== 'string' || typeof delta.reference !== 'string').length }
     const result = { status: 'complete', sourceRevision, sourceTree,
       executableSha256: hash.digest('hex'), referenceSha256: fixtureSha256, referenceImage: fixture.image,
       buildCommand: 'cargo build --workspace --all-targets --locked',
