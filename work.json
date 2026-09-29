@@ -5845,6 +5845,28 @@
       ],
       "issue": 554,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVG65"
+    },
+    {
+      "id": "identity-insert-multirow-reference-v1",
+      "title": "Capture IDENTITY_INSERT multi-row atomicity and OUTPUT behavior",
+      "state": "ready",
+      "authorization": "Owner continuing SQL Server compatibility goal and first-party IDENTITY_INSERT captures; no external submissions.",
+      "scope": [
+        "scripts/capture-identity-insert-multirow.mjs",
+        "reference/identity-insert-multirow.json",
+        "docs/identity-insert-multirow-reference.md"
+      ],
+      "acceptance": [
+        "Use the pinned SQL Server 2025 image for two fresh-database runs and an independent-container replay. Capture multi-row explicit VALUES and INSERT SELECT, with and without OUTPUT, retaining exact rows, descriptors, diagnostics, ordered events and raw DONE status/command words.",
+        "Probe later-row UNIQUE/CHECK/source-conversion failures and explicit values around the high-water mark; after each boundary record visible table rows, IDENT_CURRENT and a later generated value so allocation, OUTPUT emission and statement atomicity are distinguishable. Include transaction rollback and session reuse.",
+        "Retain raw per-run evidence, implement fixture checksum/semantic validation and refuse output alias/unpinned image. Document observed results and unprobed boundaries without claiming msduck runtime support. Do not edit claimed Rust, SQL export or existing reference/helper files."
+      ],
+      "dependencies": [
+        "identity-insert-errors-reference-v1",
+        "identity-insert-binding-v1"
+      ],
+      "issue": 556,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVJ4R"
     }
   ]
 }
