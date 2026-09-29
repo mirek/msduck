@@ -6254,7 +6254,7 @@
     {
       "id": "distribution-window-reference-v1",
       "title": "Capture SQL Server PERCENT_RANK and CUME_DIST reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "mirek's continuing SQL Server compatibility implementation goal; owner-authored issue #593",
       "scope": [
         "scripts/capture-distribution-reference.mjs",
