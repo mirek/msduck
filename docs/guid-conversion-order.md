@@ -33,6 +33,17 @@ the former is `0x00000001000000000000000000000000`, the latter
 future comparator; they do not establish every possible GUID pair or every
 comparison context.
 
+The deterministic core now exposes
+`msduck_core::types::uniqueidentifier::{order_key,compare}`. It accepts the
+mixed-endian bytes returned by `CONVERT(binary(16), guid)` (the same byte layout
+used by TDS), then compares these byte groups in precedence order:
+`[10..16], [8..10], [6..8], [4..6], [0..4]`. Bytes stay in their original
+order within each group. A test builds keys from every captured binary value
+and reproduces the ascending, descending and direct comparison results. This
+is a rule derived from the retained sample, not a claim that all GUID
+comparison contexts have been differentially verified. Root execution still
+uses DuckDB's UUID semantics until an adapter applies the core key.
+
 The stored GUID column has TDS `UniqueIdentifier` width 16 and non-null flags
 8 even for an empty filtered result. The conversion expressions below have
 `UniqueIdentifier` width 16 and nullable flags 33. The fixture retains the

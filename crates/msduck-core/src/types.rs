@@ -1,4 +1,5 @@
 //! Logical SQL scalar declarations, independent of parser and storage types.
+pub mod uniqueidentifier;
 use crate::character::{CharacterType, Length};
 use std::fmt;
 
