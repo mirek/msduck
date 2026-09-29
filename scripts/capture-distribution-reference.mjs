@@ -11,6 +11,7 @@ import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFi
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/distribution-reference.json', import.meta.url)
+const fixtureSha256 = 'ff63bce0da08791fc65be172b880e5dd7907ebba5b0c9f81113724945166155f'
 const args = process.argv.slice(2)
 const check = args.includes('--check')
 const writeFixture = args.includes('--write-fixture')
@@ -161,6 +162,7 @@ async function observe(connection) {
 
 if (check) {
   const bytes = await readFile(fixture)
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), fixtureSha256, 'fixture checksum changed')
   const retained = JSON.parse(bytes)
   assert.equal(retained.image, referenceImage, 'reference image changed')
   assert.equal(retained.runs.length, 2, 'independent runs missing')
