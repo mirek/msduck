@@ -312,10 +312,9 @@ impl Catalog {
             )?;
             let file = file_name(&self.prefix, database_id, &name_key);
             let path = self.directory.join(&file);
-            if [path.clone(), wal(&path)]
-                .iter()
-                .all(|path| matches!(present(path), Ok(false)))
-            {
+            // Only an existing entry skips the ID; any other error from
+            // inspecting storage ends the statement without using more IDs.
+            if !occupied(&path)? && !occupied(&wal(&path))? {
                 break (database_id, file);
             }
         };
@@ -714,6 +713,15 @@ static KEY_MAP: std::sync::LazyLock<(String, String)> = std::sync::LazyLock::new
         .filter(|(unit, lower)| unit != lower)
         .unzip()
 });
+
+/// Whether any directory entry, including a link, has this name.
+fn occupied(path: &Path) -> Result<bool> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("inspect {}", path.display())),
+    }
+}
 
 /// Whether a database file exists, without following a symbolic link. Only
 /// regular files are accepted.
