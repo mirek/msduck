@@ -6067,7 +6067,7 @@
     {
       "id": "identity-insert-column-diagnostics-v1",
       "title": "Preserve captured INSERT column diagnostics in IDENTITY_INSERT preflight",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek continuing full SQL Server compatible Rust server goal; first-party reference/identity-insert-shapes.json cases for duplicate and invalid columns",
       "scope": [
         "crates/msduck-sql/src/identity_insert_gate.rs",
