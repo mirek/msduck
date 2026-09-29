@@ -6613,7 +6613,7 @@
     {
       "id": "numeric-literal-metadata-reference-v1",
       "title": "Pin SQL Server numeric-literal metadata and division evidence",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server compatibility goal; owner issue #623 and owner-run PR #621 raw comparison.",
       "scope": [
         "scripts/capture-numeric-literal-metadata.mjs",
