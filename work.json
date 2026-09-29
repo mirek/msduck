@@ -6717,6 +6717,30 @@
       "dependencies": [],
       "issue": 631,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PX91W"
+    },
+    {
+      "id": "login-database-error-v1",
+      "title": "Match SQL Server LOGIN7 failure for a nonexistent database",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-09-29): logging in with a nonexistent database must produce the same communication and error codes as SQL Server",
+      "scope": [
+        "scripts/capture-login-database-error.mjs",
+        "scripts/lib/login-response.mjs",
+        "reference/login-database-error.json",
+        "src/server.rs",
+        "tests/login_database_error.test.mjs",
+        ".github/workflows/ci.yml",
+        "docs/login-database-error.md"
+      ],
+      "acceptance": [
+        "Capture SQL Server 2025's exact LOGIN7 response for a nonexistent database (ERROR 4060 and 18456 fields, DONE, packet header, closure) and related name/user variants with the pinned reference container; preserve raw evidence in reference/login-database-error.json.",
+        "msduck's response to a LOGIN7 naming a nonexistent database matches the capture token for token, with environment-specific values (server name, SPID) explicitly mapped and documented.",
+        "A tedious client test compares msduck against the retained capture and runs in CI.",
+        "AGENTS.md checks pass: cargo fmt, strict clippy, cargo test --workspace and the relevant client tests; remaining differences are documented."
+      ],
+      "dependencies": [],
+      "issue": 634,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYE0p"
     }
   ]
 }
