@@ -17,6 +17,11 @@ separate BIGINT/DECIMAL inputs before deduplication. No argument is duplicated
 by lowering. This implementation retains distinct values per group and needs
 memory proportional to their count; a typed streaming aggregate could reduce
 additional storage in a future implementation.
+The aggregate warning observer checks the original value before DISTINCT
+deduplication. With ANSI_WARNINGS ON, eliminated NULLs produce one 8153
+information token per statement; duplicate non-NULL values and empty inputs
+do not. ANSI_WARNINGS OFF suppresses that warning. The four no-argument
+errors use their uppercase SQL Server function names.
 
 Tedious tests cover values and metadata, empty/singleton sets, decimal inputs,
 prepared NULLs, grouping, ordered frames, empty frames, stored views, invalid
