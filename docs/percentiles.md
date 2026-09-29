@@ -47,7 +47,8 @@ Literal fractions below zero, above one, or NULL now use the captured error
 SQL Server emits a typed result descriptor and ORDER token before reporting
 8727 for the captured nonempty queries. That completion sequence remains a
 compatibility gap. Character fractions such as the reference's `'0.5'` remain
-unsupported by the current lowerer.
+unsupported by the current lowerer. Signed zero is accepted as an in-range
+literal in both percentile functions.
 
 References: Microsoft [PERCENTILE_CONT](https://learn.microsoft.com/en-us/sql/t-sql/functions/percentile-cont-transact-sql)
 and [PERCENTILE_DISC](https://learn.microsoft.com/en-us/sql/t-sql/functions/percentile-disc-transact-sql).

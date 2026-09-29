@@ -12,7 +12,7 @@ import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFi
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/percentile-reference.json', import.meta.url)
-const fixtureSha256 = '618a007ffa8ac0362c189579cc146ecde3704a26d7de5f8e5b32c1e24507d12b'
+const fixtureSha256 = 'd0b7e5d459e51e87d89771f4dd0dd3c7039decad109abf0068f3f45fd5f87498'
 const StreamParser = createRequire(import.meta.url)('tedious/lib/token/stream-parser.js')
 const doneKinds = new Map([[0xFD, 'DONE'], [0xFE, 'DONEPROC'], [0xFF, 'DONEINPROC']])
 const args = process.argv.slice(2)
@@ -69,6 +69,8 @@ const plan = [
   ]),
   { name: 'partitioned continuous', sql: 'SELECT id,PERCENTILE_CONT(.5) WITHIN GROUP (ORDER BY n) OVER (PARTITION BY g) AS p FROM (VALUES (1,1,1),(2,1,2),(3,2,10),(4,2,NULL)) sample(id,g,n) ORDER BY id' },
   { name: 'partitioned discrete', sql: 'SELECT id,PERCENTILE_DISC(.5) WITHIN GROUP (ORDER BY n) OVER (PARTITION BY g) AS p FROM (VALUES (1,1,1),(2,1,2),(3,2,10),(4,2,NULL)) sample(id,g,n) ORDER BY id' },
+  { name: 'signed zero continuous', sql: orderedInteger('PERCENTILE_CONT', '-0.0') },
+  { name: 'signed zero discrete', sql: orderedInteger('PERCENTILE_DISC', '-0.0') },
   ...[
     ['negative fraction', '-0.1'], ['above one fraction', '1.1'],
     ['NULL fraction', 'NULL'], ['character fraction', "'0.5'"],
@@ -282,6 +284,10 @@ function validate(run) {
   }
   checkRows('partitioned continuous', [[[1, 1.5], [2, 1.5], [3, 10], [4, 10]]])
   checkRows('partitioned discrete', [[[1, 1], [2, 1], [3, 10], [4, 10]]])
+  checkRows('signed zero continuous', [[[1, 1], [2, 1], [3, 1], [4, 1]]])
+  checkType('signed zero continuous', 'FloatN')
+  checkRows('signed zero discrete', [[[1, 1], [2, 1], [3, 1], [4, 1]]])
+  checkType('signed zero discrete', 'Int')
   checkRows('ties NULL cont', [[[1, 1], [2, 1], [3, 1], [4, 1]]])
   checkRows('ties NULL disc', [[[1, 1], [2, 1], [3, 1], [4, 1]]])
   checkRows('empty cont', [[]]); checkType('empty cont', 'FloatN')

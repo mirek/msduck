@@ -58,15 +58,17 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
         Expr::UnaryOp {
             op: UnaryOperator::Minus,
             expr,
-        } if matches!(
-            expr.as_ref(),
-            Expr::Value(ValueWithSpan {
-                value: Value::Number(_, _),
-                ..
-            })
-        ) =>
-        {
-            return Err(RANGE.into());
+        } => {
+            let Expr::Value(literal) = expr.as_ref() else {
+                return Err(LITERAL.into());
+            };
+            let Value::Number(number, _) = &literal.value else {
+                return Err(LITERAL.into());
+            };
+            if fraction_is_zero(number) != Some(true) {
+                return Err(RANGE.into());
+            }
+            true
         }
         _ => return Err(LITERAL.into()),
     };
@@ -194,7 +196,7 @@ mod tests {
     #[test]
     fn valid_and_unproven_fraction_forms_remain_distinct() {
         for function in ["PERCENTILE_CONT", "PERCENTILE_DISC"] {
-            for fraction in ["0", ".5", "1"] {
+            for fraction in ["0", ".5", "1", "-0", "-0.0", "-0e1"] {
                 let sql =
                     format!("SELECT {function}({fraction}) WITHIN GROUP (ORDER BY n) OVER ()");
                 let mut expr = expression(&sql);
