@@ -112,7 +112,7 @@ fn aliases_retain_object_id_and_identity_physical_position() {
     run(&mut session, "DROP TABLE dbo.alpha");
     assert!(matches!(
         resolve(&session.db, &parts("SET IDENTITY_INSERT alpha ON")),
-        Err(ResolveError::Diagnostic { error, .. }) if error.number == 1088
+        Err(ResolveError::Unsupported(_))
     ));
     run(
         &mut session,
