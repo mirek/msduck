@@ -6814,6 +6814,25 @@
       ],
       "issue": 639,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYKOZ"
+    },
+    {
+      "id": "float-aggregate-reference-v1",
+      "title": "Capture FLOAT and REAL aggregate precision overflow and descriptors",
+      "state": "ready",
+      "authorization": "Continuing owner SQL Server compatibility goal; first-party aggregate implementation and FLOAT gap documentation",
+      "scope": [
+        "scripts/capture-float-aggregate-reference.mjs",
+        "reference/float-aggregates.json",
+        "docs/float-aggregates.md"
+      ],
+      "acceptance": [
+        "Capture two independent SQL Server executions of SUM AVG MIN MAX for REAL FLOAT(24) FLOAT(53), NULL empty singleton DISTINCT grouped ordered and bounded window cases, cancellation order and finite overflow.",
+        "Preserve exact wire decoded floating bits including signed zero, complete descriptors errors warnings completion status and token events, pinned image and engine version, refuse replacing existing fixture.",
+        "Compare full observations against current msduck, retaining raw differences and naming execution revision; document concrete runtime work instead of tolerances or blanket parity."
+      ],
+      "dependencies": [],
+      "issue": 642,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYQOw"
     }
   ]
 }
