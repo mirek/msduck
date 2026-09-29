@@ -6833,6 +6833,33 @@
       "dependencies": [],
       "issue": 642,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYQOw"
+    },
+    {
+      "id": "float-aggregate-runtime-v1",
+      "title": "Reject FLOAT SUM AVG overflow with bounded deterministic arithmetic",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility goal; two pinned FLOAT/REAL reference captures and current-server Infinity observations from PR #643",
+      "scope": [
+        "crates/msduck-core/src/bounded_aggregate.rs",
+        "src/decimal_aggregate.rs",
+        "src/decimal_aggregate/floating.rs",
+        "crates/msduck-sql/src/aggregate.rs",
+        "crates/msduck-sql/src/aggregate_diagnostics.rs",
+        "crates/msduck-sql/tests/float_aggregate_lowering.rs",
+        "tests/float_aggregates.test.mjs",
+        "docs/float-aggregate-runtime.md"
+      ],
+      "acceptance": [
+        "Route known REAL/FLOAT SUM and AVG through bounded deterministic binary64 state and root native adapters; reject non-finite input/intermediate/final arithmetic and count overflow with sticky failures. Keep catalog effects root-side and no DuckDB/session dependency in core or SQL crates.",
+        "Match the three captured finite FLOAT overflow cases with 8115/state 2/class 16 and reuse; preserve REAL source rounding, DOUBLE output widths, NULL empty singleton DISTINCT membership, one operand evaluation, consumed-frame warnings and grouping/window source shapes.",
+        "Compare actual independent client results with every retained FLOAT aggregate probe, require exact bits for ordered/bounded and stable ordinary probes, retain complete unordered DISTINCT/parallel-order differences rather than sorting or tolerances; extend reference evidence if combine semantics cannot be justified.",
+        "Register through the existing numeric aggregate entry point without reserved engine/scalar/lib changes; bound native vector reads and allocations, provide native and pure tests; exact-head fmt strict Clippy workspace clients corpus audit CI review/fallback merge and registry/project completion."
+      ],
+      "dependencies": [
+        "float-aggregate-reference-v1"
+      ],
+      "issue": 644,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYR90"
     }
   ]
 }
