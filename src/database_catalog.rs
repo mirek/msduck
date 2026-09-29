@@ -56,16 +56,21 @@ struct Row {
     name_key: String,
     database_id: i32,
     file: String,
+    published: bool,
 }
 
 impl Row {
-    /// Reads `name, name_key, database_id, file` from the first four columns.
+    /// The registry columns `read` expects, in order.
+    const COLUMNS: &str = "r.name,r.name_key,r.database_id,r.file,r.published";
+
+    /// Reads `Row::COLUMNS` from the first five columns.
     fn read(row: &duckdb::Row) -> duckdb::Result<Self> {
         Ok(Self {
             name: row.get(0)?,
             name_key: row.get(1)?,
             database_id: row.get(2)?,
             file: row.get(3)?,
+            published: row.get(4)?,
         })
     }
 }
@@ -151,7 +156,8 @@ impl Catalog {
         ))?;
         let registered = {
             let mut query = owner.prepare(&format!(
-                "SELECT name,name_key,database_id,file FROM {} ORDER BY database_id",
+                "SELECT {} FROM {} r ORDER BY database_id",
+                Row::COLUMNS,
                 catalog.registry()
             ))?;
             query
@@ -160,15 +166,22 @@ impl Catalog {
         };
         for row in registered {
             let name = row.name.clone();
+            if catalog.forget_stale(owner, &row, false)? {
+                continue;
+            }
             let result = catalog
                 .attach(owner, &row, Attach::Recover)
                 .and_then(|()| catalog.publish(owner, &name))
-                .and_then(|()| catalog.mark_published(owner, &row.name_key));
+                .and_then(|()| catalog.set_published(owner, &row.name_key, true));
             if let Err(error) = result {
                 // SQL Server keeps serving other databases when one cannot be
                 // recovered; the database stays registered but is not listed.
-                // Listing follows attachment, so detach a partial recovery.
+                // Listing follows attachment, so detach a partial recovery,
+                // and hide a catalog that DuckDB could not detach.
                 let _ = owner.execute_batch(&format!("DETACH DATABASE IF EXISTS {}", quote(&name)));
+                if catalog.attached(owner, &name).unwrap_or(true) {
+                    let _ = catalog.set_published(owner, &row.name_key, false);
+                }
                 eprintln!("msduck: database {name} is unavailable: {error:#}");
             }
         }
@@ -217,18 +230,6 @@ impl Catalog {
         Ok(alias)
     }
 
-    /// Whether a name is registered, including a database that failed to attach.
-    fn registered(&self, db: &Connection, name_key: &str) -> Result<bool> {
-        Ok(db.query_row(
-            &format!(
-                "SELECT count(*) > 0 FROM {} WHERE name_key=?",
-                self.registry()
-            ),
-            [name_key],
-            |row| row.get(0),
-        )?)
-    }
-
     /// Make `name` the connection's current database with the `dbo` schema.
     /// Returns the database's SQL Server name.
     pub fn select(&self, db: &Connection, name: &str) -> Result<String> {
@@ -269,7 +270,12 @@ impl Catalog {
         validate(name)?;
         let _change = self.lock();
         let name_key = key(name);
-        if RESERVED.contains(&name_key.as_str()) || self.registered(db, &name_key)? {
+        if RESERVED.contains(&name_key.as_str()) {
+            return Err(exists(name));
+        }
+        if let Some((row, attached)) = self.lookup(db, &name_key)?
+            && !self.forget_stale(db, &row, attached)?
+        {
             return Err(exists(name));
         }
         ensure!(
@@ -310,24 +316,19 @@ impl Catalog {
             name_key: name_key.clone(),
             database_id,
             file,
+            published: false,
         };
         // Clients see the database only once every catalog lists it.
         let attached = self
             .attach(db, &row, Attach::Create)
             .and_then(|()| self.publish_all(db))
-            .and_then(|()| self.mark_published(db, &name_key));
+            .and_then(|()| self.set_published(db, &name_key, true));
         if let Err(error) = attached {
             // DuckDB can report an error after detaching, so the catalog's
             // presence decides. A catalog still attached keeps its files and
             // its unpublished registration, and DROP can finish the cleanup.
             let _ = db.execute_batch(&format!("DETACH DATABASE IF EXISTS {}", quote(name)));
-            let detached = db
-                .query_row(
-                    "SELECT count(*) = 0 FROM duckdb_databases() WHERE database_name=?",
-                    [name],
-                    |row| row.get::<_, bool>(0),
-                )
-                .unwrap_or(false);
+            let detached = !self.attached(db, name).unwrap_or(true);
             let cleanup = if detached {
                 self.delete_files(&row)
             } else {
@@ -367,23 +368,7 @@ impl Catalog {
             ));
         }
         // A registered database that failed to attach can still be dropped.
-        let registered = db
-            .query_row(
-                &format!(
-                    "SELECT r.name,r.name_key,r.database_id,r.file,d.database_name IS NOT NULL \
-                     FROM {} r LEFT JOIN duckdb_databases() d ON d.database_name=r.name \
-                     WHERE r.name_key=?",
-                    self.registry()
-                ),
-                [&name_key],
-                |row| Ok((Row::read(row)?, row.get::<_, bool>(4)?)),
-            )
-            .map(Some)
-            .or_else(|error| match error {
-                duckdb::Error::QueryReturnedNoRows => Ok(None),
-                error => Err(error),
-            })?;
-        let Some((row, attached)) = registered else {
+        let Some((row, attached)) = self.lookup(db, &name_key)? else {
             let mut error = SqlError::new(
                 3701,
                 1,
@@ -401,7 +386,13 @@ impl Catalog {
         // and the WAL is deleted after the file, so a present file still
         // holds all committed data.
         let restore = |error: anyhow::Error| {
-            if attached && present(&path).unwrap_or(false) {
+            if !present(&path).unwrap_or(false) {
+                return error;
+            }
+            if let Err(restore) = self.set_published(db, &name_key, row.published) {
+                eprintln!("msduck: database {} stays hidden: {restore:#}", row.name);
+            }
+            if attached {
                 let restored = path
                     .to_str()
                     .context("database path is not UTF-8")
@@ -423,17 +414,77 @@ impl Catalog {
             // the file again without one. Check before detaching, so the
             // usual failure leaves the database untouched.
             deletable(&path)?;
+        }
+        // Hide the database first. Once its files are gone, an unpublished
+        // registration without files is stale, and CREATE or startup removes
+        // it, so no failure is reported after the destructive step.
+        self.set_published(db, &name_key, false)?;
+        if attached {
             db.execute_batch(&format!("DETACH DATABASE {}", quote(&row.name)))
                 .map_err(|error| restore(error.into()))?;
         }
         // Keep the registration until the files are gone, so a failed
         // deletion leaves a database that another DROP can finish removing.
         self.delete_files(&row).map_err(restore)?;
-        db.execute(
+        if let Err(error) = db.execute(
             &format!("DELETE FROM {} WHERE name_key=?", self.registry()),
             [&name_key],
-        )?;
+        ) {
+            eprintln!(
+                "msduck: stale registration of {} remains: {error:#}",
+                row.name
+            );
+        }
         Ok(())
+    }
+
+    /// The registration for a key and whether its catalog is attached.
+    fn lookup(&self, db: &Connection, name_key: &str) -> Result<Option<(Row, bool)>> {
+        Ok(db
+            .query_row(
+                &format!(
+                    "SELECT {},d.database_name IS NOT NULL \
+                     FROM {} r LEFT JOIN duckdb_databases() d ON d.database_name=r.name \
+                     WHERE r.name_key=?",
+                    Row::COLUMNS,
+                    self.registry()
+                ),
+                [name_key],
+                |row| Ok((Row::read(row)?, row.get::<_, bool>(5)?)),
+            )
+            .map(Some)
+            .or_else(|error| match error {
+                duckdb::Error::QueryReturnedNoRows => Ok(None),
+                error => Err(error),
+            })?)
+    }
+
+    fn attached(&self, db: &Connection, alias: &str) -> Result<bool> {
+        Ok(db.query_row(
+            "SELECT count(*) > 0 FROM duckdb_databases() WHERE database_name=?",
+            [alias],
+            |row| row.get(0),
+        )?)
+    }
+
+    /// Remove a registration left by an interrupted CREATE or DROP: never
+    /// published, or hidden by DROP, and without a catalog or any file.
+    /// Callers hold the change lock or run before the server accepts clients.
+    fn forget_stale(&self, db: &Connection, row: &Row, attached: bool) -> Result<bool> {
+        if row.published || attached {
+            return Ok(false);
+        }
+        let Ok(path) = self.path(row) else {
+            return Ok(false);
+        };
+        if present(&path)? || present(&wal(&path))? {
+            return Ok(false);
+        }
+        db.execute(
+            &format!("DELETE FROM {} WHERE name_key=?", self.registry()),
+            [&row.name_key],
+        )?;
+        Ok(true)
     }
 
     fn attach(&self, db: &Connection, row: &Row, mode: Attach) -> Result<()> {
@@ -519,13 +570,13 @@ impl Catalog {
         Ok(())
     }
 
-    fn mark_published(&self, db: &Connection, name_key: &str) -> Result<()> {
+    fn set_published(&self, db: &Connection, name_key: &str, published: bool) -> Result<()> {
         db.execute(
             &format!(
-                "UPDATE {} SET published=true WHERE name_key=?",
+                "UPDATE {} SET published=? WHERE name_key=?",
                 self.registry()
             ),
-            [name_key],
+            duckdb::params![published, name_key],
         )?;
         Ok(())
     }

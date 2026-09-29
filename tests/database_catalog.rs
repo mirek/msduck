@@ -710,3 +710,47 @@ fn a_leftover_wal_blocks_create_and_is_kept() {
     drop((db, server));
     std::fs::remove_dir_all(&directory).unwrap();
 }
+
+#[test]
+fn stale_registrations_without_files_are_forgotten() {
+    let directory = scratch_directory("stale");
+    let primary = directory.join("msduck.duckdb");
+    let primary = primary.to_str().unwrap();
+    {
+        let server = Server::open(primary).unwrap();
+        let db = server.connection().unwrap();
+        db.databases().create(&db, "gone").unwrap();
+        db.databases().create(&db, "later").unwrap();
+    }
+    // An interrupted DROP hid both databases and removed their files.
+    for file in [
+        "msduck.duckdb.5.gone.duckdb",
+        "msduck.duckdb.6.later.duckdb",
+    ] {
+        std::fs::remove_file(directory.join(file)).unwrap();
+    }
+    {
+        let db = duckdb::Connection::open(primary).unwrap();
+        db.execute_batch(
+            "UPDATE main.__msduck_databases SET published=false WHERE name_key='gone'",
+        )
+        .unwrap();
+    }
+    let server = Server::open(primary).unwrap();
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    // Startup forgets the hidden registration; a published one whose file
+    // is lost stays registered.
+    assert_eq!(
+        scalar::<i64>(&db, "SELECT count(*) FROM main.__msduck_databases"),
+        1
+    );
+    assert_eq!(catalog.create(&db, "gone").unwrap(), database("gone", 7));
+    assert_eq!(sql_error(catalog.create(&db, "later").unwrap_err()).0, 1801);
+    // CREATE forgets a stale registration found at run time too.
+    db.execute_batch("UPDATE main.__msduck_databases SET published=false WHERE name_key='later'")
+        .unwrap();
+    assert_eq!(catalog.create(&db, "later").unwrap(), database("later", 8));
+    drop((db, server));
+    std::fs::remove_dir_all(&directory).unwrap();
+}
