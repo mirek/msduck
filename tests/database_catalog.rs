@@ -788,3 +788,20 @@ fn recovery_does_not_publish_hidden_databases() {
     drop((db, server));
     std::fs::remove_dir_all(&directory).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn a_linked_primary_names_databases_after_its_target() {
+    let directory = scratch_directory("linked-primary");
+    let target = directory.join("real.duckdb");
+    duckdb::Connection::open(&target).unwrap();
+    let link = directory.join("link.duckdb");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    let server = Server::open(link.to_str().unwrap()).unwrap();
+    let db = server.connection().unwrap();
+    db.databases().create(&db, "sales").unwrap();
+    assert!(directory.join("real.duckdb.5.sales.duckdb").exists());
+    assert!(!directory.join("link.duckdb.5.sales.duckdb").exists());
+    drop((db, server));
+    std::fs::remove_dir_all(&directory).unwrap();
+}

@@ -132,14 +132,16 @@ impl Catalog {
             // Resolve the directory once, so later file work depends neither
             // on the process's current directory nor on symbolic links that
             // may be retargeted while the server runs.
-            let file = std::path::absolute(path).context("resolve the database path")?;
-            let directory = file
-                .parent()
-                .context("database path needs a parent directory")?;
+            // The primary is open, so its file exists; the name of the file
+            // behind any link is the prefix.
+            let file = std::fs::canonicalize(path)
+                .with_context(|| format!("resolve database path {path}"))?;
             Self {
                 primary,
-                directory: std::fs::canonicalize(directory)
-                    .with_context(|| format!("resolve {}", directory.display()))?,
+                directory: file
+                    .parent()
+                    .map(Path::to_path_buf)
+                    .context("database path needs a parent directory")?,
                 prefix: file
                     .file_name()
                     .and_then(|name| name.to_str())
