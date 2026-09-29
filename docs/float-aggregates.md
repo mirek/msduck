@@ -47,6 +47,31 @@ retains full local/reference results plus separate floating-bit differences.
 Use the shared runner lock when using the Linux target cache.
 
 The local emulated container exited before readiness; the successful captures
-ran on linux.local. No floating aggregate runtime correction is included in
-this evidence task. Current-server comparison and follow-up findings are added
-below after the clean-checkout replay.
+ran on linux.local. No floating aggregate runtime correction is included in this evidence task.
+
+## Current-server replay
+
+Clean-checkout replay of `dff2bffaff6070891327d3a14d9196b7384d2d0c`
+retained 45 comparisons (ProductVersion excluded). **22** matched completely;
+there were **5** floating-bit differences and **86** result/event differences.
+The executable hash and full observations are in the ignored artifact
+`artifacts/compatibility/float-aggregates/comparison-sign.json`.
+
+Three FLOAT overflow requests returned Infinity instead of the captured 8115
+error. This is a runtime defect, not an acceptable approximate answer. One
+FLOAT(53) DISTINCT request also changed SUM and AVG low bits. The earlier replay
+at `b19405741fcd3cc6bc2ec39b41d5fffebc79cf1b`, with identical Rust sources,
+matched that DISTINCT request: its backend deduplication order can change.
+Both observations are retained; no sorting or tolerance hides that variation.
+
+The remaining differences include absent ORDER/NBCROW tokens and diagnostic
+placement. Descriptor widths and ordinary precision probes agreed. JSON rows
+lose the zero sign; comparison reconstructs only that sign from the separate
+retained bit field before comparing rows. Actual bit differences remain exact.
+
+Next runtime work must reject non-finite FLOAT SUM/AVG state/results with the
+captured error identity and preserve source widening, DISTINCT membership,
+one input evaluation, NULL/empty behavior and warning/reuse semantics. Ordered
+and bounded-frame evidence must remain bit-exact. A physical-order claim for
+unordered DISTINCT or parallel aggregation requires additional plan evidence;
+the recorded low-bit variation must remain visible.
