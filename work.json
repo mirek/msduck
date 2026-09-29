@@ -3977,7 +3977,7 @@
     {
       "id": "tvp-catalog-binding-v1",
       "title": "Bind decoded RPC TVPs to registered table types",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server-compatible Rust/DuckDB server goal; owner-run TVP and table-type catalog captures. No external submission is input.",
       "scope": [
         "crates/msduck-tds/src/lib.rs",
