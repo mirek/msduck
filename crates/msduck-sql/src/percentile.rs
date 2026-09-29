@@ -49,29 +49,7 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
     {
         return Err("unsupported percentile modifiers".into());
     }
-    let zero = match fraction {
-        Expr::Value(literal) => match &literal.value {
-            Value::Number(number, _) => fraction_is_zero(number).ok_or(RANGE)?,
-            Value::Null => return Err(RANGE.into()),
-            _ => return Err(LITERAL.into()),
-        },
-        Expr::UnaryOp {
-            op: UnaryOperator::Minus,
-            expr,
-        } => {
-            let Expr::Value(literal) = expr.as_ref() else {
-                return Err(LITERAL.into());
-            };
-            let Value::Number(number, _) = &literal.value else {
-                return Err(LITERAL.into());
-            };
-            if fraction_is_zero(number) != Some(true) {
-                return Err(RANGE.into());
-            }
-            true
-        }
-        _ => return Err(LITERAL.into()),
-    };
+    let (zero, mut fraction) = normalized_fraction(fraction)?;
     if function.within_group.is_empty() {
         return Err(format!(
             "The function '{name}' must have a WITHIN GROUP clause."
@@ -101,7 +79,6 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
     if name == "percentile_cont" {
         value = crate::expr::unary_function("__msduck_percentile_input", value);
     }
-    let mut fraction = fraction.clone();
     if descending && !zero {
         fraction = Expr::UnaryOp {
             op: UnaryOperator::Minus,
@@ -126,6 +103,205 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+// Only explicit, caller-owned constants are folded. Dynamic inputs remain unknown.
+fn character_literal(expr: &Expr) -> Option<(String, bool)> {
+    use msduck_core::character::{CastInput, CharacterType, Family, Length};
+    match expr {
+        Expr::Value(value) => match &value.value {
+            Value::SingleQuotedString(text) => Some((text.clone(), false)),
+            Value::NationalStringLiteral(text) => Some((text.clone(), true)),
+            _ => None,
+        },
+        Expr::Nested(value)
+        | Expr::UnaryOp {
+            op: UnaryOperator::Plus,
+            expr: value,
+        } => character_literal(value),
+        Expr::Cast {
+            kind: CastKind::Cast,
+            expr: value,
+            data_type,
+            format: None,
+        } => {
+            let (unicode, width) = match data_type {
+                DataType::Varchar(width) => (false, width),
+                DataType::Nvarchar(width) => (true, width),
+                _ => return None,
+            };
+            let length = match width {
+                Some(CharacterLength::Max) => Length::Max,
+                Some(CharacterLength::IntegerLength { length, unit: None }) => {
+                    Length::Bounded((*length).try_into().ok()?)
+                }
+                None => Length::Bounded(30),
+                _ => return None,
+            };
+            let (text, _) = character_literal(value)?;
+            let target = CharacterType::new(
+                if unicode {
+                    Family::Nvarchar
+                } else {
+                    Family::Varchar
+                },
+                length,
+            )
+            .ok()?;
+            Some((
+                target.cast(&text, CastInput::Text).ok()?.into_owned(),
+                unicode,
+            ))
+        }
+        // Root character lowering can already have converted an explicit CAST
+        // to this pure adapter call before percentile lowering sees its parent.
+        Expr::Function(function)
+            if matches!(
+                function.name.to_string().as_str(),
+                "__msduck_cast_varchar" | "__msduck_cast_nvarchar"
+            ) && matches!(function.parameters, FunctionArguments::None)
+                && function.filter.is_none()
+                && function.over.is_none()
+                && function.within_group.is_empty()
+                && function.null_treatment.is_none() =>
+        {
+            let FunctionArguments::List(args) = &function.args else {
+                return None;
+            };
+            if args.duplicate_treatment.is_some() || !args.clauses.is_empty() {
+                return None;
+            }
+            let [
+                FunctionArg::Unnamed(FunctionArgExpr::Expr(value)),
+                FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(width))),
+            ] = args.args.as_slice()
+            else {
+                return None;
+            };
+            let Value::Number(width, _) = &width.value else {
+                return None;
+            };
+            let width = width.parse::<i64>().ok()?;
+            let length = if width == -1 {
+                Length::Max
+            } else {
+                Length::Bounded(width.try_into().ok()?)
+            };
+            let unicode = function.name.to_string() == "__msduck_cast_nvarchar";
+            let (text, _) = character_literal(value)?;
+            let target = CharacterType::new(
+                if unicode {
+                    Family::Nvarchar
+                } else {
+                    Family::Varchar
+                },
+                length,
+            )
+            .ok()?;
+            Some((
+                target.cast(&text, CastInput::Text).ok()?.into_owned(),
+                unicode,
+            ))
+        }
+        _ => None,
+    }
+}
+
+fn normalized_fraction(fraction: &Expr) -> Result<(bool, Expr), String> {
+    if let Some((text, unicode)) = character_literal(fraction) {
+        let number = character_fraction(&text, unicode)?;
+        return Ok((number == 0.0, crate::expr::number(number)));
+    }
+    let zero = match fraction {
+        Expr::Value(literal) => match &literal.value {
+            Value::Number(number, _) => fraction_is_zero(number).ok_or(RANGE)?,
+            Value::Null => return Err(RANGE.into()),
+            _ => return Err(LITERAL.into()),
+        },
+        Expr::UnaryOp {
+            op: UnaryOperator::Minus,
+            expr,
+        } => {
+            let Expr::Value(literal) = expr.as_ref() else {
+                return Err(LITERAL.into());
+            };
+            let Value::Number(number, _) = &literal.value else {
+                return Err(LITERAL.into());
+            };
+            if fraction_is_zero(number) != Some(true) {
+                return Err(RANGE.into());
+            }
+            true
+        }
+        _ => return Err(LITERAL.into()),
+    };
+    Ok((zero, fraction.clone()))
+}
+
+fn character_fraction(text: &str, unicode: bool) -> Result<f64, String> {
+    let invalid = || {
+        format!(
+            "Error converting data type {} to float.",
+            if unicode { "nvarchar" } else { "varchar" }
+        )
+    };
+    let text = text
+        .split('\0')
+        .next()
+        .unwrap_or_default()
+        .trim_end_matches(' ');
+    // Empty / ASCII-space-only text is zero, but whitespace-only control or
+    // Unicode characters are invalid. Leading whitespace includes U+180E,
+    // which the current Unicode Rust predicate no longer classifies as space.
+    if text.is_empty() {
+        return Ok(0.0);
+    }
+    let text = text.trim_start_matches(|c: char| c.is_whitespace() || c == '\u{180e}');
+    let bytes = text.as_bytes();
+    let mut at = usize::from(matches!(bytes.first(), Some(b'+' | b'-')));
+    let start = at;
+    while bytes.get(at).is_some_and(u8::is_ascii_digit) {
+        at += 1
+    }
+    let mut digits = at - start;
+    if bytes.get(at) == Some(&b'.') {
+        at += 1;
+        let start = at;
+        while bytes.get(at).is_some_and(u8::is_ascii_digit) {
+            at += 1
+        }
+        digits += at - start;
+    }
+    if digits == 0 {
+        return Err(invalid());
+    }
+    if matches!(bytes.get(at), Some(b'e' | b'E' | b'd' | b'D')) {
+        at += 1;
+        if matches!(bytes.get(at), Some(b'+' | b'-')) {
+            at += 1
+        }
+        let start = at;
+        while bytes.get(at).is_some_and(u8::is_ascii_digit) {
+            at += 1
+        }
+        if at == start {
+            return Err(invalid());
+        }
+    }
+    if at != bytes.len() {
+        return Err(invalid());
+    }
+    let number = text
+        .replace(['d', 'D'], "e")
+        .parse::<f64>()
+        .map_err(|_| invalid())?;
+    if !number.is_finite() {
+        return Err("Arithmetic overflow error converting expression to data type float.".into());
+    }
+    if !(0.0..=1.0).contains(&number) {
+        return Err(RANGE.into());
+    }
+    Ok(number)
 }
 
 // Compare the decimal literal exactly: rounding to f64 here would admit
@@ -210,7 +386,7 @@ mod tests {
                     "{sql}"
                 );
             }
-            for fraction in ["'0.5'", "@p"] {
+            for fraction in ["@p", "n", "RAND()"] {
                 let sql =
                     format!("SELECT {function}({fraction}) WITHIN GROUP (ORDER BY n) OVER ()");
                 let mut expr = expression(&sql);
