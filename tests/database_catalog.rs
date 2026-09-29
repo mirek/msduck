@@ -53,7 +53,17 @@ fn master_is_listed_and_user_databases_are_attached_catalogs() {
     assert_eq!(catalog.current(&b).unwrap(), "Sales");
     assert_eq!(scalar::<String>(&b, "SELECT current_schema()"), "dbo");
     // Engine DDL in the selected database updates that database's catalog.
+    // A session starts in master and selects its database explicitly.
     let mut session = msduck::engine::Session::new(b).unwrap();
+    assert_eq!(session.database().name, "master");
+    session.use_database("SALES").unwrap();
+    assert_eq!(
+        (
+            session.database().name.as_str(),
+            session.database().database_id
+        ),
+        ("Sales", 5)
+    );
     session.batch(
         "CREATE TABLE items(id INT PRIMARY KEY IDENTITY(1,1), name NVARCHAR(20)); \
          INSERT INTO items(name) VALUES (N'one')",
@@ -834,4 +844,27 @@ fn a_hidden_registration_with_a_linked_file_does_not_stop_startup() {
     assert!(std::fs::symlink_metadata(&file).is_err());
     drop((db, server));
     std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
+fn database_helpers_evaluate_their_argument_once() {
+    let server = Server::open(":memory:").unwrap();
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    for name in ["a", "b", "c"] {
+        catalog.create(&db, name).unwrap();
+    }
+    // A volatile argument selects exactly one database per call.
+    let names: i64 = scalar(
+        &db,
+        "SELECT count(*) FROM range(200) \
+         WHERE __msduck_db_name(CASE WHEN random() < 0.5 THEN 1 ELSE 5 END) IS NULL",
+    );
+    assert_eq!(names, 0);
+    let ids: i64 = scalar(
+        &db,
+        "SELECT count(*) FROM range(200) \
+         WHERE __msduck_db_id(CASE WHEN random() < 0.5 THEN 'a' ELSE 'master' END) IS NULL",
+    );
+    assert_eq!(ids, 0);
 }

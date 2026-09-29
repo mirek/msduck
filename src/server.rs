@@ -75,8 +75,14 @@ impl Connection {
     pub fn databases(&self) -> &Arc<crate::database_catalog::Catalog> {
         &self.databases
     }
-    pub(crate) fn into_parts(self) -> (BackendConnection, crate::statement_diagnostics::Registry) {
-        (self.db, self.diagnostics)
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        BackendConnection,
+        crate::statement_diagnostics::Registry,
+        Arc<crate::database_catalog::Catalog>,
+    ) {
+        (self.db, self.diagnostics, self.databases)
     }
 }
 impl Server {
@@ -233,8 +239,34 @@ fn serve_login(
     };
     // An unused clone supplies fresh sessions for RESETCONNECTION requests.
     let template = db.try_clone()?;
-    let login_database = db.databases().select(&db, &login.database)?;
     let mut session = Session::new(db)?;
+    // SQL Server fails the login when the requested database cannot be
+    // opened, and reports the database it selected in the login response.
+    if let Err(error) = session.use_database(&login.database) {
+        if error
+            .downcast_ref::<msduck_core::diagnostic::SqlError>()
+            .is_none_or(|error| error.number != 911)
+        {
+            return Err(error);
+        }
+        let mut out = vec![];
+        let mut unavailable = msduck_core::diagnostic::SqlError::new(
+            4060,
+            1,
+            format!(
+                "Cannot open database \"{}\" requested by the login. The login failed.",
+                login.database
+            ),
+        );
+        unavailable.severity = 11;
+        tds::sql_error(&mut out, &unavailable);
+        login_failure(&mut out);
+        tds::done(&mut out, 0xfd, 2, 0, 0);
+        tds::write_message(&mut stream, &out, login.packet_size)?;
+        return Ok(());
+    }
+    login.database = session.database().name.clone();
+    let login_database = login.database.clone();
     session.original_login = authenticated_name;
     let mut rpc = crate::rpc::State::default();
     tds::write_message(&mut stream, &tds::login_response(&login), 4096)?;
@@ -335,8 +367,8 @@ fn reset_session(
 ) -> Result<()> {
     // A reset returns to the login database even if the session changed it.
     let connection = template.try_clone()?;
-    connection.databases().select(&connection, login_database)?;
     let mut fresh = Session::new(connection)?;
+    fresh.use_database(login_database)?;
     if session.transactions > 0 {
         // Tell the client its transaction ended, as an explicit ROLLBACK does.
         out.extend(session.rollback_transaction("")?);

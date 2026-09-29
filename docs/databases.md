@@ -118,27 +118,67 @@ macros `__msduck_db_id(name)`, `__msduck_db_name(id)` and
 
 `Catalog::select` makes a database the connection's DuckDB default catalog and
 restores the `dbo` schema, because DuckDB's `USE` resets the schema to `main`.
-The server selects the login database before creating the session, and
-RESETCONNECTION returns a reset session to it.
+A session holds a `Use` guard from `Catalog::enter` for its current database;
+while any session uses a database, DROP refuses it. A session starts in
+`master`, then selects the LOGIN7 database. RESETCONNECTION returns a reset
+session to the login database.
+
+## T-SQL statements
+
+Expected tokens and errors below were captured from SQL Server 2025
+(`mcr.microsoft.com/mssql/server:2025-latest`) with tedious.
+
+- `CREATE DATABASE name` completes with DONE command 203. `COLLATE` is accepted
+  only for `SQL_Latin1_General_CP1_CI_AS`; file, containment and other options
+  are refused. `IF NOT EXISTS`, which sqlparser accepts, skips an existing
+  database. Inside a user transaction it fails with 226 (state 5).
+- `DROP DATABASE [IF EXISTS] a, b` completes with DONE command 204. Inside a
+  user transaction it fails with 574 (state 0). A database in use fails with
+  3702: state 3 when the dropping connection uses it, state 4 when another
+  session does. Like SQL Server, a multi-name DROP is not atomic: it drops every
+  database it can and reports one error per failed name.
+- `USE name` sends ENVCHANGE type 1 (new and old names), INFO 5701 (state 1,
+  class 0) `Changed database context to 'name'.`, ENVCHANGE type 7 (the
+  collation) and DONE command 226. An unknown database fails with 911.
+- `DB_NAME()` and `DB_ID()` follow the session database; `DB_NAME(id)` and
+  `DB_ID(name)` use the catalog helpers. Both are nullable; `DB_NAME` is
+  nvarchar(128) and `DB_ID` is a smallint on the wire, as captured (the
+  documentation says int). More than one argument fails with 189.
+- LOGIN7 accepts any existing database, case-insensitively, and the login
+  ENVCHANGE reports its stored name. An unknown database fails the login with
+  4060 (state 1, class 11) followed by 18456.
+- In `database.schema.object` relation names, the database resolves through the
+  catalog, published databases only. An unknown one fails with 208 `Invalid
+  object name '...'`. A name in the current database is bound as
+  `schema.object`, so declared metadata and storage coercions apply. Binding
+  reads the current database's catalog objects, so a reference to another
+  database is refused explicitly: `USE` it first.
+- A `USE` inside a top-level `sp_executesql` RPC, as tedious `execSql` sends,
+  persists for the connection, as captured from SQL Server. Only nested
+  `EXEC sp_executesql` inside a batch reverts it, and msduck does not run that
+  form.
 
 The catalog uses SQL Server diagnostics for:
 
 - a duplicate name, or one of `master`, `tempdb`, `model` or `msdb`: 1801;
 - selecting an unknown database: 911;
 - dropping an unknown database: 3701;
-- dropping `master`: 3708.
+- dropping `master`: 3708 (state 4);
+- dropping a database in use: 3702.
 
 DuckDB's own catalog names (`memory`, `system`, `temp`) and the primary
 catalog's DuckDB name are rejected with an msduck error.
 
 ## Not yet supported
 
-This layer does not execute T-SQL. Wiring `CREATE DATABASE`, `DROP DATABASE`,
-`USE`, `DB_NAME` and `DB_ID` into the engine is task
-`multi-database-statements-v1`, as is accepting a non-`master` database in
-LOGIN7. Also not supported:
-
 - `tempdb`, `model` and `msdb`;
-- `ALTER DATABASE` and `CREATE DATABASE` file or collation options;
-- three-part names that use `master` (the primary catalog's DuckDB name differs);
-- detecting whether another session is still using a database before it is dropped.
+- `ALTER DATABASE` and `CREATE DATABASE` file or non-server collation options;
+- references to another database's objects (cross-database queries, DML and
+  DDL); DuckDB would also write only one attached database per transaction;
+- SQL Server resolves `USE` and three-part names when it compiles a batch, so an
+  unknown database aborts the whole batch before any statement runs. msduck
+  resolves them per statement, so earlier statements in the batch still run,
+  and a batch may `USE` a database it created earlier in the same batch;
+- four-part (server-qualified) names;
+- name equality beyond the captured case map and trailing spaces, such as width
+  equivalence.

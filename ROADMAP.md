@@ -268,7 +268,11 @@ for concrete evidence and observed failures.
    scalar/table functions, views, triggers, cursors, identity/sequences,
    OUTPUT/MERGE, temp objects, error handling, all supported session settings.
 4. SQL Server catalogs and information schema, metadata procedures, databases,
-   schema/object resolution and persistence/restart coverage.
+   schema/object resolution and persistence/restart coverage. User databases,
+   USE, DB_NAME/DB_ID, sys.databases and LOGIN7 selection exist
+   ([Databases](docs/databases.md)). Still open: tempdb/model/msdb, ALTER
+   DATABASE, cross-database references and transactions, compile-time USE and
+   three-part name resolution, and sys.databases descriptor fidelity.
 5. Remaining RPC types and application output parameters, prepare-time result
    metadata/native plan caching, TVPs, transaction
    manager savepoints/distributed transactions and full isolation/error semantics.

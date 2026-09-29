@@ -221,14 +221,14 @@ pub fn login(data: &[u8]) -> Result<Login> {
             database = decode_text(&data[offset..offset + count * 2])?;
         }
     }
-    ensure!(
-        database.is_empty() || database.eq_ignore_ascii_case("master"),
-        "database is not available"
-    );
+    // The server resolves the database; an empty name selects master.
+    if database.is_empty() {
+        database = "master".into();
+    }
     Ok(Login {
         packet_size,
         version,
-        database: "master".into(),
+        database,
         user_name,
         password,
     })
@@ -245,15 +245,19 @@ pub fn env_text(out: &mut Vec<u8>, kind: u8, new: &str, old: &str) {
     btext(&mut body, old);
     token(out, 0xe3, &body);
 }
+/// ENVCHANGE type 7: the server collation, sent after login and after USE.
+pub fn collation_change(out: &mut Vec<u8>) {
+    let mut collation = vec![7, 5];
+    collation.extend(COLLATION);
+    collation.push(0);
+    token(out, 0xe3, &collation);
+}
 pub fn login_response(login: &Login) -> Vec<u8> {
     let mut out = Vec::new();
     env_text(&mut out, 1, &login.database, "");
     env_text(&mut out, 2, "us_english", "");
     env_text(&mut out, 4, &login.packet_size.to_string(), "4096");
-    let mut collation = vec![7, 5];
-    collation.extend(COLLATION);
-    collation.push(0);
-    token(&mut out, 0xe3, &collation);
+    collation_change(&mut out);
     let mut ack = vec![1];
     ack.extend(login.version.to_be_bytes());
     btext(&mut ack, "msduck");
