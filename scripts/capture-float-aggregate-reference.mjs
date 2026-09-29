@@ -143,11 +143,23 @@ function validate(run) {
       ['80000000', '8000000000000000'].includes(bit) ? '0'.repeat(bit.length) : bit)))
     assertSameCapture(zeros(bits), zeros(floatBits(result)), `${name}: bits disagree with decoded rows`)
   }
+  const byName = new Map(run.map(record => [record.name, record]))
+  assertSameCapture(byName.get('server version').result.sets[0].rows, [['17.0.4065.4']], 'reference engine version changed')
+  for (const { name, result } of run) {
+    if (!/^(REAL|FLOAT\(24\)|FLOAT\(53\)) /.test(name)) continue
+    assert.equal(result.errors.length, 0, `${name}: reference query failed`)
+    assert.equal(result.sets.length, 1, `${name}: result set missing`)
+    const offset = name.includes('window') || name.endsWith('grouped') ? 1 : 0
+    const columns = result.sets[0].columns.slice(offset)
+    assert.equal(columns.length, 4, `${name}: aggregate descriptor missing`)
+    assertSameCapture(columns.map(column => [column.type, column.length]),
+      [['FloatN', 8], ['FloatN', 8], ['FloatN', name.startsWith('FLOAT(53)') ? 8 : 4], ['FloatN', name.startsWith('FLOAT(53)') ? 8 : 4]], `${name}: aggregate declarations changed`)
+  }
   for (const name of ['reuse after sum overflow', 'reuse after average overflow', 'session reusable']) {
     assertSameCapture(run.find(item => item.name === name).result.sets[0].rows, [[1]], `${name}: connection reuse failed`)
   }
   for (const name of ['FLOAT sum overflow', 'FLOAT average overflow', 'FLOAT cancellation overflow']) {
-    assertSameCapture(run.find(item => item.name === name).result.errors.map(error => error.number), [8115], `${name}: overflow identity changed`)
+    assertSameCapture(run.find(item => item.name === name).result.errors.map(error => [error.number, error.state, error.class]), [[8115, 2, 16]], `${name}: overflow identity changed`)
   }
 }
 
@@ -159,6 +171,16 @@ async function observe(connection) {
     console.log(name)
   }
   return run
+}
+
+// Parsed JSON rows lose -0. Recover only that sign from retained wire bits
+// before comparing rows; bit comparisons still distinguish either sign exactly.
+function restoreZeroSign(result, bits) {
+  const restored = structuredClone(result)
+  restored.sets.forEach((set, si) => set.rows.forEach((row, ri) => row.forEach((value, ci) => {
+    if (value === 0 && ['80000000', '8000000000000000'].includes(bits[si]?.[ri]?.[ci])) row[ci] = -0
+  })))
+  return restored
 }
 
 async function retainedFixture() {
@@ -216,7 +238,7 @@ if (mode === '--check') {
     const cases = local.filter(item => item.name !== 'server version').map(item => {
       const reference = retained.runs[0].find(record => record.name === item.name)
       return { name: item.name, sql: item.sql, local: item.result, localBits: item.bits, reference: reference.result, referenceBits: reference.bits,
-        differences: differences(item.result, reference.result), bitDifferences: differences(item.bits, reference.bits) }
+        differences: differences(item.result, restoreZeroSign(reference.result, reference.bits)), bitDifferences: differences(item.bits, reference.bits) }
     })
     const summary = { cases: cases.length, matched: cases.filter(item => !item.differences.length && !item.bitDifferences.length).length,
       floatBitDifferences: cases.reduce((sum, item) => sum + item.bitDifferences.length, 0), otherDifferences: cases.reduce((sum, item) => sum + item.differences.length, 0) }
