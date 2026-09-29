@@ -9,7 +9,9 @@ execution and unprepare phase. A final reuse request must succeed.
 
 The output defaults to
 `artifacts/compatibility/percentile-execution/comparison.json`; an optional
-positional path selects another new file. Existing paths, including fixture
+positional path selects another new file outside the checkout or under a
+Git-ignored directory. Unignored in-checkout output is refused before building,
+so the script cannot invalidate its own clean-source check. Existing paths, including fixture
 aliases, are refused before building. Failures leave an incomplete marker;
 only a completed replay contains results. The revision, Git tree, executable
 hash, build command, fixture checksum and reference image identify the evidence.

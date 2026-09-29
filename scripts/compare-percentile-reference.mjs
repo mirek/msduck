@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { mkdir, open, readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, resolve } from 'node:path'
+import { dirname, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Request, TYPES } from 'tedious'
 import { capture, canonical, differences } from './lib/compatibility.mjs'
@@ -225,6 +225,11 @@ if (check) {
   const sourceRevision = git('rev-parse', 'HEAD')
   const sourceTree = git('rev-parse', 'HEAD^{tree}')
   assert.equal(git('status', '--porcelain=v1'), '', 'comparison requires a clean tracked checkout')
+  const outputRelative = relative(root, output)
+  if (outputRelative !== '..' && !outputRelative.startsWith('..' + sep)) {
+    try { execFileSync('git', ['check-ignore', '-q', '--', outputRelative], { cwd: root, stdio: 'ignore' }) }
+    catch { throw Error('in-checkout output must be Git-ignored; use artifacts/ or an external path') }
+  }
   // Exclusive creation refuses every existing file, including fixture aliases,
   // symlinks and hard links, before build or execution. Keep this handle through
   // final write so a concurrent pathname replacement cannot redirect output.
