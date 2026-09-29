@@ -347,7 +347,7 @@ impl Catalog {
             let _ = db.execute_batch(&format!("DETACH DATABASE IF EXISTS {}", quote(name)));
             let detached = !self.attached(db, name).unwrap_or(true);
             let cleanup = if detached {
-                self.delete_files(&row)
+                self.delete_files(&row, false)
             } else {
                 Err(anyhow::anyhow!("the database could not be detached"))
             };
@@ -443,7 +443,7 @@ impl Catalog {
         }
         // Keep the registration until the files are gone, so a failed
         // deletion leaves a database that another DROP can finish removing.
-        self.delete_files(&row).map_err(restore)?;
+        self.delete_files(&row, attached).map_err(restore)?;
         if let Err(error) = db.execute(
             &format!("DELETE FROM {} WHERE name_key=?", self.registry()),
             [&name_key],
@@ -633,10 +633,19 @@ impl Catalog {
         Ok(self.directory.join(file))
     }
 
-    fn delete_files(&self, row: &Row) -> Result<()> {
+    /// Delete a database's WAL and file. After a checkpointing detach the WAL
+    /// goes first, so a failure leaves a complete file. Without one, the WAL
+    /// may hold committed changes, so the file goes first and a failure never
+    /// leaves an older file whose changes were discarded.
+    fn delete_files(&self, row: &Row, checkpointed: bool) -> Result<()> {
         let path = self.path(row)?;
         let wal = wal(&path);
-        for path in [wal, path] {
+        let order = if checkpointed {
+            [wal, path]
+        } else {
+            [path, wal]
+        };
+        for path in order {
             match std::fs::remove_file(&path) {
                 Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
                     return Err(error).with_context(|| format!("delete {}", path.display()));

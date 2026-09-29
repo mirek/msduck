@@ -50,7 +50,9 @@ WAL that is a symbolic link, or not a regular file, is never opened: recovery
 leaves the database unavailable and CREATE fails. DROP removes the link itself.
 The check precedes the open, so it does not guard against a process that swaps
 files in the data directory concurrently. Dropping a database
-detaches it and deletes its WAL, then its file, before the registration. If a deletion
+detaches it and deletes its checkpointed WAL, then its file, before the
+registration. A database that was not attached may have changes only in its
+WAL, so its file is deleted first. If a deletion
 fails, the database stays registered and DROP reports the error, so a retry can
 finish. Before detaching, DROP creates and removes a uniquely named `<file>.drop-*` probe; if
 the directory does not allow that, DROP fails and the database stays attached.
