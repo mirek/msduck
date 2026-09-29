@@ -6293,7 +6293,7 @@
     {
       "id": "distribution-window-tds-diagnostics-v1",
       "title": "Match TDS error class and state for distribution window diagnostics",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "mirek's continuing compatibility goal and owner-authored issue #597; reference/distribution-reference.json",
       "scope": [
         "crates/msduck-tds/src/lib.rs",
