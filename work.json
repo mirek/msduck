@@ -6590,6 +6590,25 @@
       "dependencies": [],
       "issue": 622,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PXdDc"
+    },
+    {
+      "id": "sys-databases-qualified-test-v1",
+      "title": "Use SQL Server database names in sys.databases descriptor tests",
+      "state": "ready",
+      "authorization": "Direct owner instruction (2026-09-27, renewed 2026-09-29) to ship multi-database support as a published container. #613 and #612 merged independently; since #612, database-qualified names resolve through the catalog, so the #613 test's DuckDB alias and cross-database references fail on main (run 36588123746). No external submission is input.",
+      "scope": [
+        "tests/sys_databases_descriptors.rs"
+      ],
+      "acceptance": [
+        "Replace the qualified query that names the primary's DuckDB catalog with master.sys.databases, and check inventory.sys.databases from a session that has selected inventory, keeping the same expected descriptors.",
+        "cargo test -p msduck --test sys_databases_descriptors, fmt and strict clippy pass, and the full CI job passes on the merged main head."
+      ],
+      "dependencies": [
+        "sys-databases-descriptors-v2",
+        "multi-database-statements-v2"
+      ],
+      "issue": 428,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQdWF"
     }
   ]
 }
