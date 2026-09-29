@@ -45,6 +45,15 @@ set `command:` to that path still work. After listening, the container logs
 SQL Server's `Recovery is complete` and `SQL Server is now ready for client
 connections` lines, for readiness checks that wait on them.
 
+Ctrl+C on an attached `docker run` (SIGINT) and `docker stop` (SIGTERM) stop
+the server immediately with exit status 0, logging `msduck: received SIGINT;
+shutting down` (or `SIGTERM`). The server runs as the container's PID 1 and
+handles both signals itself, so `--init` is not needed. Open connections are
+closed without a final checkpoint: committed transactions are in the DuckDB
+write-ahead log, which the next start replays, and uncommitted ones are rolled
+back. The smoke test stops the image with both signals and checks that a row
+committed just before the signal survives the restart.
+
 ## Security model
 
 The development CLI (`msduck`) stays loopback-only. The image instead runs

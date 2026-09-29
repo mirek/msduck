@@ -911,6 +911,7 @@ dependencies = [
  "anyhow",
  "base64 0.22.1",
  "duckdb",
+ "libc",
  "msduck-core",
  "msduck-sql",
  "msduck-tds",
