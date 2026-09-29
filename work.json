@@ -5975,6 +5975,28 @@
       ],
       "issue": 566,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVchK"
+    },
+    {
+      "id": "identity-insert-name-diagnostics-v1",
+      "title": "Replay captured IDENTITY_INSERT target-name errors in catalog resolver",
+      "state": "ready",
+      "authorization": "Mirek continuing full SQL Server compatibility goal; first-party reference/identity-insert-name-errors.json captured by owner PR #567.",
+      "scope": [
+        "src/identity_insert_catalog.rs",
+        "tests/identity_insert_catalog.rs",
+        "docs/identity-insert-catalog.md"
+      ],
+      "acceptance": [
+        "For unqualified, bracketed, case-varied, and schema-qualified missing/nonidentity SET IDENTITY_INSERT targets, replay the exact captured 1088/8106 number, state, class, message, and DONE command 253 using the requested spelling without brackets.",
+        "Keep catalog reads bound and side-effect free; preserve stable identity resolution for existing objects and explicit Unsupported for unprobed multipart shapes.",
+        "Use root integration tests against the live catalog and retained owner reference. Run AGENTS.md Rust/client/audit checks on the exact revision, then owner PR with exact-head CI and completed Codex review."
+      ],
+      "dependencies": [
+        "identity-insert-name-errors-reference-v1",
+        "identity-insert-catalog-v1"
+      ],
+      "issue": 568,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVdqS"
     }
   ]
 }
