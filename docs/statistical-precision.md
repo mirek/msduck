@@ -1,8 +1,9 @@
 # Statistical aggregate reference replay
 
-`node scripts/compare-statistical-reference.mjs --revision FULL_HEAD_SHA` builds no
-code. Run it from a checkout with a matching `target/debug/msduck` and tedious
-installed. It starts msduck on an ephemeral localhost port and writes the full
+`node scripts/compare-statistical-reference.mjs` builds no code. Run it from a
+clean Git checkout with a matching `target/debug/msduck` and tedious installed.
+It derives the source revision from Git and rejects tracked changes. It starts
+msduck on an ephemeral localhost port and writes the full
 reference and local observations, exact structural differences, and IEEE-754
 hex bits to `artifacts/compatibility/statistical-precision/comparison.json`.
 The output records the executable SHA-256 as well as the stated source revision.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Replay the pinned SQL Server capture against this revision of msduck.
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
@@ -16,11 +16,11 @@ const root = fileURLToPath(new URL('../', import.meta.url))
 const executablePath = resolve(root, 'target/debug/msduck')
 const fixtureSha256 = 'ddd57b260ee6db3ccb82c128bab345f5410818491d8585afd8355d2fbe150fa1'
 const outputPath = fileURLToPath(new URL('../artifacts/compatibility/statistical-precision/comparison.json', import.meta.url))
-const args = process.argv.slice(2)
-if (args.length !== 2 || args[0] !== '--revision' || !/^[0-9a-f]{40}$/.test(args[1])) {
-  throw Error('usage: node scripts/compare-statistical-reference.mjs --revision FULL_HEAD_SHA')
-}
-const sourceRevision = args[1]
+if (process.argv.length !== 2) throw Error('usage: node scripts/compare-statistical-reference.mjs')
+const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim()
+const sourceRevision = git('rev-parse', 'HEAD')
+assert.match(sourceRevision, /^[0-9a-f]{40}$/, 'Git head is not a full commit SHA')
+assert.equal(git('status', '--porcelain=v1', '--untracked-files=no'), '', 'tracked checkout is dirty')
 const StreamParser = createRequire(import.meta.url)('tedious/lib/token/stream-parser.js')
 const doneKinds = new Map([[0xFD, 'DONE'], [0xFE, 'DONEPROC'], [0xFF, 'DONEINPROC']])
 
