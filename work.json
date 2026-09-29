@@ -6629,6 +6629,28 @@
       "dependencies": [],
       "issue": 623,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PXkl3"
+    },
+    {
+      "id": "numeric-arithmetic-context-reference-v1",
+      "title": "Capture decimal arithmetic with contextual bare integer literals",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server compatibility implementation goal; first-party successor to owner issue #623 and observed owner-run comparison from PR #621.",
+      "scope": [
+        "scripts/capture-numeric-arithmetic-context.mjs",
+        "reference/numeric-arithmetic-context.json",
+        "docs/numeric-arithmetic-context.md",
+        "docs/numeric-literals.md"
+      ],
+      "acceptance": [
+        "Capture exact rows, rendered text, descriptors, errors and completion events for bare integer literals in decimal arithmetic, contrasting explicit DECIMAL/NUMERIC declarations and bound INT parameters.",
+        "Replay one plan against two independent pinned SQL Server containers and retain byte-identical canonical captures with a protected fixture and reproducible check command.",
+        "Document exact observed rules and remaining implementation gaps without implying msduck currently matches or changing any reserved runtime files."
+      ],
+      "dependencies": [
+        "numeric-literal-metadata-reference-v1"
+      ],
+      "issue": 626,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PXoo9"
     }
   ]
 }
