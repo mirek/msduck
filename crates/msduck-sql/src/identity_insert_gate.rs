@@ -99,13 +99,18 @@ pub fn preflight<K: Eq>(
                 ),
             ));
         }
-        let Some(SetExpr::Values(_)) = source else {
+        let Some(SetExpr::Values(values)) = source else {
             return Err(GateError::Unsupported(
                 "unlisted INSERT SELECT precedence is unprobed",
             ));
         };
-        // SQL Server reports 8101 for full-width positional VALUES, even
-        // when the identity slot is DEFAULT or IDENTITY_INSERT is OFF.
+        if values.rows.len() != 1 {
+            return Err(GateError::Unsupported(
+                "multi-row positional identity precedence is unprobed",
+            ));
+        }
+        // The captured single-row full-width positional VALUES report 8101,
+        // even with DEFAULT in the identity slot or IDENTITY_INSERT OFF.
         return Err(GateError::diagnostic(
             8101,
             253,

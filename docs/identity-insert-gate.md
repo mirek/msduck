@@ -11,8 +11,8 @@ command or an explicit unsupported shape.
 
 For the captured shapes, a listed identity column while the target table is
 OFF yields 544/state 1/class 16 and DONE command 195. Omitting it, including
-`DEFAULT VALUES`, while ON yields 545 with command 195. Full-width positional
-VALUES without a column list yield 8101 with command 253 under either setting,
+`DEFAULT VALUES`, while ON yields 545 with command 195. Single-row, full-width
+positional VALUES without a column list yield 8101 with command 253 under either setting,
 including `DEFAULT` in the identity slot. Messages
 are constructed from the resolved base/qualified table names supplied by the
 adapter and compared byte for byte with the first-party captures. A setting
@@ -36,7 +36,7 @@ session setting at execute time, apply the shared native sequence advance,
 publish identity scope values, and coordinate INSERT/OUTPUT atomicity. The
 multi-row capture shows an OUTPUT row can be emitted before a later failure
 rolls back the statement while retaining allocator advances. That behavior
-cannot be achieved by this preflight alone. Unknown positional arities,
+cannot be achieved by this preflight alone. Multi-row positional sources, unknown positional arities,
 unlisted INSERT SELECT, duplicate/invalid target columns and unusual source
 shapes return unsupported rather than assigning guessed SQL Server error
 precedence. The broader [runtime plan](identity-insert-runtime-plan.md)

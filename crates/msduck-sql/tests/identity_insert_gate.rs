@@ -340,6 +340,20 @@ fn unknown_shapes_fail_closed_before_diagnostic_precedence() {
             "{sql}"
         );
     }
+    for sql in [
+        "INSERT dbo.alpha VALUES(DEFAULT,3),(40,4)",
+        "INSERT dbo.alpha VALUES(20,3),(40,4)",
+    ] {
+        for active in [None, Some(&key)] {
+            assert!(
+                matches!(
+                    preflight(&insert(sql), &target, active, resolve_column),
+                    Err(GateError::Unsupported(_))
+                ),
+                "{sql}"
+            );
+        }
+    }
     let mut listed_default = insert("INSERT dbo.alpha(id) VALUES(2)");
     let Statement::Insert(insert) = &mut listed_default else {
         unreachable!()
