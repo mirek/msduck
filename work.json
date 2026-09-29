@@ -6133,6 +6133,27 @@
       ],
       "issue": 580,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVvdy"
+    },
+    {
+      "id": "ntile-null-runtime-v1",
+      "title": "Capture and align NTILE NULL bucket behavior",
+      "state": "ready",
+      "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party documented NTILE NULL gap in docs/ntile.md. No external submission.",
+      "scope": [
+        "scripts/capture-ntile-null.mjs",
+        "reference/ntile-null.json",
+        "src/ntile.rs",
+        "tests/tedious.test.mjs",
+        "docs/ntile.md"
+      ],
+      "acceptance": [
+        "Capture literal, typed, prepared and column NULL NTILE bucket behavior, plus valid, zero and negative controls, on the pinned SQL Server 2025 image in two fresh databases and an independent container replay; retain full rows, descriptors, diagnostics, ordered events and raw DONE words.",
+        "Change native NTILE validation and public client tests only for proven behavior, preserving single evaluation, prepared reuse, typed empty results and exact tested diagnostics. Keep unprobed precedence explicit.",
+        "Run AGENTS.md Rust, client and audit checks on the exact revision, verify required CI and completed Codex review, and merge the owner PR."
+      ],
+      "dependencies": [],
+      "issue": 582,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVzxN"
     }
   ]
 }
