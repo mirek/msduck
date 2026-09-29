@@ -7026,7 +7026,7 @@
     {
       "id": "percentile-order-type-policy-v1",
       "title": "Implement deterministic percentile ordering declaration and binding policy",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing fully functional SQL Server compatible Rust/DuckDB goal; merged owner PR656 supplies two independently repeated194-record source-type captures and exact binding/type requirements.",
       "scope": [
         "crates/msduck-sql/src/percentile_order_type.rs",
