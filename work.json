@@ -6308,6 +6308,24 @@
       "dependencies": [],
       "issue": 597,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PWX2P"
+    },
+    {
+      "id": "statistical-aggregates-reference-v1",
+      "title": "Capture SQL Server STDEV STDEVP VAR VARP reference behavior",
+      "state": "ready",
+      "authorization": "mirek's continuing implementation goal and owner-authored issue #599",
+      "scope": [
+        "scripts/capture-statistical-reference.mjs",
+        "reference/statistical-aggregates.json",
+        "docs/statistical-aggregates.md"
+      ],
+      "acceptance": [
+        "Capture rows, typed descriptors, diagnostics, event order and raw DONE status for STDEV, STDEVP, VAR and VARP across NULL, singleton, DISTINCT, BIT and window cases",
+        "Replay in two independent pinned SQL Server containers and fresh databases, retain a fixed external fixture checksum, and document exact observed behavior and remaining parity gaps"
+      ],
+      "dependencies": [],
+      "issue": 599,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PWajZ"
     }
   ]
 }
