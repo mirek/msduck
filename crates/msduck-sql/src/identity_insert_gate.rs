@@ -4,7 +4,7 @@
 //! It must not execute a source expression before this preflight succeeds.
 
 use msduck_core::diagnostic::SqlError;
-use sqlparser::ast::{Expr, ObjectName, SetExpr, Statement, TableObject};
+use sqlparser::ast::{Expr, ObjectName, SetExpr, Statement, TableObject, Value};
 
 pub struct ResolvedTarget<'a, K> {
     /// Stable catalog identity, shared by alternate names of the same table.
@@ -73,11 +73,6 @@ pub fn preflight<K: Eq>(
         _ => return Err(GateError::Unsupported("unsupported INSERT source shape")),
     }
     let is_on = active == Some(target.key);
-    if insert.columns.is_empty() && !is_on {
-        // The root still validates the positional source count and rewrites an
-        // omitted identity to its allocator default.
-        return Ok(Permit::Generated);
-    }
     if let Some(SetExpr::Values(values)) = source {
         let width = if insert.columns.is_empty() {
             target.column_count
@@ -92,6 +87,9 @@ pub fn preflight<K: Eq>(
     }
     if insert.columns.is_empty() {
         if source.is_none() {
+            if !is_on {
+                return Ok(Permit::Generated);
+            }
             return Err(GateError::diagnostic(
                 545,
                 195,
@@ -103,14 +101,24 @@ pub fn preflight<K: Eq>(
         }
         let Some(SetExpr::Values(values)) = source else {
             return Err(GateError::Unsupported(
-                "unlisted INSERT SELECT while ON is unprobed",
+                "unlisted INSERT SELECT precedence is unprobed",
             ));
         };
-        if values.rows.iter().any(|row| is_default(&row[identity])) {
+        if values.rows.len() != 1 {
             return Err(GateError::Unsupported(
-                "positional DEFAULT while ON is unprobed",
+                "multi-row positional identity precedence is unprobed",
             ));
         }
+        if values.rows[0].iter().enumerate().any(|(position, value)| {
+            !((position == identity && is_default(value))
+                || matches!(value, Expr::Value(v) if matches!(v.value, Value::Number(_, _))))
+        }) {
+            return Err(GateError::Unsupported(
+                "positional identity expression precedence is unprobed",
+            ));
+        }
+        // The captured single-row numeric VALUES report 8101, even with
+        // DEFAULT in the identity slot or IDENTITY_INSERT OFF.
         return Err(GateError::diagnostic(
             8101,
             253,
