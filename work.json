@@ -6250,6 +6250,24 @@
       ],
       "issue": 591,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PWGOn"
+    },
+    {
+      "id": "distribution-window-reference-v1",
+      "title": "Capture SQL Server PERCENT_RANK and CUME_DIST reference behavior",
+      "state": "ready",
+      "authorization": "mirek's continuing SQL Server compatibility implementation goal; owner-authored issue #593",
+      "scope": [
+        "scripts/capture-distribution-reference.mjs",
+        "reference/distribution-reference.json",
+        "docs/distribution-windows.md"
+      ],
+      "acceptance": [
+        "Capture values, typed metadata, errors, and completion tokens for PERCENT_RANK and CUME_DIST across ties, NULLs, partitioning, empty and invalid windows from two independent pinned SQL Server containers",
+        "Retain raw evidence and document exact observed behavior and remaining parity gaps without normalizing differences"
+      ],
+      "dependencies": [],
+      "issue": 593,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PWQpk"
     }
   ]
 }
