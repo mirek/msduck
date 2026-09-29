@@ -144,4 +144,8 @@ test('multi-name DROP drops what it can and reports each failure', { timeout: 30
   errors.length = 0
   await failure(batch(c, 'DROP DATABASE missing_db, d3'))
   assert.deepEqual(errors, [[3701, 1], [3702, 4]])
+  // Several failures stay catchable, and a malformed name drops nothing.
+  assert.deepEqual((await batch(c, 'BEGIN TRY DROP DATABASE missing1, missing2 END TRY BEGIN CATCH SELECT ERROR_NUMBER() END CATCH')).rows, [[3701]])
+  await failure(batch(c, 'DROP DATABASE d3, bad.name'))
+  assert.deepEqual(await names(), ['d3'])
 })

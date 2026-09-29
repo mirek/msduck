@@ -107,6 +107,10 @@ fn control_done(out: &mut Vec<u8>, rpc: bool, nocount: bool, command: u16) -> Op
 }
 
 fn binding_failure(error: &anyhow::Error) -> bool {
+    // Runtime diagnostics gathered from one statement are catchable.
+    if error.downcast_ref::<StatementErrors>().is_some() {
+        return false;
+    }
     if error
         .downcast_ref::<crate::query_error::CompilationFailure>()
         .is_some()
@@ -351,9 +355,13 @@ impl Session {
                 }
                 // Like SQL Server, drop every database that can be dropped
                 // and report each failure; the statement fails if any does.
+                // Malformed names fail the statement before anything is dropped.
+                let names = names
+                    .iter()
+                    .map(database_name)
+                    .collect::<Result<Vec<_>>>()?;
                 let mut errors = Vec::new();
                 for name in names {
-                    let name = database_name(name)?;
                     if let Err(error) = self.database.catalog().remove(&self.db, &name) {
                         let error = error
                             .downcast_ref::<SqlError>()
