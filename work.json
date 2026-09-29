@@ -6154,6 +6154,23 @@
       "dependencies": [],
       "issue": 582,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVzxN"
+    },
+    {
+      "id": "docker-release-tag-filter-v1",
+      "title": "Publish Docker images only for release version tags",
+      "state": "ready",
+      "authorization": "Direct owner instruction (2026-09-29) to deliver database support as a published container; first-party fix found while verifying PR #429. No external submission is input.",
+      "scope": [
+        ".github/workflows/docker.yml",
+        "docs/docker.md"
+      ],
+      "acceptance": [
+        "Restrict the docker workflow tag trigger and the PUBLISH and publish-manifest conditions to release version tags (v followed by a digit), so verify-* CI tags never build or push images.",
+        "Keep release, prerelease and pull-request behavior unchanged; document the tag rule in docs/docker.md and verify with actionlint or an equivalent workflow syntax check."
+      ],
+      "dependencies": [],
+      "issue": 428,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQdWF"
     }
   ]
 }
