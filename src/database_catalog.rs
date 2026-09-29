@@ -317,10 +317,25 @@ impl Catalog {
             .and_then(|()| self.publish_all(db))
             .and_then(|()| self.mark_published(db, &name_key));
         if let Err(error) = attached {
+            // DuckDB can report an error after detaching, so the catalog's
+            // presence decides. A catalog still attached keeps its files and
+            // its unpublished registration, and DROP can finish the cleanup.
             let _ = db.execute_batch(&format!("DETACH DATABASE IF EXISTS {}", quote(name)));
+            let detached = db
+                .query_row(
+                    "SELECT count(*) = 0 FROM duckdb_databases() WHERE database_name=?",
+                    [name],
+                    |row| row.get::<_, bool>(0),
+                )
+                .unwrap_or(false);
+            let cleanup = if detached {
+                self.delete_files(&row)
+            } else {
+                Err(anyhow::anyhow!("the database could not be detached"))
+            };
             // Forget the database only once its files are gone. Otherwise it
             // stays registered but unavailable, and DROP can finish the cleanup.
-            match self.delete_files(&row) {
+            match cleanup {
                 Ok(()) => {
                     let _ = db.execute(
                         &format!("DELETE FROM {} WHERE name_key=?", self.registry()),
