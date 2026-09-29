@@ -6530,6 +6530,30 @@
       ],
       "issue": 616,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PXL00"
+    },
+    {
+      "id": "guid-character-conversion-core-v1",
+      "title": "Capture and implement uniqueidentifier text conversion in core",
+      "state": "ready",
+      "authorization": "mirek's continuing implementation goal and owner-authored issue #618",
+      "scope": [
+        "crates/msduck-core/src/types/uniqueidentifier.rs",
+        "crates/msduck-core/tests/uniqueidentifier.rs",
+        "scripts/capture-guid-character-conversion.mjs",
+        "reference/guid-character-conversion.json",
+        "docs/guid-conversion-order.md"
+      ],
+      "acceptance": [
+        "Capture pinned SQL Server 2025 varchar and nvarchar CAST and TRY_CONVERT behavior for canonical, case-varied, braced, overlong, whitespace, malformed and NULL values, retaining TDS metadata, errors, completion and recovery across independent fresh containers",
+        "Implement a pure SQL character-to-GUID converter returning mixed-endian bytes with explicit invalid-input outcome and no database, wire, locale or ambient dependencies",
+        "Verify the converter against retained SQL Server rows and diagnostics, run required Rust and client checks, and document remaining root adapter integration without claiming runtime conversion changed"
+      ],
+      "dependencies": [
+        "guid-conversion-order-reference-v1",
+        "guid-comparison-core-v1"
+      ],
+      "issue": 618,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PXRl7"
     }
   ]
 }
