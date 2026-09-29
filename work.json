@@ -6879,6 +6879,26 @@
       ],
       "issue": 645,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYT-x"
+    },
+    {
+      "id": "percentile-execution-comparison-v1",
+      "title": "Replay complete percentile reference including prepared phases and exact float bits",
+      "state": "ready",
+      "authorization": "Owner continuing SQL Server compatibility goal and retained first-party percentile evidence; no external submission.",
+      "scope": [
+        "scripts/compare-percentile-reference.mjs",
+        "docs/percentile-execution.md"
+      ],
+      "dependencies": [
+        "percentile-reference-v1"
+      ],
+      "acceptance": [
+        "Replay every non-version retained percentile batch and prepared request against a freshly built identified revision; retain complete raw descriptors rows warnings errors DONE statuses commands events and connection reuse.",
+        "Compare FLOAT results bit-exactly without tolerances or sorting, preserve every difference and failed preparation phase rather than filtering known gaps; pin fixture checksum and independent-run equality.",
+        "Protect fixture and output against accidental overwrite/aliasing; produce revision/executable/reference identities and a precise documented gap inventory, verify script and exact-head CI/review or authorized availability fallback, merge and publish completion."
+      ],
+      "issue": 647,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYZyz"
     }
   ]
 }
