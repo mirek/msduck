@@ -83,6 +83,9 @@ required checks or unresolved review findings; a skipped optional job needs an
 understood reason and exact-revision evidence. An automatic review request is
 not a completed review. Preserve raw reference evidence and report the revision
 covered by each test run.
+If Codex reports quota or service unavailability, retry once with `@codex review`;
+if it remains unavailable, the owner permits merging without that review. Record
+the exact head and failure reason under the contribution skill's fallback.
 
 ## Code Review Rules
 
