@@ -5958,7 +5958,7 @@
     {
       "id": "identity-insert-name-errors-reference-v1",
       "title": "Capture IDENTITY_INSERT target-name diagnostics from SQL Server",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek continuing full SQL Server compatibility goal; prior catalog resolver documents this unprobed first-party evidence gap.",
       "scope": [
         "scripts/capture-identity-insert-name-errors.mjs",
