@@ -5932,6 +5932,28 @@
       ],
       "issue": 562,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVQsq"
+    },
+    {
+      "id": "identity-insert-catalog-v1",
+      "title": "Resolve IDENTITY_INSERT targets against the live catalog",
+      "state": "ready",
+      "authorization": "Mirek's continuing full SQL Server compatibility goal and first-party identity-insert evidence; no external submission.",
+      "scope": [
+        "src/identity_insert_catalog.rs",
+        "tests/identity_insert_catalog.rs",
+        "docs/identity-insert-catalog.md"
+      ],
+      "acceptance": [
+        "Resolve one- and two-part parsed SET IDENTITY_INSERT target names through bound queries against live sys.tables, sys.schemas and sys.identity_columns, retaining stable object_id, resolved schema/base name and identity column position; reject unsupported multipart shapes without guessed behavior.",
+        "For owner-captured missing and nonidentity targets return exact 1088/state 11/class 16 and 8106/state 1/class 16 messages and DONE command 253. Resolution must not mutate session settings or execute user-supplied SQL text.",
+        "Use path-imported root integration tests against a real Server catalog for aliases, case/quoting, drop/recreate identity, transaction visibility and SQL-shaped names. Document root wiring boundary. Run AGENTS.md Rust/client/audit checks at the exact revision and publish owner PR with exact-head CI and Codex review."
+      ],
+      "dependencies": [
+        "identity-insert-binding-v1",
+        "identity-insert-shapes-gate-v1"
+      ],
+      "issue": 564,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVXhv"
     }
   ]
 }
