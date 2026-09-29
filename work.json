@@ -6194,7 +6194,7 @@
     {
       "id": "percentile-reference-v1",
       "title": "Capture SQL Server percentile windows and input diagnostics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party gaps in docs/percentiles.md and local audit. No external submission.",
       "scope": [
         "scripts/capture-percentile-reference.mjs",
