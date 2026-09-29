@@ -14,6 +14,7 @@ pub mod request_control;
 pub mod rpc;
 pub mod server;
 pub mod tds;
+pub mod tvp_binding;
 
 mod aggregate;
 mod aggregate_columns;
