@@ -5936,7 +5936,7 @@
     {
       "id": "identity-insert-catalog-v1",
       "title": "Resolve IDENTITY_INSERT targets against the live catalog",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing full SQL Server compatibility goal and first-party identity-insert evidence; no external submission.",
       "scope": [
         "src/identity_insert_catalog.rs",
