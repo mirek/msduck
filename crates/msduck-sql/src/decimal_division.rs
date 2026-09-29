@@ -1,4 +1,4 @@
-//! Exact division lowering from explicit operand declarations.
+//! Exact division lowering with contextual bare-integer operand declarations.
 use crate::{
     expression_metadata::{arithmetic, storage},
     parameter::Parameter,
@@ -6,6 +6,39 @@ use crate::{
 use msduck_core::types::Type;
 use sqlparser::ast::*;
 use std::collections::HashMap;
+
+/// A bare integer token converted alongside a decimal uses its minimum
+/// precision. A CAST or a bound INT retains the declared INT precision ten.
+/// This is intentionally limited to direct literals; general expression
+/// binding belongs to the shared metadata pass.
+pub fn bare_integer_decimal_type(expr: &Expr) -> Option<DataType> {
+    let number = match expr {
+        Expr::Value(value) => match &value.value {
+            Value::Number(number, _) => number,
+            _ => return None,
+        },
+        Expr::Nested(value)
+        | Expr::UnaryOp {
+            op: UnaryOperator::Plus | UnaryOperator::Minus,
+            expr: value,
+        } => return bare_integer_decimal_type(value),
+        _ => return None,
+    };
+    if !matches!(
+        storage::numeric_literal_type(number),
+        Some(DataType::Int(_))
+    ) {
+        return None;
+    }
+    let precision = number.trim_start_matches('0').len().max(1) as u64;
+    Some(DataType::Decimal(ExactNumberInfo::PrecisionAndScale(
+        precision, 0,
+    )))
+}
+
+fn decimal(kind: &DataType) -> bool {
+    matches!(kind, DataType::Decimal(_) | DataType::Numeric(_))
+}
 
 fn operand(kind: &DataType) -> Option<DataType> {
     let (precision, scale) = match crate::sql_type::declaration(kind).ok()? {
@@ -44,12 +77,18 @@ pub fn lower(
     else {
         return;
     };
-    let Some(left_kind) = storage::kind(left, parameters, column) else {
+    let Some(mut left_kind) = storage::kind(left, parameters, column) else {
         return;
     };
-    let Some(right_kind) = storage::kind(right, parameters, column) else {
+    let Some(mut right_kind) = storage::kind(right, parameters, column) else {
         return;
     };
+    if decimal(&right_kind) {
+        left_kind = bare_integer_decimal_type(left).unwrap_or(left_kind);
+    }
+    if decimal(&left_kind) {
+        right_kind = bare_integer_decimal_type(right).unwrap_or(right_kind);
+    }
     let Some(result) = arithmetic::decimal_type(&BinaryOperator::Divide, &left_kind, &right_kind)
     else {
         return;

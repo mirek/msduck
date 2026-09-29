@@ -46,13 +46,15 @@ multiplication, addition, nesting, empty result metadata, a failed conversion
 (8114/state 5/class 16), and successful reuse of the same connection. See the
 fixture for the complete descriptors and completion sequence.
 
-Msduck currently infers a bare small integer as `INT` even in a mixed decimal
-expression. In particular, the root test in `src/decimal_division.rs` expects
-`DECIMAL(16,13)` for `CAST(2 AS DECIMAL(5,2))/3`, whereas this SQL Server capture
-reports `DecimalN(9,6)`. The SQL lowering and projection metadata need the same
-contextual operand rule; the TDS codec also needs to preserve `NumericN` versus
-`DecimalN`. Those runtime files are reserved by other claims, so this task does
-not change them or assert compatibility.
+Msduck's direct decimal division lowering and projection inference now use the
+minimum written precision of a bare integer operand, while explicit and bound
+`INT` operands retain precision ten. The root regression now expects
+`DECIMAL(9,6)` and `0.666666` for `CAST(2 AS DECIMAL(5,2))/3` rather than the
+previous `DECIMAL(16,13)` and longer quotient. Integer/integer division remains
+separate. This is a direct-expression correction: shared nested expression
+typing still infers small literals as `INT`, and the TDS codec still cannot
+distinguish `NumericN` from `DecimalN`. The fixture therefore remains reference
+evidence, not a claim that every expression or full wire capture matches.
 
 Run `node scripts/capture-numeric-arithmetic-context.mjs --check` to verify the
 retained fixture checksum, plan and two independent captures without starting
