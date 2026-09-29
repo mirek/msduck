@@ -6108,6 +6108,31 @@
       ],
       "issue": 578,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVuM_"
+    },
+    {
+      "id": "identity-insert-null-gate-v1",
+      "title": "Reject captured explicit NULL IDENTITY_INSERT values before execution",
+      "state": "ready",
+      "authorization": "Mirek's continuing full SQL Server compatibility goal and first-party reference/identity-insert-conversion.json from merged PR #579. No external submission.",
+      "scope": [
+        "crates/msduck-sql/src/identity_insert_gate.rs",
+        "crates/msduck-sql/tests/identity_insert_gate.rs",
+        "src/identity_insert_write.rs",
+        "tests/identity_insert_write.rs",
+        "docs/identity-insert-gate.md",
+        "docs/identity-insert-write-adapter.md"
+      ],
+      "acceptance": [
+        "For captured single-row INSERT with a listed NULL identity value while ON, pure gate returns exact SQL error 339/state 1/class 16 and DONE command 253 before source evaluation; OFF and unprobed multi-row/source shapes remain explicit gaps or existing diagnostics.",
+        "Propagate through live catalog preflight without session or allocator mutation; validate against the retained reference/identity-insert-conversion.json including no row and unchanged IDENT_CURRENT after failure.",
+        "Run AGENTS.md Rust, client and audit verification on exact revision; publish owner PR with exact-head CI and completed Codex review. Document engine integration boundary."
+      ],
+      "dependencies": [
+        "identity-insert-conversion-reference-v1",
+        "identity-insert-column-diagnostics-v1"
+      ],
+      "issue": 580,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVvdy"
     }
   ]
 }
