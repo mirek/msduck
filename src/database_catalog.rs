@@ -390,9 +390,10 @@ impl Catalog {
         // Validate the stored file name before detaching anything.
         let path = self.path(&row)?;
         // A failed DROP leaves the database available while its file is
-        // intact. DuckDB may report a failed checkpoint after it detached,
-        // and the WAL is deleted after the file, so a present file still
-        // holds all committed data.
+        // intact. DuckDB may report a failed checkpoint after it detached;
+        // then nothing was deleted and the WAL still holds its changes.
+        // Deletion follows only a successful detach, which checkpoints, and
+        // removes the WAL before the file, so a file left behind is complete.
         let restore = |error: anyhow::Error| {
             if !present(&path).unwrap_or(false) {
                 return error;
@@ -626,7 +627,7 @@ impl Catalog {
     fn delete_files(&self, row: &Row) -> Result<()> {
         let path = self.path(row)?;
         let wal = wal(&path);
-        for path in [path, wal] {
+        for path in [wal, path] {
             match std::fs::remove_file(&path) {
                 Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
                     return Err(error).with_context(|| format!("delete {}", path.display()));
@@ -700,17 +701,43 @@ fn present(path: &Path) -> Result<bool> {
     }
 }
 
-/// Whether files next to `path` can be created and removed.
+/// Whether files next to `path` can be created and removed. Each probe has a
+/// fresh name, so one left by an interrupted DROP blocks nothing; process IDs
+/// repeat across container restarts, so the name also carries the clock.
 fn deletable(path: &Path) -> Result<()> {
-    let mut probe = path.to_path_buf().into_os_string();
-    probe.push(".drop");
-    let probe = PathBuf::from(probe);
-    std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&probe)
-        .with_context(|| format!("cannot delete files in {}", path.display()))?;
-    std::fs::remove_file(&probe).with_context(|| format!("delete {}", probe.display()))
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_nanos())
+        .unwrap_or_default();
+    for _ in 0..16 {
+        let mut probe = path.to_path_buf().into_os_string();
+        probe.push(format!(
+            ".drop-{}-{nanos}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        let probe = PathBuf::from(probe);
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&probe)
+        {
+            Ok(_) => {
+                return std::fs::remove_file(&probe)
+                    .with_context(|| format!("delete {}", probe.display()));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("cannot delete files in {}", path.display()));
+            }
+        }
+    }
+    bail!(
+        "could not create a unique deletion probe for {}",
+        path.display()
+    )
 }
 
 fn wal(path: &Path) -> PathBuf {
