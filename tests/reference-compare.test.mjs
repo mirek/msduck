@@ -9,6 +9,12 @@ import { assertSameCapture, describeFirstDifference, refuseExistingFixture, writ
 
 const library = new URL('../scripts/lib/reference.mjs', import.meta.url).href
 
+test('focused compatibility CLI selection stays in the standard client suite', () => {
+  const result = spawnSync(process.execPath, ['tests/compatibility-selection.test.mjs'], { encoding: 'utf8' })
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.match(result.stdout, /tests 3/)
+})
+
 test('a large mismatching capture fails quickly with bounded memory and message', () => {
   // Two independently built ~40 MB captures differing in one late record. The
   // child has a 512 MB heap; inspecting the operands (node:assert behavior)
