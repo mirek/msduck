@@ -25,7 +25,7 @@ parameters. Additional native tests compare every supported numeric layout
 and decimal storage width with DuckDB casts across chunks, including NULLs,
 negative decimals and 128-bit decimals. A sequence verifies single evaluation.
 The audit captures msduck values and descriptors for comparison. A separate
-[live SQL Server 2025 reference](percentile-reference.md) records integer,
+[live SQL Server 2025 reference](https://github.com/mirek/msduck/blob/d98306b0919ebb76b5a9849ce05632513125148f/docs/percentile-reference.md) records integer,
 decimal, FLOAT and BIT interpolation, discrete text/date selection, NULLs,
 partitions, descending order, invalid fractions and prepared bindings. It
 includes the observed FLOAT interpolation value `0.15000000000000002` for
