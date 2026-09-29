@@ -128,25 +128,71 @@ pub fn preflight<K: Eq>(
             ),
         ));
     }
+    // The retained capture proves 207 for one unknown listed column and 264
+    // for one duplicate identity column while ON. Other combinations have
+    // unprobed diagnostic precedence and must remain explicit gaps.
+    if insert.columns.iter().any(|name| name.0.len() != 1) {
+        return Err(GateError::Unsupported("multipart INSERT target column"));
+    }
     let positions = insert
         .columns
         .iter()
         .map(&resolve_column)
-        .collect::<Option<Vec<_>>>()
-        .ok_or(GateError::Unsupported("unresolved INSERT column"))?;
+        .collect::<Vec<_>>();
     if positions
         .iter()
+        .flatten()
         .any(|position| *position >= target.column_count)
     {
         return Err(GateError::Unsupported("invalid INSERT catalog position"));
     }
-    if positions
+    let duplicate = positions
         .iter()
         .enumerate()
-        .any(|(i, position)| positions[..i].contains(position))
-    {
+        .filter_map(|(i, position)| {
+            position
+                .filter(|_| positions[..i].contains(position))
+                .map(|_| i)
+        })
+        .collect::<Vec<_>>();
+    let unresolved = positions
+        .iter()
+        .enumerate()
+        .filter_map(|(i, position)| position.is_none().then_some(i))
+        .collect::<Vec<_>>();
+    if !unresolved.is_empty() {
+        if is_on && unresolved.len() == 1 && duplicate.is_empty() {
+            let name = insert.columns[unresolved[0]].0[0]
+                .as_ident()
+                .ok_or(GateError::Unsupported("unsupported INSERT target column"))?;
+            return Err(GateError::diagnostic(
+                207,
+                253,
+                format!("Invalid column name '{}'.", name.value),
+            ));
+        }
+        return Err(GateError::Unsupported("unresolved INSERT column"));
+    }
+    if !duplicate.is_empty() {
+        if is_on && duplicate.len() == 1 && positions[duplicate[0]] == Some(identity) {
+            let name = insert.columns[duplicate[0]].0[0]
+                .as_ident()
+                .ok_or(GateError::Unsupported("unsupported INSERT target column"))?;
+            return Err(GateError::diagnostic(
+                264,
+                253,
+                format!(
+                    "The column name '{}' is specified more than once in the SET clause or column list of an INSERT. A column cannot be assigned more than one value in the same clause. Modify the clause to make sure that a column is updated only once. If this statement updates or inserts columns into a view, column aliasing can conceal the duplication in your code.",
+                    name.value
+                ),
+            ));
+        }
         return Err(GateError::Unsupported("duplicate INSERT target column"));
     }
+    let positions = positions
+        .into_iter()
+        .map(Option::unwrap)
+        .collect::<Vec<_>>();
     let identity_positions = positions
         .iter()
         .enumerate()

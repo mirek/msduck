@@ -11,13 +11,15 @@ identity allocator is advanced during preflight.
 
 The gate returns `Generated` for a permitted implicit identity write,
 `Explicit { source_column }` for a permitted listed identity source, or a
-captured 544, 545 or 8101 diagnostic with its DONE command. The session key
+captured 544, 545, 8101, 264 or 207 diagnostic with its DONE command. The session key
 uses the caller-supplied stable database ID plus the catalog object ID, so a
 quoted alias of the active table remains ON and an unrelated active table does
 not authorize an explicit write. A table without identity and a missing target
 return `NotApplicable`; the ordinary INSERT binder must handle those cases and
-report their own errors. Unknown target/source shapes, invalid or duplicate
-column bindings, and temporary/multipart targets remain explicitly unsupported.
+report their own errors. The captured single invalid column and duplicate
+identity column are diagnosed before source execution. Mixed, ambiguous or
+multipart column defects, other unknown source shapes and temporary/multipart
+targets remain explicitly unsupported.
 
 The [root integration tests](../tests/identity_insert_write.rs) replay the
 owner-controlled [batch](../reference/identity-insert.json),

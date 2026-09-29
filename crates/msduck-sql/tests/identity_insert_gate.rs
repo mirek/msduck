@@ -242,6 +242,8 @@ fn insert_shape_capture_replays_positional_and_source_precedence() {
             ("OFF explicit conversion", false),
             ("ON omitted INSERT SELECT", true),
             ("ON omitted conversion", true),
+            ("ON duplicate identity columns", true),
+            ("ON invalid column", true),
         ] {
             assert_diagnostic(case(run, name), "alpha", on);
         }
@@ -325,10 +327,9 @@ fn unknown_shapes_fail_closed_before_diagnostic_precedence() {
         identity_column: Some(0),
     };
     for sql in [
-        "INSERT dbo.alpha(id,unknown) VALUES(2,3)",
         "INSERT dbo.alpha(id,v) VALUES(2)",
-        "INSERT dbo.alpha(id,id) VALUES(2,3)",
         "INSERT dbo.alpha(v,v) VALUES(2,3)",
+        "INSERT dbo.alpha(id,id,unknown) VALUES(2,3,4)",
         "INSERT dbo.alpha(id,v) VALUES(DEFAULT,3)",
         "INSERT dbo.alpha SELECT id,v FROM dbo.source_rows",
     ] {
@@ -339,6 +340,15 @@ fn unknown_shapes_fail_closed_before_diagnostic_precedence() {
             ),
             "{sql}"
         );
+    }
+    for sql in [
+        "INSERT dbo.alpha(id,unknown) VALUES(2,3)",
+        "INSERT dbo.alpha(id,id) VALUES(2,3)",
+    ] {
+        assert!(matches!(
+            preflight(&insert(sql), &target, None, resolve_column),
+            Err(GateError::Unsupported(_))
+        ));
     }
     for sql in [
         "INSERT dbo.alpha VALUES(DEFAULT,3),(40,4)",
