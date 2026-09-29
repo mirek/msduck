@@ -6326,6 +6326,28 @@
       "dependencies": [],
       "issue": 599,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PWajZ"
+    },
+    {
+      "id": "statistical-distinct-warning-v1",
+      "title": "Emit statistical DISTINCT NULL warnings and exact signature messages",
+      "state": "ready",
+      "authorization": "mirek's continuing implementation goal, owner-authored issue #601 and reference/statistical-aggregates.json",
+      "scope": [
+        "crates/msduck-sql/src/aggregate.rs",
+        "crates/msduck-sql/src/aggregate_diagnostics.rs",
+        "src/aggregate_diagnostics.rs",
+        "docs/statistical-aggregates.md"
+      ],
+      "acceptance": [
+        "Observe NULL input once before typed DISTINCT deduplication for STDEV/STDEVP/VAR/VARP and emit one 8153 information warning per statement under ANSI_WARNINGS ON, including empty and duplicate cases",
+        "Match pinned SQL Server uppercase no-argument messages for all four functions without changing other aggregate diagnostics",
+        "Add deterministic AST and root wire regressions for warning presence, suppression, exact messages and single evaluation; run AGENTS.md Rust/client/audit checks and retain floating-point low-bit differences"
+      ],
+      "dependencies": [
+        "statistical-aggregates-reference-v1"
+      ],
+      "issue": 601,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PWdcJ"
     }
   ]
 }
