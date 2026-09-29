@@ -6312,7 +6312,7 @@
     {
       "id": "statistical-aggregates-reference-v1",
       "title": "Capture SQL Server STDEV STDEVP VAR VARP reference behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "mirek's continuing implementation goal and owner-authored issue #599",
       "scope": [
         "scripts/capture-statistical-reference.mjs",
