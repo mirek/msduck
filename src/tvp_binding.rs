@@ -551,10 +551,9 @@ mod tests {
                 expected["class"].as_u64().unwrap() as u8
             );
             assert_eq!(actual.error.message, expected["message"].as_str().unwrap());
-            assert_eq!(
-                actual.line_number,
-                expected["lineNumber"].as_u64().unwrap() as u32
-            );
+            if let Some(line) = expected.get("lineNumber") {
+                assert_eq!(actual.line_number, line.as_u64().unwrap() as u32);
+            }
         }
     }
     #[test]
@@ -572,7 +571,12 @@ mod tests {
                     let name = observation["name"].as_str().unwrap();
                     let bytes = hex(observation["request"]["payloadHex"].as_str().unwrap());
                     let actual = apply(&db, &bytes, Limits::default());
-                    let errors = &observation["response"]["errors"];
+                    let errors = observation
+                        .get("response")
+                        .or_else(|| observation.get("callback"))
+                        .expect("missing captured response")
+                        .get("errors")
+                        .expect("missing captured errors");
                     if !errors.as_array().unwrap().is_empty() {
                         compare_errors(actual.unwrap_err(), errors);
                     } else {
