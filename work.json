@@ -6633,7 +6633,7 @@
     {
       "id": "numeric-arithmetic-context-reference-v1",
       "title": "Capture decimal arithmetic with contextual bare integer literals",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server compatibility implementation goal; first-party successor to owner issue #623 and observed owner-run comparison from PR #621.",
       "scope": [
         "scripts/capture-numeric-arithmetic-context.mjs",
