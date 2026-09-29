@@ -653,24 +653,52 @@ fn snapshot_with_views<T: Visit>(
             Ok((row.get(0)?, crate::declared_columns::read_info(row, 1)?))
         })?
         .collect::<duckdb::Result<_>>()?;
-    // This server currently exposes one database and one catalog default.
-    // Multi-database acquisition must supply the selected database's default.
+    // The unqualified catalog uses the selected database's default.
     catalog.default_collation = catalog
         .types
         .get("nvarchar")
         .and_then(|t| t.collation_name.clone());
     let mut columns = db.prepare("SELECT c.name,c.system_type_id,c.user_type_id,c.max_length,c.precision,c.scale,c.collation_name,c.is_nullable,c.is_identity,o.type FROM sys.columns c JOIN sys.objects o ON c.object_id=o.object_id WHERE c.object_id=__msduck_object_id(?,NULL) ORDER BY c.column_id")?;
     for (name, object_name) in names.0 {
-        if let [
-            ObjectNamePart::Identifier(schema),
-            ObjectNamePart::Identifier(view),
-        ] = object_name.0.as_slice()
-            && schema.value.eq_ignore_ascii_case("sys")
-            && let Some(collation) = catalog.default_collation.as_deref()
-            && let Some(fields) = system_catalog_fields(&view.value, collation)
-        {
-            catalog.tables.insert(name, fields);
-            continue;
+        let system_view = match object_name.0.as_slice() {
+            [
+                ObjectNamePart::Identifier(schema),
+                ObjectNamePart::Identifier(view),
+            ] if schema.value.eq_ignore_ascii_case("sys") => Some((None, view)),
+            [
+                ObjectNamePart::Identifier(database),
+                ObjectNamePart::Identifier(schema),
+                ObjectNamePart::Identifier(view),
+            ] if schema.value.eq_ignore_ascii_case("sys") => Some((Some(database), view)),
+            _ => None,
+        };
+        if let Some((database, view)) = system_view {
+            let collation = if let Some(database) = database {
+                let current: String =
+                    db.query_row("SELECT current_database()", [], |row| row.get(0))?;
+                if database.value.eq_ignore_ascii_case(&current) {
+                    catalog.default_collation.clone()
+                } else {
+                    // Only published databases can supply a catalog-qualified
+                    // system view's logical descriptors. Hidden attachments
+                    // during CREATE/DROP must not fabricate a result shape.
+                    let mut query = db.prepare("SELECT collation_name FROM sys.databases WHERE __msduck_db_key(name)=__msduck_db_key(?)")?;
+                    let mut rows = query.query([&database.value])?;
+                    if let Some(row) = rows.next()? {
+                        row.get::<_, Option<String>>(0)?
+                    } else {
+                        None
+                    }
+                }
+            } else {
+                catalog.default_collation.clone()
+            };
+            if let Some(collation) = collation.as_deref()
+                && let Some(fields) = system_catalog_fields(&view.value, collation)
+            {
+                catalog.tables.insert(name, fields);
+                continue;
+            }
         }
         let mut fields = columns
             .query_map([&name], |row| {

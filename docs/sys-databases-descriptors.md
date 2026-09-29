@@ -16,6 +16,11 @@ remaining columns. Empty results, `SELECT *`, explicit projections and aliases
 use the same logical declarations. The root regression compares actual
 COLMETADATA bytes with the independent capture, including names, widths,
 nullable/computed flags and encoded collations.
+Catalog-qualified system-view names acquire the referenced published
+database's collation before binding descriptors. The regression covers the
+primary physical catalog and a published attached user catalog; logical
+`master` name resolution remains part of the separate database-statement
+runtime task.
 
 | Published column | SQL Server logical type | Nullable | TDS flag | Collation |
 | --- | --- | --- | --- | --- |
