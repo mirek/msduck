@@ -6137,7 +6137,7 @@
     {
       "id": "ntile-null-runtime-v1",
       "title": "Capture and align NTILE NULL bucket behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party documented NTILE NULL gap in docs/ntile.md. No external submission.",
       "scope": [
         "scripts/capture-ntile-null.mjs",
@@ -6989,7 +6989,7 @@
     {
       "id": "percentile-client-character-acceptance-v1",
       "title": "Replace obsolete percentile character rejection with captured acceptance",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Owner continuing SQL Server compatibility goal; captured character fractions are accepted by SQL Server, but default tedious client signature test still asserts rejection.",
       "scope": [
         "tests/tedious.test.mjs"
@@ -7092,7 +7092,7 @@
     {
       "id": "ntile-binding-diagnostics-v1",
       "title": "Align NTILE constant binding and runtime diagnostic identities",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal. Same root worker recovered and verified its original ntile-null-runtime-v1 receipt; protected concat-integration-v1 authorization explicitly stopped blocked result-alignment-v1 and its successor is Done. Root engine has no other ready reservation. This supplements owned PR584 without adopting another worker claim.",
       "scope": [
         "src/engine.rs",
