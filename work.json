@@ -5911,6 +5911,27 @@
       ],
       "issue": 560,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVO2W"
+    },
+    {
+      "id": "identity-insert-shapes-gate-v1",
+      "title": "Align IDENTITY_INSERT positional INSERT preflight with SQL Server",
+      "state": "ready",
+      "authorization": "Mirek's continuing full SQL Server compatibility goal and owner-controlled identity-insert-shapes reference; no external submission.",
+      "scope": [
+        "crates/msduck-sql/src/identity_insert_gate.rs",
+        "crates/msduck-sql/tests/identity_insert_gate.rs",
+        "docs/identity-insert-gate.md"
+      ],
+      "acceptance": [
+        "Replay retained reference/identity-insert-shapes.json diagnostics for full-width positional VALUES and positional DEFAULT without a column list with IDENTITY_INSERT ON or OFF: exact 8101/state 1/class 16/message and DONE command 253.",
+        "Preserve captured 544 for listed explicit identity while OFF, 545 for listed omitted identity while ON, and permit captured listed explicit/implicit INSERT SELECT paths. Do not evaluate source values or guess precedence for unsupported arities, duplicate/invalid columns or unlisted SELECT shapes.",
+        "Keep preflight deterministic over parsed AST and explicit catalog/session inputs. Run formatting, focused SQL crate tests, strict workspace Clippy, workspace Rust tests, independent tedious tests and local audit on the exact revision; publish an owner PR with exact-head CI and completed Codex review."
+      ],
+      "dependencies": [
+        "identity-insert-shapes-reference-v1"
+      ],
+      "issue": 562,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVQsq"
     }
   ]
 }
