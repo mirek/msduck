@@ -30,7 +30,8 @@ replay applicable cases from the owner-controlled
 also check quoted aliases, independent settings, identity-column position and
 column diagnostics. The captured ON-state duplicate identity column returns
 264, and one unknown listed column returns 207; both use failed DONE command
-253. Mixed or ambiguous defects remain unsupported because the capture does
+253. An unknown column that also omits the identity, and other mixed or
+ambiguous defects, remain unsupported because the capture does
 not establish their diagnostic precedence. The module remains unexported while
 `msduck-sql/src/lib.rs` is reserved by another worker.
 

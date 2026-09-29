@@ -161,7 +161,11 @@ pub fn preflight<K: Eq>(
         .filter_map(|(i, position)| position.is_none().then_some(i))
         .collect::<Vec<_>>();
     if !unresolved.is_empty() {
-        if is_on && unresolved.len() == 1 && duplicate.is_empty() {
+        if is_on
+            && unresolved.len() == 1
+            && duplicate.is_empty()
+            && positions.contains(&Some(identity))
+        {
             let name = insert.columns[unresolved[0]].0[0]
                 .as_ident()
                 .ok_or(GateError::Unsupported("unsupported INSERT target column"))?;

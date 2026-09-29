@@ -330,6 +330,7 @@ fn unknown_shapes_fail_closed_before_diagnostic_precedence() {
         "INSERT dbo.alpha(id,v) VALUES(2)",
         "INSERT dbo.alpha(v,v) VALUES(2,3)",
         "INSERT dbo.alpha(id,id,unknown) VALUES(2,3,4)",
+        "INSERT dbo.alpha(unknown,v) VALUES(2,3)",
         "INSERT dbo.alpha(id,v) VALUES(DEFAULT,3)",
         "INSERT dbo.alpha SELECT id,v FROM dbo.source_rows",
     ] {

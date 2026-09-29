@@ -295,6 +295,7 @@ fn physical_position_nonidentity_and_unknown_targets_are_distinct() {
         "INSERT dbo.[#temporary](v,id) VALUES(1,2)",
         "INSERT dbo.second(v,v,id) VALUES(1,2,3)",
         "INSERT dbo.second(v,v,missing,id) VALUES(1,2,3,4)",
+        "INSERT dbo.second(missing,v) VALUES(1,2)",
     ] {
         assert!(matches!(
             preflight(&session.db, 1, "logical_db", &state, &statement(sql)),
