@@ -11,15 +11,19 @@ recreating it allocates another ID. Database-qualified and linked-server
 names remain explicitly unsupported until the multi-database binding rules
 are integrated.
 
-For the captured `dbo.missing` and `dbo.plain` targets, it returns the exact
-SQL Server [reference](../reference/identity-insert-errors.json) diagnostics:
-1088/state 11/class 16 for a missing table and 8106/state 1/class 16 for a
-table without an identity, both with DONE command 253. A catalog inconsistency
-or backend failure is separate from those SQL diagnostics. Unqualified missing
-or nonidentity targets return `Unsupported` because their error spelling has
-not been captured; successful unqualified targets still resolve through `dbo`.
-Other requested forms have not been independently captured. The resolver never
-changes a session setting or executes a SQL fragment supplied by the caller.
+For the captured unqualified, bracketed, case-varied and schema-qualified
+targets, it returns the exact SQL Server
+[target-name reference](../reference/identity-insert-name-errors.json)
+diagnostics: 1088/state 11/class 16 for a missing table and 8106/state 1/class
+16 for a table without an identity, both with DONE command 253. The display
+name retains requested case and qualification while dropping brackets; an
+unqualified error does not acquire `dbo.` from the catalog lookup. The earlier
+[error capture](../reference/identity-insert-errors.json) also covers explicit
+`dbo.missing` and `dbo.plain`. A catalog inconsistency or backend failure is
+separate from those SQL diagnostics. Three- or four-part names and `#`
+temporary targets remain unsupported; their behavior has not been captured.
+The resolver never changes a session setting or executes a SQL fragment
+supplied by the caller.
 
 The [path-imported integration tests](../tests/identity_insert_catalog.rs)
 use the real `Server` catalog for quoted/case aliases, physical identity
