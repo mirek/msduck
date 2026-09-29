@@ -1315,7 +1315,7 @@
     {
       "id": "prepared-execution-context-v1",
       "title": "Pass prepared RPC execution context to the engine",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. First-party SQL Server captures show identical invalid DATEFIRST batches return status -6 through sp_execute but 0 through sp_executesql after following statements. Current RPC adapter loses that distinction. No third-party content used.",
       "scope": [
         "src/rpc.rs"
