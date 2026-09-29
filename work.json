@@ -6289,6 +6289,25 @@
       ],
       "issue": 595,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PWTAz"
+    },
+    {
+      "id": "distribution-window-tds-diagnostics-v1",
+      "title": "Match TDS error class and state for distribution window diagnostics",
+      "state": "ready",
+      "authorization": "mirek's continuing compatibility goal and owner-authored issue #597; reference/distribution-reference.json",
+      "scope": [
+        "crates/msduck-tds/src/lib.rs",
+        "crates/msduck-tds/tests/distribution_diagnostics.rs",
+        "docs/distribution-windows-wire.md"
+      ],
+      "acceptance": [
+        "Preserve SQL Server class 15 for distribution-window errors 4114, 10752, 10753 and 4112 and captured states 1, 3, 3 and 1 respectively in the TDS error encoder",
+        "Add bounded wire-level tests decoding ERROR tokens and retaining unrelated diagnostic behavior",
+        "Do not edit the active SQL diagnostic claim or tests/tedious.test.mjs; report any root-adapter gap explicitly"
+      ],
+      "dependencies": [],
+      "issue": 597,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PWX2P"
     }
   ]
 }
