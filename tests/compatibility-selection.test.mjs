@@ -4,6 +4,7 @@ import test from 'node:test'
 
 const script = 'scripts/compatibility.mjs'
 const run = (...args) => spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' })
+const runDocker = (...args) => spawnSync(process.execPath, ['scripts/docker-compare.mjs', ...args], { encoding: 'utf8' })
 
 test('focused audit lists exact names and plans a separate artifact without a server', () => {
   const listed = run('--list-cases')
@@ -42,4 +43,18 @@ test('invalid case selections fail before server configuration or connection', (
     assert.notEqual(result.status, 0, args.join(' '))
     assert.equal(result.stdout, '')
   }
+})
+
+test('Docker wrapper lists, plans and rejects unknown cases before starting Docker', () => {
+  const listed = runDocker('--list-cases')
+  assert.equal(listed.status, 0, listed.stderr)
+  assert.ok(listed.stdout.includes('numeric literal descriptors'))
+
+  const planned = runDocker('--case', 'numeric literal descriptors', '--plan')
+  assert.equal(planned.status, 0, planned.stderr)
+  assert.equal(JSON.parse(planned.stdout).mode, 'comparison')
+
+  const unknown = runDocker('--case', 'unknown case')
+  assert.notEqual(unknown.status, 0)
+  assert.match(unknown.stderr, /Unknown case: unknown case/)
 })

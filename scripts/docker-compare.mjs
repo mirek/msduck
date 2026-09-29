@@ -1,5 +1,21 @@
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { withReferenceContainer } from './lib/reference-container.mjs'
+
+const forwarded = process.argv.slice(2)
+const listing = forwarded.includes('--list-cases')
+const planning = forwarded.includes('--plan')
+const preflight = spawnSync(process.execPath, ['scripts/compatibility.mjs',
+  ...(listing ? [] : ['--compare']), ...forwarded, ...(listing || planning ? [] : ['--plan'])],
+{ encoding: 'utf8' })
+if (preflight.error) throw preflight.error
+if (preflight.status !== 0) {
+  process.stderr.write(preflight.stderr)
+  process.exit(preflight.status ?? 1)
+}
+if (listing || planning) {
+  process.stdout.write(preflight.stdout)
+  process.exit(0)
+}
 
 const controller = new AbortController()
 const stop = () => controller.abort(new Error('Reference comparison interrupted'))
@@ -8,7 +24,7 @@ process.once('SIGTERM', stop)
 await withReferenceContainer(async (config, { image }) => {
   console.log(`Reference ready: ${image}`)
   const exitCode = await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['scripts/compatibility.mjs', '--compare', ...process.argv.slice(2)], {
+    const child = spawn(process.execPath, ['scripts/compatibility.mjs', '--compare', ...forwarded], {
       stdio: 'inherit',
       detached: process.platform !== 'win32',
       env: { ...process.env, MSSQL_REFERENCE_HOST: config.server,
