@@ -6046,7 +6046,7 @@
     {
       "id": "identity-insert-column-order-reference-v1",
       "title": "Capture IDENTITY_INSERT with identity in a later physical column",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek continuing full SQL Server compatible Rust server goal; independent SQL Server evidence needed for merged live IDENTITY_INSERT write adapter",
       "scope": [
         "scripts/capture-identity-insert-column-order.mjs",
