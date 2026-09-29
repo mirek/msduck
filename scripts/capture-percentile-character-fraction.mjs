@@ -12,7 +12,7 @@ import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFi
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/percentile-character-fraction.json', import.meta.url)
-const fixtureSha256 = 'PENDING'
+const fixtureSha256 = '2d345861c98702b60c1ba69de35e65436b4c760bc7785706b6f9cdee60bf938e'
 const args = process.argv.slice(2)
 const mode = args[0]?.startsWith('--') ? args.shift() : undefined
 if (![undefined, '--check', '--write-fixture'].includes(mode) || args.length > 1 || args[0]?.startsWith('--')) throw Error('usage: capture-percentile-character-fraction.mjs [--check | --write-fixture] [output]')
