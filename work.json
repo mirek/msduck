@@ -6158,7 +6158,7 @@
     {
       "id": "docker-release-tag-filter-v1",
       "title": "Publish Docker images only for release version tags",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction (2026-09-29) to deliver database support as a published container; first-party fix found while verifying PR #429. No external submission is input.",
       "scope": [
         ".github/workflows/docker.yml",
