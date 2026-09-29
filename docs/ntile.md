@@ -30,14 +30,16 @@ The [type matrix](ntile-types-reference.md) shows that SQL Server rejects even
 integral DECIMAL and numeric-looking character bucket expressions with 4116.
 The native validator uses that same 4116 message for noninteger and NULL inputs
 instead of returning a different type error or NULL; a 6,000-row native test
-covers NULL validity past a chunk boundary. The public client replay preserves the remaining raw
-differences: constant invalid counts still publish result metadata, empty
-typed NULL returns an empty result, and runtime errors retain DuckDB's
-`Invalid Input Error:` prefix and severity 16. The same-query column error
-uses single rather than double quotes and severity 16. Those compile and wire
-diagnostic boundaries require a separate scoped change to the reserved engine
-path. Until then this is partial NULL-bucket behavior, not complete NTILE
-parity.
+covers NULL validity past a chunk boundary. The public client replay now compares the retained rows, column type/width/flags
+and complete number/state/severity/message tuples directly. Literal/typed NULL,
+zero and negative constants fail before metadata, including empty input;
+parameters and scalar subqueries stay runtime inputs with metadata before error.
+The engine converts only canonical native NTILE errors to 4116/state 1/class 15,
+and source-column rejection to the captured 4195 message/class.
+
+This does not establish full token parity. The retained ORDER/INFO/DONE event
+sequences and raw command words remain separate evidence; the client property
+comparison above does not claim they all match.
 
 Remaining gaps include complete correlated/source-column restrictions,
 exact type-error timing/severity and other unprobed bucket expressions.

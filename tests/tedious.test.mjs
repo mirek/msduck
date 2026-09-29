@@ -3080,20 +3080,6 @@ test('NTILE NULL buckets follow the retained SQL Server binding and RPC outcomes
   const c = await start(t)
   await query(c, 'CREATE TABLE dbo.bucket(n INT NOT NULL,b INT NULL)')
   await query(c, 'INSERT dbo.bucket(n,b) VALUES(1,NULL),(2,NULL),(3,NULL)')
-  const positive = "The function 'ntile' takes only a positive int or bigint expression as its input."
-  const localRuntime = { diagnostic: [[4116, 1, 16, `Invalid Input Error: ${positive}`]],
-    rows: [[]], descriptors: [[['IntN', 8, 1]]] }
-  const localCompile = { ...localRuntime }
-  const knownDifferences = new Map([
-    ...['literal NULL', 'typed INT NULL', 'typed BIGINT NULL', 'zero count', 'negative count']
-      .map(name => [name, localCompile]),
-    ...['scalar subquery NULL', 'RPC NULL', 'RPC zero', 'RPC NULL again']
-      .map(name => [name, localRuntime]),
-    ['empty typed NULL', { diagnostic: [], rows: [[]], descriptors: [[['IntN', 8, 1]]] }],
-    ['source column NULL', { diagnostic: [[4195, 1, 16,
-      "The reference to column 'b' is not allowed in an argument to the NTILE function. Only references to columns at an outer scope or standalone expressions and subqueries are allowed here."]],
-      rows: [], descriptors: [] }],
-  ])
   for (const name of ['literal NULL', 'typed INT NULL', 'typed BIGINT NULL', 'scalar subquery NULL',
     'source column NULL', 'zero count', 'negative count', 'valid count', 'empty typed NULL',
     'RPC NULL', 'RPC valid', 'RPC zero', 'RPC NULL again']) {
@@ -3118,7 +3104,7 @@ test('NTILE NULL buckets follow the retained SQL Server binding and RPC outcomes
       diagnostic: diagnostic(expected), rows: expected.sets.map(set => set.rows),
       descriptors: expected.sets.map(set => set.columns.map(({ type, length, flags }) => [type, length, flags])),
     }
-    assert.deepEqual(observed, knownDifferences.get(name) ?? retained, name)
+    assert.deepEqual(observed, retained, name)
   }
   assert.deepEqual((await query(c, 'SELECT 1 AS reusable')).rows, [[1]])
 })

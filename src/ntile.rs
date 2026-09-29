@@ -10,6 +10,84 @@ pub const POSITIVE: &str =
     "The function 'ntile' takes only a positive int or bigint expression as its input.";
 pub const TYPE: &str = "Invalid NTILE bucket argument type: ";
 
+/// Only captured invalid constants are rejected here. Parameters, subqueries
+/// and other expressions remain runtime inputs; no value is evaluated.
+pub fn validate_constants(statement: &Statement) -> Result<(), msduck_core::diagnostic::SqlError> {
+    fn null(expr: &Expr) -> bool {
+        match expr {
+            Expr::Value(value) => matches!(value.value, Value::Null),
+            Expr::Nested(expr) => null(expr),
+            Expr::Cast {
+                expr,
+                data_type: DataType::Int(_) | DataType::BigInt(_),
+                ..
+            } => null(expr),
+            _ => false,
+        }
+    }
+    fn integer(expr: &Expr) -> Option<i128> {
+        match expr {
+            Expr::Value(value) => match &value.value {
+                Value::Number(number, _) => number.parse().ok(),
+                _ => None,
+            },
+            Expr::Nested(expr) => integer(expr),
+            Expr::UnaryOp {
+                op: UnaryOperator::Minus,
+                expr,
+            } => integer(expr)?.checked_neg(),
+            Expr::UnaryOp {
+                op: UnaryOperator::Plus,
+                expr,
+            } => integer(expr),
+            _ => None,
+        }
+    }
+    let result = visit_expressions(statement, |expr| {
+        if let Expr::Function(function) = expr
+            && function.name.to_string().eq_ignore_ascii_case("NTILE")
+            && msduck_sql::ranking::validate(function).is_ok()
+            && let Some(WindowType::WindowSpec(spec)) = &function.over
+            && !spec.order_by.is_empty()
+            && spec.window_frame.is_none()
+            && let FunctionArguments::List(args) = &function.args
+            && let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] = args.args.as_slice()
+            && (null(value) || integer(value).is_some_and(|count| count <= 0))
+        {
+            return std::ops::ControlFlow::Break(msduck_core::diagnostic::SqlError::syntax(
+                4116, 1, POSITIVE,
+            ));
+        }
+        std::ops::ControlFlow::Continue(())
+    });
+    match result {
+        std::ops::ControlFlow::Continue(()) => Ok(()),
+        std::ops::ControlFlow::Break(error) => Err(error),
+    }
+}
+
+/// Recognize only the native validator or canonical binding diagnostic, never
+/// an explicit application SqlError or unrelated backend message.
+pub fn diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
+    use msduck_core::diagnostic::SqlError;
+    let message = message
+        .strip_prefix("Invalid Input Error: ")
+        .unwrap_or(message);
+    if message == POSITIVE {
+        return Some(SqlError::syntax(4116, 1, POSITIVE));
+    }
+    let prefix = "The reference to column '";
+    let suffix = "' is not allowed in an argument to the NTILE function. Only references to columns at an outer scope or standalone expressions and subqueries are allowed here.";
+    let column = message.strip_prefix(prefix)?.strip_suffix(suffix)?;
+    Some(SqlError::syntax(
+        4195,
+        1,
+        format!(
+            "The reference to column \"{column}\" is not allowed in an argument to the NTILE function. Only references to columns at an outer scope or standalone expressions and subqueries are allowed here."
+        ),
+    ))
+}
+
 pub fn lower(expr: &mut Expr) {
     if let Expr::Function(function) = expr
         && function.name.to_string().eq_ignore_ascii_case("NTILE")
