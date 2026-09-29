@@ -6042,6 +6042,27 @@
       ],
       "issue": 572,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVkkB"
+    },
+    {
+      "id": "identity-insert-column-order-reference-v1",
+      "title": "Capture IDENTITY_INSERT with identity in a later physical column",
+      "state": "ready",
+      "authorization": "Mirek continuing full SQL Server compatible Rust server goal; independent SQL Server evidence needed for merged live IDENTITY_INSERT write adapter",
+      "scope": [
+        "scripts/capture-identity-insert-column-order.mjs",
+        "reference/identity-insert-column-order.json",
+        "docs/identity-insert-column-order.md"
+      ],
+      "acceptance": [
+        "Use the pinned SQL Server 2025 reference image, two fresh databases and independent-container replay. Capture a table whose identity is not the first physical column, with generated and explicit INSERTs in distinct column-list orders and quoted/case-varied target aliases.",
+        "Preserve raw rows, typed descriptors, errors, TDS event kinds and DONE status/command words for ON/OFF permission and allocator behavior; pin and validate the retained fixture and refuse output aliases/symlinks/hard links.",
+        "Document observed behavior and remaining unknowns without claiming msduck runtime support. Verify the fixture via --check and independent replay; create an owner PR with exact-head CI and completed Codex review."
+      ],
+      "dependencies": [
+        "identity-insert-write-adapter-v1"
+      ],
+      "issue": 574,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVoGa"
     }
   ]
 }
