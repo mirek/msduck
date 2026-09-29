@@ -57,7 +57,28 @@ fn sql_error_from_message(message: &str) -> SqlError {
     runtime_diagnostic(message).unwrap_or_else(|| SqlError::new(error_number(message), 1, message))
 }
 
+/// Several diagnostics from one statement, reported in order. SQL Server's
+/// multi-name DROP DATABASE drops what it can and reports each failure; the
+/// last diagnostic is the statement's error.
+#[derive(Debug)]
+struct StatementErrors(Vec<SqlError>);
+impl std::fmt::Display for StatementErrors {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0.last() {
+            Some(error) => f.write_str(&error.message),
+            None => Ok(()),
+        }
+    }
+}
+impl std::error::Error for StatementErrors {}
+
 pub(crate) fn emit_error(out: &mut Vec<u8>, error: &anyhow::Error) -> i32 {
+    if let Some(StatementErrors(errors)) = error.downcast_ref::<StatementErrors>() {
+        for error in errors {
+            tds::sql_error(out, error);
+        }
+        return errors.last().map_or(0, |error| error.number);
+    }
     if let Some(error) = error.downcast_ref::<SqlError>() {
         tds::sql_error(out, error);
         error.number
@@ -328,18 +349,26 @@ impl Session {
                         "DROP DATABASE statement cannot be used inside a user transaction."
                     ));
                 }
+                // Like SQL Server, drop every database that can be dropped
+                // and report each failure; the statement fails if any does.
+                let mut errors = Vec::new();
                 for name in names {
                     let name = database_name(name)?;
-                    match self.database.catalog().remove(&self.db, &name) {
-                        Err(error)
-                            if *if_exists
-                                && error
-                                    .downcast_ref::<SqlError>()
-                                    .is_some_and(|error| error.number == 3701) => {}
-                        result => result?,
+                    if let Err(error) = self.database.catalog().remove(&self.db, &name) {
+                        let error = error
+                            .downcast_ref::<SqlError>()
+                            .cloned()
+                            .unwrap_or_else(|| sql_error_from_message(&format!("{error:#}")));
+                        if !(*if_exists && error.number == 3701) {
+                            errors.push(error);
+                        }
                     }
                 }
-                Ok(Some(Execution::statement(Vec::new(), None, 204)))
+                match errors.len() {
+                    0 => Ok(Some(Execution::statement(Vec::new(), None, 204))),
+                    1 => Err(errors.remove(0).into()),
+                    _ => Err(StatementErrors(errors).into()),
+                }
             }
             _ => Ok(None),
         }
@@ -386,17 +415,17 @@ impl Session {
         }
     }
 
-    /// Resolve the database part of `database.schema.object` relations to
-    /// its attached catalog. Only published databases resolve, so one being
-    /// created or dropped cannot be read or modified; like SQL Server, an
-    /// unknown database makes the object name invalid (208). msduck records
-    /// DDL in the current database's catalog objects, and a DuckDB
-    /// transaction writes one database, so DDL naming another database is
-    /// refused.
-    fn qualify_databases<T: VisitMut>(&self, node: &mut T, ddl: bool) -> Result<()> {
+    /// Resolve the database part of `database.schema.object` relations.
+    /// Only published databases resolve, so one being created or dropped
+    /// cannot be read or modified; like SQL Server, an unknown database makes
+    /// the object name invalid (208). A name in the current database becomes
+    /// `schema.object`, so binding, metadata and storage coercions apply as
+    /// usual. Those read the current database's catalog objects, so a
+    /// reference to another database is refused rather than bound without
+    /// its declared metadata.
+    fn qualify_databases<T: VisitMut>(&self, node: &mut T) -> Result<()> {
         struct Qualify<'a> {
             session: &'a Session,
-            ddl: bool,
         }
         impl VisitorMut for Qualify<'_> {
             type Break = anyhow::Error;
@@ -429,16 +458,14 @@ impl Session {
                 };
                 let catalog = self.session.database.catalog();
                 match catalog.resolve(&self.session.db, &database.value) {
-                    Ok(Some(alias)) if self.ddl && alias != self.session.database.alias() => {
-                        ControlFlow::Break(anyhow::anyhow!(
-                            "unsupported DDL on {written} in another database; USE {} first",
-                            database.value
-                        ))
-                    }
-                    Ok(Some(alias)) => {
-                        *database = Ident::with_quote('"', alias);
+                    Ok(Some(alias)) if alias == self.session.database.alias() => {
+                        relation.0.remove(0);
                         ControlFlow::Continue(())
                     }
+                    Ok(Some(_)) => ControlFlow::Break(anyhow::anyhow!(
+                        "unsupported reference to {written} in another database; USE {} first",
+                        database.value
+                    )),
                     Ok(None) => ControlFlow::Break(
                         SqlError::new(208, 1, format!("Invalid object name '{written}'.")).into(),
                     ),
@@ -446,7 +473,7 @@ impl Session {
                 }
             }
         }
-        match node.visit(&mut Qualify { session: self, ddl }) {
+        match node.visit(&mut Qualify { session: self }) {
             ControlFlow::Continue(()) => Ok(()),
             ControlFlow::Break(error) => Err(error),
         }
@@ -690,8 +717,7 @@ impl Session {
             crate::query_catalog::lower_recursion(&self.db, &mut statement)?;
             let json = crate::for_json::Output::take(&self.db, &mut statement)?;
             self.lower_database_functions(&mut statement)?;
-            let ddl = ddl_completion_command(&statement).is_some();
-            self.qualify_databases(&mut statement, ddl)?;
+            self.qualify_databases(&mut statement)?;
             select_assignments(&mut statement, &parameters)?;
             let into = crate::select_into::take(&mut statement)?;
             let money_columns = crate::insert::money_columns(&statement, &parameters);
@@ -1557,6 +1583,11 @@ impl Session {
         let caught = error
             .downcast_ref::<SqlError>()
             .cloned()
+            .or_else(|| {
+                error
+                    .downcast_ref::<StatementErrors>()
+                    .and_then(|errors| errors.0.last().cloned())
+            })
             .unwrap_or_else(|| sql_error_from_message(&message));
         // Same-level binding/compilation failures are not runtime catch targets.
         if binding_failure(error) {
@@ -1961,8 +1992,7 @@ impl Session {
             return Ok(execution);
         }
         self.lower_database_functions(&mut statement)?;
-        let ddl = ddl_completion_command(&statement).is_some();
-        self.qualify_databases(&mut statement, ddl)?;
+        self.qualify_databases(&mut statement)?;
         if let Statement::Print(print) = &statement {
             let unicode = print_is_unicode(&print.message, parameters);
             let value = self.evaluate_scalar(

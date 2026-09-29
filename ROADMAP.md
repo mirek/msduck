@@ -271,7 +271,7 @@ for concrete evidence and observed failures.
    schema/object resolution and persistence/restart coverage. User databases,
    USE, DB_NAME/DB_ID, sys.databases and LOGIN7 selection exist
    ([Databases](docs/databases.md)). Still open: tempdb/model/msdb, ALTER
-   DATABASE, cross-database DDL and transactions, compile-time USE and
+   DATABASE, cross-database references and transactions, compile-time USE and
    three-part name resolution, and sys.databases descriptor fidelity.
 5. Remaining RPC types and application output parameters, prepare-time result
    metadata/native plan caching, TVPs, transaction

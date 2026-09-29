@@ -135,7 +135,8 @@ Expected tokens and errors below were captured from SQL Server 2025
 - `DROP DATABASE [IF EXISTS] a, b` completes with DONE command 204. Inside a
   user transaction it fails with 574 (state 0). A database in use fails with
   3702: state 3 when the dropping connection uses it, state 4 when another
-  session does.
+  session does. Like SQL Server, a multi-name DROP is not atomic: it drops every
+  database it can and reports one error per failed name.
 - `USE name` sends ENVCHANGE type 1 (new and old names), INFO 5701 (state 1,
   class 0) `Changed database context to 'name'.`, ENVCHANGE type 7 (the
   collation) and DONE command 226. An unknown database fails with 911.
@@ -147,10 +148,15 @@ Expected tokens and errors below were captured from SQL Server 2025
   ENVCHANGE reports its stored name. An unknown database fails the login with
   4060 (state 1, class 11) followed by 18456.
 - In `database.schema.object` relation names, the database resolves through the
-  catalog, with `master` mapping to the primary catalog. An unknown or
-  unpublished database fails with 208 `Invalid object name '...'`. DML and
-  queries may name another database. DDL may not, because msduck records DDL
-  in the current database's catalog objects: `USE` the database first.
+  catalog, published databases only. An unknown one fails with 208 `Invalid
+  object name '...'`. A name in the current database is bound as
+  `schema.object`, so declared metadata and storage coercions apply. Binding
+  reads the current database's catalog objects, so a reference to another
+  database is refused explicitly: `USE` it first.
+- A `USE` inside a top-level `sp_executesql` RPC, as tedious `execSql` sends,
+  persists for the connection, as captured from SQL Server. Only nested
+  `EXEC sp_executesql` inside a batch reverts it, and msduck does not run that
+  form.
 
 The catalog uses SQL Server diagnostics for:
 
@@ -167,8 +173,8 @@ catalog's DuckDB name are rejected with an msduck error.
 
 - `tempdb`, `model` and `msdb`;
 - `ALTER DATABASE` and `CREATE DATABASE` file or non-server collation options;
-- DDL naming another database, and a user transaction that writes to more than
-  one database (DuckDB writes one attached database per transaction);
+- references to another database's objects (cross-database queries, DML and
+  DDL); DuckDB would also write only one attached database per transaction;
 - SQL Server resolves `USE` and three-part names when it compiles a batch, so an
   unknown database aborts the whole batch before any statement runs. msduck
   resolves them per statement, so earlier statements in the batch still run,

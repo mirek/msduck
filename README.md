@@ -29,8 +29,8 @@ transactions, prepared execution and credential-file rotation.
 and database-qualified names work against user databases that file-backed
 servers keep next to the primary file, and LOGIN7 can select any existing
 database. Tokens and errors follow SQL Server captures; see
-[Databases](docs/databases.md) for the limits, such as DDL on another
-database and multi-database transactions.
+[Databases](docs/databases.md) for the limits, such as references to
+another database's objects.
 
 ```sql
 CREATE TABLE dbo.items (id INT PRIMARY KEY, name NVARCHAR(100));

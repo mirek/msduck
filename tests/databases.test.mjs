@@ -107,17 +107,36 @@ test('LOGIN7 selects any existing database and rejects unknown ones', { timeout:
   assert.match(missing.error?.message ?? '', /Login failed/)
 })
 
-test('database-qualified names resolve through the catalog', { timeout: 30000 }, async t => {
+test('database-qualified names resolve within the current database', { timeout: 30000 }, async t => {
   const c = await start(t)
-  await batch(c, 'CREATE DATABASE q1; USE q1; CREATE TABLE dbo.t (x INT); USE master')
-  await batch(c, 'INSERT q1.dbo.t VALUES (6); UPDATE q1.dbo.t SET x = 7')
-  assert.deepEqual((await batch(c, 'SELECT x FROM Q1.dbo.t')).rows, [[7]])
-  // msduck records DDL in the current database, so DDL elsewhere is refused.
-  assert.match((await failure(batch(c, 'CREATE TABLE q1.dbo.u (x INT)')))[3], /unsupported DDL on q1\.dbo\.u/)
-  assert.deepEqual((await batch(c, 'SELECT name FROM master.sys.databases WHERE database_id = 1')).rows, [['master']])
+  await batch(c, 'CREATE DATABASE q1; USE q1; CREATE TABLE dbo.t (x INT, v VARCHAR(3))')
+  await batch(c, "INSERT Q1.dbo.t VALUES (7, 'abc')")
+  assert.deepEqual((await batch(c, 'SELECT x, v FROM q1.dbo.t')).rows, [[7, 'abc']])
+  // Storage coercions apply as for two-part names.
+  assert.equal((await failure(batch(c, "INSERT q1.dbo.t VALUES (8, 'abcd')")))[0], 2628)
   assert.deepEqual((await batch(c, 'SELECT COUNT(*) FROM q1.sys.databases')).rows, [[2]])
+  await batch(c, 'USE master')
+  assert.deepEqual((await batch(c, 'SELECT name FROM master.sys.databases WHERE database_id = 1')).rows, [['master']])
+  // Binding reads the current database's catalog, so other databases are refused.
+  assert.match((await failure(batch(c, 'SELECT x FROM q1.dbo.t')))[3], /unsupported reference to q1\.dbo\.t in another database/)
   assert.deepEqual(await failure(batch(c, 'SELECT x FROM nope.dbo.t')), [208, 1, 16, "Invalid object name 'nope.dbo.t'."])
   assert.deepEqual(await failure(batch(c, 'INSERT nope.dbo.t VALUES (1)')), [208, 1, 16, "Invalid object name 'nope.dbo.t'."])
-  // The table lives in q1, not in master.
-  assert.equal((await failure(batch(c, 'SELECT x FROM dbo.t')))[0] > 0, true)
+})
+
+test('multi-name DROP drops what it can and reports each failure', { timeout: 30000 }, async t => {
+  const c = await start(t)
+  const errors = []
+  c.on('errorMessage', error => errors.push([error.number, error.state]))
+  const names = async () => (await batch(c, "SELECT name FROM sys.databases WHERE name LIKE 'd_' ORDER BY name")).rows.flat()
+  await batch(c, 'CREATE DATABASE d1; CREATE DATABASE d2; CREATE DATABASE d3; CREATE DATABASE d4')
+  // Captured from SQL Server: earlier and later names are still dropped.
+  assert.equal((await failure(batch(c, 'DROP DATABASE d1, missing_db')))[0], 3701)
+  assert.deepEqual(await names(), ['d2', 'd3', 'd4'])
+  const { connection: other } = await login(c.config, 'd3')
+  t.after(() => other.close())
+  assert.deepEqual((await failure(batch(c, 'DROP DATABASE d2, d3, d4'))).slice(0, 2), [3702, 4])
+  assert.deepEqual(await names(), ['d3'])
+  errors.length = 0
+  await failure(batch(c, 'DROP DATABASE missing_db, d3'))
+  assert.deepEqual(errors, [[3701, 1], [3702, 4]])
 })
