@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
@@ -11,6 +12,8 @@ import { Connection } from 'tedious'
 import { capture, canonical, differences } from './lib/compatibility.mjs'
 
 const fixturePath = fileURLToPath(new URL('../reference/statistical-aggregates.json', import.meta.url))
+const root = fileURLToPath(new URL('../', import.meta.url))
+const executablePath = resolve(root, 'target/debug/msduck')
 const fixtureSha256 = 'ddd57b260ee6db3ccb82c128bab345f5410818491d8585afd8355d2fbe150fa1'
 const outputPath = fileURLToPath(new URL('../artifacts/compatibility/statistical-precision/comparison.json', import.meta.url))
 const args = process.argv.slice(2)
@@ -32,7 +35,7 @@ function annotateDifference(difference, reference) {
   const column = match && reference.sets[Number(match[1])]?.columns[Number(match[3])]
   const local = difference.local
   const expected = difference.reference
-  if (column?.type === 'FloatN' && typeof local === 'number' && typeof expected === 'number') {
+  if (column?.type === 'FloatN' && column.length === 8 && typeof local === 'number' && typeof expected === 'number') {
     return { ...difference, kind: 'float-bits', localBits: floatBits(local), referenceBits: floatBits(expected) }
   }
   return { ...difference, kind: 'other' }
@@ -84,7 +87,7 @@ async function captureTokens(connection, sql) {
 }
 
 async function startServer() {
-  const server = spawn(resolve('target/debug/msduck'), ['--listen', '127.0.0.1:0'], { stdio: ['ignore', 'ignore', 'pipe'] })
+  const server = spawn(executablePath, ['--listen', '127.0.0.1:0'], { cwd: root, stdio: ['ignore', 'ignore', 'pipe'] })
   let logs = ''
   try {
     const port = await new Promise((accept, reject) => {
@@ -110,6 +113,8 @@ const fixture = JSON.parse(fixtureBytes)
 assert.equal(fixture.runs.length, 2, 'reference fixture must have two independent runs')
 assert.deepEqual(fixture.runs[0], fixture.runs[1], 'reference runs differ')
 const plan = fixture.runs[0]
+const executableHash = createHash('sha256')
+for await (const bytes of createReadStream(executablePath)) executableHash.update(bytes)
 const { server, port } = await startServer()
 let connection
 try {
@@ -136,6 +141,7 @@ try {
   }
   const output = {
     sourceRevision, referenceImage: fixture.image, referenceSha256: fixtureSha256,
+    executableSha256: executableHash.digest('hex'),
     excluded: [{ name: 'server version', reason: 'ProductVersion is product-specific' }],
     summary, cases,
   }
