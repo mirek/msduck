@@ -6741,6 +6741,32 @@
       "dependencies": [],
       "issue": 634,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYE0p"
+    },
+    {
+      "id": "session-property-context-v1",
+      "title": "Support SESSIONPROPERTY and sp_set_session_context for the owner's Sql wrapper",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-09-29): SESSIONPROPERTY, sys.sp_set_session_context and parameterized sp_executesql statements issued by the owner's Sql wrapper must behave as in SQL Server",
+      "scope": [
+        "scripts/capture-session-property-context.mjs",
+        "reference/session-property-context.json",
+        "docs/session-property-context.md",
+        "crates/msduck-sql/src/session_function.rs",
+        "crates/msduck-sql/src/session_function/session_context.rs",
+        "crates/msduck-sql/tests/session_property_context.rs",
+        "src/engine.rs",
+        "src/engine/session_context.rs",
+        "tests/session_property_context.rs",
+        "tests/session_property_context.test.mjs"
+      ],
+      "acceptance": [
+        "Capture with the pinned SQL Server 2025 reference container, in two fresh databases, the rows, column descriptors, errors and completion tokens of the owner's four statements as tedious sends them (execSql and batches), the login SET state, SESSIONPROPERTY after SET <option> OFF/ON, and sp_set_session_context with NULL and non-null values, SESSION_CONTEXT read back, read_only and RESETCONNECTION; retain the raw fixture in reference/session-property-context.json.",
+        "Implement SESSIONPROPERTY over the session's real SET state and per-session sp_set_session_context/SESSION_CONTEXT storage cleared by RESETCONNECTION, with typed sql_variant metadata, bound values and explicit errors for unsupported cases, so the four owner statements match SQL Server rows, descriptors and completion tokens.",
+        "Add Rust and tedious tests replaying the owner's statements and fixture cases; run cargo fmt, strict workspace Clippy, workspace tests, the tedious client tests and the local audit on the exact revision, and document remaining gaps in docs/session-property-context.md."
+      ],
+      "dependencies": [],
+      "issue": 635,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYF-U"
     }
   ]
 }
