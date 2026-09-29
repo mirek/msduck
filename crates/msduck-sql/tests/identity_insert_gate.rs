@@ -12,9 +12,41 @@ fn fixture(name: &str) -> Value {
         "rpc" => include_str!("../../../reference/identity-insert-rpc.json"),
         "multirow" => include_str!("../../../reference/identity-insert-multirow.json"),
         "shapes" => include_str!("../../../reference/identity-insert-shapes.json"),
+        "conversion" => include_str!("../../../reference/identity-insert-conversion.json"),
         _ => panic!("unknown fixture"),
     })
     .unwrap()
+}
+
+#[test]
+fn captured_null_identity_fails_before_value_execution() {
+    for run in fixture("conversion")["runs"].as_array().unwrap() {
+        assert_diagnostic(case(run, "NULL identity"), "conversion", true);
+    }
+    assert!(matches!(
+        decision(
+            "INSERT dbo.conversion(id,v) VALUES(NULL,4)",
+            "conversion",
+            false
+        ),
+        Err(GateError::Unsupported(_))
+    ));
+    assert!(matches!(
+        decision(
+            "INSERT dbo.conversion(id,v) VALUES(20,2),(NULL,4)",
+            "conversion",
+            true
+        ),
+        Err(GateError::Unsupported(_))
+    ));
+    assert!(matches!(
+        decision(
+            "INSERT dbo.conversion(id,v) VALUES(NULL,CONVERT(INT,'bad'))",
+            "conversion",
+            true
+        ),
+        Err(GateError::Unsupported(_))
+    ));
 }
 
 fn insert(sql: &str) -> Statement {
