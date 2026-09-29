@@ -73,11 +73,6 @@ pub fn preflight<K: Eq>(
         _ => return Err(GateError::Unsupported("unsupported INSERT source shape")),
     }
     let is_on = active == Some(target.key);
-    if insert.columns.is_empty() && !is_on {
-        // The root still validates the positional source count and rewrites an
-        // omitted identity to its allocator default.
-        return Ok(Permit::Generated);
-    }
     if let Some(SetExpr::Values(values)) = source {
         let width = if insert.columns.is_empty() {
             target.column_count
@@ -92,6 +87,9 @@ pub fn preflight<K: Eq>(
     }
     if insert.columns.is_empty() {
         if source.is_none() {
+            if !is_on {
+                return Ok(Permit::Generated);
+            }
             return Err(GateError::diagnostic(
                 545,
                 195,
@@ -101,16 +99,13 @@ pub fn preflight<K: Eq>(
                 ),
             ));
         }
-        let Some(SetExpr::Values(values)) = source else {
+        let Some(SetExpr::Values(_)) = source else {
             return Err(GateError::Unsupported(
-                "unlisted INSERT SELECT while ON is unprobed",
+                "unlisted INSERT SELECT precedence is unprobed",
             ));
         };
-        if values.rows.iter().any(|row| is_default(&row[identity])) {
-            return Err(GateError::Unsupported(
-                "positional DEFAULT while ON is unprobed",
-            ));
-        }
+        // SQL Server reports 8101 for full-width positional VALUES, even
+        // when the identity slot is DEFAULT or IDENTITY_INSERT is OFF.
         return Err(GateError::diagnostic(
             8101,
             253,

@@ -11,6 +11,7 @@ fn fixture(name: &str) -> Value {
         "errors" => include_str!("../../../reference/identity-insert-errors.json"),
         "rpc" => include_str!("../../../reference/identity-insert-rpc.json"),
         "multirow" => include_str!("../../../reference/identity-insert-multirow.json"),
+        "shapes" => include_str!("../../../reference/identity-insert-shapes.json"),
         _ => panic!("unknown fixture"),
     })
     .unwrap()
@@ -231,6 +232,43 @@ fn rpc_capture_uses_caller_setting_not_nested_set_text() {
 }
 
 #[test]
+fn insert_shape_capture_replays_positional_and_source_precedence() {
+    for run in fixture("shapes")["runs"].as_array().unwrap() {
+        for (name, on) in [
+            ("OFF positional VALUES", false),
+            ("OFF positional DEFAULT", false),
+            ("ON positional VALUES", true),
+            ("ON positional DEFAULT", true),
+            ("OFF explicit conversion", false),
+            ("ON omitted INSERT SELECT", true),
+            ("ON omitted conversion", true),
+        ] {
+            assert_diagnostic(case(run, name), "alpha", on);
+        }
+        for (name, on, expected) in [
+            (
+                "ON explicit conversion",
+                true,
+                Permit::Explicit { source_column: 0 },
+            ),
+            (
+                "ON explicit INSERT SELECT",
+                true,
+                Permit::Explicit { source_column: 0 },
+            ),
+            ("OFF omitted INSERT SELECT", false, Permit::Generated),
+        ] {
+            let record = case(run, name);
+            assert_eq!(
+                decision(record["sql"].as_str().unwrap(), "alpha", on),
+                Ok(expected),
+                "{name}"
+            );
+        }
+    }
+}
+
+#[test]
 fn catalog_identity_aliases_sessions_and_preparation_are_explicit() {
     let statement = insert("INSERT [dbo].[alpha] ([v],[id]) VALUES(4,20)");
     let key = (1u32, 17u32);
@@ -292,7 +330,6 @@ fn unknown_shapes_fail_closed_before_diagnostic_precedence() {
         "INSERT dbo.alpha(id,id) VALUES(2,3)",
         "INSERT dbo.alpha(v,v) VALUES(2,3)",
         "INSERT dbo.alpha(id,v) VALUES(DEFAULT,3)",
-        "INSERT dbo.alpha VALUES(DEFAULT,3)",
         "INSERT dbo.alpha SELECT id,v FROM dbo.source_rows",
     ] {
         assert!(
