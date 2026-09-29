@@ -7069,7 +7069,7 @@
     {
       "id": "tvp-materialize-v1",
       "title": "Materialize bound TVP cells into isolated connection-local relations",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server-compatible Rust/DuckDB goal. First-party PR660 binder is merged; this root effect adapter is a prerequisite for procedure execution while engine/RPC reservations remain untouched.",
       "scope": [
         "src/tvp_binding.rs",
