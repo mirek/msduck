@@ -53,7 +53,17 @@ fn master_is_listed_and_user_databases_are_attached_catalogs() {
     assert_eq!(catalog.current(&b).unwrap(), "Sales");
     assert_eq!(scalar::<String>(&b, "SELECT current_schema()"), "dbo");
     // Engine DDL in the selected database updates that database's catalog.
+    // A session starts in master and selects its database explicitly.
     let mut session = msduck::engine::Session::new(b).unwrap();
+    assert_eq!(session.database().name, "master");
+    session.use_database("SALES").unwrap();
+    assert_eq!(
+        (
+            session.database().name.as_str(),
+            session.database().database_id
+        ),
+        ("Sales", 5)
+    );
     session.batch(
         "CREATE TABLE items(id INT PRIMARY KEY IDENTITY(1,1), name NVARCHAR(20)); \
          INSERT INTO items(name) VALUES (N'one')",

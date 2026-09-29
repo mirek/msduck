@@ -17,6 +17,67 @@ pub fn is_xact_state(function: &Function) -> bool {
 pub fn is_original_login(function: &Function) -> bool {
     matches!(function.name.0.as_slice(), [ObjectNamePart::Identifier(id)] if id.value.eq_ignore_ascii_case("ORIGINAL_LOGIN"))
 }
+/// DB_NAME and DB_ID, which follow the session's current database.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DatabaseFunction {
+    Name,
+    Id,
+}
+pub fn database_function(function: &Function) -> Option<DatabaseFunction> {
+    let [ObjectNamePart::Identifier(id)] = function.name.0.as_slice() else {
+        return None;
+    };
+    if id.value.eq_ignore_ascii_case("DB_NAME") {
+        Some(DatabaseFunction::Name)
+    } else if id.value.eq_ignore_ascii_case("DB_ID") {
+        Some(DatabaseFunction::Id)
+    } else {
+        None
+    }
+}
+/// Captured from SQL Server: DB_NAME is a nullable nvarchar(128) and DB_ID a
+/// nullable smallint on the wire (documented as int), with or without an
+/// argument.
+fn database_type(function: DatabaseFunction) -> DataType {
+    match function {
+        DatabaseFunction::Name => DataType::Nvarchar(Some(CharacterLength::IntegerLength {
+            length: 128,
+            unit: None,
+        })),
+        DatabaseFunction::Id => DataType::SmallInt(None),
+    }
+}
+/// Lower DB_NAME or DB_ID. Without an argument the result is the current
+/// database, supplied by the shell. With one, the catalog's per-database
+/// helper macros look it up; DB_NAME takes an int database ID.
+pub fn database(
+    function: DatabaseFunction,
+    argument: Option<Expr>,
+    current_name: &str,
+    current_id: i32,
+) -> Expr {
+    let cast = |expr, data_type| Expr::Cast {
+        kind: CastKind::Cast,
+        expr: Box::new(expr),
+        data_type,
+        format: None,
+    };
+    let value = match (function, argument) {
+        (DatabaseFunction::Name, None) => {
+            Expr::Value(Value::NationalStringLiteral(current_name.into()).into())
+        }
+        (DatabaseFunction::Id, None) => {
+            Expr::Value(Value::Number(current_id.to_string(), false).into())
+        }
+        (DatabaseFunction::Name, Some(argument)) => {
+            crate::expr::unary_function("__msduck_db_name", cast(argument, DataType::Int(None)))
+        }
+        (DatabaseFunction::Id, Some(argument)) => {
+            crate::expr::unary_function("__msduck_db_id", argument)
+        }
+    };
+    cast(value, database_type(function))
+}
 fn login_type() -> DataType {
     DataType::Nvarchar(Some(CharacterLength::IntegerLength {
         length: 4000,
@@ -48,6 +109,8 @@ pub fn error_type(function: &Function) -> Option<DataType> {
 pub fn result_type(function: &Function) -> Option<DataType> {
     if is_xact_state(function) {
         Some(DataType::SmallInt(None))
+    } else if let Some(database) = database_function(function) {
+        Some(database_type(database))
     } else if is_original_login(function) {
         Some(login_type())
     } else {
@@ -118,7 +181,15 @@ fn check(function: &Function) -> Result<(), SqlError> {
     if wildcard {
         return Err(SqlError::syntax(102, 1, "Incorrect syntax near '*'."));
     }
-    if !args.args.is_empty() {
+    if database_function(function).is_some() {
+        if args.args.len() > 1 {
+            return Err(SqlError::syntax(
+                189,
+                1,
+                format!("The {canonical} function requires 0 to 1 arguments."),
+            ));
+        }
+    } else if !args.args.is_empty() {
         return Err(SqlError::syntax(
             174,
             1,
@@ -218,6 +289,61 @@ mod tests {
         assert_eq!(data_type.to_string(), "NVARCHAR(4000)");
         assert!(
             matches!(*expr, Expr::Value(ValueWithSpan { value: Value::NationalStringLiteral(ref value), .. }) if value == name)
+        );
+    }
+    #[test]
+    fn database_functions_use_captured_types_and_argument_counts() {
+        for (call, expected) in [
+            ("DB_NAME()", "NVARCHAR(128)"),
+            ("DB_NAME(1)", "NVARCHAR(128)"),
+            ("DB_ID()", "SMALLINT"),
+            ("DB_ID(N'x')", "SMALLINT"),
+        ] {
+            let statements = crate::batch::parse(&format!("SELECT {call}")).unwrap();
+            crate::preflight::variables(&statements, &HashMap::new()).unwrap();
+            let Statement::Query(query) = &statements[0] else {
+                unreachable!()
+            };
+            let SetExpr::Select(select) = query.body.as_ref() else {
+                unreachable!()
+            };
+            let SelectItem::UnnamedExpr(Expr::Function(function)) = &select.projection[0] else {
+                unreachable!()
+            };
+            assert_eq!(
+                result_type(function).unwrap().to_string(),
+                expected,
+                "{call}"
+            );
+        }
+        for (call, name) in [("DB_NAME(1, 2)", "db_name"), ("DB_ID(1, 2)", "db_id")] {
+            let statements =
+                crate::batch::parse(&format!("INSERT INTO t VALUES(1); IF 1=0 SELECT {call}"))
+                    .unwrap();
+            let error = crate::preflight::variables(&statements, &HashMap::new()).unwrap_err();
+            let diagnostic = error.downcast_ref::<SqlError>().unwrap();
+            assert_eq!(
+                (
+                    diagnostic.number,
+                    diagnostic.state,
+                    diagnostic.severity,
+                    diagnostic.message.as_str()
+                ),
+                (
+                    189,
+                    1,
+                    15,
+                    format!("The {name} function requires 0 to 1 arguments.").as_str()
+                )
+            );
+        }
+        assert_eq!(
+            database(DatabaseFunction::Name, None, "O'Brien", 5).to_string(),
+            "CAST(N'O''Brien' AS NVARCHAR(128))"
+        );
+        assert_eq!(
+            database(DatabaseFunction::Id, None, "x", 5).to_string(),
+            "CAST(5 AS SMALLINT)"
         );
     }
     #[test]

@@ -40,12 +40,49 @@ pub struct Catalog {
     /// Serializes CREATE and DROP: each spans a registry change, file work
     /// and an attach or detach that the registry key alone cannot order.
     changes: std::sync::Mutex<()>,
+    /// How many sessions currently use each attached catalog. DROP refuses
+    /// a database that any session uses.
+    users: std::sync::Mutex<std::collections::HashMap<String, usize>>,
 }
 
 impl Drop for Catalog {
     fn drop(&mut self) {
         if self.temporary {
             let _ = std::fs::remove_dir_all(&self.directory);
+        }
+    }
+}
+
+/// A session's current database. While it exists, DROP refuses the database.
+#[derive(Debug)]
+pub struct Use {
+    /// The SQL Server name.
+    pub name: String,
+    pub database_id: i32,
+    alias: String,
+    catalog: std::sync::Arc<Catalog>,
+}
+
+impl Use {
+    /// The catalog the database belongs to.
+    pub fn catalog(&self) -> &std::sync::Arc<Catalog> {
+        &self.catalog
+    }
+
+    /// The DuckDB catalog that stores the database.
+    pub fn alias(&self) -> &str {
+        &self.alias
+    }
+}
+
+impl Drop for Use {
+    fn drop(&mut self) {
+        let mut users = self.catalog.user_counts();
+        if let Some(count) = users.get_mut(&self.alias) {
+            *count -= 1;
+            if *count == 0 {
+                users.remove(&self.alias);
+            }
         }
     }
 }
@@ -127,6 +164,7 @@ impl Catalog {
                 prefix: "msduck".into(),
                 temporary: true,
                 changes: std::sync::Mutex::new(()),
+                users: Default::default(),
             }
         } else {
             // Resolve the directory once, so later file work depends neither
@@ -149,6 +187,7 @@ impl Catalog {
                     .to_owned(),
                 temporary: false,
                 changes: std::sync::Mutex::new(()),
+                users: Default::default(),
             }
         };
         owner.execute_batch(&format!(
@@ -256,6 +295,46 @@ impl Catalog {
             .ok_or_else(|| missing(name))?;
         db.execute_batch(&format!("USE {}; SET schema = 'dbo'", quote(&alias)))?;
         Ok(self.display(&alias))
+    }
+
+    /// Make `name` the connection's current database for a session. The
+    /// returned guard keeps the database in use until it is dropped.
+    pub fn enter(self: &std::sync::Arc<Self>, db: &Connection, name: &str) -> Result<Use> {
+        let _change = self.lock();
+        let alias = self
+            .resolve_published(db, name)?
+            .ok_or_else(|| missing(name))?;
+        let database_id = if alias == self.primary {
+            MASTER_ID
+        } else {
+            db.query_row(
+                &format!("SELECT database_id FROM {} WHERE name=?", self.registry()),
+                [&alias],
+                |row| row.get(0),
+            )?
+        };
+        db.execute_batch(&format!("USE {}; SET schema = 'dbo'", quote(&alias)))?;
+        *self.user_counts().entry(alias.clone()).or_default() += 1;
+        Ok(Use {
+            name: self.display(&alias),
+            database_id,
+            alias,
+            catalog: self.clone(),
+        })
+    }
+
+    fn user_counts(&self) -> std::sync::MutexGuard<'_, std::collections::HashMap<String, usize>> {
+        self.users
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn users(&self, alias: &str) -> usize {
+        self.user_counts().get(alias).copied().unwrap_or(0)
+    }
+
+    fn alias(&self, db: &Connection) -> Result<String> {
+        Ok(db.query_row("SELECT current_database()", [], |row| row.get(0))?)
     }
 
     /// The SQL Server name of the connection's current database.
@@ -383,7 +462,7 @@ impl Catalog {
         if name_key == MASTER {
             bail!(SqlError::new(
                 3708,
-                1,
+                4,
                 "Cannot drop the database 'master' because it is a system database."
             ));
         }
@@ -399,6 +478,20 @@ impl Catalog {
             error.severity = 11;
             bail!(error)
         };
+        // SQL Server reports state 3 when the dropping connection itself uses
+        // the database and state 4 when only other sessions do.
+        let own = attached && self.alias(db)? == row.name;
+        let users = self.users(&row.name);
+        if own || users > 0 {
+            bail!(SqlError::new(
+                3702,
+                if own { 3 } else { 4 },
+                format!(
+                    "Cannot drop database \"{}\" because it is currently in use.",
+                    row.name
+                )
+            ));
+        }
         // Validate the stored file name before detaching anything.
         let path = self.path(&row)?;
         // A failed DROP leaves the database available while its file is
