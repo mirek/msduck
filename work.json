@@ -5979,7 +5979,7 @@
     {
       "id": "identity-insert-name-diagnostics-v1",
       "title": "Replay captured IDENTITY_INSERT target-name errors in catalog resolver",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek continuing full SQL Server compatibility goal; first-party reference/identity-insert-name-errors.json captured by owner PR #567.",
       "scope": [
         "src/identity_insert_catalog.rs",
