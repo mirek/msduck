@@ -263,6 +263,10 @@ pub fn login_response(login: &Login) -> Vec<u8> {
     out
 }
 pub fn error(out: &mut Vec<u8>, number: i32, message: &str) {
+    if let Some(state) = distribution_error_state(number, message) {
+        diagnostic(out, 0xaa, 15, state, number, message);
+        return;
+    }
     let severity = if matches!(
         number,
         102 | 310
@@ -291,6 +295,30 @@ pub fn error(out: &mut Vec<u8>, number: i32, message: &str) {
     };
     diagnostic(out, 0xaa, severity, 1, number, message);
 }
+
+// The legacy error adapter receives only a number and message. Limit these
+// captured SQL Server states to the exact two distribution functions so other
+// ranking diagnostics keep their existing transport policy.
+fn distribution_error_state(number: i32, message: &str) -> Option<u8> {
+    for name in ["PERCENT_RANK", "CUME_DIST"] {
+        let suffix = match number {
+            4114 => "takes exactly 0 argument(s).",
+            10752 => "may not have a window frame.",
+            10753 => "must have an OVER clause.",
+            4112 => "must have an OVER clause with ORDER BY.",
+            _ => return None,
+        };
+        if message == format!("The function '{name}' {suffix}") {
+            return Some(if matches!(number, 10752 | 10753) {
+                3
+            } else {
+                1
+            });
+        }
+    }
+    None
+}
+
 pub fn error_state(out: &mut Vec<u8>, number: i32, state: u8, message: &str) {
     diagnostic(out, 0xaa, 16, state, number, message);
 }
