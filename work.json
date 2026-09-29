@@ -5894,7 +5894,7 @@
     {
       "id": "identity-insert-shapes-reference-v1",
       "title": "Capture IDENTITY_INSERT INSERT-shape precedence and allocator behavior",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing full SQL Server compatibility goal and first-party retained IDENTITY_INSERT fixtures; no external submission.",
       "scope": [
         "scripts/capture-identity-insert-shapes.mjs",
