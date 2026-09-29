@@ -6574,6 +6574,22 @@
       "dependencies": [],
       "issue": 620,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PXZfL"
+    },
+    {
+      "id": "focused-audit-test-integration-v1",
+      "title": "Include focused compatibility CLI tests in standard client verification",
+      "state": "ready",
+      "authorization": "Mirek's continuing compatibility goal and verified owner-initiated Codex review on PR #621; owner issue #622.",
+      "scope": [
+        "tests/reference-compare.test.mjs"
+      ],
+      "acceptance": [
+        "Execute tests/compatibility-selection.test.mjs through the existing reference-comparison test entry point so npm test and the full CI client shard list include it.",
+        "Preserve failure propagation and avoid duplicate runs under client sharding; verify the entry-point test and focused CLI suite."
+      ],
+      "dependencies": [],
+      "issue": 622,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PXdDc"
     }
   ]
 }
