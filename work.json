@@ -5890,6 +5890,27 @@
       ],
       "issue": 558,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVLQf"
+    },
+    {
+      "id": "identity-insert-shapes-reference-v1",
+      "title": "Capture IDENTITY_INSERT INSERT-shape precedence and allocator behavior",
+      "state": "ready",
+      "authorization": "Mirek's continuing full SQL Server compatibility goal and first-party retained IDENTITY_INSERT fixtures; no external submission.",
+      "scope": [
+        "scripts/capture-identity-insert-shapes.mjs",
+        "reference/identity-insert-shapes.json",
+        "docs/identity-insert-shapes-reference.md"
+      ],
+      "acceptance": [
+        "Capture pinned SQL Server 2025 behavior in two fresh databases plus independent-container replay for positional VALUES/DEFAULT without a column list, omitted identity in INSERT SELECT, duplicate/invalid target columns, and source conversion competing with the identity permission gate while ON and OFF.",
+        "Retain exact rows, typed descriptors, error number/state/class/message, ordered TDS event kinds and raw DONE status/command words; inspect allocator state after failures and preserve diagnostic precedence without normalization.",
+        "Validate fixture integrity and stable behavior, refuse fixture output aliases and unpinned images, and document proven observations versus unprobed/runtime unsupported cases. Change no claimed Rust, SQL, native or existing fixture paths."
+      ],
+      "dependencies": [
+        "identity-insert-gate-v1"
+      ],
+      "issue": 560,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVO2W"
     }
   ]
 }
