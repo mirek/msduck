@@ -39,13 +39,12 @@ impl VScalar for Buckets {
                 | LogicalTypeId::Bigint
                 | LogicalTypeId::SqlNull
         ) {
-            return Err(format!("{TYPE}{kind:?}").into());
+            return Err(POSITIVE.into());
         }
         let mut result = output.flat_vector();
         for index in 0..len {
             if source.row_is_null(index as u64) {
-                result.set_null(index);
-                continue;
+                return Err(POSITIVE.into());
             }
             // ANY retains the actual input type; inspect it before reading the
             // matching physical vector. The result signature is always BIGINT.
@@ -79,6 +78,10 @@ impl VScalar for Buckets {
             LogicalTypeId::Bigint.into(),
         )]
     }
+
+    fn special_null_handling() -> bool {
+        true
+    }
 }
 
 #[cfg(test)]
@@ -89,9 +92,14 @@ mod tests {
         crate::scalar::register(&db).unwrap();
         for kind in ["UTINYINT", "SMALLINT", "INTEGER", "BIGINT"] {
             let sql = format!(
-                "SELECT COUNT(*) FROM (SELECT CAST(CASE WHEN i%17=0 THEN NULL ELSE i%200+1 END AS {kind}) n FROM range(6000) r(i)) s WHERE __msduck_ntile_count(n) IS DISTINCT FROM CAST(n AS BIGINT)"
+                "SELECT COUNT(*) FROM (SELECT CAST(i%200+1 AS {kind}) n FROM range(6000) r(i)) s WHERE __msduck_ntile_count(n) IS DISTINCT FROM CAST(n AS BIGINT)"
             );
             assert_eq!(db.query_row(&sql, [], |r| r.get::<_, i64>(0)).unwrap(), 0);
+            let sql = format!(
+                "SELECT SUM(__msduck_ntile_count(CAST(CASE WHEN i=5000 THEN NULL ELSE 2 END AS {kind}))) FROM range(6000) r(i)"
+            );
+            let error = db.query_row(&sql, [], |r| r.get::<_, i64>(0)).unwrap_err();
+            assert!(error.to_string().contains(super::POSITIVE));
         }
         for value in ["0", "-1"] {
             assert!(
@@ -103,14 +111,30 @@ mod tests {
                 .contains(super::POSITIVE)
             );
         }
-        for value in ["1.5", "'2'", "true"] {
+        for value in ["NULL", "CAST(NULL AS INTEGER)", "CAST(NULL AS BIGINT)"] {
             assert!(
                 db.query_row(&format!("SELECT __msduck_ntile_count({value})"), [], |r| {
                     r.get::<_, i64>(0)
                 })
                 .unwrap_err()
                 .to_string()
-                .contains(super::TYPE)
+                .contains(super::POSITIVE)
+            );
+        }
+        for value in [
+            "1.5",
+            "'2'",
+            "true",
+            "CAST(2 AS DECIMAL(10,2))",
+            "DATE '2024-01-02'",
+        ] {
+            assert!(
+                db.query_row(&format!("SELECT __msduck_ntile_count({value})"), [], |r| {
+                    r.get::<_, i64>(0)
+                })
+                .unwrap_err()
+                .to_string()
+                .contains(super::POSITIVE)
             );
         }
     }

@@ -3061,7 +3061,7 @@ test('NTILE validates bucket counts and preserves BIGINT results', { timeout: 20
   assert.deepEqual(await prepared.run({ b: '9223372036854775807' }), [['1'],['2'],['3'],['4'],['5'],['6'],['7']])
   await prepared.release()
   for (const value of ['0','-1']) await assert.rejects(query(c, `SELECT NTILE(${value}) OVER (ORDER BY n) FROM ${source}`), error => error.number === 4116)
-  for (const value of ['2.5',"'2'",'CAST(1 AS BIT)']) await assert.rejects(query(c, `SELECT NTILE(${value}) OVER (ORDER BY n) FROM ${source}`), error => error.number === 4110)
+  for (const value of ['2.5',"'2'",'CAST(1 AS BIT)']) await assert.rejects(query(c, `SELECT NTILE(${value}) OVER (ORDER BY n) FROM ${source}`), error => error.number === 4116)
   for (const [sql,number] of [
     ['SELECT NTILE() OVER (ORDER BY 1)',174],['SELECT NTILE(2)',10753],
     ['SELECT NTILE(2) OVER ()',4112],['SELECT NTILE(2) OVER (ORDER BY 1 ROWS UNBOUNDED PRECEDING)',4106]
@@ -3071,6 +3071,56 @@ test('NTILE validates bucket counts and preserves BIGINT results', { timeout: 20
   const empty = await query(c, `SELECT NTILE(2) OVER (ORDER BY n) FROM ${source} WHERE 1=0`)
   assert.deepEqual(empty.rows, [])
   assert.equal(empty.columns[0][0].dataLength, 8)
+})
+
+test('NTILE NULL buckets follow the retained SQL Server binding and RPC outcomes', { timeout: 30000 }, async t => {
+  const fixture = JSON.parse(readFileSync(new URL('../reference/ntile-null.json', import.meta.url), 'utf8'))
+  assert.deepEqual(fixture.runs[0], fixture.runs[1])
+  const cases = new Map(fixture.runs[0].map(item => [item.name, item]))
+  const c = await start(t)
+  await query(c, 'CREATE TABLE dbo.bucket(n INT NOT NULL,b INT NULL)')
+  await query(c, 'INSERT dbo.bucket(n,b) VALUES(1,NULL),(2,NULL),(3,NULL)')
+  const positive = "The function 'ntile' takes only a positive int or bigint expression as its input."
+  const localRuntime = { diagnostic: [[4116, 1, 16, `Invalid Input Error: ${positive}`]],
+    rows: [[]], descriptors: [[['IntN', 8, 1]]] }
+  const localCompile = { ...localRuntime }
+  const knownDifferences = new Map([
+    ...['literal NULL', 'typed INT NULL', 'typed BIGINT NULL', 'zero count', 'negative count']
+      .map(name => [name, localCompile]),
+    ...['scalar subquery NULL', 'RPC NULL', 'RPC zero', 'RPC NULL again']
+      .map(name => [name, localRuntime]),
+    ['empty typed NULL', { diagnostic: [], rows: [[]], descriptors: [[['IntN', 8, 1]]] }],
+    ['source column NULL', { diagnostic: [[4195, 1, 16,
+      "The reference to column 'b' is not allowed in an argument to the NTILE function. Only references to columns at an outer scope or standalone expressions and subqueries are allowed here."]],
+      rows: [], descriptors: [] }],
+  ])
+  for (const name of ['literal NULL', 'typed INT NULL', 'typed BIGINT NULL', 'scalar subquery NULL',
+    'source column NULL', 'zero count', 'negative count', 'valid count', 'empty typed NULL',
+    'RPC NULL', 'RPC valid', 'RPC zero', 'RPC NULL again']) {
+    const item = cases.get(name)
+    const transport = item.mode === 'rpc' ? {
+      on: (...args) => c.on(...args),
+      off: (...args) => c.off(...args),
+      execSqlBatch(request) {
+        request.addParameter('b', TYPES.Int, item.parameter)
+        c.execSql(request)
+      },
+    } : c
+    const actual = canonical(await capture(transport, item.sql))
+    const expected = item.result
+    const diagnostic = result => result.errors.map(({ number, state, class: severity, message }) =>
+      [number, state, severity, message])
+    const observed = {
+      diagnostic: diagnostic(actual), rows: actual.sets.map(set => set.rows),
+      descriptors: actual.sets.map(set => set.columns.map(({ type, length, flags }) => [type, length, flags])),
+    }
+    const retained = {
+      diagnostic: diagnostic(expected), rows: expected.sets.map(set => set.rows),
+      descriptors: expected.sets.map(set => set.columns.map(({ type, length, flags }) => [type, length, flags])),
+    }
+    assert.deepEqual(observed, knownDifferences.get(name) ?? retained, name)
+  }
+  assert.deepEqual((await query(c, 'SELECT 1 AS reusable')).rows, [[1]])
 })
 
 test('PERCENT_RANK CUME_DIST preserve floating results and validate windows', { timeout: 20000 }, async t => {
