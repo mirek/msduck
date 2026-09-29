@@ -104,15 +104,14 @@ fn published_columns_match_reference_for_star_projection_aliases_and_empty_resul
         "SELECT * FROM sys.databases WHERE database_id=1",
         &expected,
     );
-    let physical_catalog: String = session
-        .db
-        .query_row("SELECT current_database()", [], |row| row.get(0))
-        .unwrap();
-    let qualified = format!(
-        "SELECT * FROM \"{}\".sys.databases WHERE database_id=-1",
-        physical_catalog.replace('"', "\"\"")
+    // Database-qualified names use SQL Server database names and resolve
+    // within the session's current database.
+    assert_metadata(
+        &mut session,
+        "SELECT * FROM master.sys.databases WHERE database_id=-1",
+        &expected,
     );
-    assert_metadata(&mut session, &qualified, &expected);
+    session.use_database("inventory").unwrap();
     assert_metadata(
         &mut session,
         "SELECT * FROM inventory.sys.databases WHERE database_id=-1",
