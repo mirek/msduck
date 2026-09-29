@@ -6940,6 +6940,51 @@
       ],
       "issue": 651,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYc-3"
+    },
+    {
+      "id": "percentile-numeric-rounding-v1",
+      "title": "Align percentile numeric literal conversion with captured binary64 endpoints",
+      "state": "backlog",
+      "authorization": "Owner continuing SQL Server compatibility goal; task649 two pinned captures prove numeric literal 1.00000000000000000001 rounds to one in SQL Server while current exact-range policy rejects it.",
+      "scope": [
+        "crates/msduck-sql/src/percentile.rs",
+        "crates/msduck-sql/tests/percentile_numeric_rounding.rs",
+        "scripts/capture-percentile-numeric-rounding.mjs",
+        "reference/percentile-numeric-rounding.json",
+        "tests/percentile_numeric_rounding.test.mjs",
+        "docs/percentile-numeric-rounding.md"
+      ],
+      "dependencies": [
+        "percentile-character-fraction-v1"
+      ],
+      "acceptance": [
+        "Capture independently repeated numeric fraction ULP endpoints, decimal/exponent precision, underflow/overflow/signed zero, numeric source types and diagnostics before changing policy; retain raw events and descriptors.",
+        "Replace the contradicted exact-decimal policy with verified source-aware numeric conversion; preserve explicit character rules, descending endpoints, unknown barriers and single operand evaluation. Do not keep tests asserting the known incompatible rejection.",
+        "Exact-head full workspace client audit checks plus focused bit-exact replay, review or authorized availability fallback, merge and registry/project completion; retain unresolved runtime binding/error-phase gaps."
+      ],
+      "issue": 652,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYf18"
+    },
+    {
+      "id": "percentile-runtime-fraction-reference-v1",
+      "title": "Capture percentile runtime fraction expression and prepared evaluation rules",
+      "state": "ready",
+      "authorization": "Owner continuing SQL Server compatibility goal; task649 captures successful preparation of bad/range character constants and acceptance of dynamic NVARCHAR fractions, which current static lowering cannot reproduce.",
+      "scope": [
+        "scripts/capture-percentile-runtime-fraction.mjs",
+        "reference/percentile-runtime-fraction.json",
+        "docs/percentile-runtime-fraction.md"
+      ],
+      "dependencies": [
+        "percentile-character-fraction-v1"
+      ],
+      "acceptance": [
+        "Capture two fresh pinned containers covering numeric/character variables and prepared fractions with valid NULL invalid and rebound values, same-handle reuse, row-varying/partitioned and scalar-expression fractions, descending zero and empty inputs; preserve full metadata diagnostics completion/events.",
+        "Probe preparation versus execution error timing and catchability, argument evaluation/volatility and source-type conversion without normalizing differences; identify exact requirements for a deterministic policy/effectful runtime adapter and any unsupported shapes.",
+        "Validate immutable fixture hashes independently repeated evidence and bounded lifecycle/output ownership; run required exact-head CI/review or authorized fallback, merge and promptly complete registry/project."
+      ],
+      "issue": 653,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYf2S"
     }
   ]
 }
