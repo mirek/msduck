@@ -13,7 +13,8 @@ import { capture, canonical, differences } from './lib/compatibility.mjs'
 
 const fixturePath = fileURLToPath(new URL('../reference/statistical-aggregates.json', import.meta.url))
 const root = fileURLToPath(new URL('../', import.meta.url))
-const executablePath = resolve(root, 'target/debug/msduck')
+const target = resolve(root, process.env.CARGO_TARGET_DIR ?? 'target')
+const executablePath = resolve(target, 'debug/msduck')
 const fixtureSha256 = 'ddd57b260ee6db3ccb82c128bab345f5410818491d8585afd8355d2fbe150fa1'
 const outputPath = fileURLToPath(new URL('../artifacts/compatibility/statistical-precision/comparison.json', import.meta.url))
 if (process.argv.length !== 2) throw Error('usage: node scripts/compare-statistical-reference.mjs')
@@ -21,6 +22,10 @@ const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8'
 const sourceRevision = git('rev-parse', 'HEAD')
 assert.match(sourceRevision, /^[0-9a-f]{40}$/, 'Git head is not a full commit SHA')
 assert.equal(git('status', '--porcelain=v1'), '', 'Git checkout is dirty')
+// The binary must be produced from the checked revision in this run. Cargo's
+// shared target cache is safe here because it checks source fingerprints.
+execFileSync('cargo', ['build', '--workspace', '--all-targets', '--locked'], { cwd: root, stdio: 'inherit' })
+assert.equal(git('status', '--porcelain=v1'), '', 'build changed the Git checkout')
 const StreamParser = createRequire(import.meta.url)('tedious/lib/token/stream-parser.js')
 const doneKinds = new Map([[0xFD, 'DONE'], [0xFE, 'DONEPROC'], [0xFF, 'DONEINPROC']])
 
@@ -141,6 +146,7 @@ try {
   }
   const output = {
     sourceRevision, referenceImage: fixture.image, referenceSha256: fixtureSha256,
+    buildCommand: 'cargo build --workspace --all-targets --locked',
     executableSha256: executableHash.digest('hex'),
     excluded: [{ name: 'server version', reason: 'ProductVersion is product-specific' }],
     summary, cases,

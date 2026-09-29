@@ -1,8 +1,10 @@
 # Statistical aggregate reference replay
 
-`node scripts/compare-statistical-reference.mjs` builds no code. Run it from a
-clean Git checkout with a matching `target/debug/msduck` and tedious installed.
-It derives the source revision from Git and rejects uncommitted source. It starts
+Run `node scripts/compare-statistical-reference.mjs` from a clean Git checkout
+with tedious installed. It derives the source revision from Git, rejects
+uncommitted source, runs `cargo build --workspace --all-targets --locked` from
+that checkout, and hashes the resulting executable. Set `CARGO_TARGET_DIR` to
+an existing shared Cargo cache when disk space is limited. It starts
 msduck on an ephemeral localhost port and writes the full
 reference and local observations, exact structural differences, and IEEE-754
 hex bits to `artifacts/compatibility/statistical-precision/comparison.json`.
