@@ -6786,6 +6786,34 @@
       "dependencies": [],
       "issue": 636,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYH-V"
+    },
+    {
+      "id": "statistical-state-runtime-v1",
+      "title": "Execute statistical aggregates with captured binary64 arithmetic",
+      "state": "ready",
+      "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party deterministic state and pinned statistical precision/transition captures",
+      "scope": [
+        "src/decimal_aggregate.rs",
+        "src/decimal_aggregate/statistical.rs",
+        "crates/msduck-sql/src/aggregate.rs",
+        "crates/msduck-sql/src/aggregate_diagnostics.rs",
+        "crates/msduck-core/src/diagnostic.rs",
+        "crates/msduck-sql/tests/statistical_execution_lowering.rs",
+        "tests/aggregate_diagnostics.test.mjs",
+        "docs/statistical-state.md",
+        "docs/statistical-precision.md"
+      ],
+      "acceptance": [
+        "Integrate FloatStatsState into STDEV/STDEVP/VAR/VARP for ordinary, DISTINCT, grouped and ordered/bounded windows; compare all 968 non-error pinned precision/transition cells bit-exactly and keep FLOAT(53) descriptors and NULL/singleton rules.",
+        "Preserve typed DISTINCT before binary64 conversion, one evaluation of each operand, and warnings on consumed NULL-containing frames; report canonical 8115/state 2/class 16 float overflow and successful reuse.",
+        "Register through the existing numeric aggregate entry point without reserved root engine/scalar/lib edits; bound native reads and scratch allocation, safely copy non-flat list children, document LIST materialization and physical-order limits rather than inventing a parallel combine rule.",
+        "Retain full raw local/reference observations and unrelated wire differences; run format, strict Clippy, workspace tests, independent clients and corpus audit on exact head, then gated PR/review or owner-authorized unavailability fallback and completion."
+      ],
+      "dependencies": [
+        "statistical-state-core-v1"
+      ],
+      "issue": 639,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYKOZ"
     }
   ]
 }
