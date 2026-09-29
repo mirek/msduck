@@ -245,6 +245,8 @@ if (check) {
   for (const run of retained.runs) validate(run)
   assertSameCapture(retained.runs[0], retained.runs[1], 'independent runs differ')
   const candidate = candidateComparison(retained.runs[0])
+  assert.equal(candidate.compared, 156, 'candidate coverage changed')
+  assert.equal(candidate.matched, candidate.compared, 'zero-clamped candidate no longer fits the pinned capture')
   console.log(`Checked ${retained.runs[0].length} statistical observations in two retained runs`)
   console.log(`Candidate zero-clamped sum-of-squares calculation matched ${candidate.matched}/${candidate.compared} captured cells`)
 } else {
