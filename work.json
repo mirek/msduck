@@ -6651,6 +6651,29 @@
       ],
       "issue": 626,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PXoo9"
+    },
+    {
+      "id": "numeric-literal-division-direct-v1",
+      "title": "Match direct decimal division with bare integer operands",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server compatibility implementation goal and owner-produced pinned reference in issue #626; no external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/decimal_division.rs",
+        "crates/msduck-sql/src/projection.rs",
+        "crates/msduck-sql/tests/numeric_arithmetic_context.rs",
+        "src/decimal_division.rs",
+        "docs/numeric-arithmetic-context.md"
+      ],
+      "acceptance": [
+        "Direct decimal division of a bare integer literal uses minimal written precision, while explicitly cast and bound INT operands retain declared precision; integer/integer division remains integer.",
+        "SQL projection inference and exact division lowering agree for direct expressions including explicit DECIMAL/NUMERIC, leading zeros and a typed NULL, with Rust integration evidence for metadata and values.",
+        "Preserve raw SQL Server differences, document nominal NumericN and general nested inference as remaining gaps, and run required Rust/client/audit checks for the exact revision."
+      ],
+      "dependencies": [
+        "numeric-arithmetic-context-reference-v1"
+      ],
+      "issue": 628,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PXslq"
     }
   ]
 }
