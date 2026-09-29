@@ -6554,6 +6554,26 @@
       ],
       "issue": 618,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PXRl7"
+    },
+    {
+      "id": "focused-compatibility-audit-v1",
+      "title": "Select exact compatibility audit cases without overwriting full-run evidence",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server compatibility implementation goal and requests for faster issue-to-PR cycles; owner issue #620.",
+      "scope": [
+        "scripts/compatibility.mjs",
+        "scripts/docker-compare.mjs",
+        "docs/reference-comparison.md",
+        "tests/compatibility-selection.test.mjs"
+      ],
+      "acceptance": [
+        "List available case names and select one or more exact names in local, live reference and Docker modes; reject unknown, duplicate or ambiguous names before connecting.",
+        "Keep unfiltered full-run behavior and artifacts unchanged; write selected captures separately and record the selected names and total case count without normalizing rows, metadata, errors or completion events.",
+        "Add focused CLI tests proving selection, rejection and output routing without a native build or SQL Server dependency."
+      ],
+      "dependencies": [],
+      "issue": 620,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PXZfL"
     }
   ]
 }
