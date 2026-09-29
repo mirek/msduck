@@ -27,7 +27,7 @@ any remaining files.
 ## Storage
 
 A user database lives next to the primary file, in its directory resolved to
-an absolute path at startup, as
+a canonical absolute path at startup, as
 `<primary file name>.<database_id>.<name fragment>.duckdb`, for example
 `msduck.duckdb.5.sales.duckdb`. The full primary file name keeps servers apart
 whose files differ only in extension, such as `tenant.db` and `tenant.duckdb`. The ID makes the name unique. The fragment is the

@@ -129,15 +129,17 @@ impl Catalog {
                 changes: std::sync::Mutex::new(()),
             }
         } else {
-            // Resolve the directory once, so later file work does not
-            // depend on the process's current directory.
+            // Resolve the directory once, so later file work depends neither
+            // on the process's current directory nor on symbolic links that
+            // may be retargeted while the server runs.
             let file = std::path::absolute(path).context("resolve the database path")?;
+            let directory = file
+                .parent()
+                .context("database path needs a parent directory")?;
             Self {
                 primary,
-                directory: file
-                    .parent()
-                    .map(Path::to_path_buf)
-                    .context("database path needs a parent directory")?,
+                directory: std::fs::canonicalize(directory)
+                    .with_context(|| format!("resolve {}", directory.display()))?,
                 prefix: file
                     .file_name()
                     .and_then(|name| name.to_str())
