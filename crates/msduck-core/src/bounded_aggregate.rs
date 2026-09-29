@@ -1,4 +1,7 @@
-//! Exact bounded sums shared by integer and scaled currency aggregate adapters.
+//! Bounded aggregate states shared by backend adapters.
+//!
+//! Integer/currency sums are exact. Floating statistical transitions deliberately
+//! retain binary64 arithmetic order observed in pinned SQL Server captures.
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct State {
@@ -40,6 +43,86 @@ impl State {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Overflow;
+
+/// The four SQL Server statistical result families. All return FLOAT(53).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Statistic {
+    Stdev,
+    Stdevp,
+    Var,
+    Varp,
+}
+
+/// One sequential binary64 statistical transition state.
+///
+/// The caller converts each non-NULL input once and handles typed DISTINCT
+/// before calling `push`. This state intentionally does not define a parallel
+/// combine rule: binary64 accumulation is order-sensitive.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FloatStatsState {
+    pub count: u64,
+    pub sum: f64,
+    pub squares: f64,
+    pub failed: bool,
+}
+
+impl FloatStatsState {
+    /// Add one already converted, non-NULL input exactly once.
+    pub fn push(&mut self, value: f64) {
+        if self.failed {
+            return;
+        }
+        let Some(count) = self.count.checked_add(1) else {
+            self.failed = true;
+            return;
+        };
+        let sum = self.sum + value;
+        let squares = self.squares + value * value;
+        if !value.is_finite() || !sum.is_finite() || !squares.is_finite() {
+            self.failed = true;
+            return;
+        }
+        self.count = count;
+        self.sum = sum;
+        self.squares = squares;
+    }
+
+    /// Return the SQL Server sample/population shape or a numerical overflow.
+    pub fn value(self, statistic: Statistic) -> Result<Option<f64>, Overflow> {
+        if self.failed {
+            return Err(Overflow);
+        }
+        if self.count == 0
+            || (self.count == 1 && matches!(statistic, Statistic::Stdev | Statistic::Var))
+        {
+            return Ok(None);
+        }
+        let count = self.count as f64;
+        let raw = self.squares - self.sum * self.sum / count;
+        if !raw.is_finite() {
+            return Err(Overflow);
+        }
+        // A negative cancellation residue and -0 both yield positive zero.
+        let numerator = if raw <= 0.0 { 0.0 } else { raw };
+        let denominator = if matches!(statistic, Statistic::Stdev | Statistic::Var) {
+            count - 1.0
+        } else {
+            count
+        };
+        let variance = numerator / denominator;
+        let result = if matches!(statistic, Statistic::Stdev | Statistic::Stdevp) {
+            variance.sqrt()
+        } else {
+            variance
+        };
+        result
+            .is_finite()
+            .then_some(result)
+            .ok_or(Overflow)
+            .map(Some)
+    }
+}
 
 #[cfg(test)]
 mod tests {
