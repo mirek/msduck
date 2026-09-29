@@ -302,8 +302,8 @@ impl Catalog {
         // Neither the file nor a WAL may exist: CREATE owns, and on failure
         // deletes, only storage it made itself. Another primary, such as one
         // that took over a renamed primary's file name, may hold a generated
-        // name, so an occupied name moves on to the next ID.
-        let mut attempts = 0;
+        // name, so an occupied name moves on to the next ID until the
+        // sequence, which does not cycle, runs out.
         let (database_id, file) = loop {
             let database_id: i32 = db.query_row(
                 &format!("SELECT CAST(nextval({}) AS INTEGER)", literal(&self.ids())),
@@ -318,12 +318,6 @@ impl Catalog {
             {
                 break (database_id, file);
             }
-            attempts += 1;
-            ensure!(
-                attempts < 16,
-                "Cannot create database '{name}' because its files already exist in {}.",
-                self.directory.display()
-            );
         };
         // The primary key serializes concurrent creators before any attach.
         let inserted = db.execute(
