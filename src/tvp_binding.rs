@@ -476,7 +476,7 @@ mod tests {
             .collect();
         crate::type_catalog::create_table_type(db, schema, name, &columns, autocommit).unwrap();
     }
-    fn setup() -> (crate::server::Server, Connection) {
+    fn setup() -> (crate::server::Server, crate::server::Connection) {
         let server = crate::server::Server::open(":memory:").unwrap();
         let db = server.connection().unwrap();
         create(&db, "dbo", "TvpProbe", true);
