@@ -34,6 +34,17 @@ case makes comparison mode exit nonzero. A match means only that the captured
 observations agree for that case; it does not prove broader compatibility.
 The diagnostic artifact remains `artifacts/compatibility/local.json`.
 
+For a focused investigation, run `node scripts/compatibility.mjs --list-cases`
+to see exact case names, then pass one or more `--case 'Exact case name'` arguments
+to `npm run audit:local --`, `npm run audit:compare --`, or
+`npm run audit:docker --`. Selection preserves corpus order and rejects unknown,
+duplicate or ambiguous names before connecting. `--plan` prints the selected
+names and output path without starting either server; for example,
+`node scripts/compatibility.mjs --compare --case 'numeric literal descriptors' --plan`.
+Focused runs write `artifacts/compatibility/selected-local-<hash>.json` or
+`selected-comparison-<hash>.json`, leaving the full-run files intact. Their
+artifacts include the selected names and the total available case count.
+
 ## Isolated Docker reference
 
 `npm run audit:docker` builds msduck and runs the same complete comparison against
