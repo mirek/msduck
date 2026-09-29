@@ -242,6 +242,8 @@ fn serve_login(
     let mut session = Session::new(db)?;
     // SQL Server fails the login when the requested database cannot be
     // opened, and reports the database it selected in the login response.
+    // The captured failure (reference/login-database-error.json) is ERROR
+    // 4060, ERROR 18456 naming the login, DONE_ERROR, then connection close.
     if let Err(error) = session.use_database(&login.database) {
         if error
             .downcast_ref::<msduck_core::diagnostic::SqlError>()
@@ -260,7 +262,7 @@ fn serve_login(
         );
         unavailable.severity = 11;
         tds::sql_error(&mut out, &unavailable);
-        login_failure(&mut out);
+        tds::sql_error(&mut out, &user_login_failure(&authenticated_name));
         tds::done(&mut out, 0xfd, 2, 0, 0);
         tds::write_message(&mut stream, &out, login.packet_size)?;
         return Ok(());
@@ -381,6 +383,19 @@ fn reset_session(
     Ok(())
 }
 
+/// ERROR 18456 as SQL Server sends it after a login has been authenticated,
+/// for example when its database cannot be opened. SQL Server names the
+/// canonical login and escapes a single quote in it with a backslash.
+fn user_login_failure(login: &str) -> msduck_core::diagnostic::SqlError {
+    let mut error = msduck_core::diagnostic::SqlError::new(
+        18456,
+        1,
+        format!("Login failed for user '{}'.", login.replace('\'', "\\'")),
+    );
+    error.severity = 14;
+    error
+}
+
 fn login_failure(out: &mut Vec<u8>) {
     tds::sql_error(
         out,
@@ -396,7 +411,14 @@ fn login_failure(out: &mut Vec<u8>) {
 
 #[cfg(test)]
 mod reset_tests {
-    use super::reset_requested;
+    use super::{reset_requested, user_login_failure};
+
+    #[test]
+    fn user_login_failure_names_the_login() {
+        let error = user_login_failure("o'brien");
+        assert_eq!((error.number, error.state, error.severity), (18456, 1, 14));
+        assert_eq!(error.message, "Login failed for user 'o\\'brien'.");
+    }
 
     #[test]
     fn reset_applies_only_to_request_messages() {
