@@ -57,6 +57,9 @@ pub fn validate(function: &Function) -> Result<(), String> {
 }
 
 pub fn error_number(message: &str) -> Option<i32> {
+    if message == crate::percentile::RANGE {
+        return Some(8727);
+    }
     for name in [
         "row_number",
         "rank",

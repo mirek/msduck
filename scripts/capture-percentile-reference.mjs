@@ -12,7 +12,7 @@ import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFi
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/percentile-reference.json', import.meta.url)
-const fixtureSha256 = '57f1a731bd6f0713d5a985d17cd57f0e565db08cfda6be5d88c4bb5fdaf444cc'
+const fixtureSha256 = 'd0b7e5d459e51e87d89771f4dd0dd3c7039decad109abf0068f3f45fd5f87498'
 const StreamParser = createRequire(import.meta.url)('tedious/lib/token/stream-parser.js')
 const doneKinds = new Map([[0xFD, 'DONE'], [0xFE, 'DONEPROC'], [0xFF, 'DONEINPROC']])
 const args = process.argv.slice(2)
@@ -69,10 +69,16 @@ const plan = [
   ]),
   { name: 'partitioned continuous', sql: 'SELECT id,PERCENTILE_CONT(.5) WITHIN GROUP (ORDER BY n) OVER (PARTITION BY g) AS p FROM (VALUES (1,1,1),(2,1,2),(3,2,10),(4,2,NULL)) sample(id,g,n) ORDER BY id' },
   { name: 'partitioned discrete', sql: 'SELECT id,PERCENTILE_DISC(.5) WITHIN GROUP (ORDER BY n) OVER (PARTITION BY g) AS p FROM (VALUES (1,1,1),(2,1,2),(3,2,10),(4,2,NULL)) sample(id,g,n) ORDER BY id' },
+  { name: 'signed zero continuous', sql: orderedInteger('PERCENTILE_CONT', '-0.0') },
+  { name: 'signed zero discrete', sql: orderedInteger('PERCENTILE_DISC', '-0.0') },
   ...[
     ['negative fraction', '-0.1'], ['above one fraction', '1.1'],
     ['NULL fraction', 'NULL'], ['character fraction', "'0.5'"],
   ].map(([name, fraction]) => ({ name, sql: orderedInteger('PERCENTILE_CONT', fraction) })),
+  ...[
+    ['negative fraction discrete', '-0.1'], ['above one fraction discrete', '1.1'],
+    ['NULL fraction discrete', 'NULL'],
+  ].map(([name, fraction]) => ({ name, sql: orderedInteger('PERCENTILE_DISC', fraction) })),
   { name: 'empty text continuous', sql: `SELECT PERCENTILE_CONT(.5) WITHIN GROUP (ORDER BY CAST(n AS VARCHAR(8))) OVER () AS p FROM ${integerRows} WHERE 1=0` },
   { name: 'session reusable', sql: 'SELECT 1 AS reusable' },
 ]
@@ -278,6 +284,10 @@ function validate(run) {
   }
   checkRows('partitioned continuous', [[[1, 1.5], [2, 1.5], [3, 10], [4, 10]]])
   checkRows('partitioned discrete', [[[1, 1], [2, 1], [3, 10], [4, 10]]])
+  checkRows('signed zero continuous', [[[1, 1], [2, 1], [3, 1], [4, 1]]])
+  checkType('signed zero continuous', 'FloatN')
+  checkRows('signed zero discrete', [[[1, 1], [2, 1], [3, 1], [4, 1]]])
+  checkType('signed zero discrete', 'Int')
   checkRows('ties NULL cont', [[[1, 1], [2, 1], [3, 1], [4, 1]]])
   checkRows('ties NULL disc', [[[1, 1], [2, 1], [3, 1], [4, 1]]])
   checkRows('empty cont', [[]]); checkType('empty cont', 'FloatN')
@@ -292,11 +302,16 @@ function validate(run) {
     assertSameCapture(events(result), ['ERROR', 'DONE'], `${name}: events changed`)
     assertSameCapture(done(result), [['DONE', 2, 253]], `${name}: completion changed`)
   }
-  for (const name of ['negative fraction', 'above one fraction', 'NULL fraction']) {
+  for (const name of [
+    'negative fraction', 'above one fraction', 'NULL fraction',
+    'negative fraction discrete', 'above one fraction discrete', 'NULL fraction discrete',
+  ]) {
     const result = get(name)
     assertSameCapture(diagnostics(result), [[8727, 1, 16,
       'Input parameter of percentile function is outside of range [0, 1].']], `${name}: diagnostic changed`)
-    assertSameCapture(shape(result)[0][1], ['FloatN', 8, null, null, 1], `${name}: descriptor changed`)
+    assertSameCapture(shape(result)[0][1], name.endsWith('discrete')
+      ? ['Int', null, null, null, 0]
+      : ['FloatN', 8, null, null, 1], `${name}: descriptor changed`)
     assertSameCapture(rows(result), [[]], `${name}: unexpected rows`)
     assertSameCapture(events(result), ['COLMETADATA', 'ORDER', 'ERROR', 'DONE'], `${name}: events changed`)
     assertSameCapture(done(result), [['DONE', 2, 193]], `${name}: completion changed`)

@@ -1,6 +1,9 @@
 //! SQL Server ordered-set percentile windows.
 use sqlparser::ast::*;
 
+pub const RANGE: &str = "Input parameter of percentile function is outside of range [0, 1].";
+const LITERAL: &str = "Percentile requires a numeric literal between 0 and 1.";
+
 pub fn discrete_value(function: &Function) -> Option<&Expr> {
     if function
         .name
@@ -46,14 +49,29 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
     {
         return Err("unsupported percentile modifiers".into());
     }
-    let Expr::Value(literal) = fraction else {
-        return Err("Percentile requires a numeric literal between 0 and 1.".into());
+    let zero = match fraction {
+        Expr::Value(literal) => match &literal.value {
+            Value::Number(number, _) => fraction_is_zero(number).ok_or(RANGE)?,
+            Value::Null => return Err(RANGE.into()),
+            _ => return Err(LITERAL.into()),
+        },
+        Expr::UnaryOp {
+            op: UnaryOperator::Minus,
+            expr,
+        } => {
+            let Expr::Value(literal) = expr.as_ref() else {
+                return Err(LITERAL.into());
+            };
+            let Value::Number(number, _) = &literal.value else {
+                return Err(LITERAL.into());
+            };
+            if fraction_is_zero(number) != Some(true) {
+                return Err(RANGE.into());
+            }
+            true
+        }
+        _ => return Err(LITERAL.into()),
     };
-    let Value::Number(number, _) = &literal.value else {
-        return Err("Percentile requires a numeric literal between 0 and 1.".into());
-    };
-    let zero =
-        fraction_is_zero(number).ok_or("Percentile requires a numeric literal between 0 and 1.")?;
     if function.within_group.is_empty() {
         return Err(format!(
             "The function '{name}' must have a WITHIN GROUP clause."
@@ -143,6 +161,63 @@ fn fraction_is_zero(number: &str) -> Option<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dialect::ServerDialect;
+    use sqlparser::parser::Parser;
+
+    fn expression(sql: &str) -> Expr {
+        let Statement::Query(query) = Parser::parse_sql(&ServerDialect, sql).unwrap().remove(0)
+        else {
+            panic!("query")
+        };
+        let SetExpr::Select(select) = *query.body else {
+            panic!("select")
+        };
+        let SelectItem::UnnamedExpr(expr) = select.projection.into_iter().next().unwrap() else {
+            panic!("expression")
+        };
+        expr
+    }
+
+    #[test]
+    fn captured_invalid_fractions_keep_error_identity_and_ast() {
+        for function in ["PERCENTILE_CONT", "PERCENTILE_DISC"] {
+            for fraction in ["-0.1", "1.1", "NULL", "1.00000000000000000001"] {
+                let sql =
+                    format!("SELECT {function}({fraction}) WITHIN GROUP (ORDER BY n) OVER ()");
+                let mut expr = expression(&sql);
+                let original = expr.clone();
+                assert_eq!(lower(&mut expr), Err(RANGE.into()), "{sql}");
+                assert_eq!(expr, original, "invalid lowering changed the AST: {sql}");
+                assert_eq!(crate::ranking::error_number(RANGE), Some(8727));
+            }
+        }
+    }
+
+    #[test]
+    fn valid_and_unproven_fraction_forms_remain_distinct() {
+        for function in ["PERCENTILE_CONT", "PERCENTILE_DISC"] {
+            for fraction in ["0", ".5", "1", "-0", "-0.0", "-0e1"] {
+                let sql =
+                    format!("SELECT {function}({fraction}) WITHIN GROUP (ORDER BY n) OVER ()");
+                let mut expr = expression(&sql);
+                lower(&mut expr).unwrap();
+                let Expr::Function(lowered) = expr else {
+                    panic!("lowered function")
+                };
+                assert!(
+                    lowered.name.to_string().starts_with("quantile_")
+                        || lowered.name.to_string() == "max",
+                    "{sql}"
+                );
+            }
+            for fraction in ["'0.5'", "@p"] {
+                let sql =
+                    format!("SELECT {function}({fraction}) WITHIN GROUP (ORDER BY n) OVER ()");
+                let mut expr = expression(&sql);
+                assert_eq!(lower(&mut expr), Err(LITERAL.into()), "{sql}");
+            }
+        }
+    }
 
     #[test]
     fn fraction_classification_retains_extreme_decimal_exponents() {
