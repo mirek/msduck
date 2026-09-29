@@ -6609,6 +6609,26 @@
       ],
       "issue": 428,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PQdWF"
+    },
+    {
+      "id": "numeric-literal-metadata-reference-v1",
+      "title": "Pin SQL Server numeric-literal metadata and division evidence",
+      "state": "ready",
+      "authorization": "Mirek's continuing SQL Server compatibility goal; owner issue #623 and owner-run PR #621 raw comparison.",
+      "scope": [
+        "scripts/capture-numeric-literal-metadata.mjs",
+        "reference/numeric-literal-metadata.json",
+        "docs/numeric-literal-metadata.md",
+        "docs/numeric-literals.md"
+      ],
+      "acceptance": [
+        "Capture rows, exact text, column descriptors, errors and completion tokens for implicit numeric literals and division contrasted with explicit DECIMAL, NUMERIC, INT, empty results and prepared parameters.",
+        "Run the same plan against two independent pinned SQL Server 2025 containers, assert byte-identical canonical captures, and guard the checked-in fixture from overwrite and aliasing with output.",
+        "Document the observed distinctions and remaining implementation gaps without claiming that msduck matches; validate fixture replay and retain raw run evidence."
+      ],
+      "dependencies": [],
+      "issue": 623,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PXkl3"
     }
   ]
 }
