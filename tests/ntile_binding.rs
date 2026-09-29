@@ -116,7 +116,7 @@ fn dynamic_counts_keep_metadata_and_recover_without_compile_value_leaks() {
         &HashMap::new(),
         false,
     );
-    assert_eq!(error(&tokens).0, true);
+    assert!(error(&tokens).0);
     let tokens=session.batch("THROW 50001,'The function ''ntile'' takes only a positive int or bigint expression as its input.',7",&HashMap::new(),false);
     let (_, number, state, severity, _) = error(&tokens);
     assert_eq!((number, state, severity), (50001, 7, 16));
