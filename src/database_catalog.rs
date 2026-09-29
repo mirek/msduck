@@ -299,22 +299,32 @@ impl Catalog {
             !BACKEND_RESERVED.contains(&name_key.as_str()) && name_key != key(&self.primary),
             "database name '{name}' is reserved by msduck"
         );
-        let database_id: i32 = db.query_row(
-            &format!("SELECT CAST(nextval({}) AS INTEGER)", literal(&self.ids())),
-            [],
-            |row| row.get(0),
-        )?;
-        let file = file_name(&self.prefix, database_id, &name_key);
-        let path = self.directory.join(&file);
         // Neither the file nor a WAL may exist: CREATE owns, and on failure
-        // deletes, only storage it made itself.
-        for path in [&path, &wal(&path)] {
+        // deletes, only storage it made itself. Another primary, such as one
+        // that took over a renamed primary's file name, may hold a generated
+        // name, so an occupied name moves on to the next ID.
+        let mut attempts = 0;
+        let (database_id, file) = loop {
+            let database_id: i32 = db.query_row(
+                &format!("SELECT CAST(nextval({}) AS INTEGER)", literal(&self.ids())),
+                [],
+                |row| row.get(0),
+            )?;
+            let file = file_name(&self.prefix, database_id, &name_key);
+            let path = self.directory.join(&file);
+            if [path.clone(), wal(&path)]
+                .iter()
+                .all(|path| matches!(present(path), Ok(false)))
+            {
+                break (database_id, file);
+            }
+            attempts += 1;
             ensure!(
-                !present(path)?,
-                "Cannot create database '{name}' because file '{}' already exists.",
-                path.display()
+                attempts < 16,
+                "Cannot create database '{name}' because its files already exist in {}.",
+                self.directory.display()
             );
-        }
+        };
         // The primary key serializes concurrent creators before any attach.
         let inserted = db.execute(
             &format!(
@@ -495,7 +505,12 @@ impl Catalog {
         let Ok(path) = self.path(row) else {
             return Ok(false);
         };
-        if present(&path)? || present(&wal(&path))? {
+        if present(&path)? {
+            return Ok(false);
+        }
+        // A WAL without its file is what a committed DROP could not delete.
+        let wal = wal(&path);
+        if present(&wal)? && std::fs::remove_file(&wal).is_err() {
             return Ok(false);
         }
         db.execute(
@@ -640,20 +655,24 @@ impl Catalog {
     fn delete_files(&self, row: &Row, checkpointed: bool) -> Result<()> {
         let path = self.path(row)?;
         let wal = wal(&path);
-        let order = if checkpointed {
-            [wal, path]
-        } else {
-            [path, wal]
-        };
-        for path in order {
-            match std::fs::remove_file(&path) {
-                Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-                    return Err(error).with_context(|| format!("delete {}", path.display()));
-                }
-                _ => {}
+        let remove = |path: &Path| match std::fs::remove_file(path) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                Err(error).with_context(|| format!("delete {}", path.display()))
             }
+            _ => Ok(()),
+        };
+        if checkpointed {
+            remove(&wal)?;
+            remove(&path)
+        } else {
+            remove(&path)?;
+            // Deleting the file commits the drop. A WAL left behind makes
+            // the registration stale, and its removal is retried there.
+            if let Err(error) = remove(&wal) {
+                eprintln!("msduck: {error:#}");
+            }
+            Ok(())
         }
-        Ok(())
     }
 }
 

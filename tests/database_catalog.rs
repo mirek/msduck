@@ -225,10 +225,13 @@ fn an_existing_file_is_not_adopted() {
     let server = Server::open(primary.to_str().unwrap()).unwrap();
     let db = server.connection().unwrap();
     let catalog = db.databases().clone();
-    assert!(catalog.create(&db, "stale").is_err());
-    assert_eq!(catalog.list(&db).unwrap(), [database("master", 1)]);
-    // The failed attempt leaves no registration behind.
-    assert!(catalog.create(&db, "fresh").is_ok());
+    // The occupied name is skipped, and the file is left alone.
+    assert_eq!(catalog.create(&db, "stale").unwrap(), database("stale", 6));
+    assert_eq!(
+        std::fs::read(directory.join("msduck.duckdb.5.stale.duckdb")).unwrap(),
+        b"not a database"
+    );
+    assert!(directory.join("msduck.duckdb.6.stale.duckdb").exists());
     drop((db, server));
     std::fs::remove_dir_all(&directory).unwrap();
 }
@@ -625,7 +628,8 @@ fn registered_files_replaced_by_symbolic_links_are_not_opened() {
     let db = server.connection().unwrap();
     let catalog = db.databases().clone();
     assert_eq!(catalog.list(&db).unwrap(), [database("master", 1)]);
-    assert!(catalog.create(&db, "next").is_err());
+    // The link's name is skipped, never followed.
+    assert_eq!(catalog.create(&db, "next").unwrap(), database("next", 7));
     assert!(!outside.join("created.duckdb").exists());
     let victim_db = duckdb::Connection::open(&victim).unwrap();
     let schemas: i64 = victim_db
@@ -695,7 +699,7 @@ fn database_names_compare_under_the_server_collation() {
 }
 
 #[test]
-fn a_leftover_wal_blocks_create_and_is_kept() {
+fn a_leftover_wal_is_skipped_and_kept() {
     let directory = scratch_directory("stale-wal");
     let primary = directory.join("msduck.duckdb");
     let server = Server::open(primary.to_str().unwrap()).unwrap();
@@ -703,10 +707,9 @@ fn a_leftover_wal_blocks_create_and_is_kept() {
     let catalog = db.databases().clone();
     let wal = directory.join("msduck.duckdb.5.app.duckdb.wal");
     std::fs::write(&wal, b"stale").unwrap();
-    assert!(catalog.create(&db, "app").is_err());
+    assert_eq!(catalog.create(&db, "app").unwrap(), database("app", 6));
     assert_eq!(std::fs::read(&wal).unwrap(), b"stale");
     assert!(!directory.join("msduck.duckdb.5.app.duckdb").exists());
-    assert_eq!(catalog.list(&db).unwrap(), [database("master", 1)]);
     drop((db, server));
     std::fs::remove_dir_all(&directory).unwrap();
 }
