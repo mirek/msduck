@@ -6268,6 +6268,27 @@
       "dependencies": [],
       "issue": 593,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PWQpk"
+    },
+    {
+      "id": "distribution-window-diagnostics-v1",
+      "title": "Match deterministic PERCENT_RANK and CUME_DIST argument and frame diagnostics",
+      "state": "ready",
+      "authorization": "mirek's continuing implementation goal and owner-authored issue #595; SQL Server evidence reference/distribution-reference.json from PR #594",
+      "scope": [
+        "crates/msduck-sql/src/ranking.rs",
+        "crates/msduck-sql/tests/distribution_diagnostics.rs",
+        "docs/distribution-windows.md"
+      ],
+      "acceptance": [
+        "Use the pinned reference fixture to align PERCENT_RANK and CUME_DIST zero-argument and forbidden-frame messages and error numbers 4114 and 10752 without changing other ranking functions",
+        "Add deterministic SQL parser/validator tests for both functions and update the documented local behavior",
+        "Report remaining TDS state/class parity as a separate root-adapter gap; do not edit reserved src/engine.rs or shared tests/tedious.test.mjs"
+      ],
+      "dependencies": [
+        "distribution-window-reference-v1"
+      ],
+      "issue": 595,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PWTAz"
     }
   ]
 }
