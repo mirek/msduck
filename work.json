@@ -6985,6 +6985,24 @@
       ],
       "issue": 653,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYf2S"
+    },
+    {
+      "id": "percentile-client-character-acceptance-v1",
+      "title": "Replace obsolete percentile character rejection with captured acceptance",
+      "state": "backlog",
+      "authorization": "Owner continuing SQL Server compatibility goal; captured character fractions are accepted by SQL Server, but default tedious client signature test still asserts rejection.",
+      "scope": [
+        "tests/tedious.test.mjs"
+      ],
+      "dependencies": [
+        "ntile-null-runtime-v1"
+      ],
+      "acceptance": [
+        "After existing file reservation is completed, remove only the obsolete character 0.5 rejection from percentile signature validation and assert captured CONT/DISC acceptance with exact rows. Preserve unrelated validation and retain numeric endpoint policy follow-up separately.",
+        "Verify on integrated PR650 revision with all 503 default clients, focused character replay and required exact-head gates. Do not hide the failure with filtering, skipping or relaxing CI. Claim independently before editing; merge owning PR and complete registry/project."
+      ],
+      "issue": 654,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYiwY"
     }
   ]
 }
