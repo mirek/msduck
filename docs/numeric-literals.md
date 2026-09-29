@@ -26,4 +26,7 @@ SQL Server's full decimal arithmetic precision/scale formulas, automatic
 parameterization, over-38-digit errors, literal-derived column labels and the
 full implicit conversion matrix remain unfinished. The fractional division test
 checks its value only; it does not establish decimal result metadata parity.
-Live SQL Server differential validation remains outstanding.
+Live SQL Server [numeric-literal descriptor and division probes](numeric-literal-metadata.md)
+now distinguish implicit literals, explicit DECIMAL/NUMERIC casts and prepared
+INT divisors. The retained comparison still shows msduck descriptor gaps;
+broader numeric-literal compatibility remains unverified.
