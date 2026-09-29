@@ -808,3 +808,30 @@ fn a_linked_primary_names_databases_after_its_target() {
     drop((db, server));
     std::fs::remove_dir_all(&directory).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn a_hidden_registration_with_a_linked_file_does_not_stop_startup() {
+    let directory = scratch_directory("hidden-link");
+    let primary = directory.join("msduck.duckdb");
+    let primary = primary.to_str().unwrap();
+    {
+        let server = Server::open(primary).unwrap();
+        let db = server.connection().unwrap();
+        db.databases().create(&db, "odd").unwrap();
+        db.execute_batch("UPDATE main.__msduck_databases SET published=false WHERE name_key='odd'")
+            .unwrap();
+    }
+    let file = directory.join("msduck.duckdb.5.odd.duckdb");
+    std::fs::remove_file(&file).unwrap();
+    std::os::unix::fs::symlink(directory.join("elsewhere"), &file).unwrap();
+    let server = Server::open(primary).unwrap();
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    assert_eq!(catalog.list(&db).unwrap(), [database("master", 1)]);
+    assert_eq!(sql_error(catalog.create(&db, "odd").unwrap_err()).0, 1801);
+    catalog.remove(&db, "odd").unwrap();
+    assert!(std::fs::symlink_metadata(&file).is_err());
+    drop((db, server));
+    std::fs::remove_dir_all(&directory).unwrap();
+}

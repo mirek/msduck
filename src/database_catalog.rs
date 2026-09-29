@@ -498,13 +498,17 @@ impl Catalog {
         let Ok(path) = self.path(row) else {
             return Ok(false);
         };
-        if present(&path)? {
+        // Any entry under the file's name, or one that cannot be inspected,
+        // keeps the registration for DROP; startup is never stopped here.
+        if occupied(&path).unwrap_or(true) {
             return Ok(false);
         }
         // A WAL without its file is what a committed DROP could not delete.
         let wal = wal(&path);
-        if present(&wal)? && std::fs::remove_file(&wal).is_err() {
-            return Ok(false);
+        match present(&wal) {
+            Ok(false) => {}
+            Ok(true) if std::fs::remove_file(&wal).is_ok() => {}
+            _ => return Ok(false),
         }
         db.execute(
             &format!("DELETE FROM {} WHERE name_key=?", self.registry()),
