@@ -12,7 +12,7 @@ import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFi
 import { capture, canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/percentile-order-type.json', import.meta.url)
-const fixtureSha256 = 'PENDING_FIXTURE_SHA256'
+const fixtureSha256 = '878046d815625a00225430c816b2b16f822290b2b1f014c289881d64f6b010e0'
 const args = process.argv.slice(2)
 const mode = args[0]?.startsWith('--') ? args.shift() : undefined
 if (![undefined, '--check', '--write-fixture'].includes(mode) || args.length > 1 || args[0]?.startsWith('--')) throw Error('usage: capture-percentile-order-type.mjs [--check | --write-fixture] [output]')
