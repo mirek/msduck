@@ -46,15 +46,18 @@ multiplication, addition, nesting, empty result metadata, a failed conversion
 (8114/state 5/class 16), and successful reuse of the same connection. See the
 fixture for the complete descriptors and completion sequence.
 
-Msduck's direct decimal division lowering and projection inference now use the
-minimum written precision of a bare integer operand, while explicit and bound
-`INT` operands retain precision ten. The root regression now expects
+Msduck's decimal division lowering and projection inference now use the
+minimum written precision of a bare integer operand, including when a decimal
+division is nested inside another division. An inner integer division still
+truncates before its result is converted for the outer decimal division.
+Explicit and bound `INT` operands retain precision ten. The root regression expects
 `DECIMAL(9,6)` and `0.666666` for `CAST(2 AS DECIMAL(5,2))/3` rather than the
 previous `DECIMAL(16,13)` and longer quotient. Integer/integer division remains
-separate. This is a direct-expression correction: shared nested expression
-typing still infers small literals as `INT`, and the TDS codec still cannot
-distinguish `NumericN` from `DecimalN`. The fixture therefore remains reference
-evidence, not a claim that every expression or full wire capture matches.
+separate. Only nested division trees with known declarations receive this
+contextual lowering; other expression shapes still rely on shared metadata
+rules. The TDS codec still cannot distinguish `NumericN` from `DecimalN`, so
+the fixture remains reference evidence, not a claim that every expression or
+full wire capture matches.
 
 Run `node scripts/capture-numeric-arithmetic-context.mjs --check` to verify the
 retained fixture checksum, plan and two independent captures without starting
