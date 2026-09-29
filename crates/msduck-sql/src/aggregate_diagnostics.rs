@@ -106,24 +106,46 @@ pub fn instrument<T: VisitMut>(
     impl<F: Fn(&str) -> bool> VisitorMut for Instrument<'_, F> {
         type Break = ();
         fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
-            // Statistical DISTINCT lowering retains the original typed values in
-            // list(DISTINCT value). Observe that input before deduplication; the
-            // outer list statistic receives a single list, not source rows.
+            // Statistical lowering retains typed values in LIST. Observe ordinary
+            // inputs before DISTINCT, but only consumed frames for a window.
+            // The outer scalar receives one list rather than source rows.
             if let Expr::Function(function) = expr
                 && matches!(
                     function.name.to_string().to_ascii_lowercase().as_str(),
-                    "list_stddev_samp" | "list_stddev_pop" | "list_var_samp" | "list_var_pop"
+                    "list_stddev_samp"
+                        | "list_stddev_pop"
+                        | "list_var_samp"
+                        | "list_var_pop"
+                        | "__msduck_list_stddev_samp"
+                        | "__msduck_list_stddev_pop"
+                        | "__msduck_list_var_samp"
+                        | "__msduck_list_var_pop"
                 )
                 && let FunctionArguments::List(outer) = &mut function.args
                 && let [FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Function(values)))] =
                     outer.args.as_mut_slice()
                 && values.name.to_string().eq_ignore_ascii_case("list")
                 && let FunctionArguments::List(inner) = &mut values.args
-                && inner.duplicate_treatment == Some(DuplicateTreatment::Distinct)
                 && let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] =
                     inner.args.as_mut_slice()
             {
-                *value = operand(value.clone(), self.ticket.clone());
+                if values.over.is_some() {
+                    let statistic = crate::expr::unary_function(
+                        &function.name.to_string(),
+                        Expr::Identifier(Ident::new("__msduck_frame")),
+                    );
+                    let values = values.clone();
+                    *expr = template(
+                        "list_extract(list_transform([__msduck_window_values], __msduck_frame -> CASE WHEN __msduck_observe_null(__msduck_ticket, list_count(__msduck_frame) < len(__msduck_frame)) IS NOT NULL THEN __msduck_statistic ELSE NULL END), 1)",
+                        &[
+                            ("__msduck_window_values", Expr::Function(values)),
+                            ("__msduck_statistic", statistic),
+                            ("__msduck_ticket", self.ticket.clone()),
+                        ],
+                    );
+                } else {
+                    *value = operand(value.clone(), self.ticket.clone());
+                }
                 self.count += 1;
                 return ControlFlow::Continue(());
             }

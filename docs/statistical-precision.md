@@ -67,12 +67,19 @@ ORDER and NBCROW tokens that msduck does not. The artifact retains each token
 sequence and field. These wire differences must not be treated as numeric
 variance failures or normalized away.
 
-The next numerical task should first capture independent SQL Server results
-for large nearby values, mixed signs and magnitudes, DECIMAL/float inputs,
-NULLs, grouped and ordered windows, and volatile single-evaluation cases.
-Then implement a bounded statistical state in the root DuckDB adapter if the
-formula and rounding order hold, with typed DISTINCT deduplication before
-floating conversion. Avoid expanding an expression into repeated uses of its
-operand. A separate TDS task should address DONE command and ORDER/NBCROW
-emission with raw token fixtures; those changes do not belong in the numeric
-aggregate state.
+The subsequent runtime integration uses `FloatStatsState` through a native
+typed-list scalar for all four statistics. The precision/transition client
+replays now match all 968 retained statistical cells bit-for-bit, with complete
+FLOAT(53) descriptors, warning identity and overflow errors. Their ignored
+`artifacts/compatibility/statistical-{precision,transition}-execution.json`
+captures retain full observations and structural differences, including wire
+token/completion gaps. See [statistical state](statistical-state.md) for
+single-evaluation guarantees, typed DISTINCT ordering, list memory costs and
+physical plan limitations. The historical comparison above remains evidence
+for its stated older executable, rather than a result for the new adapter.
+
+Further numerical work should capture physical-plan variation, grouping and
+parallel transitions beyond the retained probes, and reduce list materialization
+costs while preserving observed bits and one evaluation of each operand. A
+separate TDS task should address DONE command and ORDER/NBCROW emission with
+raw token fixtures; those changes do not belong in the numeric aggregate state.

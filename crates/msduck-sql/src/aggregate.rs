@@ -336,24 +336,22 @@ pub fn mark(expr: &mut Expr, parameters: &HashMap<String, Parameter>) -> Result<
         return Ok(());
     }
     if let Some(target) = statistical {
-        if let FunctionArguments::List(args) = &function.args
-            && args.duplicate_treatment == Some(DuplicateTreatment::Distinct)
-        {
-            // DuckDB statistical aggregates bind DOUBLE inputs before DISTINCT,
-            // collapsing exact BIGINT/DECIMAL values. Deduplicate their original
-            // type first, then apply the statistic to the resulting list.
-            let mut values = function.clone();
-            values.name = ObjectName::from(vec![Ident::new("list")]);
-            function.name = ObjectName::from(vec![Ident::new(format!("list_{target}"))]);
-            if let FunctionArguments::List(args) = &mut function.args {
-                args.duplicate_treatment = None;
-                args.args = vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Function(
-                    values,
-                )))];
-            }
-            return Ok(());
+        // LIST retains the original typed DISTINCT identity and window order.
+        // Its operand occurs once; the native scalar converts the completed
+        // list to DOUBLE and accumulates sequentially without a parallel combine.
+        let mut values = function.clone();
+        values.name = ObjectName::from(vec![Ident::new("list")]);
+        function.name = ObjectName::from(vec![Ident::new(format!("__msduck_list_{target}"))]);
+        function.over = None;
+        function.filter = None;
+        function.within_group.clear();
+        if let FunctionArguments::List(args) = &mut function.args {
+            args.duplicate_treatment = None;
+            args.clauses.clear();
+            args.args = vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Function(
+                values,
+            )))];
         }
-        function.name = ObjectName::from(vec![Ident::new(target)]);
         return Ok(());
     }
     let Some(rank) = integer_rank(function, parameters) else {

@@ -19,12 +19,28 @@ their binary64 transitions fail rather than returning infinities. The core
 reports a typed overflow result; the root adapter must turn it into the correct
 SQL Server diagnostic.
 
-This state is a deterministic arithmetic component, not a complete aggregate
-implementation. Typed DISTINCT deduplication belongs upstream, before
-binary64 conversion. Native DuckDB registration, NULL warning observation,
-metadata, wire encoding and error mapping remain root-side. No parallel
-`combine` operation is defined because the captured computation is sensitive
-to transition order. The SQL Server captures do not establish a universal
-physical order for grouped or parallel plans; a native integration must test
-those plans and preserve one evaluation of volatile operands before claiming
-full parity.
+The root native adapter in `src/decimal_aggregate/statistical.rs` now uses this
+state for STDEV, STDEVP, VAR and VARP. Registration runs through the existing
+numeric aggregate entry point. SQL lowering collects a typed LIST, retaining
+DISTINCT and window membership/order on that call, then converts the completed
+list to DOUBLE for the scalar accumulator. DISTINCT therefore runs before
+binary64 conversion. The source operand appears once; NULL observation runs
+before ordinary deduplication or on the consumed window frame. Empty frames do
+not warn about NULLs excluded from the frame. Native overflow maps to the
+captured 8115/state 2/class 16 float error and leaves the connection reusable.
+
+The native callback copies child values into a 1,024-element flat scratch
+vector before reading them. This handles constant/dictionary child vectors and
+checks list bounds and selection-index capacity. Its accumulator and scratch
+storage are bounded, but DuckDB-owned input LISTs materialize a whole group or
+frame; ordinary aggregate memory is therefore proportional to its input and
+large window frames can be expensive. This is an explicit cost of evaluating
+the observed sequential arithmetic without inventing a parallel combine rule.
+
+Independent tedious replay matches all 156 precision cells and 812 transition
+cells, including exact FLOAT(53) descriptors, NULLs, warnings and captured
+overflow diagnostics. Full observations retain separate token/completion
+differences. The SQL Server captures do not establish a universal physical
+order for grouped or parallel plans, and DuckDB LIST aggregate transition
+order is not a SQL Server plan guarantee. Further plan/type/scale evidence and
+performance work remain necessary before claiming full statistical parity.

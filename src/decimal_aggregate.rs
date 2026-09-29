@@ -1,4 +1,5 @@
 //! Native vectors and aggregate lifecycle for exact DECIMAL AVG.
+mod statistical;
 use duckdb::{Connection, ffi::*};
 use msduck_core::{decimal_aggregate::State, types::DecimalType};
 use std::{
@@ -144,7 +145,7 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
             registered?;
         }
     }
-    Ok(())
+    statistical::register(db)
 }
 
 #[cfg(test)]
