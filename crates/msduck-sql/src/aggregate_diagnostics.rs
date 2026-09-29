@@ -106,6 +106,27 @@ pub fn instrument<T: VisitMut>(
     impl<F: Fn(&str) -> bool> VisitorMut for Instrument<'_, F> {
         type Break = ();
         fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
+            // Statistical DISTINCT lowering retains the original typed values in
+            // list(DISTINCT value). Observe that input before deduplication; the
+            // outer list statistic receives a single list, not source rows.
+            if let Expr::Function(function) = expr
+                && matches!(
+                    function.name.to_string().to_ascii_lowercase().as_str(),
+                    "list_stddev_samp" | "list_stddev_pop" | "list_var_samp" | "list_var_pop"
+                )
+                && let FunctionArguments::List(outer) = &mut function.args
+                && let [FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Function(values)))] =
+                    outer.args.as_mut_slice()
+                && values.name.to_string().eq_ignore_ascii_case("list")
+                && let FunctionArguments::List(inner) = &mut values.args
+                && inner.duplicate_treatment == Some(DuplicateTreatment::Distinct)
+                && let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] =
+                    inner.args.as_mut_slice()
+            {
+                *value = operand(value.clone(), self.ticket.clone());
+                self.count += 1;
+                return ControlFlow::Continue(());
+            }
             if let Expr::Function(function) = expr
                 && (self.selected)(&function.name.to_string().to_ascii_lowercase())
                 && let FunctionArguments::List(args) = &mut function.args
@@ -129,4 +150,47 @@ pub fn instrument<T: VisitMut>(
     };
     let _ = node.visit(&mut visitor);
     visitor.count
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dialect::ServerDialect;
+    use sqlparser::parser::Parser;
+
+    #[test]
+    fn statistical_distinct_observes_original_operand_once() {
+        for name in ["STDEV", "STDEVP", "VAR", "VARP"] {
+            let mut statement = Parser::parse_sql(
+                &ServerDialect,
+                &format!("SELECT {name}(DISTINCT nextval('calls'))"),
+            )
+            .unwrap()
+            .remove(0);
+            let Statement::Query(query) = &mut statement else {
+                panic!("query")
+            };
+            let SetExpr::Select(select) = query.body.as_mut() else {
+                panic!("select")
+            };
+            let SelectItem::UnnamedExpr(value) = &mut select.projection[0] else {
+                panic!("expression")
+            };
+            crate::aggregate::mark(value, &Default::default()).unwrap();
+            let count = instrument(
+                &mut statement,
+                &Expr::Value(Value::Placeholder("$1".into()).into()),
+                |_| false,
+            );
+            let rendered = statement.to_string().to_ascii_lowercase();
+            assert_eq!(count, 1, "{name}");
+            assert_eq!(rendered.matches("nextval('calls')").count(), 1, "{name}");
+            assert_eq!(
+                rendered.matches("__msduck_observe_null").count(),
+                1,
+                "{name}"
+            );
+            assert!(rendered.contains("list(distinct"), "{name}: {rendered}");
+        }
+    }
 }

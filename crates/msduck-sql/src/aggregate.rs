@@ -147,11 +147,20 @@ pub fn validate(function: &Function) -> Result<(), String> {
     ) {
         return Ok(());
     }
+    let diagnostic_name = if matches!(name.as_str(), "stdev" | "stdevp" | "var" | "varp") {
+        name.to_ascii_uppercase()
+    } else {
+        name.clone()
+    };
     let FunctionArguments::List(args) = &function.args else {
-        return Err(format!("The {name} function requires 1 argument(s)."));
+        return Err(format!(
+            "The {diagnostic_name} function requires 1 argument(s)."
+        ));
     };
     if args.args.len() != 1 {
-        return Err(format!("The {name} function requires 1 argument(s)."));
+        return Err(format!(
+            "The {diagnostic_name} function requires 1 argument(s)."
+        ));
     }
     if function.over.is_some() && args.duplicate_treatment == Some(DuplicateTreatment::Distinct) {
         return Err("Use of DISTINCT is not allowed with the OVER clause.".into());
@@ -443,5 +452,22 @@ mod tests {
         ] {
             validate(&function(sql)).unwrap();
         }
+    }
+
+    #[test]
+    fn statistical_signature_messages_preserve_sql_server_spelling() {
+        for name in ["STDEV", "STDEVP", "VAR", "VARP"] {
+            let function = function(&format!("SELECT {name}()"));
+            let message = validate(&function).unwrap_err();
+            assert_eq!(
+                message,
+                format!("The {name} function requires 1 argument(s).")
+            );
+            assert_eq!(error_number(&message), Some(174));
+        }
+        assert_eq!(
+            validate(&function("SELECT SUM()")).unwrap_err(),
+            "The sum function requires 1 argument(s)."
+        );
     }
 }

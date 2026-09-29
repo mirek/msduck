@@ -72,6 +72,87 @@ pub fn append_warning(tokens: &mut Vec<u8>) {
 mod tests {
     use crate::{engine::Session, server::Server};
 
+    fn utf16_bytes(message: &str) -> Vec<u8> {
+        message.encode_utf16().flat_map(u16::to_le_bytes).collect()
+    }
+
+    #[test]
+    fn statistical_distinct_reports_eliminated_nulls_once_and_preserves_input_evaluation() {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        let mut warning = Vec::new();
+        super::append_warning(&mut warning);
+        for name in ["STDEV", "STDEVP", "VAR", "VARP"] {
+            for (source, expected) in [
+                ("(VALUES(1),(NULL),(2),(NULL)) d(v)", 1),
+                ("(VALUES(1),(1),(2)) d(v)", 0),
+                ("(SELECT CAST(NULL AS INT) v WHERE 1=0) d", 0),
+            ] {
+                let sql = format!("SELECT {name}(DISTINCT v) FROM {source}");
+                let (tokens, ok) = session.batch_response(&sql, &Default::default(), false, None);
+                assert!(ok, "{sql}: {tokens:?}");
+                assert_eq!(
+                    tokens
+                        .windows(warning.len())
+                        .filter(|v| *v == warning)
+                        .count(),
+                    expected,
+                    "{sql}"
+                );
+            }
+            let (_, ok) =
+                session.batch_response("SET ANSI_WARNINGS OFF", &Default::default(), false, None);
+            assert!(ok);
+            let sql = format!("SELECT {name}(DISTINCT v) FROM (VALUES(1),(NULL)) d(v)");
+            let (tokens, ok) = session.batch_response(&sql, &Default::default(), false, None);
+            assert!(ok, "{sql}: {tokens:?}");
+            assert!(!tokens.windows(warning.len()).any(|v| v == warning));
+            let (_, ok) =
+                session.batch_response("SET ANSI_WARNINGS ON", &Default::default(), false, None);
+            assert!(ok);
+        }
+
+        session
+            .db
+            .execute_batch("CREATE SEQUENCE distinct_calls")
+            .unwrap();
+        let sql = "SELECT STDEV(DISTINCT CASE WHEN nextval('distinct_calls') % 2 = 0 THEN NULL ELSE v END) FROM (VALUES(1),(2),(3),(4)) d(v)";
+        let (tokens, ok) = session.batch_response(sql, &Default::default(), false, None);
+        assert!(ok, "{tokens:?}");
+        assert_eq!(
+            tokens
+                .windows(warning.len())
+                .filter(|v| *v == warning)
+                .count(),
+            1
+        );
+        let calls: i64 = session
+            .db
+            .query_row("SELECT currval('distinct_calls')", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(calls, 4);
+    }
+
+    #[test]
+    fn statistical_signatures_report_exact_errors_on_wire() {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        for name in ["STDEV", "STDEVP", "VAR", "VARP"] {
+            let sql = format!("SELECT {name}()");
+            let (tokens, ok) = session.batch_response(&sql, &Default::default(), false, None);
+            assert!(!ok, "{sql}");
+            let message = utf16_bytes(&format!("The {name} function requires 1 argument(s)."));
+            assert_eq!(
+                tokens
+                    .windows(message.len())
+                    .filter(|v| *v == message)
+                    .count(),
+                1,
+                "{sql}"
+            );
+        }
+    }
+
     #[test]
     fn disabled_warnings_do_not_require_available_diagnostic_contexts() {
         let server = Server::open(":memory:").unwrap();
