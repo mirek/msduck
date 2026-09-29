@@ -129,10 +129,15 @@ impl Catalog {
                 changes: std::sync::Mutex::new(()),
             }
         } else {
-            let file = Path::new(path);
+            // Resolve the directory once, so later file work does not
+            // depend on the process's current directory.
+            let file = std::path::absolute(path).context("resolve the database path")?;
             Self {
                 primary,
-                directory: file.parent().map(Path::to_path_buf).unwrap_or_default(),
+                directory: file
+                    .parent()
+                    .map(Path::to_path_buf)
+                    .context("database path needs a parent directory")?,
                 prefix: file
                     .file_name()
                     .and_then(|name| name.to_str())
