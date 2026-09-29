@@ -20,7 +20,8 @@ sqlcmd.
 | `latest`, `X.Y.Z`, `X.Y` | a pushed stable `vX.Y.Z` Git tag |
 | `X.Y.Z-pre` | a prerelease tag such as `vX.Y.Z-rc.1` (never `latest`) |
 
-Only release tags publish. Each tag is one manifest for `linux/amd64` and
+Only release tags, `v` followed by a digit, publish; `verify-*` CI tags do not
+start this workflow. Each tag is one manifest for `linux/amd64` and
 `linux/arm64`, built on native GitHub runners rather than under emulation.
 An `edge` tag was published from `main` on 2026-09-27 before publishing was
 limited to releases. It is no longer updated.
