@@ -6063,6 +6063,30 @@
       ],
       "issue": 574,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVoGa"
+    },
+    {
+      "id": "identity-insert-column-diagnostics-v1",
+      "title": "Preserve captured INSERT column diagnostics in IDENTITY_INSERT preflight",
+      "state": "ready",
+      "authorization": "Mirek continuing full SQL Server compatible Rust server goal; first-party reference/identity-insert-shapes.json cases for duplicate and invalid columns",
+      "scope": [
+        "crates/msduck-sql/src/identity_insert_gate.rs",
+        "crates/msduck-sql/tests/identity_insert_gate.rs",
+        "src/identity_insert_write.rs",
+        "tests/identity_insert_write.rs",
+        "docs/identity-insert-gate.md",
+        "docs/identity-insert-write-adapter.md"
+      ],
+      "acceptance": [
+        "For the captured IDENTITY_INSERT ON duplicate id and invalid missing target-column shapes, return exact typed 264 and 207 diagnostics and failed DONE command 253 from the pure gate, without inspecting or evaluating source expressions.",
+        "Propagate the captured diagnostics through the live catalog preflight; verify session state is unchanged. Keep unprobed mixed, multi-part and ambiguous target-column defects explicitly unsupported rather than inventing diagnostic precedence.",
+        "Replay both retained runs in pure and live adapter tests, update boundary documentation, and run AGENTS.md Rust/client/audit checks on the exact PR head before merging with completed owner-enabled Codex review."
+      ],
+      "dependencies": [
+        "identity-insert-write-adapter-v1"
+      ],
+      "issue": 576,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVp9j"
     }
   ]
 }
