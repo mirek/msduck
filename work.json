@@ -6860,6 +6860,25 @@
       ],
       "issue": 644,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYR90"
+    },
+    {
+      "id": "float-values-binding-v1",
+      "title": "Preserve FLOAT REAL declarations through VALUES operand binding",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility goal; runtime task #644 captured replay shows FLOAT VALUES columns unresolved by first-party binder",
+      "scope": [
+        "crates/msduck-sql/src/aggregate_columns.rs",
+        "crates/msduck-sql/tests/float_values_binding.rs",
+        "docs/float-values-binding.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Infer known FLOAT/REAL VALUES common declarations from explicit source types including mixed integer decimal NULL operands, leave unknown or incompatible types unknown and preserve lexical boundaries.",
+        "Annotate aggregate operands using explicit snapshots without native/backend dependencies or operand duplication; pure tests cover FLOAT overflow source shapes, REAL rounding, derived/CTE aliases, mixed numeric precedence and unknown controls.",
+        "Run format strict deterministic Clippy and tests, dependent runtime exact-head workspace/client/audit evidence on integrated tree, gated PR review/fallback merge and prompt registry/project completion."
+      ],
+      "issue": 645,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYT-x"
     }
   ]
 }
