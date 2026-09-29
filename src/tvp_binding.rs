@@ -1,4 +1,7 @@
 //! Catalog-backed TVP binding. This adapter does not write rows or execute RPCs.
+#[path = "tvp_materialize.rs"]
+pub mod materialize;
+
 use duckdb::Connection;
 use msduck_core::diagnostic::SqlError;
 use msduck_tds::tvp::{Cell, ColumnType, Limits, Tvp, Value};
