@@ -6790,7 +6790,7 @@
     {
       "id": "statistical-state-runtime-v1",
       "title": "Execute statistical aggregates with captured binary64 arithmetic",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party deterministic state and pinned statistical precision/transition captures",
       "scope": [
         "src/decimal_aggregate.rs",
