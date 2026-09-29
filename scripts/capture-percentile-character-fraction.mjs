@@ -2,9 +2,10 @@
 // Capture character percentile fraction conversion before implementing it.
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdir, open, readFile } from 'node:fs/promises'
+import { mkdir, open, readFile, realpath } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { dirname, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Request, TYPES } from 'tedious'
 import { withReferenceContainer, referenceImage } from './lib/reference-container.mjs'
 import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
@@ -199,6 +200,12 @@ function validate(run) {
   assertSameCapture(reuse.sets.map(set => set.rows), [[[1]]], 'reuse failed')
   assert.equal(reuse.errors.length, 0)
 }
+async function canonicalOutput(path) {
+  try { return await realpath(path) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return resolve(await realpath(dirname(path)), basename(path))
+  }
+}
 async function retained() {
   const bytes = await readFile(fixture)
   assert.equal(createHash('sha256').update(bytes).digest('hex'), fixtureSha256, 'fixture checksum changed')
@@ -216,6 +223,7 @@ if (mode === '--check') {
   if (mode === '--write-fixture') await refuseExistingFixture(fixture)
   if (process.env.MSSQL_REFERENCE_IMAGE && process.env.MSSQL_REFERENCE_IMAGE !== referenceImage) throw Error('reference image must be pinned')
   await mkdir(dirname(output), { recursive: true })
+  if (await canonicalOutput(output) === await canonicalOutput(fileURLToPath(fixture))) throw Error('output must not alias the retained fixture')
   const file = await open(output, 'wx') // refuse existing paths and fixture aliases
   try {
     await file.writeFile(JSON.stringify({ status: 'incomplete' }) + '\n')
