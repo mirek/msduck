@@ -6024,7 +6024,7 @@
     {
       "id": "identity-insert-write-adapter-v1",
       "title": "Compose IDENTITY_INSERT INSERT permission with live catalog",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek continuing full SQL Server compatibility goal; first-party IDENTITY_INSERT fixtures and merged pure permission/session rules.",
       "scope": [
         "src/identity_insert_write.rs",
