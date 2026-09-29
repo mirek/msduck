@@ -6655,7 +6655,7 @@
     {
       "id": "numeric-literal-division-direct-v1",
       "title": "Match direct decimal division with bare integer operands",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server compatibility implementation goal and owner-produced pinned reference in issue #626; no external submission is input.",
       "scope": [
         "crates/msduck-sql/src/decimal_division.rs",
