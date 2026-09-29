@@ -6771,7 +6771,7 @@
     {
       "id": "codex-review-availability-policy-v1",
       "title": "Document Codex review availability fallback for all workers",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction on 2026-09-29: go ahead without Codex review when unavailable after another @codex review attempt; prior owner instruction assigns each worker merge responsibility",
       "scope": [
         ".agents/skills/contribute/SKILL.md",
