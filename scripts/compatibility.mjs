@@ -1,21 +1,27 @@
 // Diagnostic capture and opt-in SQL Server comparison. Upstream SQLite
 // exceptions are never applied to msduck results.
 import { mkdir, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { corpus } from '../reference/mssqlite/corpus.ts'
 import { start } from '../tests/support/client.mjs'
 import { canonical, complete, differences, runCase } from './lib/compatibility.mjs'
 import { referenceConfig, isolatedReference, connect, command } from './lib/reference.mjs'
 
 const args = process.argv.slice(2)
-if (args.some(arg => arg !== '--compare') || args.length > 1) throw new Error('Usage: node scripts/compatibility.mjs [--compare]')
-const compare = args.includes('--compare')
-const config = compare ? referenceConfig() : null
-let referenceVersion
-if (compare) {
-  const reference = await connect(config)
-  try { referenceVersion = await command(reference, 'SELECT @@VERSION AS version') }
-  finally { reference.close() }
+const usage = 'Usage: node scripts/compatibility.mjs [--compare] [--case EXACT_NAME ...] [--plan | --list-cases]'
+let compare = false
+let plan = false
+let listCases = false
+const requestedNames = []
+for (let index = 0; index < args.length; index++) {
+  const arg = args[index]
+  if (arg === '--compare' && !compare) compare = true
+  else if (arg === '--plan' && !plan) plan = true
+  else if (arg === '--list-cases' && !listCases) listCases = true
+  else if (arg === '--case' && args[index + 1] && !args[index + 1].startsWith('--')) requestedNames.push(args[++index])
+  else throw new Error(usage)
 }
+if (listCases && (compare || plan || requestedNames.length)) throw new Error(usage)
 const probes = [
   { name: 'Integer overflow retains result metadata and continues the batch', query: 'SELECT CASE WHEN 2147483647+1=0 THEN 7 ELSE NULL END AS n; SELECT 9 AS alive' },
   { name: 'Constant CASE retains selected column provenance and conversion nullability', setup: 'CREATE TABLE case_metadata_probe(id INT NOT NULL,v INT); INSERT INTO case_metadata_probe VALUES(7,NULL)', query: 'SELECT CASE WHEN 1=1 THEN id ELSE NULL END AS stored,CASE WHEN 1=1 THEN id ELSE CAST(NULL AS BIGINT) END AS converted,CASE WHEN 1=0 THEN NULL WHEN 2=2 THEN 7 ELSE NULL END AS literal,CASE WHEN id=7 THEN 1 ELSE NULL END AS runtime FROM case_metadata_probe', cleanup: 'DROP TABLE case_metadata_probe' },
@@ -331,8 +337,36 @@ const probes = [
   { name: 'logical variable declaration defaults', query: `DECLARE @a VARCHAR='abc', @b NVARCHAR=N'雪山', @c CHAR(4)='x', @d NCHAR(3)=N'雪', @n DECIMAL=12.9, @flag BIT=2; SELECT @a,@b,@c,@d,@n,@flag,DATALENGTH(@a),DATALENGTH(@b),DATALENGTH(@c),DATALENGTH(@d),DATALENGTH(@n),DATALENGTH(@flag); SET @a='more'; SELECT @b=N'花火'; SELECT @a,@b; DECLARE @id UNIQUEIDENTIFIER='00112233-4455-6677-8899-aabbccddeeff'; SELECT DATALENGTH(@id),DATALENGTH(CAST(NULL AS UNIQUEIDENTIFIER))` },
   { name: 'numeric literal descriptors', query: 'SELECT 2147483648 AS large_integer,0.00 AS fraction,00012.3400 AS leading_zeros,2147483649/2 AS division' }
 ]
+const allCases = [...corpus, ...probes]
+if (listCases) {
+  for (const entry of allCases) console.log(entry.name)
+  process.exit(0)
+}
+const requested = new Set(requestedNames)
+if (requested.size !== requestedNames.length) throw new Error('Each --case name must be selected only once')
+for (const name of requested) {
+  const matches = allCases.filter(entry => entry.name === name).length
+  if (matches !== 1) throw new Error(`${matches ? 'Ambiguous' : 'Unknown'} case: ${name}`)
+}
+const selected = requested.size ? allCases.filter(entry => requested.has(entry.name)) : allCases
+const mode = compare ? 'comparison' : 'local'
+const suffix = requested.size
+  ? `selected-${mode}-${createHash('sha256').update(selected.map(entry => entry.name).join('\0')).digest('hex').slice(0, 12)}`
+  : mode
+const output = `artifacts/compatibility/${suffix}.json`
+if (plan) {
+  console.log(JSON.stringify({ mode, totalCases: allCases.length, selectedCases: selected.map(entry => entry.name), output }, null, 2))
+  process.exit(0)
+}
+const config = compare ? referenceConfig() : null
+let referenceVersion
+if (compare) {
+  const reference = await connect(config)
+  try { referenceVersion = await command(reference, 'SELECT @@VERSION AS version') }
+  finally { reference.close() }
+}
 const results = []
-for (const entry of [...corpus, ...probes]) {
+for (const entry of selected) {
   const cleanup = []
   const result = { name: entry.name, query: entry.query }
   try {
@@ -350,11 +384,11 @@ for (const entry of [...corpus, ...probes]) {
   console.log(`${compare ? result.status : result.execution && !result.execution.errors.length ? 'executed' : 'gap'}: ${entry.name}`)
 }
 await mkdir('artifacts/compatibility', { recursive: true })
-const output = `artifacts/compatibility/${compare ? 'comparison' : 'local'}.json`
 await writeFile(output, JSON.stringify(canonical({
   mode: compare ? 'sql-server-comparison' : 'local-diagnostic-only',
   reference: 'mirek/mssqlite@7f71f2081602f8e3051998f5c11f058e65fe24ec',
   upstreamCases: corpus.length, additionalProbes: probes.length,
+  ...(requested.size ? { totalCases: allCases.length, selectedCases: selected.map(entry => entry.name) } : {}),
   ...(compare ? { referenceVersion } : {}),
   warning: compare ? 'Matches apply only to captured observations in these cases; this is not proof of full SQL Server compatibility.' : 'Successful execution does not prove SQL Server equivalence. No SQL Server endpoint was compared.', results
 }), null, 2))

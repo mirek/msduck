@@ -8,7 +8,7 @@ process.once('SIGTERM', stop)
 await withReferenceContainer(async (config, { image }) => {
   console.log(`Reference ready: ${image}`)
   const exitCode = await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ['scripts/compatibility.mjs', '--compare'], {
+    const child = spawn(process.execPath, ['scripts/compatibility.mjs', '--compare', ...process.argv.slice(2)], {
       stdio: 'inherit',
       detached: process.platform !== 'win32',
       env: { ...process.env, MSSQL_REFERENCE_HOST: config.server,
