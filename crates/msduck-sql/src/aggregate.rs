@@ -252,20 +252,18 @@ fn floating_input_kind(expr: &Expr, parameters: &HashMap<String, Parameter>) -> 
             expr: value,
             op: UnaryOperator::Plus | UnaryOperator::Minus,
         } => floating_input_kind(value, parameters),
-        Expr::BinaryOp { left, op, right }
-            if matches!(
-                op,
+        Expr::BinaryOp {
+            left,
+            op:
                 BinaryOperator::Plus
-                    | BinaryOperator::Minus
-                    | BinaryOperator::Multiply
-                    | BinaryOperator::Divide
-            ) =>
-        {
-            crate::expression_metadata::arithmetic::set_type(
-                &floating_input_kind(left, parameters)?,
-                &floating_input_kind(right, parameters)?,
-            )
-        }
+                | BinaryOperator::Minus
+                | BinaryOperator::Multiply
+                | BinaryOperator::Divide,
+            right,
+        } => crate::expression_metadata::arithmetic::set_type(
+            &floating_input_kind(left, parameters)?,
+            &floating_input_kind(right, parameters)?,
+        ),
         Expr::Function(function) => {
             let name = function.name.to_string().to_ascii_lowercase();
             if matches!(
