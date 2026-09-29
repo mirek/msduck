@@ -6087,6 +6087,27 @@
       ],
       "issue": 576,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVp9j"
+    },
+    {
+      "id": "identity-insert-conversion-reference-v1",
+      "title": "Capture IDENTITY_INSERT conversion failure allocation",
+      "state": "ready",
+      "authorization": "Mirek's continuing full SQL Server compatible Rust server goal; first-party gap recorded in docs/identity-insert-errors-reference.md. No external submission.",
+      "scope": [
+        "scripts/capture-identity-insert-conversion.mjs",
+        "reference/identity-insert-conversion.json",
+        "docs/identity-insert-conversion-reference.md"
+      ],
+      "acceptance": [
+        "Capture explicit identity values that fail conversion, comparing allocator state and subsequent generated IDs against control successes on the pinned SQL Server 2025 reference image in two fresh databases.",
+        "Retain exact rows, typed descriptors, errors, TDS event order and raw DONE status/command words; validate a fixed case plan, fixture checksum and independent-container replay without normalizing differences.",
+        "Document the observed allocator timing and remaining unknowns without asserting msduck runtime support. Open an owner PR with exact-head CI and completed Codex review."
+      ],
+      "dependencies": [
+        "identity-insert-errors-reference-v1"
+      ],
+      "issue": 578,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVuM_"
     }
   ]
 }
