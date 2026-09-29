@@ -44,6 +44,50 @@ impl State {
 #[derive(Debug, PartialEq, Eq)]
 pub struct Overflow;
 
+/// Sequential FLOAT SUM/AVG arithmetic on already converted non-NULL inputs.
+/// Source rounding and typed DISTINCT happen before this state is updated.
+/// No parallel combine is defined: binary64 addition is order-sensitive.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FloatSumState {
+    pub count: u64,
+    pub sum: f64,
+    pub failed: bool,
+}
+impl FloatSumState {
+    pub fn push(&mut self, value: f64) {
+        if self.failed {
+            return;
+        }
+        let Some(count) = self.count.checked_add(1) else {
+            self.failed = true;
+            return;
+        };
+        let sum = self.sum + value;
+        if !value.is_finite() || !sum.is_finite() {
+            self.failed = true;
+            return;
+        }
+        self.count = count;
+        self.sum = sum;
+    }
+
+    pub fn value(self, average: bool) -> Result<Option<f64>, Overflow> {
+        if self.failed || !self.sum.is_finite() {
+            return Err(Overflow);
+        }
+        if self.count == 0 {
+            return Ok(None);
+        }
+        let result = if average {
+            self.sum / self.count as f64
+        } else {
+            self.sum
+        };
+        result.is_finite().then_some(Some(result)).ok_or(Overflow)
+    }
+}
+
 /// The four SQL Server statistical result families. All return FLOAT(53).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Statistic {
@@ -127,6 +171,55 @@ impl FloatStatsState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn float_sums_retain_source_rounding_order_and_sticky_overflow() {
+        assert_eq!(FloatSumState::default().value(false), Ok(None));
+        let mut state = FloatSumState::default();
+        for value in [0.1_f32, 0.2, 0.3, 0.3] {
+            state.push(f64::from(value));
+        }
+        assert_eq!(
+            state.value(false).unwrap().unwrap().to_bits(),
+            0x3fecccccdc000000
+        );
+        assert_eq!(
+            state.value(true).unwrap().unwrap().to_bits(),
+            0x3fccccccdc000000
+        );
+        let mut state = FloatSumState::default();
+        for value in [9007199254740992.0, 1.0, 1.0, 1.0] {
+            state.push(value);
+        }
+        assert_eq!(
+            state.value(false).unwrap().unwrap().to_bits(),
+            0x4340000000000000
+        );
+        for input in [
+            vec![1e308, 1e308, -1e308],
+            vec![f64::NAN],
+            vec![f64::INFINITY],
+            vec![f64::NEG_INFINITY],
+        ] {
+            let mut state = FloatSumState::default();
+            for value in input {
+                state.push(value);
+            }
+            state.push(0.0);
+            assert_eq!(state.value(false), Err(Overflow));
+            assert_eq!(state.value(true), Err(Overflow));
+        }
+        let mut state = FloatSumState {
+            count: u64::MAX,
+            ..FloatSumState::default()
+        };
+        state.push(1.0);
+        assert_eq!(state.value(false), Err(Overflow));
+        let mut state = FloatSumState::default();
+        state.push(-0.0);
+        assert_eq!(state.value(false).unwrap().unwrap().to_bits(), 0);
+        state.push(1e308);
+        assert_eq!(state.value(true), Ok(Some(5e307)));
+    }
     #[test]
     fn exact_averages_empty_groups_and_sticky_failure() {
         assert_eq!(State::default().value(true), Ok(None));

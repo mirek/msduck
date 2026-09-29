@@ -923,11 +923,17 @@ impl Resolver<'_> {
                         if let Some(kind) = character {
                             return (String::new(), Some(kind));
                         }
-                        if types
-                            .iter()
-                            .flatten()
-                            .any(|kind| matches!(kind, DataType::Decimal(_) | DataType::Numeric(_)))
-                        {
+                        if types.iter().flatten().any(|kind| {
+                            matches!(
+                                kind,
+                                DataType::Decimal(_)
+                                    | DataType::Numeric(_)
+                                    | DataType::Float(_)
+                                    | DataType::Double(_)
+                                    | DataType::DoublePrecision
+                                    | DataType::Real
+                            )
+                        }) {
                             let numeric = values
                                 .rows
                                 .iter()
