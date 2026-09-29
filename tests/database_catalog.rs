@@ -403,6 +403,13 @@ fn a_failed_file_deletion_keeps_the_registration() {
         // Permissions do not apply to a privileged user.
         assert!(result.is_err());
         assert!(directory.join("msduck.duckdb.5.kept.duckdb").exists());
+        // The failed DROP leaves the database attached and listed.
+        assert_eq!(
+            catalog.list(&db).unwrap(),
+            [database("master", 1), database("kept", 5)]
+        );
+        catalog.select(&db, "kept").unwrap();
+        catalog.select(&db, "master").unwrap();
         assert_eq!(sql_error(catalog.create(&db, "kept").unwrap_err()).0, 1801);
         catalog.remove(&db, "kept").unwrap();
     } else {
@@ -674,6 +681,13 @@ fn database_names_compare_under_the_server_collation() {
     assert_eq!(id("MASTER"), Some(1));
     assert_eq!(id("\u{212A}"), Some(6));
     assert_eq!(id("k"), None);
+    // Trailing spaces are not significant.
+    assert_eq!(id("istanbul  "), Some(5));
+    assert_eq!(catalog.select(&db, "İstanbul ").unwrap(), "İstanbul");
+    assert_eq!(
+        sql_error(catalog.create(&db, "istanbul ").unwrap_err()).0,
+        1801
+    );
     assert_eq!(
         sql_error(catalog.create(&db, "ISTANBUL").unwrap_err()).0,
         1801

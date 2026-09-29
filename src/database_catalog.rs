@@ -380,13 +380,40 @@ impl Catalog {
             bail!(error)
         };
         // Validate the stored file name before detaching anything.
-        self.path(&row)?;
+        let path = self.path(&row)?;
+        // A failed DROP leaves the database available while its file is
+        // intact. DuckDB may report a failed checkpoint after it detached,
+        // and the WAL is deleted after the file, so a present file still
+        // holds all committed data.
+        let restore = |error: anyhow::Error| {
+            if attached && present(&path).unwrap_or(false) {
+                let restored = path
+                    .to_str()
+                    .context("database path is not UTF-8")
+                    .and_then(|file| {
+                        Ok(db.execute_batch(&format!(
+                            "ATTACH IF NOT EXISTS {} AS {}",
+                            literal(file),
+                            quote(&row.name)
+                        ))?)
+                    });
+                if let Err(restore) = restored {
+                    eprintln!("msduck: database {} stays detached: {restore:#}", row.name);
+                }
+            }
+            error
+        };
         if attached {
-            db.execute_batch(&format!("DETACH DATABASE {}", quote(&row.name)))?;
+            // Deleting needs a writable directory, and DuckDB cannot attach
+            // the file again without one. Check before detaching, so the
+            // usual failure leaves the database untouched.
+            deletable(&path)?;
+            db.execute_batch(&format!("DETACH DATABASE {}", quote(&row.name)))
+                .map_err(|error| restore(error.into()))?;
         }
         // Keep the registration until the files are gone, so a failed
         // deletion leaves a database that another DROP can finish removing.
-        self.delete_files(&row)?;
+        self.delete_files(&row).map_err(restore)?;
         db.execute(
             &format!("DELETE FROM {} WHERE name_key=?", self.registry()),
             [&name_key],
@@ -461,7 +488,7 @@ impl Catalog {
                  WHERE r.published
              );
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_key(value) AS
-                 translate(CAST(value AS VARCHAR), {upper}, {lower});
+                 translate(rtrim(CAST(value AS VARCHAR), ' '), {upper}, {lower});
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_id(value) AS
                  (SELECT database_id FROM {target}.sys.databases
                   WHERE {target}.main.__msduck_db_key(name)={target}.main.__msduck_db_key(value));
@@ -562,7 +589,8 @@ fn validate(name: &str) -> Result<()> {
 /// server collation; the registry keys on that collation's captured
 /// lower-case mapping of UTF-16 units, not on generic Unicode casing.
 fn key(name: &str) -> String {
-    let mut units: Vec<u16> = name.encode_utf16().collect();
+    // Comparisons under the collation ignore trailing spaces.
+    let mut units: Vec<u16> = name.trim_end_matches(' ').encode_utf16().collect();
     Family::SqlLatin1.map_in_place(Direction::Lower, &mut units);
     // The mapping leaves surrogates unchanged, so the units stay valid.
     String::from_utf16_lossy(&units)
@@ -596,6 +624,19 @@ fn present(path: &Path) -> Result<bool> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(error).with_context(|| format!("inspect {}", path.display())),
     }
+}
+
+/// Whether files next to `path` can be created and removed.
+fn deletable(path: &Path) -> Result<()> {
+    let mut probe = path.to_path_buf().into_os_string();
+    probe.push(".drop");
+    let probe = PathBuf::from(probe);
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+        .with_context(|| format!("cannot delete files in {}", path.display()))?;
+    std::fs::remove_file(&probe).with_context(|| format!("delete {}", probe.display()))
 }
 
 fn wal(path: &Path) -> PathBuf {
@@ -762,6 +803,8 @@ mod tests {
     #[test]
     fn keys_follow_the_server_collation() {
         assert_eq!(key("Sales"), "sales");
+        assert_eq!(key("Sales  "), "sales");
+        assert_eq!(key(" sales"), " sales");
         // Generic Unicode lowercases İ to i and a combining dot.
         assert_eq!(key("İ"), "i");
         assert_eq!(key("ΣẞıI🦆"), "σẞıi🦆");

@@ -12,7 +12,8 @@ and IDs are not reused after a drop.
 name, the lower-case key used for case-insensitive lookup, the ID, the file name,
 the create date and whether publication finished. The key uses the captured
 `SQL_Latin1_General_CP1_CI_AS` lower-case mapping of UTF-16 units, not generic
-Unicode casing, so `İ` and `i` name the same database. The SQL helpers behind
+Unicode casing, after dropping trailing spaces, so `İ`, `i` and `i ` name the
+same database. The SQL helpers behind
 database ID lookups apply the same mapping with `translate`. This approximates the
 collation's comparison; other equivalences of its sort weights are not modelled.
 A new database is listed in `sys.databases` and selectable only after its
@@ -50,7 +51,10 @@ The check precedes the open, so it does not guard against a process that swaps
 files in the data directory concurrently. Dropping a database
 detaches it and deletes its file and WAL before the registration. If a deletion
 fails, the database stays registered and DROP reports the error, so a retry can
-finish. A CREATE that fails after its file exists cleans up the same way.
+finish. Before detaching, DROP creates and removes a `<file>.drop` probe; if
+the directory does not allow that, DROP fails and the database stays attached.
+If a later step fails while the file is intact, the database is attached again
+when DuckDB allows it. A CREATE that fails after its file exists cleans up the same way.
 
 An in-memory server keeps its user databases in a private (`0700` on Unix)
 temporary directory, which is
