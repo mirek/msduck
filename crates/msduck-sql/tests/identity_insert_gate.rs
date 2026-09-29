@@ -343,6 +343,8 @@ fn unknown_shapes_fail_closed_before_diagnostic_precedence() {
     for sql in [
         "INSERT dbo.alpha VALUES(DEFAULT,3),(40,4)",
         "INSERT dbo.alpha VALUES(20,3),(40,4)",
+        "INSERT dbo.alpha VALUES(DEFAULT,(SELECT 3))",
+        "INSERT dbo.alpha VALUES(20,ABS(3))",
     ] {
         for active in [None, Some(&key)] {
             assert!(
