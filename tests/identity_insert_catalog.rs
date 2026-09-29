@@ -69,6 +69,15 @@ fn missing_and_nonidentity_targets_replay_captured_diagnostics() {
             assert_diagnostic(resolve(&session.db, &target).unwrap_err(), &case);
         }
     }
+    for name in ["plain", "missing"] {
+        assert!(matches!(
+            resolve(
+                &session.db,
+                &parts(&format!("SET IDENTITY_INSERT {name} ON"))
+            ),
+            Err(ResolveError::Unsupported(_))
+        ));
+    }
 }
 
 #[test]

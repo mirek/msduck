@@ -15,8 +15,10 @@ For the captured `dbo.missing` and `dbo.plain` targets, it returns the exact
 SQL Server [reference](../reference/identity-insert-errors.json) diagnostics:
 1088/state 11/class 16 for a missing table and 8106/state 1/class 16 for a
 table without an identity, both with DONE command 253. A catalog inconsistency
-or backend failure is separate from those SQL diagnostics. Error spelling for
-other requested forms has not been independently captured. The resolver never
+or backend failure is separate from those SQL diagnostics. Unqualified missing
+or nonidentity targets return `Unsupported` because their error spelling has
+not been captured; successful unqualified targets still resolve through `dbo`.
+Other requested forms have not been independently captured. The resolver never
 changes a session setting or executes a SQL fragment supplied by the caller.
 
 The [path-imported integration tests](../tests/identity_insert_catalog.rs)

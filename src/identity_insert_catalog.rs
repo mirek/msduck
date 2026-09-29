@@ -87,6 +87,11 @@ pub fn resolve(db: &Connection, parts: &[Ident]) -> Result<ResolvedTable, Resolv
     )?;
     let mut rows = statement.query([schema, table])?;
     let Some(row) = rows.next()? else {
+        if parts.len() == 1 {
+            return Err(ResolveError::Unsupported(
+                "unqualified missing-table diagnostic is unprobed",
+            ));
+        }
         return Err(diagnostic(
             1088,
             11,
@@ -106,6 +111,11 @@ pub fn resolve(db: &Connection, parts: &[Ident]) -> Result<ResolvedTable, Resolv
         ));
     }
     let Some(_identity_column) = identity_column else {
+        if parts.len() == 1 {
+            return Err(ResolveError::Unsupported(
+                "unqualified nonidentity-table diagnostic is unprobed",
+            ));
+        }
         return Err(diagnostic(
             8106,
             1,
