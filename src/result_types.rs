@@ -42,11 +42,10 @@ pub fn isnull_type(first: &Expr, replacement: &Expr) -> Option<Type> {
     msduck_sql::result_types::isnull_type(first, replacement).map(wire)
 }
 
-pub fn bound_projection(
-    db: &duckdb::Connection,
+fn bound_statement(
     statement: &Statement,
     parameters: &std::collections::HashMap<String, crate::parameter::Parameter>,
-) -> duckdb::Result<Vec<Option<Type>>> {
+) -> Statement {
     struct Parameters<'a>(&'a std::collections::HashMap<String, crate::parameter::Parameter>);
     impl VisitorMut for Parameters<'_> {
         type Break = ();
@@ -57,11 +56,16 @@ pub fn bound_projection(
                     || matches!(parameter.ast_type(), DataType::Time(..))
                     || msduck_sql::money_cast::money_type(&parameter.ast_type()).is_some())
             {
-                *expr = Expr::Cast {
-                    kind: CastKind::Cast,
+                // This is a metadata-only surrogate for a runtime binding.
+                // CONVERT retains its declaration without looking like an
+                // explicit typed-NULL CAST to literal-folding rules.
+                *expr = Expr::Convert {
+                    is_try: false,
                     expr: Box::new(Expr::Value(Value::Null.into())),
-                    data_type: parameter.ast_type(),
-                    format: None,
+                    data_type: Some(parameter.ast_type()),
+                    charset: None,
+                    target_before_value: true,
+                    styles: vec![],
                 };
             }
             std::ops::ControlFlow::Continue(())
@@ -69,6 +73,15 @@ pub fn bound_projection(
     }
     let mut typed = statement.clone();
     let _ = VisitMut::visit(&mut typed, &mut Parameters(parameters));
+    typed
+}
+
+pub fn bound_projection(
+    db: &duckdb::Connection,
+    statement: &Statement,
+    parameters: &std::collections::HashMap<String, crate::parameter::Parameter>,
+) -> duckdb::Result<Vec<Option<Type>>> {
+    let typed = bound_statement(statement, parameters);
     let mut types = projection(&typed);
     if let Statement::Query(query) = &typed
         && let Some(fields) =
@@ -148,7 +161,79 @@ fn fill_fields(types: &mut Vec<Option<Type>>, fields: &[crate::query_catalog::Fi
 #[cfg(test)]
 mod tests {
     use super::*;
+    use msduck_core::{
+        character::CharacterType,
+        types::{Scale, Type as CoreType},
+        value::Value as CoreValue,
+    };
     use std::ops::ControlFlow;
+
+    #[test]
+    fn bound_parameters_keep_runtime_provenance_and_declared_types() {
+        let character =
+            CoreType::Character(CharacterType::new(Family::Nvarchar, Length::Bounded(12)).unwrap());
+        let parameters = std::collections::HashMap::from([
+            (
+                "@text".to_owned(),
+                crate::parameter::Parameter {
+                    value: CoreValue::Null,
+                    data_type: character,
+                },
+            ),
+            (
+                "@clock".to_owned(),
+                crate::parameter::Parameter {
+                    value: CoreValue::Null,
+                    data_type: CoreType::Time(Scale::new(2).unwrap()),
+                },
+            ),
+            (
+                "@amount".to_owned(),
+                crate::parameter::Parameter {
+                    value: CoreValue::Null,
+                    data_type: CoreType::Money,
+                },
+            ),
+        ]);
+        let sql = "SELECT COALESCE(@text,N'🦆'),COALESCE(CAST(NULL AS NVARCHAR(12)),N'🦆'),@clock,@amount";
+        let statement = msduck_sql::batch::parse(sql).unwrap().remove(0);
+        let typed = bound_statement(&statement, &parameters);
+        struct Shapes {
+            converts: usize,
+            casts: usize,
+        }
+        impl Visitor for Shapes {
+            type Break = ();
+            fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+                match expr {
+                    Expr::Convert { .. } => self.converts += 1,
+                    Expr::Cast { .. } => self.casts += 1,
+                    _ => {}
+                }
+                ControlFlow::Continue(())
+            }
+        }
+        let mut shapes = Shapes {
+            converts: 0,
+            casts: 0,
+        };
+        let _ = Visit::visit(&typed, &mut shapes);
+        assert_eq!((shapes.converts, shapes.casts), (3, 1));
+
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let db = server.connection().unwrap();
+        let before = bound_projection(&db, &statement, &parameters).unwrap();
+        assert_eq!(before.len(), 4);
+        assert_eq!(before[0], Some(Type::Nvarchar(12)));
+        assert_eq!(before[2], Some(Type::Time(2)));
+        assert_eq!(before[3], Some(Type::Money(8)));
+
+        let mut valued = parameters.clone();
+        valued.get_mut("@text").unwrap().value = CoreValue::Unicode("🦆".encode_utf16().collect());
+        assert_eq!(bound_statement(&statement, &valued), typed);
+        assert_eq!(bound_projection(&db, &statement, &valued).unwrap(), before);
+    }
+
     #[test]
     fn conditional_padding_preserves_branch_evaluation_across_chunks() {
         struct Lower;

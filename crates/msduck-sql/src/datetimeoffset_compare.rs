@@ -12,6 +12,8 @@ pub fn scale(
             .max();
     }
     match expr {
+        Expr::AtTimeZone { timestamp, .. } => scale(timestamp, parameters)
+            .or_else(|| crate::datetime2_compare::scale(timestamp, parameters)),
         Expr::Cast { data_type, .. } => crate::datetimeoffset_cast::scale(data_type).ok().flatten(),
         Expr::Identifier(id) => {
             crate::datetimeoffset_cast::scale(&parameters.get(&id.value.to_lowercase())?.ast_type())
@@ -57,7 +59,9 @@ pub fn scale(
                 .or_else(|| name.strip_prefix("__msduck_datetimeoffset_try_"))
                 .or_else(|| name.strip_prefix("__msduck_datetimeoffset_dateadd_"))
                 .or_else(|| name.strip_prefix("__msduck_switchoffset_"))
-                .or_else(|| name.strip_prefix("__msduck_todatetimeoffset_"))?;
+                .or_else(|| name.strip_prefix("__msduck_todatetimeoffset_"))
+                .or_else(|| name.strip_prefix("__msduck_at_time_zone_local_"))
+                .or_else(|| name.strip_prefix("__msduck_at_time_zone_instant_"))?;
             suffix.parse::<u8>().ok().filter(|s| *s <= 7)
         }
         _ => None,

@@ -1,4 +1,6 @@
 //! Attach or change fixed offsets using exact temporal ticks.
+#[path = "at_time_zone_native.rs"]
+mod at_time_zone_native;
 use duckdb::{
     core::{DataChunkHandle, LogicalTypeHandle, LogicalTypeId as Id},
     vscalar::{ScalarFunctionSignature, VScalar},
@@ -14,6 +16,35 @@ pub fn lower(
     expr: &mut Expr,
     parameters: &std::collections::HashMap<String, crate::parameter::Parameter>,
 ) -> Result<(), String> {
+    if let Expr::AtTimeZone {
+        timestamp,
+        time_zone,
+    } = expr
+    {
+        let (scale, instant) =
+            if let Some(scale) = crate::datetimeoffset_compare::scale(timestamp, parameters) {
+                (scale, true)
+            } else if let Some(scale) = crate::datetime2_compare::scale(timestamp, parameters) {
+                (scale, false)
+            } else {
+                return Err(
+                    "AT TIME ZONE requires a declared DATETIME2 or DATETIMEOFFSET input".into(),
+                );
+            };
+        *expr = crate::engine::binary_function(
+            &format!(
+                "__msduck_at_time_zone_{}_{scale}",
+                if instant { "instant" } else { "local" }
+            ),
+            if instant {
+                crate::datetimeoffset_cast::convert(*timestamp.clone(), scale)
+            } else {
+                crate::datetime2_cast::convert(*timestamp.clone(), scale)
+            },
+            *time_zone.clone(),
+        );
+        return Ok(());
+    }
     for (name, attach) in [("SWITCHOFFSET", false), ("TODATETIMEOFFSET", true)] {
         if let Expr::Function(f) = expr
             && let Some([value, offset]) = crate::isnull::binary_args(f, name)?
@@ -251,6 +282,7 @@ impl<const SCALE: u8, const ATTACH: bool, const MONEY: bool> VScalar
 pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
     macro_rules! register {($($s:literal),*)=>{$(db.register_scalar_function::<Switch<$s>>(concat!("__msduck_switchoffset_",stringify!($s)))?; db.register_scalar_function::<Switch<$s,true>>(concat!("__msduck_todatetimeoffset_",stringify!($s)))?; db.register_scalar_function::<Switch<$s,false,true>>(concat!("__msduck_switchoffset_",stringify!($s),"_money"))?; db.register_scalar_function::<Switch<$s,true,true>>(concat!("__msduck_todatetimeoffset_",stringify!($s),"_money"))?;)*};}
     register!(0, 1, 2, 3, 4, 5, 6, 7);
+    at_time_zone_native::register(db)?;
     Ok(())
 }
 

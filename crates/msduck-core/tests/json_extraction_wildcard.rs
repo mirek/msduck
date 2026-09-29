@@ -1,4 +1,7 @@
-use msduck_core::json_path::{PATH, diagnostic, exists, exists_utf16, extract, extract_utf16};
+use msduck_core::json_path::{
+    PATH, diagnostic, exists, exists_utf16, extract, extract_detailed, extract_utf16,
+    extract_utf16_detailed,
+};
 
 #[test]
 fn captured_wildcard_results_and_core_diagnostics_match_both_reference_runs() {
@@ -28,6 +31,15 @@ fn captured_wildcard_results_and_core_diagnostics_match_both_reference_runs() {
             let utf16 = extract_utf16(&source_units, &path_units, query)
                 .map(|value| value.map(|units| String::from_utf16(&units).unwrap()));
             assert_eq!(actual, utf16, "UTF-16 parity: {name}/query={query}");
+            let detailed = extract_detailed(source, path, query);
+            let detailed_utf16 = extract_utf16_detailed(&source_units, &path_units, query)
+                .map(|value| value.map(|units| String::from_utf16(&units).unwrap()));
+            assert_eq!(detailed, detailed_utf16, "detailed UTF-16 parity: {name}");
+            assert_eq!(
+                actual,
+                detailed.clone().map_err(|error| error.marker()),
+                "legacy extraction parity: {name}"
+            );
             let errors = record["result"]["errors"].as_array().unwrap();
             if let Some(reference) = errors.first() {
                 let error = actual.unwrap_err();
@@ -35,6 +47,20 @@ fn captured_wildcard_results_and_core_diagnostics_match_both_reference_runs() {
                 assert_eq!(identity.number, reference["number"], "{name}/query={query}");
                 if name != "wildcard invalid suffix" {
                     assert_eq!(identity.state, reference["state"], "{name}/query={query}");
+                }
+                if identity.number == 13607 {
+                    let error = detailed.as_ref().unwrap_err();
+                    let exact = diagnostic(&error.backend_message()).unwrap();
+                    assert_eq!(exact.number, 13607, "{name}/query={query}");
+                    assert_eq!(exact.state, reference["state"], "{name}/query={query}");
+                    assert_eq!(exact.message, reference["message"], "{name}/query={query}");
+                }
+                if identity.number == 13609 {
+                    let error = detailed.as_ref().unwrap_err();
+                    let exact = diagnostic(&error.backend_message()).unwrap();
+                    assert_eq!(exact.number, 13609, "{name}/query={query}");
+                    assert_eq!(exact.state, reference["state"], "{name}/query={query}");
+                    assert_eq!(exact.message, reference["message"], "{name}/query={query}");
                 }
                 if identity.number != 13609 && identity.number != 13607 {
                     assert_eq!(
@@ -66,4 +92,43 @@ fn wildcard_existence_is_unchanged_and_large_arrays_are_iterative() {
     let many = format!("[{}]", "1,".repeat(20_000).trim_end_matches(','));
     assert_eq!(extract(&many, path, false), Ok(None));
     assert_eq!(extract(&many, path, true), Ok(None));
+}
+
+#[test]
+fn document_cursor_counts_utf16_units_before_the_invalid_value() {
+    let source = "[\"😀\",x]";
+    let path = "$[*]";
+    let utf8 = extract_detailed(source, path, false).unwrap_err();
+    let source_units = source.encode_utf16().collect::<Vec<_>>();
+    let path_units = path.encode_utf16().collect::<Vec<_>>();
+    let utf16 = extract_utf16_detailed(&source_units, &path_units, false).unwrap_err();
+    assert_eq!(utf8, utf16);
+    assert_eq!(
+        diagnostic(&utf8.backend_message()).unwrap().message,
+        "JSON text is not properly formatted. Unexpected character 'x' is found at position 6."
+    );
+}
+
+#[test]
+fn document_cursor_follows_the_sql_json_lexer_after_large_valid_prefixes() {
+    for source in [
+        r#"["\uD800",x]"#.to_owned(),
+        "[1e400,x]".to_owned(),
+        format!("{}x{}", "[".repeat(160), "]".repeat(160)),
+        format!("[{},x]", "1,".repeat(20_000).trim_end_matches(',')),
+    ] {
+        let position = source
+            .encode_utf16()
+            .position(|unit| unit == u16::from(b'x'))
+            .unwrap();
+        let error = extract_detailed(&source, "$[*]", false).unwrap_err();
+        assert_eq!(
+            error,
+            msduck_core::json_path::ExtractionError::DocumentSyntax {
+                character: u16::from(b'x'),
+                position,
+            },
+            "{source}"
+        );
+    }
 }

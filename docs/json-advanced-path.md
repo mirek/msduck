@@ -27,20 +27,25 @@ in the captured cases.
 The deterministic core now evaluates ranges with source-preserving slices,
 UTF-16 path and value handling, and an explicit bounded array traversal.
 The fixture test matches the result or diagnostic identity of all 284
-observations through both the UTF-8 and UTF-16 entry points. The ordinary
-public path parser and `JSON_PATH_EXISTS` still reject ranges.
+observations through both the UTF-8 and UTF-16 entry points, including the
+complete dynamic 13659 message and captured 13607 malformed-path and 13609
+malformed-document diagnostics. Structured core errors carry range bounds or
+the unexpected character and UTF-16 position to the root adapter. The TDS integration test matches
+the captured 13659, 13607 and 13609 errors' numbers, states, classes and messages,
+then checks a successful range result and its column type on the same connection. The
+ordinary public path parser and `JSON_PATH_EXISTS` still reject ranges.
 
 Remaining differences are recorded rather than hidden:
 
-- SQL Server's 13659 text includes the selected index, source UTF-16
-  position and requested end bound; the core's static error contract retains
-  the number and state but cannot yet format those dynamic fields.
-- Malformed path errors retain a generic 13607/state 1 rather than SQL
-  Server's character, offset and state. Malformed document errors retain
-  generic 13609 text rather than its character and position.
-- This core replay does not establish root adapter, wire descriptor or event
-  ordering parity. The raw reference fixture preserves that evidence for
-  integration work.
+- The captured malformed-document and malformed-path forms match, but this does
+  not establish complete 13609 coverage for other JSON grammar or complete
+  13607 coverage for other path grammar. The document cursor is derived only
+  after the extraction parser rejects the input; early selected values retain
+  the observed behavior even when a later document suffix is malformed.
+- The 13659 wire test covers the captured error fields and one successful
+  result descriptor. It does not establish full adapter, descriptor or event
+  ordering parity for every advanced path. The raw reference fixture
+  preserves that evidence for further integration work.
 
 The captured subset does not imply support for the full advanced JSON path
 grammar.
