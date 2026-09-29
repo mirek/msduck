@@ -6558,7 +6558,7 @@
     {
       "id": "focused-compatibility-audit-v1",
       "title": "Select exact compatibility audit cases without overwriting full-run evidence",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server compatibility implementation goal and requests for faster issue-to-PR cycles; owner issue #620.",
       "scope": [
         "scripts/compatibility.mjs",
@@ -6578,7 +6578,7 @@
     {
       "id": "focused-audit-test-integration-v1",
       "title": "Include focused compatibility CLI tests in standard client verification",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing compatibility goal and verified owner-initiated Codex review on PR #621; owner issue #622.",
       "scope": [
         "tests/reference-compare.test.mjs"
