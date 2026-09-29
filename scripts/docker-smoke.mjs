@@ -57,6 +57,15 @@ function query(connection, sql) {
     connection.execSql(request)
   })
 }
+// Ctrl+C (SIGINT, forwarded by `docker run`) and `docker stop` (SIGTERM) must
+// stop the server, which runs as PID 1, well before Docker's 30 s kill timeout.
+async function stops(name, signal) {
+  const started = Date.now()
+  await docker(signal === 'SIGTERM' ? ['stop', '--time', '30', name] : ['kill', '--signal', signal, name])
+  assert.equal(await docker(['wait', name]), '0', `${signal} exit status`)
+  assert.ok(Date.now() - started < 10000, `${signal} stopped after ${Date.now() - started} ms`)
+  assert.match(await logs(name), new RegExp(`received ${signal}; shutting down`))
+}
 async function exitsWith(env, pattern) {
   const name = `${run}-rejected-${containers.length}`
   containers.push(name)
@@ -129,14 +138,24 @@ try {
   const recovered = await connect(thirdPort, password)
   assert.deepEqual(await query(recovered, 'SELECT name FROM dbo.ducks'), [['Mallard']])
   recovered.close()
-  await docker(['rm', '--force', third])
+  await stops(third, 'SIGINT')
 
   // Likewise when only the certificate survived.
   await docker(['run', '--rm', '--volume', `${volume}:/var/opt/mssql`, image, 'rm', '/var/opt/mssql/secrets/msduck-key.pem'])
   const fourth = `${run}-fourth`
   const fourthPort = await start(fourth, { ACCEPT_EULA: 'Y', MSSQL_SA_PASSWORD: password })
   assert.match(await logs(fourth), /generated self-signed TLS certificate/)
-  ;(await connect(fourthPort, password)).close()
+  const committed = await connect(fourthPort, password)
+  await query(committed, "INSERT INTO dbo.ducks VALUES (2, N'Teal')")
+  committed.close()
+  await stops(fourth, 'SIGTERM')
+
+  // Rows committed before a signal survive into the next start.
+  const fifth = `${run}-fifth`
+  const fifthPort = await start(fifth, { ACCEPT_EULA: 'Y', MSSQL_SA_PASSWORD: password })
+  const survived = await connect(fifthPort, password)
+  assert.deepEqual(await query(survived, 'SELECT name FROM dbo.ducks ORDER BY id'), [['Mallard'], ['Teal']])
+  survived.close()
   console.log(`docker smoke test passed for ${image}`)
 } finally {
   for (const name of containers) await docker(['rm', '--force', name]).catch(() => {})

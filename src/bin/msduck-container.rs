@@ -20,6 +20,8 @@ const HANDLED: &[&str] = &[
 ];
 
 fn main() -> Result<()> {
+    #[cfg(unix)]
+    exit_on_stop_signals()?;
     if env::args().len() > 1 {
         bail!(
             "msduck-container takes no arguments; configure it with MSSQL_* environment variables"
@@ -85,6 +87,47 @@ fn main() -> Result<()> {
         "SQL Server is now ready for client connections. This is an informational message; no user action is required."
     );
     server.serve(listener)
+}
+
+/// The launcher runs as the container's PID 1, where the kernel ignores any
+/// signal without a handler, so Ctrl+C and `docker stop` would otherwise do
+/// nothing until Docker's SIGKILL. Block SIGINT and SIGTERM before any other
+/// thread starts, so every thread inherits the mask, and exit from a thread that
+/// waits for them. Committed transactions are already in the DuckDB WAL, which
+/// the next start replays. `_exit` skips C++ static destructors that DuckDB
+/// threads may still be using.
+#[cfg(unix)]
+fn exit_on_stop_signals() -> Result<()> {
+    // SAFETY: the set is initialized by sigemptyset before use, and neither call
+    // retains the pointers.
+    let signals = unsafe {
+        let mut signals = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
+        libc::sigemptyset(signals.as_mut_ptr());
+        let mut signals = signals.assume_init();
+        libc::sigaddset(&mut signals, libc::SIGINT);
+        libc::sigaddset(&mut signals, libc::SIGTERM);
+        signals
+    };
+    // SAFETY: valid set pointer; a null old-set pointer is allowed.
+    let status = unsafe { libc::pthread_sigmask(libc::SIG_BLOCK, &signals, std::ptr::null_mut()) };
+    ensure!(status == 0, "block stop signals: error {status}");
+    std::thread::Builder::new()
+        .name("stop-signals".into())
+        .spawn(move || {
+            let mut signal = 0;
+            // SAFETY: valid set and output pointers for the duration of the call.
+            while unsafe { libc::sigwait(&signals, &mut signal) } != 0 {}
+            let name = if signal == libc::SIGINT {
+                "SIGINT"
+            } else {
+                "SIGTERM"
+            };
+            eprintln!("msduck: received {name}; shutting down");
+            // SAFETY: terminates the process without running destructors.
+            unsafe { libc::_exit(0) }
+        })
+        .context("start signal thread")?;
+    Ok(())
 }
 
 fn setting(name: &str, default: &str) -> String {
