@@ -2,9 +2,10 @@ name: Docker
 on:
   # Only release tags publish. Each run builds DuckDB natively for two
   # platforms, so main pushes do not run it; the tag run smoke-tests every
-  # platform before anything is pushed.
+  # platform before anything is pushed. A digit must follow the `v`, so CI's
+  # `verify-*` tags, which PUBLISH would otherwise accept, never run this.
   push:
-    tags: ['v*']
+    tags: ['v[0-9]*']
   pull_request:
     paths:
       - Dockerfile

@@ -19,6 +19,14 @@ adapter and compared byte for byte with the first-party captures. A setting
 for a different stable table key is OFF for this target, even when a textual
 alias resembles it. Preflight precedes source conversion or constraint checks;
 permission for a statement does not mean its rows can be committed.
+The [conversion capture](../reference/identity-insert-conversion.json) also
+proves that a listed literal `NULL` identity in a single-row `VALUES` insert
+while ON returns 339/state 1/class 16, message `DEFAULT or NULL are not allowed
+as explicit identity values.`, and failed DONE command 253. The gate checks
+that shape before returning an explicit permit. NULL mixed with other source
+expressions, multi-row NULL identity inputs, OFF precedence and listed
+`DEFAULT` remain unsupported because the retained evidence does not settle
+their diagnostic precedence.
 
 The [path-imported tests](../crates/msduck-sql/tests/identity_insert_gate.rs)
 replay applicable cases from the owner-controlled

@@ -44,6 +44,66 @@ fn assert_error(actual: PreflightError, case: &Value) {
 }
 
 #[test]
+fn captured_null_identity_preflight_preserves_live_rows_allocator_and_setting() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    run(
+        &mut session,
+        "CREATE TABLE dbo.conversion(id INT IDENTITY(10,2) PRIMARY KEY, v INT NOT NULL)",
+    );
+    run(&mut session, "INSERT dbo.conversion(v) VALUES(1)");
+    let mut state = session::State::default();
+    session::apply(
+        &session.db,
+        1,
+        "logical_db",
+        &mut state,
+        &statement("SET IDENTITY_INSERT dbo.conversion ON"),
+    )
+    .unwrap();
+    let active = state.active().unwrap().clone();
+    let before: (i64, i64) = session
+        .db
+        .query_row(
+            "SELECT (SELECT count(*) FROM dbo.conversion), \
+                    (SELECT last_value FROM duckdb_sequences() \
+                     WHERE sequence_name LIKE '__msduck_identity_%')",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(before, (1, 10));
+    let fixture: Value =
+        serde_json::from_str(include_str!("../reference/identity-insert-conversion.json")).unwrap();
+    for run in fixture["runs"].as_array().unwrap() {
+        let case = captured(run, "NULL identity");
+        assert_error(
+            preflight(
+                &session.db,
+                1,
+                "logical_db",
+                &state,
+                &statement(case["sql"].as_str().unwrap()),
+            )
+            .unwrap_err(),
+            case,
+        );
+        assert_eq!(state.active(), Some(&active));
+        let after: (i64, i64) = session
+            .db
+            .query_row(
+                "SELECT (SELECT count(*) FROM dbo.conversion), \
+                        (SELECT last_value FROM duckdb_sequences() \
+                         WHERE sequence_name LIKE '__msduck_identity_%')",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(after, before);
+    }
+}
+
+#[test]
 fn captured_insert_shapes_use_live_columns_and_session_key() {
     let server = Server::open(":memory:").unwrap();
     let mut session = Session::new(server.connection().unwrap()).unwrap();
