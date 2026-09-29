@@ -6678,7 +6678,7 @@
     {
       "id": "nested-decimal-division-v1",
       "title": "Preserve contextual declarations through nested decimal division",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing SQL Server compatibility goal and first-party reference/numeric-arithmetic-context.json",
       "scope": [
         "crates/msduck-sql/src/decimal_division.rs",
