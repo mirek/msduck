@@ -7088,6 +7088,28 @@
       ],
       "issue": 661,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYuFj"
+    },
+    {
+      "id": "ntile-binding-diagnostics-v1",
+      "title": "Align NTILE constant binding and runtime diagnostic identities",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal. Same root worker recovered and verified its original ntile-null-runtime-v1 receipt; protected concat-integration-v1 authorization explicitly stopped blocked result-alignment-v1 and its successor is Done. Root engine has no other ready reservation. This supplements owned PR584 without adopting another worker claim.",
+      "scope": [
+        "src/engine.rs",
+        "tests/ntile_binding.rs",
+        "docs/ntile-binding-diagnostics.md"
+      ],
+      "dependencies": [
+        "concat-integration-v1"
+      ],
+      "acceptance": [
+        "Reject retained literal NULL, typed integer NULL, zero and negative NTILE counts during statement binding before metadata, including empty inputs. Preserve runtime metadata for dynamic parameter/scalar-subquery counts; never inspect parameter values to decide compile metadata or evaluate volatile operands twice.",
+        "Map only canonical native NTILE errors to captured4116/state1/severity15 without DuckDB envelopes and same-query column4195/state1/severity15 with captured double-quoted identifier. Preserve explicit THROW identity and unrelated backend errors. Coordinate pure AST validation/native changes/public client assertions only via the same worker original NTILE claim.",
+        "Add native compile/runtime distinction and typed parameter/recovery tests; compare public client rows/descriptors/errors to retained SQL Server fixtures without a known-difference override for fixed cases. Preserve any remaining full-token or unsupported-shape differences explicitly; do not claim complete NTILE or server compatibility from partial evidence.",
+        "Run exact-head formatting, strict workspace Clippy, workspace tests, all-targets build, full independent clients and diagnostic audit; verify required CI and review or authorized service fallback. Merge combined owner PR584 only after all scoped claims and gates pass, then promptly complete both tasks/project."
+      ],
+      "issue": 663,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYy6u"
     }
   ]
 }
