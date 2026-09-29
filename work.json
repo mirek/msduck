@@ -7043,6 +7043,28 @@
       ],
       "issue": 657,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYlZK"
+    },
+    {
+      "id": "percentile-order-type-export-v1",
+      "title": "Export captured percentile ordering declaration policy",
+      "state": "backlog",
+      "authorization": "Owner continuing full SQL Server compatible Rust/DuckDB goal; first-party task657 stages deterministic policy while existing string-agg-rules-v1 owns shared SQL lib.rs.",
+      "scope": [
+        "crates/msduck-sql/src/lib.rs",
+        "crates/msduck-sql/tests/percentile_order_type_public.rs",
+        "docs/percentile-order-type-export.md"
+      ],
+      "dependencies": [
+        "string-agg-rules-v1",
+        "percentile-order-type-policy-v1"
+      ],
+      "acceptance": [
+        "After both dependencies are merged and Done, promote through protected registry and exclusively claim. Export msduck_sql::percentile_order_type with no unrelated lib.rs changes or adoption of an older claim.",
+        "Verify downstream use of public declaration/Kind/BindingError/Declaration APIs for nullable numeric CONT, source-preserving DISC and captured nonnumeric402 error. Run deterministic and required workspace/client checks on exact revision, CI and review or authorized fallback, merge and complete registry/project.",
+        "Document public policy API and remaining catalog-backed binding, projection properties and runtime diagnostic/prepare sequencing integration requirements; export alone must not claim server compatibility."
+      ],
+      "issue": 659,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYmW3"
     }
   ]
 }
