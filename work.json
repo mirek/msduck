@@ -6512,7 +6512,7 @@
     {
       "id": "guid-comparison-core-v1",
       "title": "Implement SQL Server uniqueidentifier comparison key in core",
-      "state": "ready",
+      "state": "done",
       "authorization": "mirek's continuing implementation goal, merged PR #615, owner-authored issue #616",
       "scope": [
         "crates/msduck-core/src/types.rs",
