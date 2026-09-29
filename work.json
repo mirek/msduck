@@ -5997,6 +5997,29 @@
       ],
       "issue": 568,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PVdqS"
+    },
+    {
+      "id": "identity-insert-session-adapter-v1",
+      "title": "Compose IDENTITY_INSERT catalog and session transition adapter",
+      "state": "ready",
+      "authorization": "Mirek continuing full SQL Server compatibility goal; first-party identity-insert references and merged binding/catalog modules.",
+      "scope": [
+        "src/identity_insert_session.rs",
+        "tests/identity_insert_session.rs",
+        "docs/identity-insert-session-adapter.md"
+      ],
+      "acceptance": [
+        "Path-import the existing pure SET IDENTITY_INSERT operation/session rules and live catalog resolver into a root adapter without modifying reserved export, engine or SQL crate files; apply ON/OFF only after successful catalog resolution.",
+        "Replay captured 1088, 8106 and 8107 diagnostics and DONE commands, preserving requested table spelling, active database/schema/table identity, repeat ON/OFF and OFF-other behavior; reject unsupported name shapes without mutation.",
+        "Use real Server catalog tests for aliases, two independent session states, transaction rollback and explicit RPC fork semantics. Document that TDS execution still awaits engine/export integration. Run AGENTS.md Rust/client/audit checks on exact revision and publish owner PR with exact-head CI and completed Codex review."
+      ],
+      "dependencies": [
+        "identity-insert-binding-v1",
+        "identity-insert-catalog-v1",
+        "identity-insert-name-diagnostics-v1"
+      ],
+      "issue": 570,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PVhbe"
     }
   ]
 }
