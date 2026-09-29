@@ -61,7 +61,11 @@ pub const TEXT_INT_OVERFLOW: &str = "The conversion of a character value overflo
 /// Recognize only canonical messages emitted by our numeric rules. Backend
 /// envelopes and explicit application errors must be handled by the adapter.
 pub fn numeric(message: &str) -> Option<SqlError> {
-    if message == "Arithmetic overflow error converting expression to data type numeric." {
+    if matches!(
+        message,
+        "Arithmetic overflow error converting expression to data type numeric."
+            | "Arithmetic overflow error converting expression to data type float."
+    ) {
         return Some(SqlError::new(8115, 2, message));
     }
     let number = match message {
@@ -99,6 +103,8 @@ mod tests {
     fn numeric_recognition_requires_complete_canonical_messages() {
         let decimal = "Arithmetic overflow error converting expression to data type numeric.";
         assert_eq!(numeric(decimal), Some(SqlError::new(8115, 2, decimal)));
+        let float = "Arithmetic overflow error converting expression to data type float.";
+        assert_eq!(numeric(float), Some(SqlError::new(8115, 2, float)));
         for changed in [
             format!("Invalid Input Error: {decimal}"),
             format!("{decimal} trailing text"),
