@@ -6818,7 +6818,7 @@
     {
       "id": "float-aggregate-reference-v1",
       "title": "Capture FLOAT and REAL aggregate precision overflow and descriptors",
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner SQL Server compatibility goal; first-party aggregate implementation and FLOAT gap documentation",
       "scope": [
         "scripts/capture-float-aggregate-reference.mjs",
