@@ -2,16 +2,37 @@
 
 PERCENT_RANK and CUME_DIST share ranking signature checks: zero arguments,
 mandatory OVER and ORDER BY, and no ROWS/RANGE frame. Named window inheritance
-is expanded before validation. Errors use 174, 10753, 4112 and 4106 respectively.
+is expanded before validation. The local errors currently use 174 for an
+argument, 10753 for missing OVER, 4112 for missing ORDER BY, and 4106 for a
+frame.
 They remain outside BIGINT ranking inference: DuckDB computes DOUBLE results,
 which the existing wire encoder exposes as eight-byte FLOATN (SQL FLOAT(53)).
 
 Tedious tests cover tied values, ascending/descending NULL ordering, partitions,
 singleton and all-NULL partitions, empty-result metadata, outer aggregates,
 prepared execution and invalid prepared windows. A diagnostic audit probe
-captures values, metadata and missing-order diagnostics for future reference
-comparison. No live SQL Server comparison has been run; broader floating-point
-expression coercion and complete diagnostic fidelity remain unverified.
+captures values, metadata and missing-order diagnostics. The pinned SQL Server
+2025 reference capture in `reference/distribution-reference.json` records 16
+batch observations from two independent containers and fresh databases. The
+replay script is `node scripts/capture-distribution-reference.mjs --check`, or
+run it without `--check` against fresh containers to compare raw rows,
+descriptors, errors, event order and DONE status words. The two retained runs
+match exactly and have a SHA-256 digest in the fixture.
+
+The reference confirms that both functions expose nullable eight-byte FLOATN
+descriptors even for empty results. For ascending `(NULL,10,10,20,30)`, their
+values are `(0,0.2)`, `(0.25,0.6)`, `(0.25,0.6)`, `(0.75,0.8)`, `(1,1)`;
+descending order places the NULL last. A singleton returns `(0,1)` and two
+NULLs each return `(0,1)`. A named window works. Successful SELECT batches
+end with a DONE status word of 16 and command 193; invalid calls emit ERROR
+before DONE with status 2 and command 253, without column metadata.
+
+The reference reveals diagnostic mismatches to implement separately: a frame
+raises 10752, state 3, class 15, and an argument raises 4114, state 1,
+class 15. The local validator currently maps these to 4106 and 174. Missing
+OVER uses 10753/state 3/class 15; missing ORDER BY uses 4112/state 1/class
+15. The fixture retains the exact messages. Broader floating-point expression
+coercion and complete diagnostic fidelity remain unverified.
 WINDOW clauses without FROM now reach named-window resolution and inherited
 frame validation; both source-free and VALUES queries are covered.
 
