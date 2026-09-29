@@ -6190,6 +6190,25 @@
       "dependencies": [],
       "issue": 585,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PV5kD"
+    },
+    {
+      "id": "percentile-reference-v1",
+      "title": "Capture SQL Server percentile windows and input diagnostics",
+      "state": "ready",
+      "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party gaps in docs/percentiles.md and local audit. No external submission.",
+      "scope": [
+        "scripts/capture-percentile-reference.mjs",
+        "reference/percentile-reference.json",
+        "docs/percentile-reference.md"
+      ],
+      "acceptance": [
+        "Capture PERCENTILE_CONT/DISC across integer, decimal, float, BIT, text and temporal order expressions; ties, NULLs, partitions, descending order, empty inputs, invalid fractions and actual prepared INT/text parameter rebinding on pinned SQL Server 2025 in two fresh databases plus independent-container replay.",
+        "Retain full rows, typed descriptors, ordered errors/events and raw DONE status/command words; pin a fixed case plan, fixture SHA-256 and image; reject fixture overwrite and output aliases.",
+        "Document proven interpolation, type acceptance, diagnostics and remaining unknown precedence without claiming msduck parity; validate fixture/live replay and publish an owner PR with exact-head required CI and completed Codex review."
+      ],
+      "dependencies": [],
+      "issue": 587,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PWAq_"
     }
   ]
 }
