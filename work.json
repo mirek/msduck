@@ -6112,7 +6112,7 @@
     {
       "id": "identity-insert-null-gate-v1",
       "title": "Reject captured explicit NULL IDENTITY_INSERT values before execution",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing full SQL Server compatibility goal and first-party reference/identity-insert-conversion.json from merged PR #579. No external submission.",
       "scope": [
         "crates/msduck-sql/src/identity_insert_gate.rs",
