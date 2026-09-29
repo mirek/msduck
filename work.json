@@ -6226,6 +6226,30 @@
       "dependencies": [],
       "issue": 589,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PWC8o"
+    },
+    {
+      "id": "percentile-range-diagnostic-v1",
+      "title": "Align percentile literal range diagnostics with SQL Server",
+      "state": "ready",
+      "authorization": "Mirek's continuing full SQL Server compatibility goal and owner-run SQL Server percentile reference #588; first-party gap in the deterministic lowerer",
+      "scope": [
+        "scripts/capture-percentile-reference.mjs",
+        "reference/percentile-reference.json",
+        "docs/percentile-reference.md",
+        "crates/msduck-sql/src/percentile.rs",
+        "crates/msduck-sql/src/ranking.rs",
+        "docs/percentiles.md"
+      ],
+      "acceptance": [
+        "Extend the pinned SQL Server percentile capture with DISC negative, above-one and NULL fractions in two fresh databases and an independent container replay; retain rows, typed descriptors, ordered errors/events and raw DONE words with an updated fixture checksum.",
+        "Map only proven literal out-of-range and NULL percentile fractions to SQL Server error 8727 with its exact message, state 1 and severity 16, keeping deterministic AST transformation and existing valid fractions intact; add meaningful standalone SQL-crate tests.",
+        "Document the remaining metadata/event timing gap without claiming full parity, run the required Rust, client and audit checks for the exact revision, then take the owner PR through CI, completed Codex review and merge."
+      ],
+      "dependencies": [
+        "percentile-reference-v1"
+      ],
+      "issue": 591,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PWGOn"
     }
   ]
 }
