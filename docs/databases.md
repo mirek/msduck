@@ -57,8 +57,10 @@ If a later step fails while the file is intact, the database is attached again
 when DuckDB allows it. DROP hides the database before it detaches or deletes
 anything. Once the files are gone, DROP succeeds even if removing the
 registration fails: a hidden registration without a catalog or files is stale,
-and CREATE of that name or the next startup removes it. A recovery that cannot
-detach a partially attached catalog hides it the same way. A CREATE that fails after its file exists cleans up the same way.
+and CREATE of that name or the next startup removes it. A hidden registration
+whose files remain, from a failed CREATE or an interrupted DROP, is never
+published by recovery; it stays unavailable until DROP removes it. If recovery
+cannot detach a partially attached catalog, the server does not start. A CREATE that fails after its file exists cleans up the same way.
 
 An in-memory server keeps its user databases in a private (`0700` on Unix)
 temporary directory, which is

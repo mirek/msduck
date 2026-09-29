@@ -169,6 +169,12 @@ impl Catalog {
             if catalog.forget_stale(owner, &row, false)? {
                 continue;
             }
+            // A CREATE that failed, or a DROP that stopped, left the database
+            // hidden. Recovery never publishes it; DROP can remove it.
+            if !row.published {
+                eprintln!("msduck: database {name} is unavailable: it was not published");
+                continue;
+            }
             let result = catalog
                 .attach(owner, &row, Attach::Recover)
                 .and_then(|()| catalog.publish(owner, &name))
@@ -176,12 +182,14 @@ impl Catalog {
             if let Err(error) = result {
                 // SQL Server keeps serving other databases when one cannot be
                 // recovered; the database stays registered but is not listed.
-                // Listing follows attachment, so detach a partial recovery,
-                // and hide a catalog that DuckDB could not detach.
+                // Listing follows attachment, so detach a partial recovery.
+                // A catalog DuckDB cannot detach would be listed while
+                // incomplete, so the server does not start.
                 let _ = owner.execute_batch(&format!("DETACH DATABASE IF EXISTS {}", quote(&name)));
-                if catalog.attached(owner, &name).unwrap_or(true) {
-                    let _ = catalog.set_published(owner, &row.name_key, false);
-                }
+                ensure!(
+                    !catalog.attached(owner, &name)?,
+                    "database {name} failed to recover and could not be detached: {error:#}"
+                );
                 eprintln!("msduck: database {name} is unavailable: {error:#}");
             }
         }

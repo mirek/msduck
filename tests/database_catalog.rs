@@ -754,3 +754,37 @@ fn stale_registrations_without_files_are_forgotten() {
     drop((db, server));
     std::fs::remove_dir_all(&directory).unwrap();
 }
+
+#[test]
+fn recovery_does_not_publish_hidden_databases() {
+    let directory = scratch_directory("hidden");
+    let primary = directory.join("msduck.duckdb");
+    let primary = primary.to_str().unwrap();
+    {
+        let server = Server::open(primary).unwrap();
+        let db = server.connection().unwrap();
+        db.databases().create(&db, "failed").unwrap();
+        // As left by a CREATE whose cleanup could not detach the catalog.
+        db.execute_batch(
+            "UPDATE main.__msduck_databases SET published=false WHERE name_key='failed'",
+        )
+        .unwrap();
+    }
+    let server = Server::open(primary).unwrap();
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    assert_eq!(catalog.list(&db).unwrap(), [database("master", 1)]);
+    assert_eq!(sql_error(catalog.select(&db, "failed").unwrap_err()).0, 911);
+    assert_eq!(
+        sql_error(catalog.create(&db, "failed").unwrap_err()).0,
+        1801
+    );
+    catalog.remove(&db, "failed").unwrap();
+    assert!(!directory.join("msduck.duckdb.5.failed.duckdb").exists());
+    assert_eq!(
+        catalog.create(&db, "failed").unwrap(),
+        database("failed", 6)
+    );
+    drop((db, server));
+    std::fs::remove_dir_all(&directory).unwrap();
+}
