@@ -7003,6 +7003,25 @@
       ],
       "issue": 654,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYiwY"
+    },
+    {
+      "id": "percentile-order-type-reference-v1",
+      "title": "Capture percentile ordering type descriptors and binding diagnostics",
+      "state": "ready",
+      "authorization": "Owner continuing fully functional SQL Server compatibility goal; retained complete percentile replay proves DISC descriptor and CONT nonnumeric binding diagnostic gaps requiring explicit source-type evidence.",
+      "scope": [
+        "scripts/capture-percentile-order-type.mjs",
+        "reference/percentile-order-type.json",
+        "docs/percentile-order-type.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Capture two fresh pinned SQL Server containers for CONT and DISC over numeric, character, temporal, binary and identifier ORDER BY source types with ordinary, all-NULL and empty input; preserve full rows descriptors errors warnings ordered token events raw DONE words and successful reuse. Include prepared typed ordering operands rebound to NULL and non-NULL values without parameter-value-dependent metadata.",
+        "Retain an immutable checksum-pinned fixture and exclusive output ownership; validate complete plan and repeated evidence without sorting, tolerance, filtering errors or changing queries to obtain matches. Document precise type eligibility/nullability/width/diagnostic observations and implementation requirements rather than claiming compatibility.",
+        "Run capture/check and exact-head required CI, independent owner review or authorized Codex availability fallback, merge own PR and promptly complete registry/project. No native Rust code or existing reserved files may be edited."
+      ],
+      "issue": 655,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYj1B"
     }
   ]
 }
