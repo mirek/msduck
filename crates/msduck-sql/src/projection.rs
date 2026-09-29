@@ -103,6 +103,30 @@ pub fn view_fields(catalog: &CatalogSnapshot, query: &Query) -> Option<Vec<Field
     Some(fields)
 }
 
+fn division_operands(
+    catalog: &CatalogSnapshot,
+    op: &BinaryOperator,
+    left_expr: &Expr,
+    right_expr: &Expr,
+    mut left: Info,
+    mut right: Info,
+) -> Option<(Info, Info)> {
+    if !matches!(op, BinaryOperator::Divide) {
+        return Some((left, right));
+    }
+    if matches!(right.system_type_id, Some(106 | 108))
+        && let Some(kind) = crate::decimal_division::bare_integer_decimal_type(left_expr)
+    {
+        left = catalog.cast_info(&kind)?;
+    }
+    if matches!(left.system_type_id, Some(106 | 108))
+        && let Some(kind) = crate::decimal_division::bare_integer_decimal_type(right_expr)
+    {
+        right = catalog.cast_info(&kind)?;
+    }
+    Some((left, right))
+}
+
 fn query_fields_in(
     catalog: &CatalogSnapshot,
     query: &Query,
@@ -206,8 +230,14 @@ fn member_expression(
             member_expression(catalog, value, sources, scope)
         }
         Expr::BinaryOp { left, op, right } => {
-            let left = member_expression(catalog, left, sources, scope)?;
-            let right = member_expression(catalog, right, sources, scope)?;
+            let (left, right) = division_operands(
+                catalog,
+                op,
+                left,
+                right,
+                member_expression(catalog, left, sources, scope)?,
+                member_expression(catalog, right, sources, scope)?,
+            )?;
             crate::expression_metadata::arithmetic::result(catalog, op, &left, &right)
         }
         _ => catalog.cast_info(&storage::kind(expr, &Default::default(), &|_| None)?),
@@ -1175,8 +1205,7 @@ fn expression(
                 return Some(info);
             }
         }
-        let left = left_info?;
-        let right = right_info?;
+        let (left, right) = division_operands(catalog, op, left, right, left_info?, right_info?)?;
         return crate::expression_metadata::arithmetic::result(catalog, op, &left, &right);
     }
     let ids = match e {
