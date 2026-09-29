@@ -6696,6 +6696,27 @@
       ],
       "issue": 630,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PX1lW"
+    },
+    {
+      "id": "container-signal-exit-v1",
+      "title": "Exit the container promptly on SIGINT and SIGTERM",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-09-29): make Ctrl+C exit the container; done when an image with this support is published",
+      "scope": [
+        "src/bin/msduck-container.rs",
+        "Cargo.toml",
+        "Cargo.lock",
+        "scripts/docker-smoke.mjs",
+        "docs/docker.md"
+      ],
+      "acceptance": [
+        "msduck-container, running as PID 1, exits promptly with status 0 on SIGINT (Ctrl+C) and SIGTERM (docker stop) instead of ignoring them.",
+        "The Docker smoke test proves both signals stop the image well before docker stop's kill timeout, and docs/docker.md describes the behavior.",
+        "Run AGENTS.md Rust checks and the Docker workflow on the exact PR head, merge with a completed owner-enabled Codex review, then push a vX.Y.Z release tag and confirm the published multi-platform image."
+      ],
+      "dependencies": [],
+      "issue": 631,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PX91W"
     }
   ]
 }
