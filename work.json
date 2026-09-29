@@ -7022,6 +7022,27 @@
       ],
       "issue": 655,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYj1B"
+    },
+    {
+      "id": "percentile-order-type-policy-v1",
+      "title": "Implement deterministic percentile ordering declaration and binding policy",
+      "state": "ready",
+      "authorization": "Owner continuing fully functional SQL Server compatible Rust/DuckDB goal; merged owner PR656 supplies two independently repeated194-record source-type captures and exact binding/type requirements.",
+      "scope": [
+        "crates/msduck-sql/src/percentile_order_type.rs",
+        "crates/msduck-sql/tests/percentile_order_type.rs",
+        "docs/percentile-order-type-policy.md"
+      ],
+      "dependencies": [
+        "percentile-order-type-reference-v1"
+      ],
+      "acceptance": [
+        "Implement a deterministic policy over explicit logical source declarations and collation labels: eligible CONT returns FLOAT(53), eligible DISC retains source width precision scale and collation; every known successful result is nullable. Preserve unknown source declarations without guessing and return explicit unsupported for uncaptured legacy types.",
+        "Match captured CONT402 source-specific messages including MAX types and DISC XML305 identity without evaluating operands or acquiring catalog/session state. Replay every applicable batch and prepared declaration from both retained source-type captures, including all-NULL empty and rebound metadata; retain decoder limits and prepared8180 sequencing as root integration requirements.",
+        "Use a path-imported standalone module while lib.rs and runtime adapters remain reserved; no edits to other claims. Run required exact-head Rust checks, deterministic fixture tests, CI and independent review or owner-authorized fallback, merge and promptly complete registry/project. Document that staging the policy is not runtime or full compatibility completion."
+      ],
+      "issue": 657,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYlZK"
     }
   ]
 }
