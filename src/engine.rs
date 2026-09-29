@@ -1,5 +1,6 @@
 //! Session-owned DuckDB execution with AST-based T-SQL translation.
 mod joined_output;
+mod session_context;
 use crate::tds::{self, Column, Type};
 use anyhow::{Result, bail, ensure};
 use duckdb::{
@@ -10,7 +11,7 @@ use duckdb::{
 pub use joined_output::{BoundOutputQuery, BoundOutputUpdate, PreparedJoinedOutput};
 use msduck_core::diagnostic::SqlError;
 pub use msduck_sql::batch::parameter_declarations;
-use msduck_sql::batch::{parse as parse_batch, variable_type};
+use msduck_sql::batch::variable_type;
 use msduck_sql::expr::number;
 pub(crate) use msduck_sql::expr::{binary_function, unary_function};
 use msduck_sql::preflight::{
@@ -219,6 +220,8 @@ pub struct Session {
     read_cancel_cleanup_failed: bool,
     /// The session's current database; it stays in use while selected.
     database: crate::database_catalog::Use,
+    /// Keys set by sp_set_session_context; RESETCONNECTION starts a new session.
+    session_context: msduck_sql::session_function::SessionContext,
 }
 impl Session {
     pub fn new(connection: crate::server::Connection) -> Result<Self> {
@@ -254,6 +257,7 @@ impl Session {
             read_cancelled: false,
             read_cancel_cleanup_failed: false,
             database,
+            session_context: Self::empty_session_context(),
         })
     }
 
@@ -538,7 +542,7 @@ impl Session {
                 )
             })
             .collect();
-        let parameters = batch_variables(&statements, &parameters)?;
+        let mut parameters = batch_variables(&statements, &parameters)?;
         let mut pending = statements.into_iter().rev().collect::<Vec<_>>();
         while let Some(mut statement) = pending.pop() {
             crate::query_catalog::validate_cte_columns(&self.db, &statement)?;
@@ -726,6 +730,7 @@ impl Session {
             let json = crate::for_json::Output::take(&self.db, &mut statement)?;
             self.lower_database_functions(&mut statement)?;
             self.qualify_databases(&mut statement)?;
+            self.lower_session_functions(&mut statement, &mut parameters)?;
             select_assignments(&mut statement, &parameters)?;
             let into = crate::select_into::take(&mut statement)?;
             let money_columns = crate::insert::money_columns(&statement, &parameters);
@@ -821,6 +826,8 @@ impl Session {
     ) -> Result<duckdb::core::LogicalTypeId> {
         self.lower_database_functions(&mut expression)?;
         self.qualify_databases(&mut expression)?;
+        let lowered = self.lower_session_functions_shared(&mut expression, parameters)?;
+        let parameters = &*lowered;
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
             .map_err(anyhow::Error::msg)?;
@@ -1264,6 +1271,62 @@ impl Session {
                     246,
                     0,
                 );
+                continue;
+            }
+            if let Some(result) = self.set_session_context(statement, &variables) {
+                executed_leaf = true;
+                // EXEC keeps @@ROWCOUNT. A batch reports RETURNSTATUS (0, or 1
+                // after a failure) and DONEPROC; inside sp_executesql the call
+                // ends with DONEINPROC and a failure becomes the RPC status.
+                let status: i32 = match result {
+                    Ok(()) => {
+                        self.last_error = 0;
+                        0
+                    }
+                    Err(error) => {
+                        if self.catch_error(&mut pending, &error) {
+                            // A caught failure's DONEPROC has no RETURNSTATUS.
+                            if !(rpc && self.nocount) {
+                                last_done = Some(out.len());
+                                tds::done(&mut out, if rpc { 0xff } else { 0xfe }, more, 224, 0);
+                            }
+                            continue;
+                        }
+                        self.last_error = emit_error(&mut out, &error);
+                        if error.downcast_ref::<SqlError>().is_none() {
+                            // Unsupported forms stop the batch explicitly.
+                            tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
+                            return (out, false);
+                        }
+                        preserve_return_status = false;
+                        had_runtime_error = true;
+                        return_status = self.last_error;
+                        1
+                    }
+                };
+                if rpc {
+                    if !self.nocount {
+                        last_done = Some(out.len());
+                        tds::done(
+                            &mut out,
+                            0xff,
+                            more | if status == 0 { 0 } else { 2 },
+                            224,
+                            0,
+                        );
+                    }
+                } else {
+                    out.push(0x79);
+                    out.extend(status.to_le_bytes());
+                    last_done = Some(out.len());
+                    tds::done(
+                        &mut out,
+                        0xfe,
+                        more | if status == 0 { 0 } else { 2 },
+                        224,
+                        0,
+                    );
+                }
                 continue;
             }
             match self.execute(statement.clone(), &mut variables) {
@@ -1818,6 +1881,7 @@ impl Session {
         // bookkeeping, which see only two-part names.
         self.lower_database_functions(&mut statement)?;
         self.qualify_databases(&mut statement)?;
+        self.lower_session_functions(&mut statement, parameters)?;
         if !matches!(
             statement,
             Statement::Rollback { .. }
@@ -2006,6 +2070,7 @@ impl Session {
         }
         self.lower_database_functions(&mut statement)?;
         self.qualify_databases(&mut statement)?;
+        self.lower_session_functions(&mut statement, parameters)?;
         if let Statement::Print(print) = &statement {
             let unicode = print_is_unicode(&print.message, parameters);
             let value = self.evaluate_scalar(
@@ -3047,6 +3112,8 @@ impl Session {
         self.sync_datefirst()?;
         self.lower_database_functions(&mut expression)?;
         self.qualify_databases(&mut expression)?;
+        let lowered = self.lower_session_functions_shared(&mut expression, parameters)?;
+        let parameters = &*lowered;
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
             .map_err(anyhow::Error::msg)?;
@@ -3522,6 +3589,13 @@ pub fn error_number(message: &str) -> i32 {
     } else {
         50000
     }
+}
+/// Parse a batch; `sp_set_session_context` arguments bind by position.
+fn parse_batch(sql: &str) -> Result<Vec<Statement>> {
+    let mut statements = msduck_sql::batch::parse(sql)?;
+    msduck_sql::session_function::positional_arguments(&mut statements);
+    msduck_sql::session_function::validate_set_calls(&statements)?;
+    Ok(statements)
 }
 /// A database name is a single identifier; server or other qualifiers are
 /// not supported.
