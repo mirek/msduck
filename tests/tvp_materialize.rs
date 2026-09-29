@@ -335,7 +335,7 @@ fn malformed_values_and_limits_reject_before_writes() {
                 "__msduck_tvp_invalid",
                 Limits::default(),
                 Transaction::Owned,
-                |_| panic!("invalid callback")
+                |_| -> anyhow::Result<()> { panic!("invalid callback") }
             )
             .is_err()
         );
