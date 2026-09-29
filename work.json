@@ -6272,7 +6272,7 @@
     {
       "id": "distribution-window-diagnostics-v1",
       "title": "Match deterministic PERCENT_RANK and CUME_DIST argument and frame diagnostics",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "mirek's continuing implementation goal and owner-authored issue #595; SQL Server evidence reference/distribution-reference.json from PR #594",
       "scope": [
         "crates/msduck-sql/src/ranking.rs",
