@@ -679,10 +679,13 @@ impl Catalog {
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_key(value) AS
                  translate(rtrim(CAST(value AS VARCHAR), ' '), {upper}, {lower});
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_id(value) AS
-                 (SELECT database_id FROM {target}.sys.databases
-                  WHERE {target}.main.__msduck_db_key(name)={target}.main.__msduck_db_key(value));
+                 (SELECT d.database_id
+                  FROM (SELECT {target}.main.__msduck_db_key(value) AS k) a,
+                       {target}.sys.databases d
+                  WHERE {target}.main.__msduck_db_key(d.name)=a.k);
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_name(value) AS
-                 (SELECT name FROM {target}.sys.databases WHERE database_id=value);
+                 (SELECT d.name FROM (SELECT value AS v) a, {target}.sys.databases d
+                  WHERE d.database_id=a.v);
              CREATE OR REPLACE MACRO {target}.main.__msduck_current_db_name() AS
                  CASE WHEN current_database()={primary} THEN '{MASTER}' ELSE current_database() END",
             registry = self.registry(),
