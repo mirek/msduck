@@ -6091,7 +6091,7 @@
     {
       "id": "identity-insert-conversion-reference-v1",
       "title": "Capture IDENTITY_INSERT conversion failure allocation",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing full SQL Server compatible Rust server goal; first-party gap recorded in docs/identity-insert-errors-reference.md. No external submission.",
       "scope": [
         "scripts/capture-identity-insert-conversion.mjs",
