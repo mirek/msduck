@@ -6415,7 +6415,7 @@
     {
       "id": "statistical-state-core-v1",
       "title": "Implement deterministic statistical accumulation state",
-      "state": "ready",
+      "state": "done",
       "authorization": "mirek's continuing implementation goal, owner-authored issue #609 and pinned statistical precision/transition references",
       "scope": [
         "crates/msduck-core/src/bounded_aggregate.rs",
