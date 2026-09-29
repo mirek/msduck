@@ -6508,6 +6508,28 @@
       "dependencies": [],
       "issue": 614,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PXH78"
+    },
+    {
+      "id": "guid-comparison-core-v1",
+      "title": "Implement SQL Server uniqueidentifier comparison key in core",
+      "state": "ready",
+      "authorization": "mirek's continuing implementation goal, merged PR #615, owner-authored issue #616",
+      "scope": [
+        "crates/msduck-core/src/types.rs",
+        "crates/msduck-core/src/types/uniqueidentifier.rs",
+        "crates/msduck-core/tests/uniqueidentifier.rs",
+        "docs/guid-conversion-order.md"
+      ],
+      "acceptance": [
+        "Define a pure comparator over SQL binary/TDS mixed-endian GUID bytes with explicit input contract and no backend or ambient dependencies",
+        "Match all ordering rows and direct comparison captured independently from pinned SQL Server 2025, distinguishing GUID from raw binary and text order",
+        "Run core and required Rust checks, document runtime integration as remaining work without claiming server behavior has changed"
+      ],
+      "dependencies": [
+        "guid-conversion-order-reference-v1"
+      ],
+      "issue": 616,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PXL00"
     }
   ]
 }
