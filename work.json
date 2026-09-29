@@ -4225,7 +4225,7 @@
     {
       "id": "multi-database-catalog-v1",
       "title": "Attach user databases with a registry, sys.databases and session database selection",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction in this session (2026-09-27) to support CREATE DATABASE, USE and sys.databases and to work on it. No external submission is input.",
       "scope": [
         "src/database_catalog.rs",
@@ -6433,6 +6433,39 @@
       ],
       "issue": 609,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PWw_G"
+    },
+    {
+      "id": "multi-database-statements-v2",
+      "title": "Execute CREATE DATABASE, DROP DATABASE, USE and DB_NAME/DB_ID and accept any existing LOGIN7 database",
+      "state": "ready",
+      "authorization": "Direct owner instruction (2026-09-27, renewed 2026-09-29) to support CREATE DATABASE, USE and sys.databases and ship it as a container. Successor of the unclaimed backlog task multi-database-statements-v1, whose package.json scope is held by a ready task; client coverage is registered in the CI client shard list instead. No external submission is input.",
+      "scope": [
+        "src/engine.rs",
+        "src/database_catalog.rs",
+        "src/server.rs",
+        "crates/msduck-tds/src/lib.rs",
+        "crates/msduck-sql/src/session_function.rs",
+        "tests/databases.test.mjs",
+        "tests/database_catalog.rs",
+        ".github/workflows/ci.yml",
+        "docs/databases.md",
+        "README.md",
+        "ROADMAP.md"
+      ],
+      "acceptance": [
+        "Route CREATE DATABASE, DROP DATABASE and USE through the database catalog. USE emits ENVCHANGE type 1 and informational message 5701. Refuse CREATE and DROP DATABASE inside a user transaction, refuse dropping a database in use, and reject unsupported options explicitly.",
+        "DB_NAME(), DB_NAME(id) and DB_ID(name) follow the session database and the catalog.",
+        "Database-qualified names (database.schema.object) resolve only published databases through the catalog, map master to the primary catalog, and fail explicitly for unknown or unpublished databases, so a database being created or dropped cannot be read or modified.",
+        "LOGIN7 accepts any existing database, the server selects it for the session and reports it in the login ENVCHANGE, and unknown databases still fail login explicitly.",
+        "Add tedious coverage (tests/databases.test.mjs, registered in the CI client shard list) for connecting to master, creating a database, USE, creating tables, reconnecting with that database in the login, and querying sys.databases. Update README and ROADMAP with verified behavior and remaining gaps. Run the required Rust and client checks."
+      ],
+      "dependencies": [
+        "multi-database-catalog-v1",
+        "select-top-percent-ties-v1",
+        "returnvalue-codec-v1"
+      ],
+      "issue": 428,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PQdWF"
     }
   ]
 }
