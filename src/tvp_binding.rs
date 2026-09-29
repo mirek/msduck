@@ -126,6 +126,37 @@ fn protocol(context: &Context<'_>) -> String {
     )
 }
 
+/// Resolve nominal identity without interpreting unrelated column declarations.
+fn catalog_identity(
+    db: &Connection,
+    schema: &str,
+    name: &str,
+    ordinal: u16,
+) -> Result<(String, String, i32, i32), Error> {
+    let mut statement = db.prepare(
+        "SELECT s.name,t.name,t.user_type_id,t.type_table_object_id \
+         FROM sys.table_types t JOIN main.__msduck_schemas s ON s.schema_id=t.schema_id \
+         WHERE lower(s.name)=lower(?) AND lower(t.name)=lower(?) LIMIT 2",
+    )?;
+    let mut query = statement.query(duckdb::params![schema, name])?;
+    let Some(row) = query.next()? else {
+        return Err(diagnostic(
+            2715,
+            3,
+            format!(
+                "Column, parameter, or variable #{ordinal}: Cannot find data type {schema}.{name}."
+            ),
+        ));
+    };
+    let identity: (String, String, i32, i32) = (row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?);
+    if !valid_name(&identity.0) || !valid_name(&identity.1) || query.next()?.is_some() {
+        return Err(Error::Malformed(
+            "invalid or ambiguous catalog TVP identity",
+        ));
+    }
+    Ok(identity)
+}
+
 /// Resolve one registered type and its ordered columns with a bounded read.
 /// Names are values in bound queries, never interpolated SQL identifiers.
 fn catalog(
@@ -281,7 +312,7 @@ pub fn bind(
         ));
     }
     if !name.is_empty() {
-        let supplied = catalog(
+        let supplied = catalog_identity(
             db,
             if schema.is_empty() {
                 context.default_schema
@@ -289,18 +320,15 @@ pub fn bind(
                 &schema
             },
             &name,
-            limits,
             context.parameter_ordinal,
         )?;
-        if supplied.user_type_id != table_type.user_type_id
-            || supplied.object_id != table_type.object_id
-        {
+        if supplied.2 != table_type.user_type_id || supplied.3 != table_type.object_id {
             return Err(diagnostic(
                 206,
                 3,
                 format!(
                     "Operand type clash: {}.{} is incompatible with {}.{}",
-                    table_type.schema, table_type.name, supplied.schema, supplied.name
+                    table_type.schema, table_type.name, supplied.0, supplied.1
                 ),
             ));
         }
@@ -770,6 +798,72 @@ mod tests {
             ),
             Err(Error::Unsupported(_))
         ));
+    }
+
+    #[test]
+    fn wrong_identity_rejects_before_unrelated_column_conversion_or_limits() {
+        let (_server, db) = setup();
+        let sqlparser::ast::Statement::CreateTable(table) = sqlparser::parser::Parser::parse_sql(
+            &crate::dialect::ServerDialect,
+            "CREATE TABLE probe(day DATE NULL)",
+        )
+        .unwrap()
+        .remove(0) else {
+            panic!()
+        };
+        let columns = [crate::type_catalog::TableColumn {
+            name: &table.columns[0].name.value,
+            data_type: &table.columns[0].data_type,
+            nullable: true,
+            collation_name: None,
+        }];
+        crate::type_catalog::create_table_type(&db, "dbo", "OtherDate", &columns, true).unwrap();
+        // DATE alone already exercises unsupported conversion; the repeated
+        // declarations also exceed the destination's three-column limit.
+        let names: Vec<_> = (0..4).map(|i| format!("day{i}")).collect();
+        let wide: Vec<_> = names
+            .iter()
+            .map(|name| crate::type_catalog::TableColumn {
+                name,
+                data_type: &table.columns[0].data_type,
+                nullable: true,
+                collation_name: None,
+            })
+            .collect();
+        crate::type_catalog::create_table_type(&db, "dbo", "OtherWide", &wide, true).unwrap();
+        for name in ["OtherDate", "OtherWide"] {
+            let value = Tvp {
+                type_name: msduck_tds::tvp::TypeName {
+                    schema: "dbo".encode_utf16().collect(),
+                    name: name.encode_utf16().collect(),
+                },
+                value: Value::Table {
+                    columns: Vec::new(),
+                    rows: Vec::new(),
+                },
+            };
+            let Error::Diagnostics(errors) = bind(
+                &db,
+                &context(),
+                Input::Parameter {
+                    status: 0,
+                    value: &value,
+                },
+                Limits {
+                    max_columns: 3,
+                    ..Limits::default()
+                },
+            )
+            .unwrap_err() else {
+                panic!("expected nominal type clash")
+            };
+            assert_eq!(errors[0].error.number, 206);
+            assert_eq!(errors[0].error.state, 3);
+            assert_eq!(
+                errors[0].error.message,
+                format!("Operand type clash: dbo.TvpProbe is incompatible with dbo.{name}")
+            );
+        }
     }
 
     #[test]

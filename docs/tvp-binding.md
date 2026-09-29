@@ -15,7 +15,9 @@ schema/name can use the procedure declaration, as captured in
 `reference/tvp-binding.json`; a schema without a type name rejects with 8049.
 A wrong existing identity rejects with 206, a missing identity with 2715, and
 a wrong column count with 500. Captured diagnostics retain number, state,
-severity, message and line number. No catalog writes or row materialization
+severity and message, and line numbers where retained. Legacy
+`tvp-wire` callback observations omit line numbers. Supplied identities are
+resolved without inspecting unrelated column declarations. No catalog writes or row materialization
 occur in binding. The eventual executor must hold its catalog/execution
 transaction across binding and use; this API does not lease type identities
 against concurrent DROP/recreate.
