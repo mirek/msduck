@@ -21,10 +21,29 @@ additional storage in a future implementation.
 Tedious tests cover values and metadata, empty/singleton sets, decimal inputs,
 prepared NULLs, grouping, ordered frames, empty frames, stored views, invalid
 signatures, nesting, DISTINCT windows and BIT rejection. The differential audit
-captures aggregate, singleton and exact-input DISTINCT results; no SQL Server reference endpoint is
-configured yet. Floating-point results can differ in low bits across engines
-and execution plans. Other invalid operand families, overflow diagnostics,
-complete source-type inference and exact reference behavior remain unfinished.
+captures aggregate, singleton and exact-input DISTINCT results; it records
+local evidence rather than a SQL Server parity verdict.
+
+The pinned SQL Server 2025 capture in `reference/statistical-aggregates.json`
+retains 35 cases from two independent containers and fresh databases. Run
+`node scripts/capture-statistical-reference.mjs --check` to verify the retained
+fixture against the SHA-256 pinned in the script. A fresh run compares full
+rows, typed descriptors, errors, token order and raw DONE status words against
+that fixture. Every one of the four functions returns an eight-byte nullable
+FLOATN descriptor, including empty and all-NULL aggregates. Sample functions
+return NULL for a singleton; population functions return zero. BIT inputs
+raise 8117/state 1/class 16 before metadata, no-argument calls raise
+174/state 1/class 15, and DISTINCT with OVER raises 10759/state 1/class 15.
+An empty preceding frame returns NULL for all four, while a one-row preceding
+frame returns NULL for sample functions and zero for population functions.
+
+Two distinct DECIMAL(20,0) inputs, 9007199254740992 and 9007199254740993,
+produce zero for all four DISTINCT results on this SQL Server build. The sample
+results remain non-NULL, proving that input identity survives deduplication
+even though floating-point computation collapses the numerical difference.
+Floating-point results can differ in low bits across engines and execution
+plans. Other invalid operand families, overflow diagnostics, complete
+source-type inference and exact reference behavior remain unfinished.
 The exact-input regression verifies two original values remain two inputs even
 when both round to the same DOUBLE: sample functions return a non-NULL value
 instead of incorrectly treating the input as a singleton. It does not establish
