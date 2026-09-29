@@ -60,6 +60,8 @@ fn missing_and_nonidentity_targets_replay_captured_diagnostics() {
     let server = Server::open(":memory:").unwrap();
     let mut session = Session::new(server.connection().unwrap()).unwrap();
     run(&mut session, "CREATE TABLE dbo.plain(v INT)");
+    run(&mut session, "CREATE SCHEMA other");
+    run(&mut session, "CREATE TABLE other.plain(v INT)");
     let fixture: Value =
         serde_json::from_str(include_str!("../reference/identity-insert-errors.json")).unwrap();
     for run in fixture["runs"].as_array().unwrap() {
@@ -69,14 +71,29 @@ fn missing_and_nonidentity_targets_replay_captured_diagnostics() {
             assert_diagnostic(resolve(&session.db, &target).unwrap_err(), &case);
         }
     }
-    for name in ["plain", "missing"] {
-        assert!(matches!(
-            resolve(
-                &session.db,
-                &parts(&format!("SET IDENTITY_INSERT {name} ON"))
-            ),
-            Err(ResolveError::Unsupported(_))
-        ));
+    let names: Value = serde_json::from_str(include_str!(
+        "../reference/identity-insert-name-errors.json"
+    ))
+    .unwrap();
+    for run in names["runs"].as_array().unwrap() {
+        for name in [
+            "unqualified plain ON",
+            "unqualified missing ON",
+            "qualified plain ON",
+            "qualified missing ON",
+            "bracketed plain ON",
+            "bracketed missing ON",
+            "bracketed qualified plain ON",
+            "bracketed qualified missing ON",
+            "case-varied plain ON",
+            "case-varied missing ON",
+            "other schema plain ON",
+            "other schema missing ON",
+        ] {
+            let case = captured(run, name);
+            let target = parts(case["sql"].as_str().unwrap());
+            assert_diagnostic(resolve(&session.db, &target).unwrap_err(), &case);
+        }
     }
 }
 
@@ -112,7 +129,7 @@ fn aliases_retain_object_id_and_identity_physical_position() {
     run(&mut session, "DROP TABLE dbo.alpha");
     assert!(matches!(
         resolve(&session.db, &parts("SET IDENTITY_INSERT alpha ON")),
-        Err(ResolveError::Unsupported(_))
+        Err(ResolveError::Diagnostic { error, .. }) if error.number == 1088
     ));
     run(
         &mut session,

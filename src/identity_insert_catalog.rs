@@ -75,7 +75,13 @@ pub fn resolve(db: &Connection, parts: &[Ident]) -> Result<ResolvedTable, Resolv
             "empty IDENTITY_INSERT target part",
         ));
     }
-    let display = format!("{schema}.{table}");
+    // SQL Server reports the requested parts, without quoting delimiters. An
+    // unqualified failure must not acquire the implicit dbo lookup schema.
+    let display = if parts.len() == 1 {
+        table.to_owned()
+    } else {
+        format!("{schema}.{table}")
+    };
     let mut statement = db.prepare(
         "SELECT t.object_id,s.name,t.name,i.column_id,c.ordinal_position \
          FROM sys.tables t JOIN sys.schemas s ON s.schema_id=t.schema_id \
@@ -87,11 +93,6 @@ pub fn resolve(db: &Connection, parts: &[Ident]) -> Result<ResolvedTable, Resolv
     )?;
     let mut rows = statement.query([schema, table])?;
     let Some(row) = rows.next()? else {
-        if parts.len() == 1 {
-            return Err(ResolveError::Unsupported(
-                "unqualified missing-table diagnostic is unprobed",
-            ));
-        }
         return Err(diagnostic(
             1088,
             11,
@@ -111,11 +112,6 @@ pub fn resolve(db: &Connection, parts: &[Ident]) -> Result<ResolvedTable, Resolv
         ));
     }
     let Some(_identity_column) = identity_column else {
-        if parts.len() == 1 {
-            return Err(ResolveError::Unsupported(
-                "unqualified nonidentity-table diagnostic is unprobed",
-            ));
-        }
         return Err(diagnostic(
             8106,
             1,
