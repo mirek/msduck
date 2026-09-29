@@ -15,7 +15,7 @@ rows, typed descriptors, errors, information messages, event order, and raw
 DONE status and command words. It excludes only the product-specific server
 version case. Differences are never rounded or hidden behind tolerances.
 
-On `6facbf81b16d9cffb7d98beefde667d8895e0fd6` (after PR #602), replay on
+On `87c52cbdcce37b8cf0b90480c6ad75edd52bb1be` (after PR #602), replay on
 `linux.local` against SQL Server image
 `mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a` from the pinned fixture
 found 20 exact matches and 14 differing cases: 28 floating-point cells and
