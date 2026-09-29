@@ -6923,6 +6923,23 @@
       ],
       "issue": 649,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYbZo"
+    },
+    {
+      "id": "float-character-diagnostic-v1",
+      "title": "Recognize canonical VARCHAR NVARCHAR to FLOAT conversion diagnostics",
+      "state": "ready",
+      "authorization": "Owner continuing SQL Server compatibility goal and two identical first-party SQL Server captures from task649.",
+      "scope": [
+        "crates/msduck-core/src/diagnostic.rs",
+        "docs/float-conversion-diagnostics.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Recognize only complete canonical VARCHAR/NVARCHAR to FLOAT conversion messages as error8114/state5/severity16; preserve explicit application identity and existing overflow recognition.",
+        "Pure tests reject wrappers altered punctuation unrelated types and suffixes; integrated task649 exact-head workspace clients audit CI review/fallback merge and completion verify the native and translation adapters."
+      ],
+      "issue": 651,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PYc-3"
     }
   ]
 }
