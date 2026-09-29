@@ -6175,7 +6175,7 @@
     {
       "id": "ntile-types-reference-v1",
       "title": "Capture SQL Server NTILE bucket type and conversion matrix",
-      "state": "ready",
+      "state": "done",
       "authorization": "Mirek's continuing full SQL Server compatibility goal; first-party NTILE type fidelity gap recorded in docs/ntile.md and owner-run PR #584. No external submission.",
       "scope": [
         "scripts/capture-ntile-types.mjs",
