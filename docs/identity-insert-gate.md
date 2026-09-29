@@ -28,7 +28,11 @@ replay applicable cases from the owner-controlled
 [multi-row/OUTPUT](../reference/identity-insert-multirow.json) and
 [INSERT-shape](../reference/identity-insert-shapes.json) fixtures. They
 also check quoted aliases, independent settings, identity-column position and
-unresolved columns. The module remains unexported while
+column diagnostics. The captured ON-state duplicate identity column returns
+264, and one unknown listed column returns 207; both use failed DONE command
+253. An unknown column that also omits the identity, and other mixed or
+ambiguous defects, remain unsupported because the capture does
+not establish their diagnostic precedence. The module remains unexported while
 `msduck-sql/src/lib.rs` is reserved by another worker.
 
 The root still must resolve table and column identities, bind the current
@@ -38,7 +42,7 @@ multi-row capture shows an OUTPUT row can be emitted before a later failure
 rolls back the statement while retaining allocator advances. That behavior
 cannot be achieved by this preflight alone. Multi-row positional sources, nonliteral
 positional expressions, unknown positional arities,
-unlisted INSERT SELECT, duplicate/invalid target columns and unusual source
-shapes return unsupported rather than assigning guessed SQL Server error
+unlisted INSERT SELECT, mixed or multipart target-column defects and unusual
+source shapes return unsupported rather than assigning guessed SQL Server error
 precedence. The broader [runtime plan](identity-insert-runtime-plan.md)
 maps the remaining engine integration.

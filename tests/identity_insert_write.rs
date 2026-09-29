@@ -64,6 +64,8 @@ fn captured_insert_shapes_use_live_columns_and_session_key() {
         "ON positional DEFAULT",
         "ON omitted INSERT SELECT",
         "ON omitted conversion",
+        "ON duplicate identity columns",
+        "ON invalid column",
     ];
     for run in shapes["runs"].as_array().unwrap() {
         for name in off_errors {
@@ -292,7 +294,8 @@ fn physical_position_nonidentity_and_unknown_targets_are_distinct() {
         "INSERT master.dbo.second(v,id) VALUES(1,2)",
         "INSERT dbo.[#temporary](v,id) VALUES(1,2)",
         "INSERT dbo.second(v,v,id) VALUES(1,2,3)",
-        "INSERT dbo.second(missing,id) VALUES(1,2)",
+        "INSERT dbo.second(v,v,missing,id) VALUES(1,2,3,4)",
+        "INSERT dbo.second(missing,v) VALUES(1,2)",
     ] {
         assert!(matches!(
             preflight(&session.db, 1, "logical_db", &state, &statement(sql)),
