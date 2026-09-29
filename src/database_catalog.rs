@@ -12,6 +12,7 @@
 //! servers keep their user databases in a temporary directory.
 use anyhow::{Context, Result, bail, ensure};
 use duckdb::Connection;
+use msduck_core::case_mapping::{Direction, Family};
 use msduck_core::diagnostic::SqlError;
 use std::path::{Path, PathBuf};
 
@@ -142,7 +143,8 @@ impl Catalog {
                 name VARCHAR NOT NULL,
                 database_id INTEGER UNIQUE NOT NULL,
                 file VARCHAR NOT NULL,
-                create_date TIMESTAMP NOT NULL);
+                create_date TIMESTAMP NOT NULL,
+                published BOOLEAN NOT NULL DEFAULT false);
              CREATE SEQUENCE IF NOT EXISTS {ids} START {FIRST_USER_ID} MAXVALUE 32767 NO CYCLE",
             registry = catalog.registry(),
             ids = catalog.ids(),
@@ -160,7 +162,8 @@ impl Catalog {
             let name = row.name.clone();
             let result = catalog
                 .attach(owner, &row, Attach::Recover)
-                .and_then(|()| catalog.publish(owner, &name));
+                .and_then(|()| catalog.publish(owner, &name))
+                .and_then(|()| catalog.mark_published(owner, &row.name_key));
             if let Err(error) = result {
                 // SQL Server keeps serving other databases when one cannot be
                 // recovered; the database stays registered but is not listed.
@@ -199,7 +202,8 @@ impl Catalog {
         let alias = db
             .query_row(
                 &format!(
-                    "SELECT r.name FROM {} r JOIN duckdb_databases() d ON d.database_name=r.name WHERE r.name_key=?",
+                    "SELECT r.name FROM {} r JOIN duckdb_databases() d ON d.database_name=r.name \
+                     WHERE r.name_key=? AND r.published",
                     self.registry()
                 ),
                 [key(name)],
@@ -280,7 +284,7 @@ impl Catalog {
         let file = file_name(&self.prefix, database_id, &name_key);
         let path = self.directory.join(&file);
         ensure!(
-            !path.exists(),
+            !present(&path)?,
             "Cannot create database '{name}' because file '{}' already exists.",
             path.display()
         );
@@ -303,9 +307,11 @@ impl Catalog {
             database_id,
             file,
         };
+        // Clients see the database only once every catalog lists it.
         let attached = self
             .attach(db, &row, Attach::Create)
-            .and_then(|()| self.publish_all(db));
+            .and_then(|()| self.publish_all(db))
+            .and_then(|()| self.mark_published(db, &name_key));
         if let Err(error) = attached {
             let _ = db.execute_batch(&format!("DETACH DATABASE IF EXISTS {}", quote(name)));
             // Forget the database only once its files are gone. Otherwise it
@@ -388,14 +394,14 @@ impl Catalog {
         let name = row.name.as_str();
         let path = self.path(row)?;
         // DuckDB creates missing files; recovery must not replace lost data
-        // with an empty database.
-        if mode == Attach::Recover {
-            ensure!(
-                path.is_file(),
-                "database file '{}' is missing",
-                path.display()
-            );
+        // with an empty database. `present` rejects symbolic links, so a
+        // replaced file cannot redirect DuckDB outside the data directory.
+        let exists = present(&path)?;
+        match mode {
+            Attach::Recover => ensure!(exists, "database file '{}' is missing", path.display()),
+            Attach::Create => ensure!(!exists, "database file '{}' already exists", path.display()),
         }
+        present(&wal(&path))?;
         bootstrap_file(&path)?;
         let path = path.to_str().context("database path is not UTF-8")?;
         db.execute_batch(&format!("ATTACH {} AS {}", literal(path), quote(name)))?;
@@ -445,6 +451,7 @@ impl Catalog {
                  UNION ALL
                  SELECT r.name,r.database_id,r.create_date
                  FROM {registry} r JOIN duckdb_databases() d ON d.database_name=r.name
+                 WHERE r.published
              );
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_id(value) AS
                  (SELECT database_id FROM {target}.sys.databases WHERE lower(name)=lower(CAST(value AS VARCHAR)));
@@ -455,6 +462,17 @@ impl Catalog {
             registry = self.registry(),
             primary = literal(&self.primary),
         ))?;
+        Ok(())
+    }
+
+    fn mark_published(&self, db: &Connection, name_key: &str) -> Result<()> {
+        db.execute(
+            &format!(
+                "UPDATE {} SET published=true WHERE name_key=?",
+                self.registry()
+            ),
+            [name_key],
+        )?;
         Ok(())
     }
 
@@ -494,9 +512,8 @@ impl Catalog {
 
     fn delete_files(&self, row: &Row) -> Result<()> {
         let path = self.path(row)?;
-        let mut wal = path.clone().into_os_string();
-        wal.push(".wal");
-        for path in [path, PathBuf::from(wal)] {
+        let wal = wal(&path);
+        for path in [path, wal] {
             match std::fs::remove_file(&path) {
                 Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
                     return Err(error).with_context(|| format!("delete {}", path.display()));
@@ -530,9 +547,36 @@ fn validate(name: &str) -> Result<()> {
 }
 
 /// SQL Server compares database names case-insensitively under the default
-/// server collation; the registry keys on the lower-case form.
+/// server collation; the registry keys on that collation's captured
+/// lower-case mapping of UTF-16 units, not on generic Unicode casing.
 fn key(name: &str) -> String {
-    name.to_lowercase()
+    let mut units: Vec<u16> = name.encode_utf16().collect();
+    Family::SqlLatin1.map_in_place(Direction::Lower, &mut units);
+    // The mapping leaves surrogates unchanged, so the units stay valid.
+    String::from_utf16_lossy(&units)
+}
+
+/// Whether a database file exists, without following a symbolic link. Only
+/// regular files are accepted.
+fn present(path: &Path) -> Result<bool> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            ensure!(
+                metadata.file_type().is_file(),
+                "database file '{}' is not a regular file",
+                path.display()
+            );
+            Ok(true)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error).with_context(|| format!("inspect {}", path.display())),
+    }
+}
+
+fn wal(path: &Path) -> PathBuf {
+    let mut wal = path.to_path_buf().into_os_string();
+    wal.push(".wal");
+    PathBuf::from(wal)
 }
 
 /// Longest encoded name kept in a file name. With the prefix, the ID and the
@@ -542,9 +586,13 @@ const FILE_NAME_FRAGMENT: usize = 64;
 /// The database ID makes the name unique; a bounded, readable fragment of the
 /// encoded name follows it.
 fn file_name(prefix: &str, database_id: i32, name_key: &str) -> String {
-    // The prefix is already a valid file name; only its length needs a bound
-    // so that the whole component fits. A shortened prefix keeps a hash of the
-    // full prefix, so servers whose file names share a start do not collide.
+    // The prefix is already a file name, but a Unix name may contain `\`,
+    // which registered names reject for portability. Its length also needs a
+    // bound so that the whole component fits. A shortened prefix keeps a hash
+    // of the full prefix, so servers whose file names share a start do not
+    // collide.
+    let escaped = prefix.replace('\\', "%5C");
+    let prefix = escaped.as_str();
     let prefix = if prefix.len() > FILE_NAME_FRAGMENT {
         let mut end = FILE_NAME_FRAGMENT;
         while !prefix.is_char_boundary(end) {
@@ -674,6 +722,19 @@ mod tests {
         let b = file_name(&format!("{}b", "s".repeat(64)), 5, "sales");
         assert_ne!(a, b);
         assert_eq!(fnv1a(b"a"), 0xaf63_dc4c_8601_ec8c);
+    }
+
+    #[test]
+    fn generated_names_pass_their_own_validation() {
+        assert_eq!(file_name("a\\b.duckdb", 5, "x"), "a%5Cb.duckdb.5.x.duckdb");
+    }
+
+    #[test]
+    fn keys_follow_the_server_collation() {
+        assert_eq!(key("Sales"), "sales");
+        // Generic Unicode lowercases İ to i and a combining dot.
+        assert_eq!(key("İ"), "i");
+        assert_eq!(key("ΣẞıI🦆"), "σẞıi🦆");
     }
 
     #[test]

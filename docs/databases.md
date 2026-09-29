@@ -9,8 +9,13 @@ and IDs are not reused after a drop.
 
 `src/database_catalog.rs` owns this mapping. Its registry is the table
 `main.__msduck_databases` in the primary catalog. It records each database's
-name, the lower-case key used for case-insensitive lookup, the ID, the file name
-and the create date. A file-backed server re-attaches every registered database
+name, the lower-case key used for case-insensitive lookup, the ID, the file name,
+the create date and whether publication finished. The key uses the captured
+`SQL_Latin1_General_CP1_CI_AS` lower-case mapping of UTF-16 units, not generic
+Unicode casing, so `İ` and `i` name the same database. This approximates the
+collation's comparison; other equivalences of its sort weights are not modelled.
+A new database is listed in `sys.databases` and selectable only after its
+catalog objects and every catalog's `sys.databases` view are in place. A file-backed server re-attaches every registered database
 on startup. If one cannot be attached, the server logs the failure and still
 starts. A missing file is never recreated, so lost data is not replaced by an
 empty database. An unavailable database stays registered and keeps its name,
@@ -27,7 +32,8 @@ lower-case name with ASCII letters, digits, `_` and `-` kept and every other
 UTF-8 byte written as `%XX`. It is cut at a whole character after 64 bytes, so
 long non-ASCII names stay within file-name limits. A primary file name longer than 64
 bytes is cut the same way and followed by `~` and a 64-bit FNV-1a hash of the
-full name, so servers whose file names share a prefix do not collide. The registry
+full name, so servers whose file names share a prefix do not collide. A `\` in
+the primary file name, legal on Unix, is written as `%5C`. The registry
 is ordinary SQL data, so a stored file name is used only if it is a single
 file-name component that ends with the `.<database_id>.<fragment>.duckdb`
 suffix generated for that row's ID and name. Any other value, such as an
@@ -35,7 +41,11 @@ absolute path, `..`, master's file or another database's file, makes the
 database unavailable, and neither recovery nor DROP touches the file. Any
 prefix is accepted, so renaming the primary file keeps its databases. `My App` is stored as
 `msduck.duckdb.5.my%20app.duckdb`. The registry records the file name.
-Creation refuses to adopt an existing file with that name. Dropping a database
+Creation refuses to adopt an existing file with that name. A database file or
+WAL that is a symbolic link, or not a regular file, is never opened: recovery
+leaves the database unavailable and CREATE fails. DROP removes the link itself.
+The check precedes the open, so it does not guard against a process that swaps
+files in the data directory concurrently. Dropping a database
 detaches it and deletes its file and WAL before the registration. If a deletion
 fails, the database stays registered and DROP reports the error, so a retry can
 finish. A CREATE that fails after its file exists cleans up the same way.

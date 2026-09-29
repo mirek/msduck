@@ -587,3 +587,83 @@ fn readers_never_select_a_database_that_is_still_being_created() {
     stop.store(true, std::sync::atomic::Ordering::Relaxed);
     watching.join().unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn registered_files_replaced_by_symbolic_links_are_not_opened() {
+    let directory = scratch_directory("symlink");
+    let outside = scratch_directory("symlink-target");
+    let victim = outside.join("victim.duckdb");
+    duckdb::Connection::open(&victim)
+        .unwrap()
+        .execute_batch("CREATE TABLE kept(x INT)")
+        .unwrap();
+    let primary = directory.join("msduck.duckdb");
+    let primary = primary.to_str().unwrap();
+    {
+        let server = Server::open(primary).unwrap();
+        let db = server.connection().unwrap();
+        db.databases().create(&db, "app").unwrap();
+    }
+    let file = directory.join("msduck.duckdb.5.app.duckdb");
+    std::fs::remove_file(&file).unwrap();
+    std::os::unix::fs::symlink(&victim, &file).unwrap();
+    // A dangling link must not become the file of a new database either.
+    std::os::unix::fs::symlink(
+        outside.join("created.duckdb"),
+        directory.join("msduck.duckdb.6.next.duckdb"),
+    )
+    .unwrap();
+    let server = Server::open(primary).unwrap();
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    assert_eq!(catalog.list(&db).unwrap(), [database("master", 1)]);
+    assert!(catalog.create(&db, "next").is_err());
+    assert!(!outside.join("created.duckdb").exists());
+    let victim_db = duckdb::Connection::open(&victim).unwrap();
+    let schemas: i64 = victim_db
+        .query_row(
+            "SELECT count(*) FROM duckdb_schemas() WHERE database_name='victim' AND schema_name IN ('dbo','sys')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(schemas, 0, "the linked file was bootstrapped");
+    drop(victim_db);
+    // Dropping removes the link, not its target.
+    catalog.remove(&db, "app").unwrap();
+    assert!(victim.exists());
+    drop((db, server));
+    std::fs::remove_dir_all(&directory).unwrap();
+    std::fs::remove_dir_all(&outside).unwrap();
+}
+
+#[test]
+fn unpublished_databases_are_neither_listed_nor_selectable() {
+    let server = Server::open(":memory:").unwrap();
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    catalog.create(&db, "pending").unwrap();
+    // A registration whose publication has not finished stays hidden.
+    db.execute_batch("UPDATE main.__msduck_databases SET published=false WHERE name_key='pending'")
+        .unwrap();
+    assert_eq!(catalog.list(&db).unwrap(), [database("master", 1)]);
+    assert_eq!(scalar::<i64>(&db, "SELECT count(*) FROM sys.databases"), 1);
+    assert_eq!(
+        sql_error(catalog.select(&db, "pending").unwrap_err()).0,
+        911
+    );
+}
+
+#[test]
+fn database_names_compare_under_the_server_collation() {
+    let server = Server::open(":memory:").unwrap();
+    let db = server.connection().unwrap();
+    let catalog = db.databases().clone();
+    catalog.create(&db, "İstanbul").unwrap();
+    assert_eq!(catalog.select(&db, "istanbul").unwrap(), "İstanbul");
+    assert_eq!(
+        sql_error(catalog.create(&db, "ISTANBUL").unwrap_err()).0,
+        1801
+    );
+}
