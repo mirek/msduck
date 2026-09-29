@@ -6883,7 +6883,7 @@
     {
       "id": "percentile-execution-comparison-v1",
       "title": "Replay complete percentile reference including prepared phases and exact float bits",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing SQL Server compatibility goal and retained first-party percentile evidence; no external submission.",
       "scope": [
         "scripts/compare-percentile-reference.mjs",
