@@ -95,6 +95,12 @@ fn missing_and_nonidentity_targets_replay_captured_diagnostics() {
             assert_diagnostic(resolve(&session.db, &target).unwrap_err(), &case);
         }
     }
+    for name in ["#local", "##global"] {
+        assert!(matches!(
+            resolve(&session.db, &[Ident::new(name)]),
+            Err(ResolveError::Unsupported(_))
+        ));
+    }
 }
 
 #[test]

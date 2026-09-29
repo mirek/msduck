@@ -20,9 +20,10 @@ name retains requested case and qualification while dropping brackets; an
 unqualified error does not acquire `dbo.` from the catalog lookup. The earlier
 [error capture](../reference/identity-insert-errors.json) also covers explicit
 `dbo.missing` and `dbo.plain`. A catalog inconsistency or backend failure is
-separate from those SQL diagnostics. Three- or four-part names remain
-unsupported. The resolver never changes a session setting or executes a SQL
-fragment supplied by the caller.
+separate from those SQL diagnostics. Three- or four-part names and `#`
+temporary targets remain unsupported; their behavior has not been captured.
+The resolver never changes a session setting or executes a SQL fragment
+supplied by the caller.
 
 The [path-imported integration tests](../tests/identity_insert_catalog.rs)
 use the real `Server` catalog for quoted/case aliases, physical identity

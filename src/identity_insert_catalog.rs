@@ -75,6 +75,11 @@ pub fn resolve(db: &Connection, parts: &[Ident]) -> Result<ResolvedTable, Resolv
             "empty IDENTITY_INSERT target part",
         ));
     }
+    if table.starts_with('#') {
+        return Err(ResolveError::Unsupported(
+            "temporary IDENTITY_INSERT target is unprobed",
+        ));
+    }
     // SQL Server reports the requested parts, without quoting delimiters. An
     // unqualified failure must not acquire the implicit dbo lookup schema.
     let display = if parts.len() == 1 {
