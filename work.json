@@ -5871,7 +5871,7 @@
     {
       "id": "identity-insert-gate-v1",
       "title": "Preflight INSERT identity permission from explicit session and catalog inputs",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server compatibility goal and owner-controlled IDENTITY_INSERT fixtures; no external submissions.",
       "scope": [
         "crates/msduck-sql/src/identity_insert_gate.rs",
