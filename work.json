@@ -6348,6 +6348,27 @@
       ],
       "issue": 601,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PWdcJ"
+    },
+    {
+      "id": "statistical-precision-diagnostics-v1",
+      "title": "Diagnose statistical aggregate floating-point differences",
+      "state": "ready",
+      "authorization": "mirek's continuing implementation goal, owner-authored issue #603 and reference/statistical-aggregates.json",
+      "scope": [
+        "scripts/compare-statistical-reference.mjs",
+        "docs/statistical-precision.md"
+      ],
+      "acceptance": [
+        "Replay the pinned statistical reference against a running local msduck using a reproducible bounded script, retaining exact rows, descriptors, diagnostics, token order and floating-point bit patterns without tolerance-based normalization",
+        "Document every observed difference with reference case IDs and source revisions; distinguish numerical low-bit differences from other mismatches and explain the limits of local evidence",
+        "Recommend a bounded successor implementation task based on evidence, preserving typed DISTINCT input identity and single evaluation of volatile operands; do not claim SQL Server parity or edit numerical lowering in this diagnostic task"
+      ],
+      "dependencies": [
+        "statistical-aggregates-reference-v1",
+        "statistical-distinct-warning-v1"
+      ],
+      "issue": 603,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PWi1-"
     }
   ]
 }
