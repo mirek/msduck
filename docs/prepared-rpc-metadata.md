@@ -131,5 +131,10 @@ Precision, dynamically supplied property names and NULL inputs. Preparation
 retains nullable/computed flags for every captured property result; the runtime
 payload never chooses the compile-time type. Captured DATETIME2 COALESCE retains
 fComputed as well. Complete API/named preparation responses are embedded as
-additional goldens; unimplemented variant conditional/extrema and grouped cast
-ORDER responses remain in the raw capture for further integration.
+additional goldens. Variant conditional and non-window MIN/MAX declarations
+also use original explicit casts and resolved catalog fields. Every contributing
+conditional operand must prove a supported variant/integral/BIT family; unknown
+or other families and COUNT-containing trees remain barriers. Known original
+properties survive enrichment, including captured aggregate flags. Grouped cast
+ORDER and wider set/window variant shapes remain in the raw capture for further
+integration.

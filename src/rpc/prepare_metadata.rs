@@ -39,6 +39,84 @@ fn datetime2_declaration(expression: &Expr, parameters: &HashMap<String, Paramet
     }
 }
 
+// Some(true) is a proven variant, Some(false) a supported integral/BIT
+// operand. Unknown and other families cannot establish variant precedence.
+fn variant_declaration(
+    expression: &Expr,
+    scope: &Scope,
+    parameters: &HashMap<String, Parameter>,
+) -> Option<bool> {
+    use msduck_sql::expression_metadata::conditional;
+    if sqlparser::ast::visit_expressions(expression, |node| {
+        if matches!(node, Expr::Function(f) if matches!(f.name.to_string().to_ascii_lowercase().as_str(), "count" | "count_big")) {
+            ControlFlow::Break(())
+        } else { ControlFlow::Continue(()) }
+    }).is_break() {
+        return None;
+    }
+    if conditional::candidate(expression) {
+        let values = conditional::values(expression)
+            .into_iter()
+            .filter(|value| !conditional::literal_null(value))
+            .map(|value| variant_declaration(value, scope, parameters))
+            .collect::<Option<Vec<_>>>()?;
+        return (!values.is_empty()).then(|| values.into_iter().any(|variant| variant));
+    }
+    match expression {
+        Expr::Nested(expr) => return variant_declaration(expr, scope, parameters),
+        Expr::Cast { data_type, .. }
+        | Expr::Convert {
+            data_type: Some(data_type),
+            ..
+        } if msduck_sql::variant_pack::is_variant(data_type) => return Some(true),
+        Expr::Function(f)
+            if matches!(
+                f.name.to_string().to_ascii_lowercase().as_str(),
+                "min" | "max"
+            ) && f.over.is_none()
+                && msduck_sql::aggregate::validate(f).is_ok() =>
+        {
+            let FunctionArguments::List(args) = &f.args else {
+                return None;
+            };
+            let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] = args.args.as_slice() else {
+                return None;
+            };
+            return variant_declaration(value, scope, parameters);
+        }
+        _ => {}
+    }
+    if msduck_sql::case_types::integer_rank(expression, parameters).is_some()
+        || msduck_sql::case_types::is_bit(expression, parameters)
+    {
+        return Some(false);
+    }
+    let ids = match expression {
+        Expr::Identifier(id) if id.value.starts_with('@') => {
+            return scope
+                .parameters
+                .get(&id.value.to_lowercase())
+                .and_then(|info| info.system_type_id)
+                .and_then(|id| match id {
+                    98 => Some(true),
+                    48 | 52 | 56 | 127 | 104 => Some(false),
+                    _ => None,
+                });
+        }
+        Expr::Identifier(id) => vec![id],
+        Expr::CompoundIdentifier(ids) => ids.iter().collect(),
+        _ => return None,
+    };
+    msduck_sql::binding_scope::resolve(&ids, &[], &scope.rows)
+        .and_then(|field| field.info.as_ref())
+        .and_then(|info| info.system_type_id)
+        .and_then(|id| match id {
+            98 => Some(true),
+            48 | 52 | 56 | 127 | 104 => Some(false),
+            _ => None,
+        })
+}
+
 // This clone is used only for declaration inference, never execution. Native
 // validation has already checked the original seed expression and function.
 fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter>) -> Query {
@@ -541,6 +619,25 @@ fn query_description(
                 | sqlparser::ast::SelectItem::ExprWithAlias { expr, .. } => expr,
                 _ => continue,
             };
+            if field.info.is_none()
+                && variant_declaration(expression, &source_scope, parameters) == Some(true)
+            {
+                field.info = catalog.cast_info(&DataType::Custom(
+                    sqlparser::ast::ObjectName::from(vec![sqlparser::ast::Ident::new(
+                        "SQL_VARIANT",
+                    )]),
+                    vec![],
+                ));
+                if field.info.is_some()
+                    && field.properties.origin == msduck_core::result::Origin::Unknown
+                {
+                    field.properties = msduck_sql::result_properties::expression(
+                        expression,
+                        &[],
+                        &source_scope.rows,
+                    );
+                }
+            }
             if let Expr::Function(function) = expression
                 && (msduck_sql::expression_metadata::conditional::isnull_args(function)
                     .ok()
@@ -825,6 +922,38 @@ mod tests {
                 panic!("values")
             };
             assert_eq!(values.rows.len(), 2, "{sql}");
+        }
+    }
+
+    #[test]
+    fn variant_declarations_require_every_contributing_family() {
+        fn declaration(sql: &str) -> Option<bool> {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            let sqlparser::ast::SetExpr::Select(select) = query.body.as_ref() else {
+                panic!("select")
+            };
+            let sqlparser::ast::SelectItem::UnnamedExpr(expr) = &select.projection[0] else {
+                panic!("expression")
+            };
+            variant_declaration(expr, &Scope::default(), &HashMap::new())
+        }
+        assert_eq!(
+            declaration("SELECT COALESCE(CAST(NULL AS SQL_VARIANT),CAST(4 AS BIGINT))"),
+            Some(true)
+        );
+        assert_eq!(
+            declaration("SELECT MIN(CAST(1 AS SQL_VARIANT))"),
+            Some(true)
+        );
+        for sql in [
+            "SELECT COALESCE(CAST(NULL AS SQL_VARIANT),@unknown)",
+            "SELECT COALESCE(CAST(NULL AS SQL_VARIANT),CAST(NULL AS FLOAT))",
+            "SELECT MIN(COUNT(NULL))",
+            "SELECT MAX(CAST(COUNT(NULL) AS SQL_VARIANT))",
+        ] {
+            assert_eq!(declaration(sql), None, "{sql}");
         }
     }
 
