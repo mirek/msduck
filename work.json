@@ -1182,7 +1182,7 @@
     {
       "id": "drop-index-batch-syntax-v1",
       "title": "Preserve ordered DROP INDEX requests through batch parsing",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal. Captured DROP INDEX binder and caller-owned parser cursor are implemented; runtime integration requires retaining all targets and options in the visitor-compatible batch AST. No external submissions consumed.",
       "scope": [
         "crates/msduck-sql/src/dialect.rs",
@@ -7329,6 +7329,63 @@
       ],
       "issue": 679,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZW9F"
+    },
+    {
+      "id": "alter-database-sessions-reference-v1",
+      "title": "Capture SQL Server ALTER DATABASE options, session termination, sys.dm_exec_sessions and @@SPID",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-09-30), issue #680. No external submission is input.",
+      "scope": [
+        "scripts/capture-alter-database-sessions.mjs",
+        "reference/alter-database-sessions.json",
+        "docs/alter-database-sessions-reference.md"
+      ],
+      "acceptance": [
+        "With the pinned SQL Server 2025 reference container, capture exact tokens (messages, errors, DONE status/curcmd/rowcount) for ALTER DATABASE [db] SET READ_COMMITTED_SNAPSHOT ON|OFF, SINGLE_USER, MULTI_USER with and without WITH ROLLBACK IMMEDIATE and NO_WAIT, ALTER DATABASE CURRENT, unknown databases, master, and inside a user transaction.",
+        "Capture what an idle and an in-transaction second connection using the database observe after ROLLBACK IMMEDIATE, SINGLE_USER admission errors for a second USE or login, sys.databases user_access/is_read_committed_snapshot_on after each change, and DROP DATABASE after SINGLE_USER.",
+        "Capture sys.all_columns declarations and empty-result descriptors for sys.dm_exec_sessions and SELECT @@SPID, and program_name/host_name/login_name for the capturing session; retain identical observations from two fresh containers and document them."
+      ],
+      "dependencies": [],
+      "issue": 680,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZegD"
+    },
+    {
+      "id": "alter-database-sessions-v1",
+      "title": "Execute ALTER DATABASE READ_COMMITTED_SNAPSHOT/user access with ROLLBACK IMMEDIATE, sys.dm_exec_sessions and @@SPID",
+      "state": "backlog",
+      "authorization": "Direct owner instruction from mirek in this session (2026-09-30), issue #680; owner approved local implementation before src/engine.rs is released by percentile-runtime-adapter-v1. No external submission is input.",
+      "scope": [
+        "src/engine.rs",
+        "src/server.rs",
+        "src/database_catalog.rs",
+        "src/query_catalog.rs",
+        "src/lib.rs",
+        "src/sessions.rs",
+        "src/checked_projection.rs",
+        "src/column_catalog/system_columns.json",
+        "crates/msduck-tds/src/lib.rs",
+        "crates/msduck-sql/src/dialect.rs",
+        "crates/msduck-sql/src/dialect/alter_database.rs",
+        "crates/msduck-sql/src/session_function.rs",
+        "tests/alter_database_sessions.rs",
+        "tests/alter_database_sessions.test.mjs",
+        ".github/workflows/ci.yml",
+        "docs/alter-database-sessions.md",
+        "docs/databases.md",
+        "README.md",
+        "ROADMAP.md"
+      ],
+      "acceptance": [
+        "Parse ALTER DATABASE {name|CURRENT} SET READ_COMMITTED_SNAPSHOT ON|OFF and SINGLE_USER|RESTRICTED_USER|MULTI_USER with optional WITH ROLLBACK IMMEDIATE or NO_WAIT; persist the options per database, expose them in sys.databases, and reject other options explicitly. Match captured tokens and errors for unknown databases, master and user transactions.",
+        "Keep a server session registry with SPIDs, login time, LOGIN7 host/program/client interface names, login and current database. Expose sys.dm_exec_sessions with captured declarations and @@SPID as captured.",
+        "ROLLBACK IMMEDIATE terminates other sessions using the database and waits until they release it, so a following DROP DATABASE succeeds; NO_WAIT and SINGLE_USER admission errors follow the capture. Unsupported termination forms fail explicitly instead of blocking.",
+        "Add root Rust and tedious coverage (registered in CI) for the owner's sequence, run the AGENTS.md checks, and update README, ROADMAP and docs with verified behavior and gaps."
+      ],
+      "dependencies": [
+        "alter-database-sessions-reference-v1"
+      ],
+      "issue": 680,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZegD"
     }
   ]
 }
