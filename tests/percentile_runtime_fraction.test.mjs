@@ -11,7 +11,7 @@ test('runtime percentile local variables scalar expressions and catchable failur
  const c=await start(t)
  for(const kind of ['CONT','DISC']) {
   for(const [prefix,fraction] of [['DECLARE @p FLOAT=.5;','@p'],['DECLARE @p FLOAT=.5;','@p+0'],["DECLARE @p NVARCHAR(16)=N'0.5';",'CAST(@p AS FLOAT)'],['DECLARE @p FLOAT=-.5;','ABS(@p)'],['','CASE WHEN 1=1 THEN .5 ELSE 1/0 END'],['','(SELECT .5)']]) {
-   assert.deepEqual((await query(c,prefix+sql(kind,fraction))).rows,Array.from({length:4},()=>[kind==='CONT'?2.5:2]))
+   assert.deepEqual((await query(c,prefix+sql(kind,fraction)).catch(e=>{throw new Error(`${kind}: ${prefix} ${fraction}: ${e.message}`,{cause:e})})).rows,Array.from({length:4},()=>[kind==='CONT'?2.5:2]))
   }
   for(const [fraction,number,state,message] of [["'abc'",8114,5,'Error converting data type varchar to float.'],['NULL',8727,1,'Input parameter of percentile function is outside of range [0, 1].'],['CASE WHEN 1=0 THEN .5 ELSE 1/0 END',8134,1,'Divide by zero error encountered.']]) {
    const failed=await capture(c,sql(kind,fraction))
@@ -45,6 +45,6 @@ test('prepared percentile bindings recover without inspecting values during prep
     if(!empty && ['abc',null,'1.1'].includes(value)) {assert.equal(error?.number,value==='abc'?8114:8727);assert.deepEqual(rows,[])}
     else {assert.ifError(error);assert.deepEqual(rows,empty?[]:Array.from({length:4},()=>[kind==='CONT'?2.5:2]))}
    }
-  } finally {await new Promise((resolve,reject)=>{callback=e=>e?reject(e):resolve();c.unprepare(request)})}
+  } finally {await new Promise((resolve,reject)=>{callback=e=>e?reject(e):resolve();request.error=undefined;c.unprepare(request)})}
  }
 })
