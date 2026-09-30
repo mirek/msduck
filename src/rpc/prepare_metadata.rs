@@ -210,6 +210,12 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
                                 .expect("sysname declaration"),
                             )))
                         }
+                        "sql_variant_property" => Some(DataType::Custom(
+                            sqlparser::ast::ObjectName::from(vec![sqlparser::ast::Ident::new(
+                                "SQL_VARIANT",
+                            )]),
+                            vec![],
+                        )),
                         "ident_current" | "ident_seed" | "ident_incr" => {
                             Some(DataType::Numeric(ExactNumberInfo::PrecisionAndScale(38, 0)))
                         }
@@ -530,17 +536,28 @@ fn query_description(
                 _ => continue,
             };
             if let Expr::Function(function) = expression
-                && msduck_sql::expression_metadata::conditional::isnull_args(function)
+                && (msduck_sql::expression_metadata::conditional::isnull_args(function)
                     .ok()
                     .flatten()
                     .is_some()
+                    || msduck_sql::expression_metadata::conditional::coalesce_args(function)
+                        .ok()
+                        .flatten()
+                        .is_some())
                 && datetime2_declaration(expression, parameters).is_some()
                 && field.info.as_ref().and_then(|info| info.system_type_id) == Some(42)
             {
                 // Unlike ordinary temporal casts, the captured prepared
-                // ISNULL retains fComputed and original NULL provenance.
+                // ISNULL/COALESCE retain fComputed and original NULL provenance.
                 field.properties =
                     msduck_sql::result_properties::expression(expression, &[], &source_scope.rows);
+            }
+            if matches!(expression, Expr::Function(function) if function.name.to_string().eq_ignore_ascii_case("SQL_VARIANT_PROPERTY"))
+                && field.info.as_ref().and_then(|info| info.system_type_id) == Some(98)
+            {
+                // The property name and runtime payload do not choose the
+                // result declaration: both strings and integers are variants.
+                field.properties = msduck_core::result::Properties::expression(true);
             }
             if let Expr::Cast {
                 expr, data_type, ..

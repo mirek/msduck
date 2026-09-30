@@ -122,3 +122,14 @@ The `--declarations PATH` mode captures preparation-only variant property calls,
 conditional/extrema variants, grouped cast ordering and temporal VALUES/conditional
 shapes in two fresh pinned containers. It retains complete responses and verifies
 that preparation leaves rows, random state and transaction depth unchanged.
+
+The declaration capture at `190911e` retains 20 records/run in
+`artifacts/prepared-rpc-metadata/declarations-reference.json` (SHA-256
+`8be6f5f5f0026a5b5b013b9bb79d9230485b9b30e3597da68116751479069542`).
+SQL_VARIANT_PROPERTY has a fixed SQL_VARIANT return declaration for BaseType,
+Precision, dynamically supplied property names and NULL inputs. Preparation
+retains nullable/computed flags for every captured property result; the runtime
+payload never chooses the compile-time type. Captured DATETIME2 COALESCE retains
+fComputed as well. Complete API/named preparation responses are embedded as
+additional goldens; unimplemented variant conditional/extrema and grouped cast
+ORDER responses remain in the raw capture for further integration.
