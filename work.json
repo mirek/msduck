@@ -7390,7 +7390,7 @@
     {
       "id": "order-token-reference-v1",
       "title": "Capture SQL Server ORDER token bytes and emission rules",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing goal and raw PR674 evidence; first-party capture, no external submission intake.",
       "issue": 681,
       "scope": [
@@ -7406,6 +7406,28 @@
         "Source/checksum and meaningful fixture invariants tests, locked Linux capture and retained evidence, independent review or recorded authorized Codex availability fallback, exact-head required CI, merge and registry/project completion by claiming worker."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZf11"
+    },
+    {
+      "id": "order-token-codec-v1",
+      "title": "Implement bounded deterministic TDS ORDER codec from retained vectors",
+      "state": "ready",
+      "authorization": "Owner continuing compatibility goal and merged first-party ORDER reference; no external content intake.",
+      "issue": 683,
+      "scope": [
+        "crates/msduck-tds/src/order.rs",
+        "crates/msduck-tds/src/lib.rs",
+        "crates/msduck-tds/tests/order.rs",
+        "docs/order-token-codec.md"
+      ],
+      "dependencies": [
+        "order-token-reference-v1"
+      ],
+      "acceptance": [
+        "Implement pure bounded ORDER codec using exact retained SQL Server vectors. Preserve ordinal0 hidden keys, select-list ordinal sequence and exact little-endian USHORT byte length; no guessed query emission or dropping zeros/duplicates. lib.rs scope is module export only.",
+        "Check length arithmetic and maximum even USHORT payload; reject malformed/truncated/odd/trailing token bytes without panic and avoid partial appended output on validation error. Add retained-fixture and meaningful hostile-boundary tests.",
+        "Run required Rust/client checks appropriate to pure codec, independent exact-head review or recorded authorized availability fallback and required CI; claiming worker merges and promptly completes registry/project. Root emission/planning remains separate explicit unfinished compatibility work. No engine.rs edits."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZhbU"
     }
   ]
 }
