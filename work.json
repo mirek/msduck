@@ -7189,6 +7189,30 @@
         "Meaningful pure tests cover retained batch/prepared expressions and invalid/unknown/volatile cases. Full exact-head required Rust/client/audit checks, review/fallback, CI, merge and registry/project completion. Document that root runtime adapter and full wire/error timing still need implementation."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZEK5"
+    },
+    {
+      "id": "percentile-runtime-adapter-v1",
+      "title": "Execute statement-wide percentile fractions with captured preparation and error phases",
+      "state": "ready",
+      "authorization": "Owner continuing goal and reference PR664. Begin only after deterministic plan task669 is Done; this task is implementation, not another reference-only report.",
+      "issue": 671,
+      "scope": [
+        "src/engine.rs",
+        "src/percentile_input.rs",
+        "tests/percentile_runtime_fraction.rs",
+        "tests/percentile_runtime_fraction.test.mjs",
+        "docs/percentile-runtime-adapter.md"
+      ],
+      "dependencies": [
+        "percentile-runtime-plan-v1"
+      ],
+      "acceptance": [
+        "Integrate explicit deterministic eligibility/declarations with root execution. Accept captured local/prepared parameters, constant scalar expressions and seeded RAND without inspecting bound values for compile metadata. No interpolation text substitution or backend inference of unknown sources.",
+        "Evaluate each proven statement-wide fraction once, preserving CASE laziness and observable RAND advancement even for empty input. Separate evaluation effects, source FLOAT conversion and range validation. Empty input suppresses captured conversion/range errors; all-NULL ordering rows still validate. Preserve numeric literal syntax diagnostics, ordering single evaluation, ascending/descending and partition semantics.",
+        "Prepare invalid/NULL fraction bindings successfully with declaration-only metadata; execution retains captured source-specific8114/8115/8727 identities, result prefix/error phase, TRY/CATCH and repeated valid/invalid/valid handle recovery. Compare complete retained137-record/311-phase evidence and report every remaining descriptor/ORDER/DONE gap raw; no normalization/skips or value-only server completion claims.",
+        "Add native/public interoperability coverage including typed empty/NULL results and real client preparation phases. Use shared locked Linux builder; full exact-head fmt/strictClippy/workspace/build/default and focused clients/audit/reference checks, independent review/authorized availability fallback, required CI, merge and registry/project completion. Further frontend/wire files require separate conflict-free claims before edits."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZF_y"
     }
   ]
 }
