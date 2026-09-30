@@ -173,14 +173,14 @@ export async function observeDefaultPreparation(connection) {
  ])for(const option of ['',',0'])for(const mode of ['batch','rpc']){
   const batch=`DECLARE @h INT; EXEC sys.sp_prepare @h OUTPUT,N'@p INT',N'${sql}'${option}; EXEC sys.sp_execute @h,0; EXEC sys.sp_execute @h,9; EXEC sys.sp_execute @h,1; EXEC sys.sp_unprepare @h`;
   const result=canonical(await(mode==='batch'?captureBatch(connection,batch):captureRpc(connection,batch)));
-  assert.deepEqual(result.errors,[]);assert.equal(result.sets.length,3);
+  assert.deepEqual(result.errors,[]);assert.equal(result.sets.length,option?3:4);
   records.push({name,option:option?'zero':'omitted',mode,sql:batch,result});
  }
  return records;
 }
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined;
- if(![undefined,'--check','--write-fixture','--default-prepare'].includes(mode)||args.length>1)throw Error('usage: capture-count-ranking-declarations.mjs [--check | --write-fixture] [output]');
+ if(![undefined,'--check','--write-fixture','--default-prepare'].includes(mode)||args.length>1)throw Error('usage: capture-count-ranking-declarations.mjs [--check | --write-fixture | --default-prepare] [output]');
  if(mode==='--check'){const r=await retained();console.log('Checked COUNT/ranking records',r.runs[0].length);return;}
  if(mode==='--write-fixture')await refuseExistingFixture(fixture);
  const output=resolve(args[0]??'artifacts/count-ranking-declarations/capture.json');assert.notEqual(output,fileURLToPath(fixture));
