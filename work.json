@@ -7493,7 +7493,7 @@
     {
       "id": "order-token-expanded-reference-v1",
       "title": "Capture expanded SQL Server ORDER profiles and retain optimizer probes",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing compatibility goal and first-party ORDER evidence; no external content intake.",
       "issue": 689,
       "scope": [
