@@ -40,29 +40,54 @@ fn column<'a>(expr: &Expr, sources: &'a [Source], scope: &'a Scope) -> Option<&'
     Some(field)
 }
 fn same(left: &Expr, right: &Expr, sources: &[Source], scope: &Scope) -> bool {
-    let (left, right) = (inner(left), inner(right));
-    if let (Some(left), Some(right)) = (column(left, sources, scope), column(right, sources, scope))
-    {
-        // Both references resolve within the same explicit source snapshot.
-        // Identity distinguishes equally named columns from different sources.
-        return std::ptr::eq(left, right);
+    // Canonicalize borrowed field identity through the whole expression tree,
+    // including CAST, COLLATE and aggregate arguments. Never rewrite the input.
+    struct Canonical<'a> {
+        sources: &'a [Source],
+        scope: &'a Scope,
+        fields: Vec<&'a Field>,
     }
-    match (left, right) {
-        (
-            Expr::BinaryOp {
-                left: a,
-                op: x,
-                right: b,
-            },
-            Expr::BinaryOp {
-                left: c,
-                op: y,
-                right: d,
-            },
-        ) => x == y && same(a, c, sources, scope) && same(b, d, sources, scope),
-        (Expr::Value(a), Expr::Value(b)) => a == b,
-        _ => left == right,
+    impl VisitorMut for Canonical<'_> {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<()> {
+            if let Some(source) = crate::variant_cast::source(expr) {
+                *expr = source.clone();
+            }
+            if let Some(field) = column(expr, self.sources, self.scope) {
+                if let Some(index) = self
+                    .fields
+                    .iter()
+                    .position(|candidate| std::ptr::eq(*candidate, field))
+                {
+                    *expr = Expr::Identifier(Ident::new(format!("__msduck_order_field_{index}")));
+                }
+            } else if let Expr::Identifier(name) = expr
+                && name.value.starts_with('@')
+                && self
+                    .scope
+                    .parameters
+                    .contains_key(&name.value.to_lowercase())
+            {
+                name.value = name.value.to_lowercase();
+            }
+            std::ops::ControlFlow::Continue(())
+        }
     }
+    let fields = sources
+        .iter()
+        .chain(scope.rows.iter().filter_map(Option::as_deref).flatten())
+        .flat_map(|source| &source.fields)
+        .collect();
+    let mut canonical = Canonical {
+        sources,
+        scope,
+        fields,
+    };
+    let mut left = inner(left).clone();
+    let mut right = inner(right).clone();
+    let _ = left.visit(&mut canonical);
+    let _ = right.visit(&mut canonical);
+    left == right
 }
 fn integer_column(expr: &Expr, sources: &[Source], scope: &Scope) -> bool {
     column(expr, sources, scope).is_some_and(|field| {

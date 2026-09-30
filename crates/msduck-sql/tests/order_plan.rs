@@ -437,3 +437,30 @@ fn prepared_arithmetic_has_one_declaration_plan_for_all_captured_phases() {
         }
     }
 }
+
+#[test]
+fn equivalent_qualified_expression_keys_reuse_captured_projected_ordinals() {
+    for (sql, expected) in [
+        (
+            "SELECT CAST(a AS BIGINT) AS k FROM dbo.order_heap h ORDER BY CAST(h.a AS BIGINT)",
+            1,
+        ),
+        (
+            "SELECT label COLLATE Latin1_General_100_BIN2 AS k FROM dbo.order_heap h ORDER BY h.label COLLATE Latin1_General_100_BIN2",
+            1,
+        ),
+        (
+            "SELECT b,SUM(a) AS n FROM dbo.order_heap h GROUP BY b ORDER BY SUM(h.a)",
+            2,
+        ),
+    ] {
+        assert_eq!(plan(sql), Plan::Token(vec![expected]));
+        let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+            panic!("query");
+        };
+        assert_eq!(
+            infer(&catalog(), &query, &Scope::default()),
+            Plan::Token(vec![expected])
+        );
+    }
+}
