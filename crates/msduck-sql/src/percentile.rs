@@ -219,7 +219,10 @@ fn normalized_fraction(fraction: &Expr) -> Result<(bool, Expr), String> {
     if !(0.0..=1.0).contains(&number) {
         return Err(RANGE.into());
     }
-    Ok((number == 0.0, crate::expr::number(number)))
+    // A fixed-point spelling would make DuckDB parse this as DECIMAL and
+    // convert it to DOUBLE again, which can round a neighboring FLOAT to one.
+    // Scientific round-trip spelling preserves the already converted bits.
+    Ok((number == 0.0, crate::expr::number(format!("{number:e}"))))
 }
 
 // Distinguish a numeric source literal from character-to-FLOAT conversion.
