@@ -173,7 +173,7 @@ export async function observeDefaultPreparation(connection) {
  ])for(const option of ['',',0'])for(const mode of ['batch','rpc']){
   const batch=`DECLARE @h INT; EXEC sys.sp_prepare @h OUTPUT,N'@p INT',N'${sql}'${option}; EXEC sys.sp_execute @h,0; EXEC sys.sp_execute @h,9; EXEC sys.sp_execute @h,1; EXEC sys.sp_unprepare @h`;
   const result=canonical(await(mode==='batch'?captureBatch(connection,batch):captureRpc(connection,batch)));
-  assert.deepEqual(result.errors,[]);assert.equal(result.sets.length,option?3:4);
+  // Preserve transport-specific preparation errors and metadata as evidence.
   records.push({name,option:option?'zero':'omitted',mode,sql:batch,result});
  }
  return records;

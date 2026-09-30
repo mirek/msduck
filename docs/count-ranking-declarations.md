@@ -67,8 +67,8 @@ and every unproven window shape still need exact ground truth and integration.
 No root source files or engine.rs are changed by this task.
 
 The supplemental `--default-prepare` capture records omitted and explicit zero
-options separately in two fresh containers. Omitting the option returns a
-metadata-only preparation set; zero suppresses it. Thus omission is not an
-alias for zero. Tedious omits the option, exposing a runtime metadata gap.
+options separately in two fresh containers, retaining transport-specific errors
+and metadata rather than assuming they are equivalent. Tedious omits the option;
+its preparation metadata requires separate reference verification.
 The client diagnostic records preparation omissions and the full batch/RPC
 responses when option 1 is requested. Execution comparisons remain strict.
