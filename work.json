@@ -7741,7 +7741,7 @@
     {
       "id": "count-null-compilation-reference-v1",
       "title": "Capture COUNT typeless NULL validation and compilation boundaries",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing compatibility goal and first-party COUNT(NULL)8117 mismatch retained at535c125. Reference acquisition only; no engine.rs reservation.",
       "issue": 699,
       "scope": [
