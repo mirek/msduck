@@ -7789,6 +7789,33 @@
       "dependencies": [],
       "issue": 697,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZ76f"
+    },
+    {
+      "id": "prepared-rpc-metadata-v1",
+      "title": "Emit declaration-based metadata for prepared RPC results",
+      "state": "ready",
+      "authorization": "Owner continuing full compatibility goal, first-party missing prepare metadata and verified public catalog/Session APIs. Engine.rs, root lib and query_catalog are excluded to preserve owner separate work.",
+      "issue": 702,
+      "dependencies": [
+        "count-ranking-declarations-v1",
+        "count-null-compilation-reference-v1"
+      ],
+      "scope": [
+        "src/rpc.rs",
+        "src/rpc/prepare_metadata.rs",
+        "scripts/capture-prepared-rpc-metadata.mjs",
+        "scripts/capture-order-token.mjs",
+        "reference/prepared-rpc-metadata.json",
+        "tests/prepared_rpc_metadata.test.mjs",
+        "tests/prepared_rpc_metadata_reference.test.mjs",
+        "docs/prepared-rpc-metadata.md"
+      ],
+      "acceptance": [
+        "First capture direct typed RPC preparation option semantics and complete preparation/execution/unpreparation rows/descriptors/errors/DONE/ORDER in two fresh pinned SQL Server containers. Cover COUNT/COUNT_BIG, ROW_NUMBER, declared numeric/character columns, empty/NULL/parameter reuse, no-result/multiple-result shapes and nonexecution/volatile-state probes. Preserve exact differences/unknowns. capture-order-token.mjs scope is export of the existing private capturePreparedPhase helper only; do not alter hook/capture behavior or existing fixtures.",
+        "Implement metadata-only root RPC descriptions from original logical AST and explicit catalog/parameter declarations using existing public Session/query_catalog APIs. Validate without stepping statements, keep effects root-side, preserve bounded type/capacity/collation/properties, handle ownership/allocation and failures. Do not fabricate unknown shapes, infer metadata from values/rows, evaluate volatile operands or change engine.rs/root lib/query_catalog. Unknown/unsupported/error/ORDER/DONE gaps remain explicitly evidenced; do not claim full prepared compatibility.",
+        "Meaningful focused Rust/public client/reference tests invoked explicitly alongside the default client inventory (package.json is reserved by prepared-capture-helper-v1), exact-head formatting/strict workspace-alltargetsClippy/workspace tests/alltargets build/full independent clients and semantic copied-corpus diagnostic audit. Independent owner-run review or authorized GitHubCodex unavailable fallback and required exact-head CI. Claiming worker merges and promptly completes task/board; respect other active file reservations."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PaD96"
     }
   ]
 }
