@@ -4,6 +4,275 @@ use sqlparser::ast::*;
 pub const RANGE: &str = "Input parameter of percentile function is outside of range [0, 1].";
 const LITERAL: &str = "Percentile requires a numeric literal between 0 and 1.";
 
+/// Declaration intent; DISC requires the caller's ordering-source declaration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuntimeKind {
+    Continuous,
+    Discrete,
+}
+
+/// Caller-owned syntax, with no converted fraction or acquired runtime value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimePlan {
+    pub kind: RuntimeKind,
+    pub fraction: Expr,
+    pub ordering: OrderByExpr,
+    pub window: WindowType,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlanError {
+    Shape(String),
+    Diagnostic(msduck_core::diagnostic::SqlError),
+    /// Not proven by the retained source matrix; adapters must not guess.
+    Unknown,
+}
+
+/// Plan statement-wide fractions without evaluating them or reading bindings.
+/// Conversion and range errors (including constant NULL/text/range errors) are
+/// deferred so the root can preserve empty-input suppression and error timing.
+pub fn runtime_plan(
+    expr: &Expr,
+    declarations: &crate::binding_scope::Scope,
+) -> Result<Option<RuntimePlan>, PlanError> {
+    let Expr::Function(function) = expr else {
+        return Ok(None);
+    };
+    let name = function.name.to_string().to_ascii_lowercase();
+    let kind = match name.as_str() {
+        "percentile_cont" => RuntimeKind::Continuous,
+        "percentile_disc" => RuntimeKind::Discrete,
+        _ => return Ok(None),
+    };
+    let FunctionArguments::List(args) = &function.args else {
+        return Err(PlanError::Shape(format!(
+            "The {name} function requires 1 argument(s)."
+        )));
+    };
+    let [FunctionArg::Unnamed(FunctionArgExpr::Expr(fraction))] = args.args.as_slice() else {
+        return Err(PlanError::Shape(format!(
+            "The {name} function requires 1 argument(s)."
+        )));
+    };
+    // Reuse modifier/window validation with a harmless syntax placeholder.
+    // Neither this clone nor the original fraction is executed or converted.
+    let mut shape = expr.clone();
+    if let Expr::Function(f) = &mut shape
+        && let FunctionArguments::List(args) = &mut f.args
+    {
+        args.args[0] = FunctionArg::Unnamed(FunctionArgExpr::Expr(crate::expr::number(0)));
+    }
+    lower(&mut shape).map_err(PlanError::Shape)?;
+    fn null_order(expr: &Expr) -> bool {
+        let expr = crate::variant_cast::source(expr).unwrap_or(expr);
+        match expr {
+            Expr::Value(value) => matches!(value.value, Value::Null),
+            Expr::Nested(value) | Expr::Cast { expr: value, .. } => null_order(value),
+            _ => false,
+        }
+    }
+    if null_order(&function.within_group[0].expr) {
+        return Err(PlanError::Diagnostic(
+            msduck_core::diagnostic::SqlError::new(
+                5309,
+                1,
+                "Windowed functions, aggregates and NEXT VALUE FOR functions do not support constants as ORDER BY clause expressions.",
+            ),
+        ));
+    }
+    struct Sources<'a> {
+        declarations: &'a crate::binding_scope::Scope,
+        row_dependent: bool,
+        unknown: bool,
+        literal_error: Option<msduck_core::diagnostic::SqlError>,
+    }
+    impl Visitor for Sources<'_> {
+        type Break = ();
+        fn pre_visit_query(&mut self, query: &Query) -> std::ops::ControlFlow<()> {
+            let SetExpr::Select(select) = query.body.as_ref() else {
+                self.unknown = true;
+                return std::ops::ControlFlow::Continue(());
+            };
+            self.row_dependent |= !select.from.is_empty();
+            let simple = query.with.is_none()
+                && query.order_by.is_none()
+                && query.limit_clause.is_none()
+                && query.fetch.is_none()
+                && query.locks.is_empty()
+                && query.for_clause.is_none()
+                && query.settings.is_none()
+                && query.format_clause.is_none()
+                && query.pipe_operators.is_empty()
+                && select.projection.len() == 1
+                && matches!(
+                    &select.projection[0],
+                    SelectItem::UnnamedExpr(_) | SelectItem::ExprWithAlias { .. }
+                )
+                && select.optimizer_hints.is_empty()
+                && select.distinct.is_none()
+                && select.select_modifiers.is_none()
+                && select.top.is_none()
+                && select.exclude.is_none()
+                && select.into.is_none()
+                && select.lateral_views.is_empty()
+                && select.prewhere.is_none()
+                && select.selection.is_none()
+                && select.connect_by.is_empty()
+                && matches!(&select.group_by, GroupByExpr::Expressions(e,m) if e.is_empty() && m.is_empty())
+                && select.cluster_by.is_empty()
+                && select.distribute_by.is_empty()
+                && select.sort_by.is_empty()
+                && select.having.is_none()
+                && select.named_window.is_empty()
+                && select.qualify.is_none()
+                && select.value_table_mode.is_none();
+            self.unknown |= !simple;
+            std::ops::ControlFlow::Continue(())
+        }
+        fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
+            match expr {
+                Expr::Identifier(name) => {
+                    if name.quote_style.is_none() && name.value.starts_with('@') {
+                        self.unknown |= !self
+                            .declarations
+                            .parameters
+                            .keys()
+                            .any(|key| key.eq_ignore_ascii_case(&name.value));
+                    } else {
+                        self.row_dependent = true;
+                    }
+                }
+                Expr::CompoundIdentifier(_) => self.row_dependent = true,
+                Expr::Value(v) => {
+                    if let Value::Number(source, _) = &v.value
+                        && let Err(message) = numeric_literal(source)
+                    {
+                        if let Some(error) = literal_diagnostic(&message) {
+                            self.literal_error.get_or_insert(error);
+                        } else {
+                            self.unknown = true;
+                        }
+                    }
+                    self.unknown |= !matches!(
+                        v.value,
+                        Value::Number(_, _)
+                            | Value::Null
+                            | Value::SingleQuotedString(_)
+                            | Value::NationalStringLiteral(_)
+                    )
+                }
+                Expr::Nested(_)
+                | Expr::Subquery(_)
+                | Expr::Case { .. }
+                | Expr::IsNull(_)
+                | Expr::IsNotNull(_) => {}
+                Expr::UnaryOp { op, .. } => {
+                    self.unknown |= !matches!(
+                        op,
+                        UnaryOperator::Plus | UnaryOperator::Minus | UnaryOperator::Not
+                    )
+                }
+                Expr::BinaryOp { op, .. } => {
+                    self.unknown |= !matches!(
+                        op,
+                        BinaryOperator::Plus
+                            | BinaryOperator::Minus
+                            | BinaryOperator::Multiply
+                            | BinaryOperator::Divide
+                            | BinaryOperator::Modulo
+                            | BinaryOperator::Eq
+                            | BinaryOperator::NotEq
+                            | BinaryOperator::Lt
+                            | BinaryOperator::LtEq
+                            | BinaryOperator::Gt
+                            | BinaryOperator::GtEq
+                            | BinaryOperator::And
+                            | BinaryOperator::Or
+                    )
+                }
+                Expr::Cast {
+                    kind: CastKind::Cast,
+                    data_type,
+                    format: None,
+                    ..
+                } => {
+                    self.unknown |= !(numeric_cast_supported(data_type)
+                        || matches!(data_type, DataType::Varchar(_) | DataType::Nvarchar(_)))
+                }
+                Expr::Function(f) => {
+                    let name = f.name.to_string().to_ascii_lowercase();
+                    let expected = match name.as_str() {
+                        "abs" => Some(1),
+                        "rand" => Some(0),
+                        _ => None,
+                    };
+                    let plain = !f.uses_odbc_syntax
+                        && f.filter.is_none()
+                        && f.over.is_none()
+                        && f.within_group.is_empty()
+                        && f.null_treatment.is_none()
+                        && matches!(f.parameters, FunctionArguments::None);
+                    let valid_args = matches!(&f.args, FunctionArguments::List(args) if args.duplicate_treatment.is_none() && args.clauses.is_empty() && Some(args.args.len()) == expected && args.args.iter().all(|a| matches!(a, FunctionArg::Unnamed(FunctionArgExpr::Expr(_)))));
+                    let marker_args = matches!(&f.args, FunctionArguments::List(args) if args.duplicate_treatment.is_none() && args.clauses.is_empty() && args.args.len() == 1);
+                    self.unknown |= !(plain
+                        && (valid_args
+                            || marker_args && crate::variant_cast::source(expr).is_some()));
+                }
+                _ => self.unknown = true,
+            }
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    let mut sources = Sources {
+        declarations,
+        row_dependent: false,
+        unknown: false,
+        literal_error: None,
+    };
+    let _ = Visit::visit(fraction, &mut sources);
+    if let Some(error) = sources.literal_error {
+        return Err(PlanError::Diagnostic(error));
+    }
+    if sources.row_dependent {
+        return Err(PlanError::Diagnostic(
+            msduck_core::diagnostic::SqlError::new(
+                8726,
+                1,
+                format!(
+                    "Input parameter of {} function must be a constant.",
+                    function.name.to_string().to_ascii_uppercase()
+                ),
+            ),
+        ));
+    }
+    if sources.unknown {
+        return Err(PlanError::Unknown);
+    }
+    Ok(Some(RuntimePlan {
+        kind,
+        fraction: fraction.clone(),
+        ordering: function.within_group[0].clone(),
+        window: function.over.clone().expect("validated percentile window"),
+    }))
+}
+
+/// Validate a caller-isolated fraction token stream before AST acquisition.
+/// NEXT VALUE FOR is not yet parsed by ServerDialect; no sequence is accessed.
+pub fn validate_sequence_source(
+    tokens: &[sqlparser::tokenizer::Token],
+) -> Result<(), msduck_core::diagnostic::SqlError> {
+    use sqlparser::tokenizer::Token;
+    let significant = tokens
+        .iter()
+        .filter(|token| !matches!(token, Token::Whitespace(_) | Token::EOF))
+        .collect::<Vec<_>>();
+    if significant.windows(3).any(|window| window.iter().zip(["NEXT", "VALUE", "FOR"]).all(|(token, expected)| matches!(token, Token::Word(word) if word.quote_style.is_none() && word.value.eq_ignore_ascii_case(expected)))) {
+        return Err(msduck_core::diagnostic::SqlError::syntax(11720, 1,
+            "NEXT VALUE FOR function is not allowed in the TOP, OVER, OUTPUT, ON, WHERE, GROUP BY, HAVING, or ORDER BY clauses."));
+    }
+    Ok(())
+}
+
 pub fn discrete_value(function: &Function) -> Option<&Expr> {
     if function
         .name
