@@ -7875,6 +7875,25 @@
         "Fixture-backed pure tests and meaningful all-scale/boundary/alias/unknown checks; integrate with the parent captured public preparation test and remove the temporary root VALUES declaration clone workaround when shared inference replaces it. Exact-head formatting/strict workspace Clippy/workspace/build/default+dedicated clients/diagnostic audit, independent review or authorized availability fallback/required CI. Same claiming worker owns final merge and prompt completion of all companion tasks/projects/issues."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PaoT2"
+    },
+    {
+      "id": "set-result-properties-v1",
+      "title": "Preserve captured result properties for SQL set operators",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility goal; first-party exact-head INTERSECT/EXCEPT flag mismatch in PR703 and immutable temporal set capture. No external submission input. Same worker/worktree/PR703; capture wiring/public tests remain in already-owned parent scope.",
+      "issue": 707,
+      "dependencies": [],
+      "scope": [
+        "crates/msduck-sql/src/projection.rs",
+        "crates/msduck-sql/tests/set_result_properties.rs",
+        "reference/prepared-set-properties.json"
+      ],
+      "acceptance": [
+        "Capture complete preparation responses in two fresh pinned SQL Server containers for UNION/UNION ALL/INTERSECT/EXCEPT over temporal/integer declarations, nullable/nonnullable sources and expressions, differing scales and nested set boundaries. Preserve immutable evidence, full plan/raw tokens/nonexecution and independent agreement. Use existing parent-owned capture script; do not infer nullability from runtime rows.",
+        "Implement captured set-operation result properties in shared deterministic projection over explicit inputs. Preserve unknown/alias/declaration barriers, correct operator associativity and source identity; do not alter UNION/VALUES type rules or hide descriptor differences. No engine.rs, backend, clocks or session effects.",
+        "Fixture-backed pure tests and complete public preparation comparisons in parent scope, exact-head formatting/strict workspaceClippy/workspace/alltargets build/default and dedicated clients/audit, independent review or owner-authorized availability fallback and required CI. Same worker owns final merge and completion of every companion task/project/issue."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84ParYi"
     }
   ]
 }
