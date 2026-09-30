@@ -62,55 +62,63 @@ fn retained_success_descriptors_are_inferred_without_rows() {
             continue;
         }
         let sql = record["sql"].as_str().unwrap();
-        let ast = query(sql);
-        let original = ast.clone();
-        let fields = query_fields(&catalog, &ast, &Scope::default());
-        assert_eq!(ast, original);
-        if !record["result"]["errors"].as_array().unwrap().is_empty() {
-            assert!(
-                fields.is_none_or(|fields| fields.iter().all(|field| field.info.is_none())),
-                "error shape {sql}"
-            );
-            continue;
-        }
-        let fields = fields.unwrap();
-        let columns = record["result"]["sets"][0]["columns"].as_array().unwrap();
-        assert_eq!(fields.len(), columns.len(), "{sql}");
-        for (field, column) in fields.iter().zip(columns) {
-            let info = field
-                .info
-                .as_ref()
-                .unwrap_or_else(|| panic!("unknown {} in {sql}: {ast:#?}", field.name));
-            if column["type"] == "IntN" {
-                assert_eq!(
-                    info.max_length.map(i64::from),
-                    column["length"].as_i64(),
-                    "width {} in {sql}",
-                    field.name
+        let Statement::Query(raw) =
+            sqlparser::parser::Parser::parse_sql(&msduck_sql::dialect::ServerDialect, sql)
+                .unwrap()
+                .remove(0)
+        else {
+            panic!("query")
+        };
+        for ast in [*raw, query(sql)] {
+            let original = ast.clone();
+            let fields = query_fields(&catalog, &ast, &Scope::default());
+            assert_eq!(ast, original);
+            if !record["result"]["errors"].as_array().unwrap().is_empty() {
+                assert!(
+                    fields.is_none_or(|fields| fields.iter().all(|field| field.info.is_none())),
+                    "error shape {sql}"
                 );
-                assert_eq!(
-                    info.system_type_id,
-                    Some(if column["length"] == 8 { 127 } else { 56 }),
-                    "{sql}"
-                );
+                continue;
             }
-            if column["type"] == "DecimalN" {
-                assert!(matches!(info.system_type_id, Some(106 | 108)));
-                assert_eq!(
-                    info.precision.map(u64::from),
-                    column["precision"].as_u64(),
-                    "precision {sql}"
-                );
-                assert_eq!(
-                    info.scale.map(u64::from),
-                    column["scale"].as_u64(),
-                    "scale {sql}"
-                );
+            let fields = fields.unwrap();
+            let columns = record["result"]["sets"][0]["columns"].as_array().unwrap();
+            assert_eq!(fields.len(), columns.len(), "{sql}");
+            for (field, column) in fields.iter().zip(columns) {
+                let info = field
+                    .info
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("unknown {} in {sql}: {ast:#?}", field.name));
+                if column["type"] == "IntN" {
+                    assert_eq!(
+                        info.max_length.map(i64::from),
+                        column["length"].as_i64(),
+                        "width {} in {sql}",
+                        field.name
+                    );
+                    assert_eq!(
+                        info.system_type_id,
+                        Some(if column["length"] == 8 { 127 } else { 56 }),
+                        "{sql}"
+                    );
+                }
+                if column["type"] == "DecimalN" {
+                    assert!(matches!(info.system_type_id, Some(106 | 108)));
+                    assert_eq!(
+                        info.precision.map(u64::from),
+                        column["precision"].as_u64(),
+                        "precision {sql}"
+                    );
+                    assert_eq!(
+                        info.scale.map(u64::from),
+                        column["scale"].as_u64(),
+                        "scale {sql}"
+                    );
+                }
             }
+            checked += 1;
         }
-        checked += 1;
     }
-    assert_eq!(checked, 44);
+    assert_eq!(checked, 88);
 }
 #[test]
 fn explicit_parameters_and_unknown_arguments_remain_separate() {
