@@ -7774,6 +7774,21 @@
       "dependencies": [],
       "issue": 697,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZ76f"
+    },
+    {
+      "id": "tedious-compat-gaps-insert-v1",
+      "title": "Skip computed columns in INSERT target expansion and omitted-default rewriting",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-09-30), issue #697. Companion of tedious-compat-gaps-v2, delivered in the same PR. No external submission is input.",
+      "scope": [
+        "src/insert.rs"
+      ],
+      "acceptance": [
+        "INSERT with or without a column list into a table with computed columns targets only the stored columns, matching reference/tedious-compat-gaps.json; workspace checks pass."
+      ],
+      "dependencies": [],
+      "issue": 697,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZ76f"
     }
   ]
 }
