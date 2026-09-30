@@ -7534,6 +7534,35 @@
         "Run exact-head formatting/strict workspace Clippy/workspace tests/all-targets build and independent clients, independent review or owner-authorized Codex unavailable fallback and required CI. No root/server/corpus behavior changes and no engine.rs reservation. Claiming worker owns merge and prompt registry/project completion; root ORDER emission remains unfinished separate work."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZtM6"
+    },
+    {
+      "id": "order-token-runtime-adapter-v1",
+      "title": "Integrate logical ORDER plans into server and prepared result framing",
+      "state": "backlog",
+      "authorization": "Owner continuing compatibility goal; root integration follows first-party ORDER reference/codec/planner and does not approve external content. Backlog reserves no files.",
+      "issue": 693,
+      "scope": [
+        "src/order_runtime.rs",
+        "src/engine.rs",
+        "src/query_catalog.rs",
+        "src/rpc.rs",
+        "src/lib.rs",
+        "tests/order_token.rs",
+        "tests/order_token.test.mjs",
+        "docs/order-token-runtime.md",
+        "README.md",
+        "ROADMAP.md"
+      ],
+      "dependencies": [
+        "order-token-codec-v1",
+        "order-token-expanded-plan-v1"
+      ],
+      "acceptance": [
+        "Acquire catalog/parameter declarations in root effects adapter and infer ORDER on original logical AST before backend lowering. Carry exact known plan into each public result; encode bounded ORDER after COLMETADATA before ROW/completion, preserving hidden0/key sequence, folded/no-outer-token distinctions, empty results and metadata-only preparation. Prepared executions use one declaration-only plan independent of bound values/row counts. Do not evaluate volatile operands for metadata or duplicate backend work.",
+        "Replay original/expanded ORDER profiles over server batch/RPC/prepared paths; verify exact raw ORDER bytes/event placement and rows/descriptors/errors/DONE. Preserve binding-error precedence and partial-result error context. Unknown plans remain explicitly recorded compatibility gaps rather than guessed bytes or claimed no-token proof. Fix confirmed differences without hiding or normalizing reference evidence.",
+        "After owner makes a ready non-overlapping task available, exclusively claim before implementation. Exact-head workspace fmt/strict Clippy/tests/all-targets build, independent clients and semantic copied-corpus audit; review or authorized availability fallback and required CI, worker-owned merge and prompt registry/project completion. Backlog only now, so engine.rs is not reserved by this session."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZy8e"
     }
   ]
 }
