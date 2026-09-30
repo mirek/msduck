@@ -943,6 +943,163 @@ fn fragment(expr: &Expr, sources: &[Source], outer: &[Option<Vec<Source>>]) -> b
     crate::binding_scope::resolve(&ids, sources, outer).is_some_and(|field| field.json_fragment)
 }
 
+// Fixed aggregate/ranking widths still require declared, valid inputs. These
+// facts are shared by derived/CTE binding, not obtained from backend results.
+fn count_ranking_info(
+    catalog: &CatalogSnapshot,
+    function: &Function,
+    sources: &[Source],
+    scope: &Scope,
+) -> Option<Info> {
+    let name = function.name.to_string().to_ascii_lowercase();
+    if !matches!(name.as_str(), "count" | "count_big" | "row_number")
+        || function.parameters != FunctionArguments::None
+        || function.filter.is_some()
+        || function.null_treatment.is_some()
+        || !function.within_group.is_empty()
+        || function.uses_odbc_syntax
+    {
+        return None;
+    }
+    crate::aggregate::validate(function).ok()?;
+    let FunctionArguments::List(args) = &function.args else {
+        return None;
+    };
+    if !args.clauses.is_empty() {
+        return None;
+    }
+    struct Declared<'a> {
+        catalog: &'a CatalogSnapshot,
+        sources: &'a [Source],
+        scope: &'a Scope,
+        known: bool,
+    }
+    impl Visitor for Declared<'_> {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
+            let ids = match expr {
+                Expr::Identifier(name) if name.value.starts_with('@') => {
+                    self.known &= self
+                        .scope
+                        .parameters
+                        .get(&name.value.to_lowercase())
+                        .is_some_and(|info| info.system_type_id.is_some());
+                    return std::ops::ControlFlow::Continue(());
+                }
+                Expr::Identifier(name) => vec![name],
+                Expr::CompoundIdentifier(names) => names.iter().collect(),
+                Expr::Subquery(_) => {
+                    self.known = false;
+                    return std::ops::ControlFlow::Continue(());
+                }
+                Expr::Function(f)
+                    if ["count", "count_big", "sum", "avg", "min", "max"]
+                        .iter()
+                        .any(|name| f.name.to_string().eq_ignore_ascii_case(name)) =>
+                {
+                    self.known = false;
+                    return std::ops::ControlFlow::Continue(());
+                }
+                Expr::Function(_) if crate::variant_cast::source(expr).is_some() => {
+                    return std::ops::ControlFlow::Continue(());
+                }
+                Expr::Function(_) => {
+                    self.known &=
+                        member_expression(self.catalog, expr, self.sources, self.scope).is_some();
+                    return std::ops::ControlFlow::Continue(());
+                }
+                _ => return std::ops::ControlFlow::Continue(()),
+            };
+            self.known &= crate::binding_scope::resolve(&ids, self.sources, &self.scope.rows)
+                .is_some_and(|field| {
+                    field
+                        .info
+                        .as_ref()
+                        .is_some_and(|info| info.system_type_id.is_some())
+                });
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    let declared = |expr: &Expr| {
+        let mut check = Declared {
+            catalog,
+            sources,
+            scope,
+            known: true,
+        };
+        let _ = expr.visit(&mut check);
+        check.known
+    };
+    let key = |expr: &Expr| {
+        struct ColumnReference(bool);
+        impl Visitor for ColumnReference {
+            type Break = ();
+            fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
+                self.0 |= matches!(expr, Expr::Identifier(id) if !id.value.starts_with('@'))
+                    || matches!(expr, Expr::CompoundIdentifier(_));
+                std::ops::ControlFlow::Continue(())
+            }
+        }
+        let mut reference = ColumnReference(false);
+        let _ = expr.visit(&mut reference);
+        if reference.0 && declared(expr) && expression(catalog, expr, sources, scope).is_some() {
+            return true;
+        }
+        if let Expr::Subquery(query) = expr {
+            let expected =
+                sqlparser::parser::Parser::parse_sql(&crate::dialect::ServerDialect, "SELECT NULL")
+                    .ok();
+            return matches!(expected.as_deref(),Some([Statement::Query(expected)]) if query==expected);
+        }
+        false
+    };
+    if let Some(over) = &function.over {
+        let WindowType::WindowSpec(window) = over else {
+            return None;
+        };
+        if window.window_name.is_some()
+            || window.window_frame.is_some()
+            || !window
+                .partition_by
+                .iter()
+                .all(|expr| declared(expr) && expression(catalog, expr, sources, scope).is_some())
+            || !window.order_by.iter().all(|order| key(&order.expr))
+        {
+            return None;
+        }
+        if name == "row_number" && (window.order_by.is_empty() || window.window_frame.is_some()) {
+            return None;
+        }
+    } else if name == "row_number" {
+        return None;
+    }
+    if name == "row_number" {
+        if !args.args.is_empty() || args.duplicate_treatment.is_some() {
+            return None;
+        }
+        return catalog.cast_info(&DataType::BigInt(None));
+    }
+    match args.args.as_slice() {
+        [FunctionArg::Unnamed(FunctionArgExpr::Wildcard)] if args.duplicate_treatment.is_none() => {
+        }
+        [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] => {
+            if conditional::literal_null(value) || !declared(value) {
+                return None;
+            }
+            let input = member_expression(catalog, value, sources, scope)?;
+            if matches!(input.system_type_id, None | Some(34 | 35 | 99)) {
+                return None;
+            }
+        }
+        _ => return None,
+    }
+    catalog.cast_info(&if name == "count_big" {
+        DataType::BigInt(None)
+    } else {
+        DataType::Int(None)
+    })
+}
+
 fn expression(
     catalog: &CatalogSnapshot,
     e: &Expr,
@@ -962,6 +1119,9 @@ fn expression(
     }
     if let Expr::Function(function) = e {
         let name = function.name.to_string().to_ascii_lowercase();
+        if matches!(name.as_str(), "count" | "count_big" | "row_number") {
+            return count_ranking_info(catalog, function, sources, scope);
+        }
         if matches!(name.as_str(), "percentile_cont" | "percentile_disc") {
             // The fraction never supplies result metadata. Invalid/NULL and
             // declaration-only bindings retain the ordering-source descriptor.
