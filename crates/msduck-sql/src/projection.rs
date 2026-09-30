@@ -1002,7 +1002,7 @@ fn count_ranking_info(
                 }
                 Expr::Function(_) => {
                     self.known &=
-                        expression(self.catalog, expr, self.sources, self.scope).is_some();
+                        member_expression(self.catalog, expr, self.sources, self.scope).is_some();
                     return std::ops::ControlFlow::Continue(());
                 }
                 _ => return std::ops::ControlFlow::Continue(()),
