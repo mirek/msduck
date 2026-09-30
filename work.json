@@ -7512,6 +7512,28 @@
         "Add source/fixture integrity and meaningful retained wire invariants tests, exact-head required CI and independent review or authorized fallback. Claiming worker merges and promptly completes registry/project. This is reference acquisition only; no engine.rs/server/SQL planner edits or compatibility completion claim."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZrKA"
+    },
+    {
+      "id": "order-token-expanded-plan-v1",
+      "title": "Resolve expanded logical ORDER profiles from retained SQL Server evidence",
+      "state": "ready",
+      "authorization": "Owner continuing compatibility goal and original/expanded first-party ORDER captures; no external content intake.",
+      "issue": 691,
+      "scope": [
+        "crates/msduck-sql/src/projection/order.rs",
+        "crates/msduck-sql/tests/order_plan.rs",
+        "docs/order-token-plan.md"
+      ],
+      "dependencies": [
+        "order-token-plan-v1",
+        "order-token-expanded-reference-v1"
+      ],
+      "acceptance": [
+        "Extend logical declaration-only ORDER planning for valid original/expanded reference profiles: wildcard/qualified/joined/derived/CTE/set output ordinals; captured arithmetic/cast/collation/aggregate/window profiles; exact literal/typed-NULL no-token and constant-key removal preserving CASE distinction, source identity, hidden zero and key order. Bind only explicit AST/catalog/parameter declarations. Never infer metadata from bound values/rows/backend state or alter source snapshots.",
+        "Replay both retained fixtures and exact prepared arithmetic phases, with one compile plan across preparation and all executions including empty input. Enumerate any remaining errors/unknowns; preserve SQL Server binding-error precedence as explicit barriers instead of fabricated tokens. Unproven optimizer/expression shapes need further ground truth before known plans. Meaningful regressions for wildcard ordinal identity, normalized markers, ambiguous names, source immutability and bounds.",
+        "Run exact-head formatting/strict workspace Clippy/workspace tests/all-targets build and independent clients, independent review or owner-authorized Codex unavailable fallback and required CI. No root/server/corpus behavior changes and no engine.rs reservation. Claiming worker owns merge and prompt registry/project completion; root ORDER emission remains unfinished separate work."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZtM6"
     }
   ]
 }
