@@ -4376,6 +4376,7 @@ impl VisitorMut for Translator<'_> {
     }
     fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<String> {
         // Fold proven constant percentile sources before child casts become native adapters.
+        rand::seed_conversion(expr);
         if let Err(error) = crate::percentile::lower(expr) {
             return ControlFlow::Break(error);
         }

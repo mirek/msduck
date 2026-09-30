@@ -19,6 +19,30 @@ use std::{
 type Ticket = [u8; 16];
 const LIMIT: usize = 4096;
 
+/// SQL Server converts RAND seeds to INT. Route the explicit conversion through
+/// the existing source-aware translator instead of DuckDB overload coercion
+/// (which rounds floating values and cannot bind DECIMAL literal INT_MIN).
+pub(super) fn seed_conversion(expression: &mut Expr) {
+    let Expr::Function(function) = expression else {
+        return;
+    };
+    if !function.name.to_string().eq_ignore_ascii_case("rand") {
+        return;
+    }
+    let FunctionArguments::List(arguments) = &mut function.args else {
+        return;
+    };
+    let [FunctionArg::Unnamed(FunctionArgExpr::Expr(seed))] = arguments.args.as_mut_slice() else {
+        return;
+    };
+    *seed = Expr::Cast {
+        kind: CastKind::Cast,
+        expr: Box::new(seed.clone()),
+        data_type: DataType::Int(None),
+        format: None,
+    };
+}
+
 #[derive(Debug)]
 pub(super) struct Generator {
     x: u64,
