@@ -112,11 +112,8 @@ fn retained_runtime_requests_keep_syntax_and_defer_execution_diagnostics() {
         requests += usize::from(count > 0);
     }
     assert_eq!(sequence_requests, 2);
-    assert!(
-        requests > 100,
-        "missing retained request coverage: {requests}"
-    );
-    assert!(planned > 100, "missing deferred runtime plans: {planned}");
+    assert_eq!(requests, 128);
+    assert_eq!(planned, 122);
     assert_eq!(rejected, 10);
 }
 #[test]

@@ -38,20 +38,21 @@ pub fn runtime_plan(
     let Expr::Function(function) = expr else {
         return Ok(None);
     };
-    let kind = match function.name.to_string().to_ascii_lowercase().as_str() {
+    let name = function.name.to_string().to_ascii_lowercase();
+    let kind = match name.as_str() {
         "percentile_cont" => RuntimeKind::Continuous,
         "percentile_disc" => RuntimeKind::Discrete,
         _ => return Ok(None),
     };
     let FunctionArguments::List(args) = &function.args else {
-        return Err(PlanError::Shape(
-            "Percentile requires 1 argument(s).".into(),
-        ));
+        return Err(PlanError::Shape(format!(
+            "The {name} function requires 1 argument(s)."
+        )));
     };
     let [FunctionArg::Unnamed(FunctionArgExpr::Expr(fraction))] = args.args.as_slice() else {
-        return Err(PlanError::Shape(
-            "Percentile requires 1 argument(s).".into(),
-        ));
+        return Err(PlanError::Shape(format!(
+            "The {name} function requires 1 argument(s)."
+        )));
     };
     // Reuse modifier/window validation with a harmless syntax placeholder.
     // Neither this clone nor the original fraction is executed or converted.
@@ -63,6 +64,7 @@ pub fn runtime_plan(
     }
     lower(&mut shape).map_err(PlanError::Shape)?;
     fn null_order(expr: &Expr) -> bool {
+        let expr = crate::variant_cast::source(expr).unwrap_or(expr);
         match expr {
             Expr::Value(value) => matches!(value.value, Value::Null),
             Expr::Nested(value) | Expr::Cast { expr: value, .. } => null_order(value),
@@ -197,8 +199,10 @@ pub fn runtime_plan(
                         && f.null_treatment.is_none()
                         && matches!(f.parameters, FunctionArguments::None);
                     let valid_args = matches!(&f.args, FunctionArguments::List(args) if args.duplicate_treatment.is_none() && args.clauses.is_empty() && Some(args.args.len()) == expected && args.args.iter().all(|a| matches!(a, FunctionArg::Unnamed(FunctionArgExpr::Expr(_)))));
-                    self.unknown |=
-                        !(plain && valid_args || crate::variant_cast::source(expr).is_some());
+                    let marker_args = matches!(&f.args, FunctionArguments::List(args) if args.duplicate_treatment.is_none() && args.clauses.is_empty() && args.args.len() == 1);
+                    self.unknown |= !(plain
+                        && (valid_args
+                            || marker_args && crate::variant_cast::source(expr).is_some()));
                 }
                 _ => self.unknown = true,
             }
