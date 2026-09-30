@@ -1000,6 +1000,9 @@ fn count_ranking_info(
                     self.known = false;
                     return std::ops::ControlFlow::Continue(());
                 }
+                Expr::Function(_) if crate::variant_cast::source(expr).is_some() => {
+                    return std::ops::ControlFlow::Continue(());
+                }
                 Expr::Function(_) => {
                     self.known &=
                         member_expression(self.catalog, expr, self.sources, self.scope).is_some();
