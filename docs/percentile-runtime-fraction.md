@@ -6,8 +6,11 @@ request phases per run. The fixture SHA-256 is
 `499a6af4c764ad0f2176fdd97a4776a1d1c51829b23a882bc92404b676f0e808`.
 The capture retains column names, userType, type/width/precision/scale/flags,
 collation, rows, diagnostics, return status and typed RETURNVALUE payloads,
-ordered token names and raw DONE status/command/count words. It preserves each
+ordered token names, raw DONE status/command words and Tedious-decoded row counts. It preserves each
 preparation, execution binding and unpreparation separately.
+The raw eight-byte DONE count payload is not retained independently: decoded
+row counts become NULL when DONE_COUNT is absent. This is a capture limitation,
+not proof of those unobserved bytes.
 
 The finite matrix covers FLOAT, REAL, INT, DECIMAL, VARCHAR and NVARCHAR
 prepared fraction parameters; local FLOAT/DECIMAL/INT/BIT/character variables;
