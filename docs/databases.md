@@ -101,9 +101,10 @@ user database:
 | `create_date` | datetime | registry create date; SQL Server's fixed date for `master` |
 | `compatibility_level` | tinyint | 160 |
 | `collation_name` | nvarchar | `SQL_Latin1_General_CP1_CI_AS` |
-| `user_access`, `user_access_desc` | tinyint, nvarchar | 0, `MULTI_USER` |
+| `user_access`, `user_access_desc` | tinyint, nvarchar | 0/1/2, `MULTI_USER`/`SINGLE_USER`/`RESTRICTED_USER` as set by ALTER DATABASE |
 | `is_read_only` | bit | 0 |
 | `state`, `state_desc` | tinyint, nvarchar | 0, `ONLINE` |
+| `is_read_committed_snapshot_on` | bit | as set by ALTER DATABASE; 0 for `master` |
 | `recovery_model`, `recovery_model_desc` | tinyint, nvarchar | 3, `SIMPLE` |
 
 The other SQL Server columns are not provided. Result metadata comes from these
@@ -119,7 +120,9 @@ macros `__msduck_db_id(name)`, `__msduck_db_name(id)` and
 `Catalog::select` makes a database the connection's DuckDB default catalog and
 restores the `dbo` schema, because DuckDB's `USE` resets the schema to `main`.
 A session holds a `Use` guard from `Catalog::enter` for its current database;
-while any session uses a database, DROP refuses it. A session starts in
+while any session uses a database, DROP refuses it. A session that sets a
+database to `SINGLE_USER` also holds a `Hold` guard for it; see
+[ALTER DATABASE options, sessions and @@SPID](alter-database-sessions.md). A session starts in
 `master`, then selects the LOGIN7 database. RESETCONNECTION returns a reset
 session to the login database.
 
@@ -172,7 +175,9 @@ catalog's DuckDB name are rejected with an msduck error.
 ## Not yet supported
 
 - `tempdb`, `model` and `msdb`;
-- `ALTER DATABASE` and `CREATE DATABASE` file or non-server collation options;
+- `ALTER DATABASE` options other than `READ_COMMITTED_SNAPSHOT` and user access
+  ([ALTER DATABASE](alter-database-sessions.md)), and `CREATE DATABASE` file or
+  non-server collation options;
 - references to another database's objects (cross-database queries, DML and
   DDL); DuckDB would also write only one attached database per transaction;
 - SQL Server resolves `USE` and three-part names when it compiles a batch, so an

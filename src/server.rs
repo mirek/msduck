@@ -21,6 +21,7 @@ pub struct Server {
     administrator: Option<Arc<crate::authentication::Administrator>>,
     max_connections: usize,
     databases: Arc<crate::database_catalog::Catalog>,
+    sessions: Arc<crate::sessions::Registry>,
 }
 
 pub const DEFAULT_MAX_CONNECTIONS: usize = 128;
@@ -56,6 +57,7 @@ pub struct Connection {
     db: BackendConnection,
     diagnostics: crate::statement_diagnostics::Registry,
     databases: Arc<crate::database_catalog::Catalog>,
+    sessions: Arc<crate::sessions::Registry>,
 }
 impl std::ops::Deref for Connection {
     type Target = BackendConnection;
@@ -69,6 +71,7 @@ impl Connection {
             db: self.db.try_clone()?,
             diagnostics: self.diagnostics.clone(),
             databases: self.databases.clone(),
+            sessions: self.sessions.clone(),
         })
     }
     /// The server's databases. A fresh connection starts in `master`.
@@ -81,8 +84,9 @@ impl Connection {
         BackendConnection,
         crate::statement_diagnostics::Registry,
         Arc<crate::database_catalog::Catalog>,
+        Arc<crate::sessions::Registry>,
     ) {
-        (self.db, self.diagnostics, self.databases)
+        (self.db, self.diagnostics, self.databases, self.sessions)
     }
 }
 impl Server {
@@ -96,6 +100,9 @@ impl Server {
         let diagnostics = crate::statement_diagnostics::Registry::default();
         diagnostics.register(&owner)?;
         crate::database_catalog::bootstrap_objects(&owner)?;
+        // Every database's sys.dm_exec_sessions view reads this registry.
+        let sessions = Arc::new(crate::sessions::Registry::default());
+        crate::sessions::register(&owner, &sessions)?;
         let databases = Arc::new(crate::database_catalog::Catalog::open(&owner, path)?);
         Ok(Self {
             owner: Arc::new(Mutex::new(owner)),
@@ -104,6 +111,7 @@ impl Server {
             administrator: None,
             max_connections: DEFAULT_MAX_CONNECTIONS,
             databases,
+            sessions,
         })
     }
     pub fn with_tls(mut self, config: Arc<rustls::ServerConfig>) -> Self {
@@ -162,6 +170,7 @@ impl Server {
             db,
             diagnostics: self.diagnostics.clone(),
             databases: self.databases.clone(),
+            sessions: self.sessions.clone(),
         })
     }
 }
@@ -175,6 +184,8 @@ fn serve_connection_configured(
     administrator: Option<Arc<crate::authentication::Administrator>>,
 ) -> Result<()> {
     stream.set_nodelay(true)?;
+    // ALTER DATABASE ... WITH ROLLBACK closes the session through this clone.
+    let socket = stream.try_clone()?;
     let Some(message) = tds::read_message(&mut stream, 4096)? else {
         return Ok(());
     };
@@ -195,15 +206,16 @@ fn serve_connection_configured(
             stream,
             tls.ok_or_else(|| anyhow::anyhow!("missing TLS configuration"))?,
         )?;
-        serve_login(&mut encrypted, db, administrator.as_deref())
+        serve_login(&mut encrypted, db, administrator.as_deref(), socket)
     } else {
-        serve_login(&mut stream, db, administrator.as_deref())
+        serve_login(&mut stream, db, administrator.as_deref(), socket)
     }
 }
 fn serve_login(
     mut stream: &mut (impl std::io::Read + std::io::Write),
     db: Connection,
     administrator: Option<&crate::authentication::Administrator>,
+    socket: TcpStream,
 ) -> Result<()> {
     let mut message =
         tds::read_message(&mut stream, 4096)?.ok_or_else(|| anyhow::anyhow!("missing LOGIN7"))?;
@@ -245,9 +257,11 @@ fn serve_login(
     // The captured failure (reference/login-database-error.json) is ERROR
     // 4060, ERROR 18456 naming the login, DONE_ERROR, then connection close.
     if let Err(error) = session.use_database(&login.database) {
+        // A missing database (911) and a SINGLE_USER database another
+        // session holds (924) fail the login the same way.
         if error
             .downcast_ref::<msduck_core::diagnostic::SqlError>()
-            .is_none_or(|error| error.number != 911)
+            .is_none_or(|error| !matches!(error.number, 911 | 924))
         {
             return Err(error);
         }
@@ -269,6 +283,18 @@ fn serve_login(
     }
     login.database = session.database().name.clone();
     let login_database = login.database.clone();
+    session.process().set_login(
+        crate::sessions::Client {
+            host_name: login.host_name.clone(),
+            program_name: login.app_name.clone(),
+            client_interface_name: login.library_name.clone(),
+            host_process_id: login.client_pid,
+        },
+        &authenticated_name,
+        Some(std::sync::Arc::new(move || {
+            let _ = socket.shutdown(std::net::Shutdown::Both);
+        })),
+    );
     session.original_login = authenticated_name;
     let mut rpc = crate::rpc::State::default();
     tds::write_message(&mut stream, &tds::login_response(&login), 4096)?;
@@ -284,6 +310,7 @@ fn serve_login(
             ))
         } else {
             (|| -> Result<Vec<u8>> {
+                session.process().set_running(true);
                 let reset = reset_requested(message.kind, message.status)?;
                 if matches!(message.kind, 1 | 3 | 14) {
                     let (_, descriptor) = tds::request_headers(&message.payload)?;
@@ -322,6 +349,7 @@ fn serve_login(
                 }
             })()
         };
+        session.process().set_running(false);
         let response = response.unwrap_or_else(|error| {
             let mut out = vec![];
             crate::engine::emit_error(&mut out, &error);
@@ -370,12 +398,12 @@ fn reset_session(
     // A reset returns to the login database even if the session changed it.
     let connection = template.try_clone()?;
     let mut fresh = Session::new(connection)?;
-    fresh.use_database(login_database)?;
+    fresh.use_database_continuing(login_database, session)?;
     if session.transactions > 0 {
         // Tell the client its transaction ended, as an explicit ROLLBACK does.
         out.extend(session.rollback_transaction("")?);
     }
-    fresh.original_login = std::mem::take(&mut session.original_login);
+    fresh.continue_session(session);
     *session = fresh;
     *rpc = crate::rpc::State::default();
     // ENVCHANGE, length 3, type 18 (reset completion), empty new and old values.
@@ -528,5 +556,32 @@ mod database_reset_tests {
                 .unwrap();
             assert_eq!(schema, "dbo");
         }
+    }
+
+    #[test]
+    fn reset_continues_the_session_in_a_held_single_user_database() {
+        let server = Server::open(":memory:").unwrap();
+        let template = server.connection().unwrap();
+        template.databases().create(&template, "probe").unwrap();
+        let mut session = Session::new(template.try_clone().unwrap()).unwrap();
+        session.use_database("probe").unwrap();
+        let (_, ok) = session.batch_response(
+            "ALTER DATABASE CURRENT SET SINGLE_USER",
+            &Default::default(),
+            false,
+            None,
+        );
+        assert!(ok);
+        let spid = session.spid();
+        let mut rpc = crate::rpc::State::default();
+        let mut out = vec![];
+        reset_session(&template, "probe", &mut session, &mut rpc, &mut out).unwrap();
+        assert_eq!(session.spid(), spid);
+        assert_eq!(session.database().name, "probe");
+        // The reset session still holds the database.
+        let mut other = Session::new(template.try_clone().unwrap()).unwrap();
+        assert!(other.use_database("probe").is_err());
+        drop(session);
+        other.use_database("probe").unwrap();
     }
 }

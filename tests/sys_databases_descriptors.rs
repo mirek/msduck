@@ -3,6 +3,7 @@ use msduck::server::Server;
 use serde_json::Value;
 
 const REFERENCE: &str = include_str!("../reference/sys-databases.json");
+const OPTIONS: &str = include_str!("../reference/alter-database-sessions.json");
 
 fn observation<'a>(fixture: &'a Value, name: &str) -> &'a Value {
     fixture["runs"][0]
@@ -85,6 +86,26 @@ fn published_columns_match_reference_for_star_projection_aliases_and_empty_resul
         );
     }
     let expected = reference_metadata(columns, &names);
+    // SELECT * also lists is_read_committed_snapshot_on, captured by
+    // reference/alter-database-sessions.json. SQL Server declares it as
+    // column 20, between state_desc (14) and recovery_model (21).
+    let options: Value = serde_json::from_str(OPTIONS).unwrap();
+    let option = &observation(&options, "initial state")["result"]["sets"][0]["columns"][3];
+    assert_eq!(option["name"], "is_read_committed_snapshot_on");
+    let declared = observation(&options, "sys.databases option declarations")["result"]["sets"][0]
+        ["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row[0] == "is_read_committed_snapshot_on")
+        .unwrap();
+    assert_eq!(declared[1], 20);
+    let state_desc = names.iter().position(|name| *name == "state_desc").unwrap();
+    let mut star_columns = columns.to_vec();
+    star_columns.insert(state_desc + 1, option.clone());
+    let mut star_names = names.clone();
+    star_names.insert(state_desc + 1, "is_read_committed_snapshot_on");
+    let star = reference_metadata(&star_columns, &star_names);
     let server = Server::open(":memory:").unwrap();
     let db = server.connection().unwrap();
     db.databases().create(&db, "inventory").unwrap();
@@ -97,32 +118,32 @@ fn published_columns_match_reference_for_star_projection_aliases_and_empty_resul
     assert_metadata(
         &mut session,
         "SELECT * FROM sys.databases WHERE database_id=-1",
-        &expected,
+        &star,
     );
     assert_metadata(
         &mut session,
         "SELECT * FROM sys.databases WHERE database_id=1",
-        &expected,
+        &star,
     );
     // Database-qualified names use SQL Server database names and resolve
     // within the session's current database.
     assert_metadata(
         &mut session,
         "SELECT * FROM master.sys.databases WHERE database_id=-1",
-        &expected,
+        &star,
     );
     session.use_database("inventory").unwrap();
     assert_metadata(
         &mut session,
         "SELECT * FROM inventory.sys.databases WHERE database_id=-1",
-        &expected,
+        &star,
     );
     let aliases = ["database_name", "server_collation"];
     let selected = "SELECT name AS database_name, collation_name AS server_collation FROM sys.databases WHERE database_id=-1";
     let expected_aliases = reference_metadata(&[columns[0].clone(), columns[5].clone()], &aliases);
     assert_metadata(&mut session, selected, &expected_aliases);
     // The pinned image has 98 sys.databases columns; msduck currently publishes
-    // only 13. Do not synthesize declarations for the unsupported remainder.
+    // only 14. Do not synthesize declarations for the unsupported remainder.
     assert_eq!(
         observation(&fixture, "complete empty")["result"]["sets"][0]["columns"]
             .as_array()

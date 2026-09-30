@@ -77,15 +77,82 @@ impl Use {
 
 impl Drop for Use {
     fn drop(&mut self) {
-        let mut users = self.catalog.user_counts();
-        if let Some(count) = users.get_mut(&self.alias) {
-            *count -= 1;
-            if *count == 0 {
-                users.remove(&self.alias);
-            }
+        self.catalog.release(&self.alias);
+    }
+}
+
+/// The claim of the session that set a database to SINGLE_USER. SQL Server
+/// keeps that session the database's single user even while its current
+/// database is another one, until it disconnects or sets another user
+/// access mode. Like `Use`, a hold keeps the database in use.
+#[derive(Debug)]
+pub struct Hold {
+    alias: String,
+    catalog: std::sync::Arc<Catalog>,
+}
+
+impl Hold {
+    /// The DuckDB catalog that stores the held database.
+    pub fn alias(&self) -> &str {
+        &self.alias
+    }
+}
+
+impl Drop for Hold {
+    fn drop(&mut self) {
+        self.catalog.release(&self.alias);
+    }
+}
+
+/// `sys.databases.user_access`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UserAccess {
+    Multi = 0,
+    Single = 1,
+    Restricted = 2,
+}
+
+impl UserAccess {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Multi => "MULTI_USER",
+            Self::Single => "SINGLE_USER",
+            Self::Restricted => "RESTRICTED_USER",
         }
     }
 }
+
+/// One ALTER DATABASE ... SET option.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Setting {
+    ReadCommittedSnapshot(bool),
+    UserAccess(UserAccess),
+}
+
+/// What ALTER DATABASE does when other sessions use the database.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Termination {
+    /// No clause: SQL Server waits for the other sessions indefinitely.
+    Wait,
+    NoWait,
+    RollbackImmediate,
+    /// Wait up to the duration, then terminate the remaining sessions.
+    RollbackAfter(std::time::Duration),
+}
+
+/// A completed ALTER DATABASE.
+#[derive(Debug)]
+pub struct Altered {
+    /// The DuckDB catalog of the altered database.
+    pub alias: String,
+    /// Whether other sessions were terminated.
+    pub terminated: bool,
+    /// The caller's claim when the database became SINGLE_USER.
+    pub hold: Option<Hold>,
+}
+
+/// How long ROLLBACK waits for terminated sessions to release the database.
+const RELEASE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// One registry row. Its values are ordinary SQL data.
 struct Row {
@@ -198,7 +265,9 @@ impl Catalog {
                 file VARCHAR NOT NULL,
                 create_date TIMESTAMP NOT NULL,
                 published BOOLEAN NOT NULL DEFAULT false);
-             CREATE SEQUENCE IF NOT EXISTS {ids} START {FIRST_USER_ID} MAXVALUE 32767 NO CYCLE",
+             CREATE SEQUENCE IF NOT EXISTS {ids} START {FIRST_USER_ID} MAXVALUE 32767 NO CYCLE;
+             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS user_access UTINYINT DEFAULT 0;
+             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS read_committed_snapshot BOOLEAN DEFAULT false",
             registry = catalog.registry(),
             ids = catalog.ids(),
         ))?;
@@ -300,19 +369,46 @@ impl Catalog {
     /// Make `name` the connection's current database for a session. The
     /// returned guard keeps the database in use until it is dropped.
     pub fn enter(self: &std::sync::Arc<Self>, db: &Connection, name: &str) -> Result<Use> {
+        self.enter_as(db, name, &|_| 0)
+    }
+
+    /// `enter` for a session that already uses databases: `own` counts the
+    /// session's own uses and holds of a catalog alias, which do not keep it
+    /// out of a SINGLE_USER database.
+    pub fn enter_as(
+        self: &std::sync::Arc<Self>,
+        db: &Connection,
+        name: &str,
+        own: &dyn Fn(&str) -> usize,
+    ) -> Result<Use> {
         let _change = self.lock();
         let alias = self
             .resolve_published(db, name)?
             .ok_or_else(|| missing(name))?;
-        let database_id = if alias == self.primary {
-            MASTER_ID
+        let (database_id, user_access) = if alias == self.primary {
+            (MASTER_ID, UserAccess::Multi as u8)
         } else {
             db.query_row(
-                &format!("SELECT database_id FROM {} WHERE name=?", self.registry()),
+                &format!(
+                    "SELECT database_id,coalesce(user_access,0) FROM {} WHERE name=?",
+                    self.registry()
+                ),
                 [&alias],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )?
         };
+        if user_access == UserAccess::Single as u8 && self.users(&alias) > own(&alias) {
+            let mut error = SqlError::new(
+                924,
+                1,
+                format!(
+                    "Database '{}' is already open and can only have one user at a time.",
+                    self.display(&alias)
+                ),
+            );
+            error.severity = 14;
+            bail!(error);
+        }
         db.execute_batch(&format!("USE {}; SET schema = 'dbo'", quote(&alias)))?;
         *self.user_counts().entry(alias.clone()).or_default() += 1;
         Ok(Use {
@@ -331,6 +427,145 @@ impl Catalog {
 
     fn users(&self, alias: &str) -> usize {
         self.user_counts().get(alias).copied().unwrap_or(0)
+    }
+
+    fn release(&self, alias: &str) {
+        let mut users = self.user_counts();
+        if let Some(count) = users.get_mut(alias) {
+            *count -= 1;
+            if *count == 0 {
+                users.remove(alias);
+            }
+        }
+    }
+
+    /// Set database options, as ALTER DATABASE does. `own` counts the
+    /// caller's uses and holds of a catalog alias; `terminate` ends the other
+    /// sessions whose current database is the alias and returns how many it
+    /// asked to end. Errors follow reference/alter-database-sessions.json;
+    /// the caller adds the final 5069 where SQL Server sends it.
+    pub fn alter(
+        self: &std::sync::Arc<Self>,
+        db: &Connection,
+        name: &str,
+        settings: &[Setting],
+        termination: Termination,
+        own: &dyn Fn(&str) -> usize,
+        terminate: &dyn Fn(&str) -> usize,
+    ) -> Result<Altered> {
+        let _change = self.lock();
+        let Some(alias) = self.resolve_published(db, name)? else {
+            let mut error = SqlError::new(
+                5011,
+                5,
+                format!(
+                    "User does not have permission to alter database '{name}', the database does not exist, or the database is not in a state that allows access checks."
+                ),
+            );
+            error.severity = 14;
+            bail!(error);
+        };
+        let display = self.display(&alias);
+        if alias == self.primary {
+            let (option, state) = match settings.first() {
+                Some(Setting::ReadCommittedSnapshot(_)) => ("READ_COMMITTED_SNAPSHOT", 2),
+                Some(Setting::UserAccess(access)) => (access.name(), 5),
+                None => bail!("ALTER DATABASE requires an option"),
+            };
+            bail!(SqlError::new(
+                5058,
+                state,
+                format!("Option '{option}' cannot be set in database '{display}'.")
+            ));
+        }
+        let others = || self.users(&alias).saturating_sub(own(&alias));
+        let user_access: u8 = db.query_row(
+            &format!(
+                "SELECT coalesce(user_access,0) FROM {} WHERE name=?",
+                self.registry()
+            ),
+            [&alias],
+            |row| row.get(0),
+        )?;
+        if user_access == UserAccess::Single as u8 && others() > 0 {
+            bail!(SqlError::new(
+                5064,
+                1,
+                format!(
+                    "Changes to the state or options of database '{display}' cannot be made at this time. The database is in single-user mode, and a user is currently connected to it."
+                )
+            ));
+        }
+        // RESTRICTED_USER admits db_owner, dbcreator and sysadmin members.
+        // Every msduck login is sysadmin, so only these options need the
+        // other sessions gone.
+        let exclusive = settings.iter().any(|setting| {
+            matches!(
+                setting,
+                Setting::ReadCommittedSnapshot(_) | Setting::UserAccess(UserAccess::Single)
+            )
+        });
+        let released = |timeout: std::time::Duration| {
+            let deadline = std::time::Instant::now() + timeout;
+            while others() > 0 {
+                if std::time::Instant::now() >= deadline {
+                    return false;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            true
+        };
+        let mut terminated = false;
+        if exclusive && others() > 0 {
+            match termination {
+                Termination::NoWait => bail!(SqlError::new(
+                    5070,
+                    2,
+                    format!(
+                        "Database state cannot be changed while other users are using the database '{display}'"
+                    )
+                )),
+                Termination::Wait => bail!(
+                    "ALTER DATABASE without a termination clause would wait for the other sessions using database '{display}'; msduck supports WITH ROLLBACK IMMEDIATE, WITH ROLLBACK AFTER or WITH NO_WAIT here"
+                ),
+                Termination::RollbackAfter(delay) if released(delay) => {}
+                Termination::RollbackAfter(_) | Termination::RollbackImmediate => {
+                    terminated = terminate(&alias) > 0;
+                    ensure!(
+                        released(RELEASE_TIMEOUT),
+                        "the other sessions using database '{display}' did not end"
+                    );
+                }
+            }
+        }
+        let mut read_committed_snapshot = None;
+        let mut access = None;
+        for setting in settings {
+            match *setting {
+                Setting::ReadCommittedSnapshot(on) => read_committed_snapshot = Some(on),
+                Setting::UserAccess(value) => access = Some(value as u8),
+            }
+        }
+        db.execute(
+            &format!(
+                "UPDATE {} SET read_committed_snapshot=coalesce(?,read_committed_snapshot),\
+                 user_access=coalesce(?,user_access) WHERE name=?",
+                self.registry()
+            ),
+            duckdb::params![read_committed_snapshot, access, alias],
+        )?;
+        let hold = (access == Some(UserAccess::Single as u8)).then(|| {
+            *self.user_counts().entry(alias.clone()).or_default() += 1;
+            Hold {
+                alias: alias.clone(),
+                catalog: self.clone(),
+            }
+        });
+        Ok(Altered {
+            alias,
+            terminated,
+            hold,
+        })
     }
 
     fn alias(&self, db: &Connection) -> Result<String> {
@@ -457,6 +692,17 @@ impl Catalog {
     /// Detach a user database and remove its storage. The caller must make
     /// sure no session is using it; the connection must not be using it.
     pub fn remove(&self, db: &Connection, name: &str) -> Result<()> {
+        self.remove_as(db, name, &|_| 0)
+    }
+
+    /// `remove` for a session whose SINGLE_USER holds, counted by `held`
+    /// per catalog alias, do not keep the database in use.
+    pub fn remove_as(
+        &self,
+        db: &Connection,
+        name: &str,
+        held: &dyn Fn(&str) -> usize,
+    ) -> Result<()> {
         let _change = self.lock();
         let name_key = key(name);
         if name_key == MASTER {
@@ -481,7 +727,7 @@ impl Catalog {
         // SQL Server reports state 3 when the dropping connection itself uses
         // the database and state 4 when only other sessions do.
         let own = attached && self.alias(db)? == row.name;
-        let users = self.users(&row.name);
+        let users = self.users(&row.name).saturating_sub(held(&row.name));
         if own || users > 0 {
             bail!(SqlError::new(
                 3702,
@@ -661,21 +907,27 @@ impl Catalog {
                     CAST(create_date AS TIMESTAMP) AS create_date,
                     CAST(160 AS UTINYINT) AS compatibility_level,
                     CAST('{COLLATION}' AS VARCHAR) AS collation_name,
-                    CAST(0 AS UTINYINT) AS user_access,
-                    CAST('MULTI_USER' AS VARCHAR) AS user_access_desc,
+                    CAST(user_access AS UTINYINT) AS user_access,
+                    CAST(CASE user_access WHEN 1 THEN 'SINGLE_USER' WHEN 2 THEN 'RESTRICTED_USER'
+                         ELSE 'MULTI_USER' END AS VARCHAR) AS user_access_desc,
                     false AS is_read_only,
                     CAST(0 AS UTINYINT) AS state,
                     CAST('ONLINE' AS VARCHAR) AS state_desc,
+                    CAST(read_committed_snapshot AS BOOLEAN) AS is_read_committed_snapshot_on,
                     CAST(3 AS UTINYINT) AS recovery_model,
                     CAST('SIMPLE' AS VARCHAR) AS recovery_model_desc
              FROM (
                  SELECT '{MASTER}' AS name,{MASTER_ID} AS database_id,
-                        CAST(TIMESTAMP '2003-04-08 09:13:36.39' AS TIMESTAMP) AS create_date
+                        CAST(TIMESTAMP '2003-04-08 09:13:36.39' AS TIMESTAMP) AS create_date,
+                        0 AS user_access,false AS read_committed_snapshot
                  UNION ALL
-                 SELECT r.name,r.database_id,r.create_date
+                 SELECT r.name,r.database_id,r.create_date,
+                        coalesce(r.user_access,0),coalesce(r.read_committed_snapshot,false)
                  FROM {registry} r JOIN duckdb_databases() d ON d.database_name=r.name
                  WHERE r.published
              );
+             CREATE OR REPLACE VIEW {target}.sys.dm_exec_sessions AS
+             SELECT * FROM __msduck_sessions();
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_key(value) AS
                  translate(rtrim(CAST(value AS VARCHAR), ' '), {upper}, {lower});
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_id(value) AS
