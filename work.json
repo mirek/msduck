@@ -7410,7 +7410,7 @@
     {
       "id": "order-token-codec-v1",
       "title": "Implement bounded deterministic TDS ORDER codec from retained vectors",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing compatibility goal and merged first-party ORDER reference; no external content intake.",
       "issue": 683,
       "scope": [
@@ -7428,6 +7428,29 @@
         "Run required Rust/client checks appropriate to pure codec, independent exact-head review or recorded authorized availability fallback and required CI; claiming worker merges and promptly completes registry/project. Root emission/planning remains separate explicit unfinished compatibility work. No engine.rs edits."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZhbU"
+    },
+    {
+      "id": "order-token-plan-v1",
+      "title": "Infer logical ORDER metadata from explicit SQL declarations",
+      "state": "ready",
+      "authorization": "Owner continuing goal and merged first-party ORDER reference/codec; no external content intake.",
+      "issue": 686,
+      "scope": [
+        "crates/msduck-sql/src/projection/order.rs",
+        "crates/msduck-sql/src/projection.rs",
+        "crates/msduck-sql/tests/order_plan.rs",
+        "docs/order-token-plan.md"
+      ],
+      "dependencies": [
+        "order-token-reference-v1",
+        "order-token-codec-v1"
+      ],
+      "acceptance": [
+        "Expose pure logical ORDER plan over explicit AST/catalog/declaration inputs. Distinguish proven no-token, proven ordered ordinals and unknown emission; preserve0 nonprojected keys, projected aliases/ordinals/key sequence, no descending payload flag, and empty/prepared declaration independence. projection.rs scope is module export only.",
+        "Compare retained reference shapes and enumerate which queries resolve versus remain unknown. Preserve outer versus window/derived internal ordering and captured constant-folding exception; unproven folded, wildcard/ambiguous or unknown source shapes remain explicit gaps, never fabricated metadata. No bound values/backend rows may supply compile metadata; get further ground truth before generalizing rules.",
+        "Meaningful deterministic tests and appropriate exact-head required workspace/client checks, independent review or recorded authorized fallback, required CI, merge and registry/project completion by claimant. Root emission remains separate unfinished work; engine.rs is excluded."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZjrf"
     }
   ]
 }
