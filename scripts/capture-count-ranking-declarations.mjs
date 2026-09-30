@@ -10,7 +10,7 @@ import {withReferenceContainer,referenceImage} from './lib/reference-container.m
 import {isolatedReference,assertSameCapture,refuseExistingFixture,writeNewFixture} from './lib/reference.mjs';
 import {canonical} from './lib/compatibility.mjs';
 const fixture=new URL('../reference/count-ranking-declarations.json',import.meta.url);
-export const fixtureSha256='PENDING';
+export const fixtureSha256='90e58f096efc179289404dfb29af02323ca6f44c1ba6745b704da59629fe2738';
 export const queries=[
   [
     "count star",
