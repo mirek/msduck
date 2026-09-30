@@ -82,7 +82,8 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
                 })
                 .collect::<Option<Vec<_>>>();
             if let Some(declarations) = declarations {
-                values.rows = vec![declarations];
+                *values.rows[0] = declarations;
+                values.rows.truncate(1);
             }
             ControlFlow::Continue(())
         }
