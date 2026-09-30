@@ -44,6 +44,10 @@ Two test files cover this behavior:
   (`localtime_r`, or UTC on platforms without it) once per translated
   statement. Every call in that statement sees the same instant, so
   `CURRENT_TIMESTAMP = GETDATE()` holds.
+- **Stored definitions.** Column `DEFAULT`s, `CHECK` constraints and view
+  bodies read DuckDB's clock each time they are used. Local time there uses the
+  UTC offset in effect when the definition was created, so a later
+  daylight-saving change is not reflected.
 - **Rounding.** `datetime` values are rounded to SQL Server's 1/300 second.
 - **Local time.** `GETDATE`, `SYSDATETIME` and the offset of
   `SYSDATETIMEOFFSET` follow the server process's time zone. The reference and
@@ -74,7 +78,10 @@ Two test files cover this behavior:
   `ORIGINAL_LOGIN()`. msduck has no impersonation, so they always agree.
 - **SID lookup.** `SUSER_SNAME(sid)` looks the SID up in
   `sys.server_principals` and returns NULL when no login matches.
-- **Unsupported.** `SUSER_NAME(id)` with an argument fails.
+- **Unsupported.** `SUSER_NAME(id)` with an argument fails. `SUSER_SNAME`,
+  `SUSER_NAME` and `SYSTEM_USER` in a column `DEFAULT`, `CHECK` or view body
+  also fail. msduck cannot evaluate them for the session that later uses the
+  definition.
 - **Known difference.** An unaliased `SYSTEM_USER` column is named
   `SYSTEM_USER`; SQL Server leaves it unnamed.
 
@@ -134,7 +141,7 @@ Known differences:
 
 - msduck does not record which index SQL Server would make clustered.
 - Two `CLUSTERED` constraints are not rejected with 8112.
-- `CREATE CLUSTERED INDEX` still fails to parse.
+- `CREATE [UNIQUE] CLUSTERED INDEX` still fails to parse.
 - `WITH (FILLFACTOR = ...)` on a constraint is not supported.
 - `ALTER TABLE ... ADD [CONSTRAINT name] PRIMARY KEY | UNIQUE ...` is not
   supported, with or without the keywords. This predates the change.

@@ -89,7 +89,7 @@ pub fn login_name(function: &Function, name: &str) -> Expr {
         None => Expr::Value(Value::NationalStringLiteral(name.into()).into()),
         Some(sid) => {
             let mut statement = crate::batch::parse(
-                "SELECT name FROM sys.server_principals WHERE sid = CAST(__msduck_sid AS VARBINARY(85))",
+                "SELECT __msduck_principal.name FROM sys.server_principals AS __msduck_principal WHERE __msduck_principal.sid = CAST(__msduck_sid AS VARBINARY(85))",
             )
             .expect("valid SID lookup")
             .remove(0);
@@ -219,6 +219,102 @@ pub fn current_time_value(kind: CurrentTime, clock: Clock) -> Expr {
         data_type: current_time_type(kind),
         format: None,
     }
+}
+/// A current-time function inside a stored definition (a column DEFAULT or
+/// CHECK, a computed column or a view) is evaluated when the definition is
+/// used, from DuckDB's clock. DuckDB has no local time zone here, so the
+/// local offset is the one at definition time.
+pub fn current_time_runtime(kind: CurrentTime, offset_minutes: i16) -> Expr {
+    let utc = crate::expr::unary_function(
+        "epoch_us",
+        Expr::Function(Function {
+            name: ObjectName::from(vec![Ident::new("get_current_timestamp")]),
+            uses_odbc_syntax: false,
+            parameters: FunctionArguments::None,
+            args: FunctionArguments::List(FunctionArgumentList {
+                duplicate_treatment: None,
+                args: vec![],
+                clauses: vec![],
+            }),
+            filter: None,
+            null_treatment: None,
+            over: None,
+            within_group: vec![],
+        }),
+    );
+    let utc = crate::expr::unary_function("make_timestamp", utc);
+    let function = |name: &str, args: Vec<Expr>| {
+        Expr::Function(Function {
+            name: ObjectName::from(vec![Ident::new(name)]),
+            uses_odbc_syntax: false,
+            parameters: FunctionArguments::None,
+            args: FunctionArguments::List(FunctionArgumentList {
+                duplicate_treatment: None,
+                args: args
+                    .into_iter()
+                    .map(|arg| FunctionArg::Unnamed(FunctionArgExpr::Expr(arg)))
+                    .collect(),
+                clauses: vec![],
+            }),
+            filter: None,
+            null_treatment: None,
+            over: None,
+            within_group: vec![],
+        })
+    };
+    let timestamp = match kind {
+        CurrentTime::SysUtcDateTime | CurrentTime::GetUtcDate => utc,
+        // DuckDB's add() and an INTERVAL: T-SQL lowering would widen `+` and
+        // large literals to DECIMAL.
+        _ => function(
+            "add",
+            vec![
+                utc,
+                crate::expr::unary_function(
+                    "to_minutes",
+                    Expr::Value(Value::Number(offset_minutes.to_string(), false).into()),
+                ),
+            ],
+        ),
+    };
+    let cast = |data_type| Expr::Cast {
+        kind: CastKind::Cast,
+        expr: Box::new(timestamp.clone()),
+        data_type,
+        format: None,
+    };
+    if kind != CurrentTime::SysDateTimeOffset {
+        return cast(current_time_type(kind));
+    }
+    let minutes = offset_minutes.unsigned_abs();
+    let sign = if offset_minutes < 0 { '-' } else { '+' };
+    Expr::Function(Function {
+        name: ObjectName::from(vec![Ident::new("TODATETIMEOFFSET")]),
+        uses_odbc_syntax: false,
+        parameters: FunctionArguments::None,
+        args: FunctionArguments::List(FunctionArgumentList {
+            duplicate_treatment: None,
+            args: [
+                cast(current_time_type(CurrentTime::SysDateTime)),
+                Expr::Value(
+                    Value::SingleQuotedString(format!(
+                        "{sign}{:02}:{:02}",
+                        minutes / 60,
+                        minutes % 60
+                    ))
+                    .into(),
+                ),
+            ]
+            .into_iter()
+            .map(|arg| FunctionArg::Unnamed(FunctionArgExpr::Expr(arg)))
+            .collect(),
+            clauses: vec![],
+        }),
+        filter: None,
+        null_treatment: None,
+        over: None,
+        within_group: vec![],
+    })
 }
 /// DB_NAME and DB_ID, which follow the session's current database.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -131,3 +131,76 @@ fn computed_columns_survive_restart() {
     drop(server);
     std::fs::remove_dir_all(&directory).unwrap();
 }
+
+fn column<T: duckdb::types::FromSql>(session: &Session, sql: &str) -> Vec<T> {
+    session
+        .db
+        .prepare(sql)
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap()
+}
+
+#[test]
+fn stored_definitions_read_the_clock_when_used() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    assert!(run(
+        &mut session,
+        "CREATE TABLE stamped (id int, at datetime2(7) DEFAULT SYSUTCDATETIME(), legacy datetime DEFAULT GETDATE(), zoned datetimeoffset(7) DEFAULT SYSDATETIMEOFFSET())"
+    ));
+    assert!(run(&mut session, "INSERT INTO stamped (id) VALUES (1)"));
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    assert!(run(&mut session, "INSERT INTO stamped (id) VALUES (2)"));
+    let distinct: Vec<i64> = column(
+        &session,
+        "SELECT count(DISTINCT at) * 100 + count(DISTINCT legacy) FROM stamped",
+    );
+    assert_eq!(distinct, [202]);
+    assert!(run(&mut session, "SELECT zoned FROM stamped"));
+    // A view evaluates the clock per query, not at CREATE VIEW.
+    assert!(run(
+        &mut session,
+        "CREATE VIEW clock AS SELECT SYSUTCDATETIME() AS now"
+    ));
+    let first: Vec<String> = column(&session, "SELECT CAST(now AS VARCHAR) FROM clock");
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    let second: Vec<String> = column(&session, "SELECT CAST(now AS VARCHAR) FROM clock");
+    assert_ne!(first, second);
+    // A login name would be fixed to the creator; it fails explicitly.
+    assert!(!run(
+        &mut session,
+        "CREATE TABLE owned (id int, who nvarchar(128) DEFAULT SUSER_SNAME())"
+    ));
+}
+
+#[test]
+fn computed_column_checks_and_dropped_columns() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    // Date part arguments are not column references.
+    assert!(run(
+        &mut session,
+        "CREATE TABLE due (d date, next_day AS DATEADD(day, 1, d), age AS DATEDIFF(day, d, d))"
+    ));
+    assert!(run(
+        &mut session,
+        "INSERT INTO due (d) VALUES ('2026-09-30')"
+    ));
+    let next: Vec<String> = column(&session, "SELECT CAST(next_day AS VARCHAR) FROM due");
+    assert_eq!(next.len(), 1);
+    assert!(next[0].starts_with("2026-10-01"), "{next:?}");
+    // A dropped computed column does not mark a later column of that name.
+    assert!(run(&mut session, "CREATE TABLE t (a int, c AS a + 1)"));
+    assert!(run(&mut session, "ALTER TABLE t DROP COLUMN c"));
+    assert!(run(&mut session, "ALTER TABLE t ADD c int"));
+    assert!(run(&mut session, "INSERT INTO t (a, c) VALUES (1, 2)"));
+    assert!(run(&mut session, "UPDATE t SET c = 3"));
+    let computed: Vec<bool> = column(
+        &session,
+        "SELECT is_computed FROM sys.columns WHERE object_id=__msduck_object_id('dbo.t','U') ORDER BY column_id",
+    );
+    assert_eq!(computed, [false, false]);
+}

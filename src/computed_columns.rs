@@ -66,11 +66,37 @@ fn native(kind: &DataType) -> bool {
     }
 }
 
-/// Column names referenced by an expression, excluding variables.
+/// Functions whose first argument is a date part keyword, not a column.
+const DATE_PART_FUNCTIONS: &[&str] = &[
+    "DATEADD",
+    "DATEDIFF",
+    "DATEDIFF_BIG",
+    "DATEPART",
+    "DATENAME",
+    "DATETRUNC",
+    "DATE_BUCKET",
+];
+
+/// Column names referenced by an expression, excluding variables and date
+/// part arguments.
 fn references(expr: &Expr) -> Vec<Ident> {
+    let mut parts = Vec::new();
+    let _ = visit_expressions(expr, |expr| {
+        if let Expr::Function(function) = expr
+            && DATE_PART_FUNCTIONS
+                .iter()
+                .any(|name| function.name.to_string().eq_ignore_ascii_case(name))
+            && let FunctionArguments::List(args) = &function.args
+            && let Some(FunctionArg::Unnamed(FunctionArgExpr::Expr(part))) = args.args.first()
+        {
+            parts.push(part as *const Expr);
+        }
+        ControlFlow::<()>::Continue(())
+    });
     let mut found = Vec::new();
     let _ = visit_expressions(expr, |expr| {
         match expr {
+            Expr::Identifier(_) if parts.contains(&(expr as *const Expr)) => {}
             Expr::Identifier(id) if !id.value.starts_with('@') => found.push(id.clone()),
             Expr::CompoundIdentifier(ids) => found.extend(ids.last().cloned()),
             _ => {}
@@ -251,6 +277,15 @@ pub fn record(db: &duckdb::Connection, statement: &Statement) -> Result<()> {
             )?;
         }
     }
+    Ok(())
+}
+
+/// Remove computed-column rows whose table or column no longer exists, so a
+/// dropped computed column never marks a later column of the same name.
+pub fn prune(db: &duckdb::Connection) -> Result<()> {
+    db.execute_batch(
+        "DELETE FROM main.__msduck_computed_columns k WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_column_info c WHERE c.object_id=k.object_id AND lower(c.name)=k.name_key)",
+    )?;
     Ok(())
 }
 

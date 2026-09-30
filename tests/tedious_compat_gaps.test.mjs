@@ -107,6 +107,8 @@ test('sys.server_principals and SUSER_SNAME', { timeout: 60000 }, async t => {
   // msduck has no login catalog, so the default database is master.
   assert.deepEqual(own.rows, [['probe_login', 'master']])
   assert.deepEqual((await ok(c, "SELECT name,type_desc FROM sys.server_principals WHERE type IN ('S','U','G') ORDER BY principal_id")).rows, observed('probe login visible principals').sets[0].rows)
+  // The SID argument binds to the outer row, not to the lookup's own columns.
+  assert.deepEqual((await ok(c, 'SELECT name, SUSER_SNAME(sid) AS by_sid FROM sys.server_principals ORDER BY principal_id')).rows, [['sa', 'sa'], ['probe_login', 'probe_login']])
 })
 
 test('computed columns', { timeout: 60000 }, async t => {

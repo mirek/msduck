@@ -2331,6 +2331,7 @@ impl Session {
                 crate::object_catalog::touch(&self.db, &statement)?;
                 crate::declared_columns::record(&self.db, &statement)?;
                 crate::computed_columns::record(&self.db, &statement)?;
+                crate::computed_columns::prune(&self.db)?;
                 crate::object_catalog::sync_lob(&self.db)?;
                 if let Some((name, fields)) = view_columns {
                     crate::query_catalog::record(&self.db, &name, &fields)?;
@@ -4349,6 +4350,41 @@ impl VisitorMut for Translator<'_> {
         ControlFlow::Continue(())
     }
     fn pre_visit_statement(&mut self, stmt: &mut Statement) -> ControlFlow<String> {
+        // Stored definitions are evaluated when used, not when defined.
+        if matches!(
+            stmt,
+            Statement::CreateTable(_)
+                | Statement::AlterTable(_)
+                | Statement::CreateView(_)
+                | Statement::AlterView { .. }
+        ) {
+            let offset = self.clock.offset_minutes;
+            visit_expressions_mut(stmt, |expr| {
+                match expr {
+                    Expr::Function(function) => {
+                        if let Some(kind) = msduck_sql::session_function::current_time(function) {
+                            *expr =
+                                msduck_sql::session_function::current_time_runtime(kind, offset);
+                        } else if msduck_sql::session_function::is_login_name(function) {
+                            return ControlFlow::Break(format!(
+                                "unsupported {} in a stored definition",
+                                function.name
+                            ));
+                        }
+                    }
+                    Expr::Identifier(id)
+                        if id.quote_style.is_none()
+                            && msduck_sql::session_function::is_system_user(&id.value) =>
+                    {
+                        return ControlFlow::Break(
+                            "unsupported SYSTEM_USER in a stored definition".into(),
+                        );
+                    }
+                    _ => {}
+                }
+                ControlFlow::Continue(())
+            })?;
+        }
         if let Statement::Insert(insert) = stmt {
             // INTO is optional in T-SQL but required by DuckDB.
             insert.into = true;

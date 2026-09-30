@@ -5,7 +5,8 @@
 //! stores every table and index the same way, so the tokens are dropped
 //! before parsing. The catalog does not record which index SQL Server would
 //! make clustered, and two CLUSTERED constraints are not rejected with 8112
-//! (see docs/tedious-compat-gaps.md). `CREATE CLUSTERED INDEX` still fails.
+//! (see docs/tedious-compat-gaps.md). `CREATE [UNIQUE] CLUSTERED INDEX` still
+//! fails.
 use sqlparser::{
     keywords::Keyword,
     tokenizer::{Token, TokenWithSpan},
@@ -43,7 +44,9 @@ pub fn strip(tokens: &mut Vec<TokenWithSpan>) {
         if !clustering || position == 0 {
             continue;
         }
-        let constraint = keyword(position - 1, Keyword::UNIQUE)
+        // Not CREATE UNIQUE CLUSTERED INDEX, which stays unsupported.
+        let constraint = (keyword(position - 1, Keyword::UNIQUE)
+            && !keyword(position + 1, Keyword::INDEX))
             || (position >= 2
                 && keyword(position - 1, Keyword::KEY)
                 && keyword(position - 2, Keyword::PRIMARY));
@@ -101,5 +104,6 @@ mod tests {
             assert_eq!(statements[0].to_string(), expected, "{sql}");
         }
         assert!(crate::batch::parse("CREATE CLUSTERED INDEX CIX ON T (a)").is_err());
+        assert!(crate::batch::parse("CREATE UNIQUE CLUSTERED INDEX CIX ON T (a)").is_err());
     }
 }
