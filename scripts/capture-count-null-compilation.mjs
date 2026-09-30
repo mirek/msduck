@@ -10,7 +10,7 @@ import {withReferenceContainer,referenceImage} from './lib/reference-container.m
 import {isolatedReference,assertSameCapture,refuseExistingFixture,writeNewFixture} from './lib/reference.mjs'
 import {canonical} from './lib/compatibility.mjs'
 const fixture=new URL('../reference/count-null-compilation.json',import.meta.url)
-export const fixtureSha256='PENDING'
+export const fixtureSha256='d08c691dab34e91de2d49aae575d91976419cf666a394b0509fb47ee14e5f530'
 const version="SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)) AS v"
 const rows="INSERT INTO dbo.count_null_heap VALUES(3,1,N'c'),(1,2,N'a'),(2,1,NULL),(4,2,N'd')"
 const setup='CREATE TABLE dbo.count_null_heap(a INT,b INT,label NVARCHAR(8)); '+rows
@@ -83,7 +83,8 @@ export function validate(run){
  assertSameCapture(run.slice(0,2).map(({name,mode,sql})=>({name,mode,sql})),[{name:'version',mode:'batch',sql:version},{name:'setup',mode:'batch',sql:setup}],'COUNT NULL setup plan')
  assertSameCapture(run.slice(2).map(({name,mode,sql})=>({name,mode,sql})),queries.flatMap(([name,sql])=>['batch','rpc'].map(mode=>({name,mode,sql}))),'COUNT NULL query plan')
  assertSameCapture(run[0].result.sets[0].rows,[['17.0.4065.4']],'COUNT NULL reference version')
- for(const record of run){
+ for(const [index,record] of run.entries()){
+  if(index>=2)assert(record.reset&&record.followup,'missing COUNT NULL reset/follow-up phase')
   validatePhase(record.result)
   if(record.reset){assert.equal(record.reset.sql,reset);assert.deepEqual(record.reset.result.errors,[]);validatePhase(record.reset.result)}
   if(record.followup){assert.equal(record.followup.sql,followup);assert.deepEqual(record.followup.result.errors,[]);validatePhase(record.followup.result)}
