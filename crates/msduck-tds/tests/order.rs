@@ -43,7 +43,7 @@ fn every_retained_order_token_matches_exact_sql_server_bytes() {
         serde_json::from_str(include_str!("../../../reference/order-token.json")).unwrap();
     let mut count = 0;
     captured_vectors(&reference, &mut count);
-    assert!(count > 100, "reference ORDER coverage missing");
+    assert_eq!(count, 124, "reference ORDER coverage changed");
 }
 
 #[test]
