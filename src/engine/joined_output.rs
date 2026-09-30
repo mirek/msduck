@@ -370,6 +370,7 @@ impl Session {
             rowcount: self.rowcount,
             last_error: self.last_error,
             caught_error: self.caught_error.as_ref(),
+            spid: self.process.spid(),
         };
         if let ControlFlow::Break(error) = node.visit(&mut translator) {
             bail!(error);

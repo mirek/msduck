@@ -356,8 +356,32 @@ fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Fiel
             ("is_read_only", 104, 104, 1, 1, 0, true, true),
             ("state", 48, 48, 1, 3, 0, true, true),
             ("state_desc", 231, 231, 120, 0, 0, true, true),
+            (
+                "is_read_committed_snapshot_on",
+                104,
+                104,
+                1,
+                1,
+                0,
+                true,
+                true,
+            ),
             ("recovery_model", 48, 48, 1, 3, 0, true, true),
             ("recovery_model_desc", 231, 231, 120, 0, 0, true, true),
+        ],
+        // The columns msduck provides, from reference/alter-database-sessions.json.
+        "dm_exec_sessions" => vec![
+            ("session_id", 52, 52, 2, 5, 0, false, false),
+            ("login_time", 61, 61, 8, 23, 3, false, false),
+            ("host_name", 231, 231, 256, 0, 0, true, false),
+            ("program_name", 231, 231, 256, 0, 0, true, false),
+            ("host_process_id", 56, 56, 4, 10, 0, true, false),
+            ("client_interface_name", 231, 231, 64, 0, 0, true, false),
+            ("login_name", 231, 231, 256, 0, 0, false, false),
+            ("status", 231, 231, 60, 0, 0, false, false),
+            ("is_user_process", 104, 104, 1, 1, 0, false, false),
+            ("original_login_name", 231, 231, 256, 0, 0, false, false),
+            ("database_id", 52, 52, 2, 5, 0, false, false),
         ],
         "schemas" => vec![
             ("name", 231, 256, 256, 0, 0, false, false),
@@ -535,6 +559,8 @@ fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Fiel
             let collation_name = matches!(system, 175 | 231).then(|| {
                 if name == "name" || (view == "databases" && name == "collation_name") {
                     catalog_collation
+                } else if view == "dm_exec_sessions" {
+                    "SQL_Latin1_General_CP1_CI_AS"
                 } else {
                     "Latin1_General_CI_AS_KS_WS"
                 }

@@ -13,6 +13,7 @@ pub mod read_cancellation;
 pub mod request_control;
 pub mod rpc;
 pub mod server;
+pub mod sessions;
 pub mod tds;
 pub mod tvp_binding;
 

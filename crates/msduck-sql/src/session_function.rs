@@ -6,8 +6,12 @@ use std::ops::ControlFlow;
 mod session_context;
 pub use session_context::*;
 
-/// Non-null INT session counters. Runtime values are supplied by the shell.
+/// Non-null session values: the INT counters and the SMALLINT @@SPID.
+/// Runtime values are supplied by the shell.
 pub fn counter_type(name: &str) -> Option<DataType> {
+    if name.eq_ignore_ascii_case("@@SPID") {
+        return Some(DataType::SmallInt(None));
+    }
     ["@@ROWCOUNT", "@@TRANCOUNT", "@@ERROR"]
         .iter()
         .any(|candidate| name.eq_ignore_ascii_case(candidate))

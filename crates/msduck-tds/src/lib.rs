@@ -165,6 +165,11 @@ pub struct Login {
     pub database: String,
     pub user_name: String,
     pub password: zeroize::Zeroizing<String>,
+    /// HostName, AppName and CltIntName as the client sent them.
+    pub host_name: String,
+    pub app_name: String,
+    pub library_name: String,
+    pub client_pid: u32,
 }
 pub fn login(data: &[u8]) -> Result<Login> {
     ensure!((94..=131071).contains(&data.len()), "invalid LOGIN7 size");
@@ -180,6 +185,8 @@ pub fn login(data: &[u8]) -> Result<Login> {
     };
     let packet_size = c.u32()? as usize;
     ensure!((512..=32767).contains(&packet_size), "invalid packet size");
+    let _client_program_version = c.u32()?;
+    let client_pid = c.u32()?;
     ensure!(
         data[25] & 0x80 == 0,
         "integrated authentication is not supported"
@@ -193,6 +200,8 @@ pub fn login(data: &[u8]) -> Result<Login> {
     let mut password = zeroize::Zeroizing::new(String::new());
     // Validate every ordinary offset/count pair, including the password; never log secrets.
     let mut database = String::new();
+    let (mut host_name, mut app_name, mut library_name) =
+        (String::new(), String::new(), String::new());
     for index in [0, 1, 2, 3, 4, 6, 7, 8] {
         let mut pair = Cursor::new(&data[36 + 4 * index..]);
         let offset = pair.u16()? as usize;
@@ -219,8 +228,22 @@ pub fn login(data: &[u8]) -> Result<Login> {
             );
             password = zeroize::Zeroizing::new(String::from_utf16(&units)?);
         }
-        if index == 8 && count > 0 {
-            database = decode_text(&data[offset..offset + count * 2])?;
+        // Client-reported names are informational, so malformed UTF-16
+        // does not fail the login.
+        let informational = || {
+            let units = data[offset..offset + count * 2]
+                .chunks_exact(2)
+                .map(|bytes| u16::from_le_bytes([bytes[0], bytes[1]]))
+                .collect::<Vec<_>>();
+            String::from_utf16_lossy(&units)
+        };
+        match index {
+            _ if count == 0 => {}
+            0 => host_name = informational(),
+            3 => app_name = informational(),
+            6 => library_name = informational(),
+            8 => database = decode_text(&data[offset..offset + count * 2])?,
+            _ => {}
         }
     }
     // The server resolves the database; an empty name selects master.
@@ -233,6 +256,10 @@ pub fn login(data: &[u8]) -> Result<Login> {
         database,
         user_name,
         password,
+        host_name,
+        app_name,
+        library_name,
+        client_pid,
     })
 }
 pub fn done(out: &mut Vec<u8>, id: u8, status: u16, command: u16, count: u64) {
@@ -911,6 +938,30 @@ mod reference_vectors {
         invalid = request.clone();
         invalid[27] |= 1;
         assert!(login(&invalid).is_err());
+        // Client names are informational: decoded when present, and an
+        // empty one with any offset never slices the request.
+        let mut named = request.clone();
+        named[16..20].copy_from_slice(&4242u32.to_le_bytes());
+        for field in [0, 3, 6] {
+            named[36 + 4 * field..38 + 4 * field].copy_from_slice(&94u16.to_le_bytes());
+            named[38 + 4 * field..40 + 4 * field].copy_from_slice(&2u16.to_le_bytes());
+        }
+        let decoded = login(&named).unwrap();
+        assert_eq!(
+            (
+                decoded.host_name.as_str(),
+                decoded.app_name.as_str(),
+                decoded.library_name.as_str()
+            ),
+            ("sa", "sa", "sa")
+        );
+        assert_eq!(decoded.client_pid, 4242);
+        for field in [0, 3, 6] {
+            named[36 + 4 * field..38 + 4 * field].copy_from_slice(&0xffffu16.to_le_bytes());
+            named[38 + 4 * field..40 + 4 * field].copy_from_slice(&0u16.to_le_bytes());
+        }
+        let decoded = login(&named).unwrap();
+        assert_eq!(decoded.app_name, "");
         // A lone UTF-16 surrogate cannot become a silently replaced credential.
         request[94..96].copy_from_slice(&0xd800u16.to_le_bytes());
         assert!(login(&request).is_err());

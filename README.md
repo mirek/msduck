@@ -30,7 +30,11 @@ and database-qualified names work against user databases that file-backed
 servers keep next to the primary file, and LOGIN7 can select any existing
 database. Tokens and errors follow SQL Server captures; see
 [Databases](docs/databases.md) for the limits, such as references to
-another database's objects.
+another database's objects. `ALTER DATABASE ... SET READ_COMMITTED_SNAPSHOT`,
+`SINGLE_USER`, `RESTRICTED_USER` and `MULTI_USER` with `WITH ROLLBACK IMMEDIATE`
+(which closes the other sessions using the database), `ROLLBACK AFTER` or
+`NO_WAIT`, `sys.dm_exec_sessions` and `@@SPID` also follow SQL Server captures;
+see [ALTER DATABASE options, sessions and @@SPID](docs/alter-database-sessions.md).
 
 ```sql
 CREATE TABLE dbo.items (id INT PRIMARY KEY, name NVARCHAR(100));

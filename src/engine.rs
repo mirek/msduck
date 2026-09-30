@@ -372,13 +372,19 @@ pub struct Session {
     read_cancel_cleanup_failed: bool,
     /// The session's current database; it stays in use while selected.
     database: crate::database_catalog::Use,
+    /// SINGLE_USER databases this session set and still holds.
+    holds: Vec<crate::database_catalog::Hold>,
+    /// The session's SPID and sys.dm_exec_sessions entry.
+    process: crate::sessions::Registration,
     /// Keys set by sp_set_session_context; RESETCONNECTION starts a new session.
     session_context: msduck_sql::session_function::SessionContext,
 }
 impl Session {
     pub fn new(connection: crate::server::Connection) -> Result<Self> {
-        let (db, diagnostics, databases) = connection.into_parts();
+        let (db, diagnostics, databases, sessions) = connection.into_parts();
         let database = databases.enter(&db, crate::database_catalog::MASTER)?;
+        let process = sessions.register(database.database_id, database.alias())?;
+        process.set_interrupt(db.interrupt_handle());
         db.execute_batch("SET schema = 'dbo'; SET arrow_lossless_conversion = true; SET VARIABLE __msduck_datefirst = 7")?;
         db.execute_batch(
             "CREATE TEMP MACRO __msduck_time_round(value, quantum) AS
@@ -410,13 +416,52 @@ impl Session {
             read_cancelled: false,
             read_cancel_cleanup_failed: false,
             database,
+            holds: Vec::new(),
+            process,
             session_context: Self::empty_session_context(),
         })
+    }
+
+    /// The session's SPID.
+    pub fn spid(&self) -> i16 {
+        self.process.spid()
+    }
+
+    /// The session's sys.dm_exec_sessions entry.
+    pub fn process(&self) -> &crate::sessions::Registration {
+        &self.process
+    }
+
+    /// Continue `other`'s session in this one after RESETCONNECTION: keep
+    /// its SPID, login and client names, and the SINGLE_USER databases it
+    /// holds, as SQL Server does for a reset connection.
+    pub fn continue_session(&mut self, other: &mut Session) {
+        self.process.exchange(&mut other.process);
+        self.process
+            .set_database(self.database.database_id, self.database.alias());
+        self.process.set_interrupt(self.db.interrupt_handle());
+        self.holds = std::mem::take(&mut other.holds);
+        self.original_login = std::mem::take(&mut other.original_login);
+    }
+
+    /// How many of this session's uses and holds are on a catalog alias.
+    fn own_uses(&self, alias: &str) -> usize {
+        usize::from(self.database.alias() == alias) + self.held(alias)
+    }
+
+    fn held(&self, alias: &str) -> usize {
+        self.holds
+            .iter()
+            .filter(|hold| hold.alias() == alias)
+            .count()
     }
 
     /// CREATE DATABASE, DROP DATABASE and USE run against the database
     /// catalog. Tokens, errors and completion commands follow SQL Server.
     fn database_statement(&mut self, statement: &Statement) -> Result<Option<Execution>> {
+        if let Some(request) = msduck_sql::dialect::alter_database::request(statement) {
+            return self.alter_database(request).map(Some);
+        }
         match statement {
             Statement::Use(target) => {
                 let sqlparser::ast::Use::Object(name) = target else {
@@ -519,7 +564,23 @@ impl Session {
                     .collect::<Result<Vec<_>>>()?;
                 let mut errors = Vec::new();
                 for name in names {
-                    if let Err(error) = self.database.catalog().remove(&self.db, &name) {
+                    let alias = self
+                        .database
+                        .catalog()
+                        .resolve(&self.db, &name)
+                        .ok()
+                        .flatten();
+                    let removed = self
+                        .database
+                        .catalog()
+                        .remove_as(&self.db, &name, &|alias| self.held(alias));
+                    // Holds on a dropped database end with it.
+                    if removed.is_ok()
+                        && let Some(alias) = alias
+                    {
+                        self.holds.retain(|hold| hold.alias() != alias);
+                    }
+                    if let Err(error) = removed {
                         let error = error
                             .downcast_ref::<SqlError>()
                             .cloned()
@@ -537,6 +598,103 @@ impl Session {
             }
             _ => Ok(None),
         }
+    }
+
+    /// ALTER DATABASE ... SET, following reference/alter-database-sessions.json.
+    /// ROLLBACK IMMEDIATE closes the other sessions using the database; the
+    /// session that sets SINGLE_USER holds the database until it disconnects
+    /// or sets another user access mode.
+    fn alter_database(
+        &mut self,
+        request: msduck_sql::dialect::alter_database::Request,
+    ) -> Result<Execution> {
+        use crate::database_catalog::{Setting, Termination, UserAccess};
+        use msduck_sql::dialect::alter_database as syntax;
+        if self.transactions > 0 {
+            bail!(SqlError::new(
+                226,
+                6,
+                "ALTER DATABASE statement not allowed within multi-statement transaction."
+            ));
+        }
+        let name = match &request.database {
+            Some(name) => name.value.clone(),
+            None if self.database.database_id == crate::database_catalog::MASTER_ID => {
+                bail!(SqlError::new(
+                    12104,
+                    2,
+                    "ALTER DATABASE CURRENT failed because 'master' is a system database. System databases cannot be altered by using the CURRENT keyword. Use the database name to alter a system database."
+                ));
+            }
+            None => self.database.name.clone(),
+        };
+        let settings = request
+            .settings
+            .iter()
+            .map(|setting| match setting {
+                syntax::Setting::ReadCommittedSnapshot(on) => Setting::ReadCommittedSnapshot(*on),
+                syntax::Setting::SingleUser => Setting::UserAccess(UserAccess::Single),
+                syntax::Setting::RestrictedUser => Setting::UserAccess(UserAccess::Restricted),
+                syntax::Setting::MultiUser => Setting::UserAccess(UserAccess::Multi),
+            })
+            .collect::<Vec<_>>();
+        let termination = match request.termination {
+            syntax::Termination::Wait => Termination::Wait,
+            syntax::Termination::NoWait => Termination::NoWait,
+            syntax::Termination::RollbackImmediate => Termination::RollbackImmediate,
+            syntax::Termination::RollbackAfterSeconds(seconds) => {
+                Termination::RollbackAfter(std::time::Duration::from_secs(seconds))
+            }
+        };
+        let catalog = self.database.catalog().clone();
+        let altered = catalog
+            .alter(
+                &self.db,
+                &name,
+                &settings,
+                termination,
+                &|alias| self.own_uses(alias),
+                &|alias| self.process.terminate_others(alias),
+            )
+            .map_err(|error| match error.downcast_ref::<SqlError>() {
+                Some(first) if matches!(first.number, 5011 | 5064 | 5070) => StatementErrors(vec![
+                    first.clone(),
+                    SqlError::new(5069, 1, "ALTER DATABASE statement failed."),
+                ])
+                .into(),
+                _ => error,
+            })?;
+        let access = settings.iter().rev().find_map(|setting| match setting {
+            Setting::UserAccess(access) => Some(*access),
+            Setting::ReadCommittedSnapshot(_) => None,
+        });
+        if access.is_some_and(|access| access != UserAccess::Single) {
+            self.holds.retain(|hold| hold.alias() != altered.alias);
+        }
+        if let Some(hold) = altered.hold
+            && self.held(hold.alias()) == 0
+        {
+            self.holds.push(hold);
+        }
+        let mut tokens = Vec::new();
+        if altered.terminated {
+            for (state, progress) in [(2, 0), (1, 100)] {
+                let message: Vec<u16> = format!(
+                    "Nonqualified transactions are being rolled back. Estimated rollback completion: {progress}%."
+                )
+                .encode_utf16()
+                .collect();
+                tds::diagnostic_utf16(
+                    &mut tokens,
+                    tds::DiagnosticKind::Information,
+                    0,
+                    state,
+                    5060,
+                    &message,
+                );
+            }
+        }
+        Ok(Execution::statement(tokens, None, 215))
     }
 
     /// Replace DB_NAME and DB_ID with the session's current database or a
@@ -652,8 +810,24 @@ impl Session {
     /// Make `name` the session's current database, as USE and the login do.
     /// The previous database is released only once the new one is in use.
     pub fn use_database(&mut self, name: &str) -> Result<()> {
-        let entered = self.database.catalog().clone().enter(&self.db, name)?;
+        self.enter_database(name, None)
+    }
+
+    /// Enter the login database for a session that replaces `previous` after
+    /// RESETCONNECTION. The previous session's uses and holds count as this
+    /// session's own, because it continues the same SQL Server session.
+    pub fn use_database_continuing(&mut self, name: &str, previous: &Session) -> Result<()> {
+        self.enter_database(name, Some(previous))
+    }
+
+    fn enter_database(&mut self, name: &str, previous: Option<&Session>) -> Result<()> {
+        let catalog = self.database.catalog().clone();
+        let entered = catalog.enter_as(&self.db, name, &|alias| {
+            self.own_uses(alias) + previous.map_or(0, |previous| previous.own_uses(alias))
+        })?;
         self.database = entered;
+        self.process
+            .set_database(self.database.database_id, self.database.alias());
         Ok(())
     }
 
@@ -709,6 +883,9 @@ impl Session {
             }
             if msduck_sql::drop_index_syntax::request(&statement).is_some() {
                 continue; // Bind table/index identities only when executed.
+            }
+            if msduck_sql::dialect::alter_database::request(&statement).is_some() {
+                continue; // Databases are resolved only when executed.
             }
             if let Some(call) = msduck_sql::raiserror::call(&statement) {
                 for expression in [call.message, call.severity, call.state]
@@ -921,6 +1098,7 @@ impl Session {
                 rowcount: self.rowcount,
                 last_error: self.last_error,
                 caught_error: self.caught_error.as_ref(),
+                spid: self.process.spid(),
             };
             if let ControlFlow::Break(error) = VisitMut::visit(&mut statement, &mut translator) {
                 bail!(error);
@@ -1020,6 +1198,7 @@ impl Session {
             rowcount: self.rowcount,
             last_error: self.last_error,
             caught_error: self.caught_error.as_ref(),
+            spid: self.process.spid(),
         };
         if let ControlFlow::Break(error) = VisitMut::visit(&mut expression, &mut translator) {
             bail!(error);
@@ -1780,6 +1959,16 @@ impl Session {
                         if !rpc && msduck_sql::drop_index_syntax::request(statement).is_some() {
                             self.rowcount = 0;
                             if self.last_error == 3748 { 253 } else { 201 }
+                        } else if !rpc
+                            && msduck_sql::dialect::alter_database::request(statement).is_some()
+                        {
+                            // Captured: option refusals end as CurCmd 253,
+                            // the other ALTER DATABASE failures as 215.
+                            if matches!(self.last_error, 5058 | 12104) {
+                                253
+                            } else {
+                                215
+                            }
                         } else if !rpc
                             && matches!(statement, Statement::CreateIndex(_))
                             && self.last_error == 1913
@@ -2557,6 +2746,7 @@ impl Session {
                 rowcount: self.rowcount,
                 last_error: self.last_error,
                 caught_error: self.caught_error.as_ref(),
+                spid: self.process.spid(),
             };
             if let ControlFlow::Break(error) =
                 VisitMut::visit(&mut materialized.projection, &mut translator)
@@ -2688,6 +2878,7 @@ impl Session {
             rowcount: self.rowcount,
             last_error: self.last_error,
             caught_error: self.caught_error.as_ref(),
+            spid: self.process.spid(),
         };
         if let ControlFlow::Break(error) = VisitMut::visit(&mut statement, &mut translator) {
             bail!(error);
@@ -2798,6 +2989,7 @@ impl Session {
                 rowcount: self.rowcount,
                 last_error: self.last_error,
                 caught_error: self.caught_error.as_ref(),
+                spid: self.process.spid(),
             };
             if let ControlFlow::Break(error) =
                 VisitMut::visit(&mut projection, &mut projection_translator)
@@ -3459,6 +3651,7 @@ impl Session {
             rowcount: self.rowcount,
             last_error: self.last_error,
             caught_error: self.caught_error.as_ref(),
+            spid: self.process.spid(),
         };
         use msduck_sql::checked_expression::{Kind, plan};
         let mut declarations = parameters
@@ -3957,6 +4150,7 @@ struct Translator<'a> {
     rowcount: u64,
     last_error: i32,
     caught_error: Option<&'a SqlError>,
+    spid: i16,
 }
 fn max_length_type(kind: &DataType) -> bool {
     matches!(
@@ -4676,6 +4870,12 @@ impl VisitorMut for Translator<'_> {
                         format: None,
                     },
                     "@@TRANCOUNT" => number(self.transactions),
+                    "@@SPID" => Expr::Cast {
+                        kind: CastKind::Cast,
+                        expr: Box::new(number(self.spid)),
+                        data_type: DataType::SmallInt(None),
+                        format: None,
+                    },
                     "@@ROWCOUNT" => number(self.rowcount),
                     "@@ERROR" => number(self.last_error),
                     "@@VERSION" => Expr::Value(
@@ -5796,6 +5996,7 @@ mod tests {
             rowcount: 0,
             last_error: 0,
             caught_error: None,
+            spid: 51,
         };
         assert!(matches!(
             VisitMut::visit(&mut statements[0], &mut translator),
