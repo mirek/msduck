@@ -178,7 +178,8 @@ fn percentile_binding(
 }
 
 fn runtime_diagnostic(message: &str) -> Option<SqlError> {
-    crate::json_extract::diagnostic(message)
+    rand::diagnostic(message)
+        .or_else(|| crate::json_extract::diagnostic(message))
         .or_else(|| crate::integer_conversion::diagnostic(message))
         .or_else(|| crate::binary_unicode::diagnostic(message))
         .or_else(|| crate::storage_diagnostic::diagnostic(message))
@@ -4376,7 +4377,7 @@ impl VisitorMut for Translator<'_> {
     }
     fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<String> {
         // Fold proven constant percentile sources before child casts become native adapters.
-        rand::seed_conversion(expr);
+        rand::seed_conversion(expr, self.parameters);
         if let Err(error) = crate::percentile::lower(expr) {
             return ControlFlow::Break(error);
         }

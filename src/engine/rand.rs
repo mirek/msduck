@@ -22,7 +22,10 @@ const LIMIT: usize = 4096;
 /// SQL Server converts RAND seeds to INT. Route the explicit conversion through
 /// the existing source-aware translator instead of DuckDB overload coercion
 /// (which rounds floating values and cannot bind DECIMAL literal INT_MIN).
-pub(super) fn seed_conversion(expression: &mut Expr) {
+pub(super) fn seed_conversion(
+    expression: &mut Expr,
+    parameters: &HashMap<String, super::Parameter>,
+) {
     let Expr::Function(function) = expression else {
         return;
     };
@@ -35,6 +38,28 @@ pub(super) fn seed_conversion(expression: &mut Expr) {
     let [FunctionArg::Unnamed(FunctionArgExpr::Expr(seed))] = arguments.args.as_mut_slice() else {
         return;
     };
+    fn float_source(seed: &Expr, parameters: &HashMap<String, super::Parameter>) -> bool {
+        match seed {
+            Expr::Nested(seed) => float_source(seed, parameters),
+            Expr::Identifier(name) => parameters.iter().any(|(key, parameter)| {
+                key.eq_ignore_ascii_case(&name.value)
+                    && parameter.data_type == super::SqlType::Float
+            }),
+            Expr::Cast { data_type, .. } => {
+                matches!(
+                    data_type,
+                    DataType::Double(_)
+                        | DataType::DoublePrecision
+                        | DataType::Float(ExactNumberInfo::None)
+                ) || matches!(data_type, DataType::Float(ExactNumberInfo::Precision(bits)) if *bits > 24)
+            }
+            _ => false,
+        }
+    }
+    if float_source(seed, parameters) {
+        *seed = super::unary_function("__msduck_rand_float_seed", seed.clone());
+        return;
+    }
     *seed = Expr::Cast {
         kind: CastKind::Cast,
         expr: Box::new(seed.clone()),
@@ -130,9 +155,72 @@ impl Registry {
         })
     }
     pub(crate) fn register(&self, db: &Connection) -> duckdb::Result<()> {
+        db.register_scalar_function::<FloatSeed>("__msduck_rand_float_seed")?;
         db.register_scalar_function_with_state::<Draw<false>>("__msduck_rand", self)?;
         db.register_scalar_function_with_state::<Draw<true>>("__msduck_rand_seed", self)
     }
+}
+
+const FLOAT_OVERFLOW: &str = "__msduck_rand_float_seed_overflow:";
+struct FloatSeed;
+impl VScalar for FloatSeed {
+    type State = ();
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        vec![ScalarFunctionSignature::exact(
+            vec![LogicalTypeId::Double.into()],
+            LogicalTypeId::Integer.into(),
+        )]
+    }
+    fn volatile() -> bool {
+        true
+    }
+    fn special_null_handling() -> bool {
+        true
+    }
+    fn invoke(
+        _: &(),
+        input: &mut DataChunkHandle,
+        output: &mut dyn WritableVector,
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let values = input.flat_vector(0);
+        let mut result = output.flat_vector();
+        for row in 0..input.len() {
+            if values.row_is_null(row as u64) {
+                result.set_null(row);
+                continue;
+            }
+            let value = unsafe { values.as_slice_with_len::<f64>(input.len())[row] };
+            let integer = value.trunc();
+            if !integer.is_finite()
+                || integer < f64::from(i32::MIN)
+                || integer > f64::from(i32::MAX)
+            {
+                return Err(format!("{FLOAT_OVERFLOW}{:016x}", value.to_bits()).into());
+            }
+            unsafe {
+                result.as_mut_slice::<i32>()[row] = integer as i32;
+            }
+        }
+        Ok(())
+    }
+}
+
+pub(super) fn diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
+    let bits = message
+        .strip_prefix("Invalid Input Error: ")?
+        .strip_prefix(FLOAT_OVERFLOW)?;
+    if bits.len() != 16 || !bits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return None;
+    }
+    let value = f64::from_bits(u64::from_str_radix(bits, 16).ok()?);
+    if !value.is_finite() || (f64::from(i32::MIN)..=f64::from(i32::MAX)).contains(&value.trunc()) {
+        return None;
+    }
+    Some(msduck_core::diagnostic::SqlError::new(
+        232,
+        3,
+        format!("Arithmetic overflow error for type int, value = {value:.6}."),
+    ))
 }
 struct Draw<const SEEDED: bool>;
 impl<const SEEDED: bool> VScalar for Draw<SEEDED> {
@@ -312,6 +400,45 @@ pub(super) fn declarations<T: VisitMut>(node: &mut T) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn float_seed_truncates_and_retains_captured_overflow_identity() {
+        let db = Connection::open_in_memory().unwrap();
+        Registry::default().register(&db).unwrap();
+        for value in [0.9_f64, 1.9, -1.9, 42.9] {
+            let integer: i32 = db
+                .query_row("SELECT __msduck_rand_float_seed(?)", [value], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert_eq!(integer, value.trunc() as i32);
+        }
+        let null: Option<i32> = db
+            .query_row("SELECT __msduck_rand_float_seed(NULL)", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(null, None);
+        let error = db
+            .query_row(
+                "SELECT __msduck_rand_float_seed(?)",
+                [2147483648.0_f64],
+                |row| row.get::<_, i32>(0),
+            )
+            .unwrap_err();
+        let error = diagnostic(&error.to_string()).unwrap();
+        assert_eq!((error.number, error.state, error.severity), (232, 3, 16));
+        assert_eq!(
+            error.message,
+            "Arithmetic overflow error for type int, value = 2147483648.000000."
+        );
+        for invalid in [
+            "__msduck_rand_float_seed_overflow:41e0000000000000",
+            "Invalid Input Error: __msduck_rand_float_seed_overflow:41e0000000000000 extra",
+            "Invalid Input Error: __msduck_rand_float_seed_overflow:3ff0000000000000",
+        ] {
+            assert!(diagnostic(invalid).is_none());
+        }
+    }
     #[test]
     fn seeded_reference_stream_and_boundaries() {
         let mut generator = Generator::seeded(42);

@@ -72,3 +72,22 @@ test('preparing RAND never draws and repeated INT bindings recover after NULL',a
  assert.deepEqual((await query(c,'SELECT RAND() AS after')).rows,[[stream[1]]])
  }
 })
+test('prepared FLOAT seed conversion retains 232 state 3 and does not advance on failure',async t=>{
+ const c=await start(t)
+ await query(c,'SELECT RAND(42) AS seed')
+ let callback=()=>{}
+ const request=new Request('SELECT RAND(@seed) AS r',error=>callback(error))
+ request.addParameter('seed',TYPES.Float,undefined)
+ await new Promise((resolve,reject)=>{request.once('prepared',resolve);request.once('error',reject);c.prepare(request)})
+ request.error=undefined
+ await assert.rejects(new Promise((resolve,reject)=>{callback=error=>error?reject(error):resolve();c.execute(request,{seed:2147483648})}),
+  error=>error.number===232 && error.state===3 && error.class===16 && error.message==='Arithmetic overflow error for type int, value = 2147483648.000000.')
+ assert.deepEqual((await query(c,'SELECT RAND() AS after')).rows,[[stream[1]]])
+ for(const seed of [1.9,null,42]) {
+  const rows=[];const onRow=cells=>rows.push(cells.map(cell=>cell.value));request.on('row',onRow);request.error=undefined
+  await new Promise((resolve,reject)=>{callback=error=>error?reject(error):resolve();c.execute(request,{seed})});request.off('row',onRow)
+  assert.deepEqual(rows,[[seed===null?null:seed===42?stream[0]:.7135919932129235]])
+ }
+ request.error=undefined
+ await new Promise((resolve,reject)=>{callback=error=>error?reject(error):resolve();c.unprepare(request)})
+})
