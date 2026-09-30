@@ -560,11 +560,15 @@ impl Catalog {
                     (deadline(ROUND).min(limit), true)
                 }
             };
-            if transition.1.is_none() {
-                self.altering
+            // A concurrent ALTER of the same database may already own the
+            // marker; only the ALTER that set it removes it.
+            if transition.1.is_none()
+                && self
+                    .altering
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
-                    .insert(alias.clone());
+                    .insert(alias.clone())
+            {
                 transition.1 = Some(alias.clone());
             }
             drop(change);
