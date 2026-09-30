@@ -3,8 +3,47 @@ use crate::{engine::Session, parameter::Parameter, tds};
 use anyhow::{Result, bail, ensure};
 use msduck_core::{catalog::TypeMetadata, types::Type as SqlType, value::Value};
 use msduck_sql::{binding_scope::Scope, projection};
-use sqlparser::ast::{Query, Statement};
+use sqlparser::ast::{
+    DataType, ExactNumberInfo, Expr, FunctionArg, FunctionArgExpr, FunctionArguments, Query,
+    Statement, VisitMut, VisitorMut,
+};
 use std::collections::HashMap;
+use std::ops::ControlFlow;
+
+// This clone is used only for declaration inference, never execution. Native
+// validation has already checked the original seed expression and function.
+fn rand_declarations(query: &Query) -> Query {
+    struct Declare;
+    impl VisitorMut for Declare {
+        type Break = ();
+        fn post_visit_expr(&mut self, expression: &mut Expr) -> ControlFlow<()> {
+            if let Expr::Function(f) = expression {
+                if f.name.to_string().eq_ignore_ascii_case("rand")
+                    && matches!(&f.args, FunctionArguments::List(a) if matches!(a.args.as_slice(), [] | [FunctionArg::Unnamed(FunctionArgExpr::Expr(_))]) && a.clauses.is_empty() && a.duplicate_treatment.is_none())
+                    && f.over.is_none()
+                    && f.filter.is_none()
+                    && f.within_group.is_empty()
+                    && f.null_treatment.is_none()
+                    && matches!(f.parameters, FunctionArguments::None)
+                    && !f.uses_odbc_syntax
+                {
+                    *expression = Expr::Convert {
+                        is_try: false,
+                        expr: Box::new(Expr::Value(sqlparser::ast::Value::Null.into())),
+                        data_type: Some(DataType::Double(ExactNumberInfo::None)),
+                        charset: None,
+                        target_before_value: true,
+                        styles: vec![],
+                    };
+                }
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut declared = query.clone();
+    let _ = declared.visit(&mut Declare);
+    declared
+}
 
 pub(super) struct Description {
     pub prefix: Vec<u8>,
@@ -66,8 +105,19 @@ fn query_description(
             scope.parameters.insert(name.to_lowercase(), info);
         }
     }
-    let fields = projection::query_fields(&catalog, query, &scope)
+    let mut fields = projection::query_fields(&catalog, query, &scope)
         .ok_or_else(|| anyhow::anyhow!("unsupported prepared result declarations"))?;
+    if let Some(declared) = projection::query_fields(&catalog, &rand_declarations(query), &scope) {
+        ensure!(
+            declared.len() == fields.len(),
+            "prepared declaration alignment changed"
+        );
+        for (field, declaration) in fields.iter_mut().zip(declared) {
+            if field.info.is_none() {
+                field.info = declaration.info;
+            }
+        }
+    }
     ensure!(
         !fields.is_empty(),
         "unsupported empty prepared result declarations"
@@ -126,11 +176,12 @@ pub(super) fn describe(
     }
     let prefix = match statements.as_slice() {
         [Statement::Query(query)] => query_description(session, query, &parameters)?,
-        [Statement::Insert(_)] => {
+        [Statement::Insert(insert)] if insert.output.is_none() && insert.returning.is_none() => {
             let mut out = Vec::new();
             tds::done(&mut out, 0xff, 17, 0xc3, 0);
             out
         }
+        [Statement::Insert(_)] => bail!("unsupported prepared INSERT result declarations"),
         // Existing non-result/control-flow preparation stays available. These
         // shapes have no proven description here and are documented gaps.
         _ => vec![],
