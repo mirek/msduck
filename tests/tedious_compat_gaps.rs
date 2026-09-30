@@ -149,14 +149,14 @@ fn stored_definitions_read_the_clock_when_used() {
     let mut session = Session::new(server.connection().unwrap()).unwrap();
     assert!(run(
         &mut session,
-        "CREATE TABLE stamped (id int, at datetime2(7) DEFAULT SYSUTCDATETIME(), legacy datetime DEFAULT GETDATE(), zoned datetimeoffset(7) DEFAULT SYSDATETIMEOFFSET())"
+        "CREATE TABLE stamped (id int, created datetime2(7) DEFAULT SYSUTCDATETIME(), legacy datetime DEFAULT GETDATE(), zoned datetimeoffset(7) DEFAULT SYSDATETIMEOFFSET())"
     ));
     assert!(run(&mut session, "INSERT INTO stamped (id) VALUES (1)"));
     std::thread::sleep(std::time::Duration::from_millis(50));
     assert!(run(&mut session, "INSERT INTO stamped (id) VALUES (2)"));
     let distinct: Vec<i64> = column(
         &session,
-        "SELECT count(DISTINCT at) * 100 + count(DISTINCT legacy) FROM stamped",
+        "SELECT count(DISTINCT created) * 100 + count(DISTINCT legacy) FROM stamped",
     );
     assert_eq!(distinct, [202]);
     assert!(run(&mut session, "SELECT zoned FROM stamped"));

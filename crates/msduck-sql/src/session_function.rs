@@ -49,7 +49,7 @@ pub fn variant_type() -> DataType {
 /// SUSER_SNAME and SUSER_NAME: the login name of the current security
 /// context, a nullable nvarchar(128). msduck has no impersonation, so this is
 /// the authenticated login. SUSER_SNAME(sid) looks the SID up in
-/// sys.server_principals.
+/// sys.server_principals through the catalog's `__msduck_login_name` macro.
 pub fn is_login_name(function: &Function) -> bool {
     matches!(function.name.0.as_slice(), [ObjectNamePart::Identifier(id)]
         if id.quote_style.is_none()
@@ -87,23 +87,17 @@ pub fn login_name(function: &Function, name: &str) -> Expr {
     };
     let value = match argument {
         None => Expr::Value(Value::NationalStringLiteral(name.into()).into()),
-        Some(sid) => {
-            let mut statement = crate::batch::parse(
-                "SELECT __msduck_principal.name FROM sys.server_principals AS __msduck_principal WHERE __msduck_principal.sid = CAST(__msduck_sid AS VARBINARY(85))",
-            )
-            .expect("valid SID lookup")
-            .remove(0);
-            let _ = visit_expressions_mut(&mut statement, |expr| {
-                if matches!(expr, Expr::Identifier(id) if id.value == "__msduck_sid") {
-                    *expr = sid.clone();
-                }
-                ControlFlow::<()>::Continue(())
-            });
-            let Statement::Query(query) = statement else {
-                unreachable!()
-            };
-            Expr::Subquery(query)
-        }
+        // A catalog macro binds the argument as a value, so a `sid` column in
+        // the caller's query is never captured by the lookup's own columns.
+        Some(sid) => crate::expr::unary_function(
+            "__msduck_login_name",
+            Expr::Cast {
+                kind: CastKind::Cast,
+                expr: Box::new(sid),
+                data_type: DataType::Varbinary(Some(BinaryLength::IntegerLength { length: 85 })),
+                format: None,
+            },
+        ),
     };
     Expr::Cast {
         kind: CastKind::Cast,

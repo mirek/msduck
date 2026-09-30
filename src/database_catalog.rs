@@ -1040,6 +1040,9 @@ impl Catalog {
                  UNION ALL
                  SELECT name,principal_id,create_date FROM __msduck_server_principals()
              );
+             CREATE OR REPLACE MACRO {target}.main.__msduck_login_name(value) AS
+                 (SELECT p.name FROM (SELECT value AS v) a, {target}.sys.server_principals p
+                  WHERE p.sid=a.v);
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_key(value) AS
                  translate(rtrim(CAST(value AS VARCHAR), ' '), {upper}, {lower});
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_id(value) AS
