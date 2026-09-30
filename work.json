@@ -6944,7 +6944,7 @@
     {
       "id": "percentile-numeric-rounding-v1",
       "title": "Align percentile numeric literal conversion with captured binary64 endpoints",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Owner continuing SQL Server compatibility goal; task649 two pinned captures prove numeric literal 1.00000000000000000001 rounds to one in SQL Server while current exact-range policy rejects it.",
       "scope": [
         "crates/msduck-sql/src/percentile.rs",
@@ -6968,7 +6968,7 @@
     {
       "id": "percentile-runtime-fraction-reference-v1",
       "title": "Capture percentile runtime fraction expression and prepared evaluation rules",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing SQL Server compatibility goal; task649 captures successful preparation of bad/range character constants and acceptance of dynamic NVARCHAR fractions, which current static lowering cannot reproduce.",
       "scope": [
         "scripts/capture-percentile-runtime-fraction.mjs",
