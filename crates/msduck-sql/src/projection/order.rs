@@ -90,7 +90,6 @@ fn null_subquery(expr: &Expr) -> bool {
     query.with.is_none()
         && query.order_by.is_none()
         && query.limit_clause.is_none()
-        && query.offset.is_none()
         && query.fetch.is_none()
         && query.for_clause.is_none()
         && select.from.is_empty()
