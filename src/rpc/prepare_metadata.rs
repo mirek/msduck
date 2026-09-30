@@ -488,6 +488,19 @@ fn query_description(
                 | sqlparser::ast::SelectItem::ExprWithAlias { expr, .. } => expr,
                 _ => continue,
             };
+            if let Expr::Function(function) = expression
+                && msduck_sql::expression_metadata::conditional::isnull_args(function)
+                    .ok()
+                    .flatten()
+                    .is_some()
+                && datetime2_declaration(expression, parameters).is_some()
+                && field.info.as_ref().and_then(|info| info.system_type_id) == Some(42)
+            {
+                // Unlike ordinary temporal casts, the captured prepared
+                // ISNULL retains fComputed and original NULL provenance.
+                field.properties =
+                    msduck_sql::result_properties::expression(expression, &[], &source_scope.rows);
+            }
             if let Expr::Cast {
                 expr, data_type, ..
             } = expression
