@@ -55,6 +55,18 @@ export const regressionProfiles=[
  ['bare NULL','SELECT NULL AS n'],
  ['count NULL','SELECT COUNT(NULL) AS n'],
 ]
+// Supplemental original declarations, independent of returned payload values.
+export const declarationProfiles=[
+ ['variant properties',"SELECT SQL_VARIANT_PROPERTY(CAST(@p AS INT),N'BaseType') AS t,SQL_VARIANT_PROPERTY(CAST(@p AS INT),N'Precision') AS p"],
+ ['variant unknown property',"SELECT SQL_VARIANT_PROPERTY(@p,CAST(@p AS NVARCHAR(8))) AS v"],
+ ['variant NULL property',"SELECT SQL_VARIANT_PROPERTY(NULL,N'BaseType') AS v"],
+ ['variant conditional',"SELECT COALESCE(CAST(NULL AS SQL_VARIANT),CAST(@p AS BIGINT)) AS v"],
+ ['variant extrema',"SELECT MIN(CAST(a AS SQL_VARIANT)) AS lo,MAX(CAST(a AS SQL_VARIANT)) AS hi FROM dbo.prepare_heap"],
+ ['variant group cast order',"SELECT CAST(a AS INT) AS n,COUNT(*) AS c FROM dbo.prepare_heap GROUP BY a ORDER BY n"],
+ ['datetime values','SELECT d FROM (VALUES(CAST(\'2024-01-01\' AS DATETIME2(2))),(CAST(NULL AS DATETIME2(7)))) q(d)'],
+ ['datetime COALESCE','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIME2(7))) AS d'],
+ ['datetime mixed offset','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIMEOFFSET(7))) AS d'],
+]
 export const cteDeleteProfiles=[
  ['CTE delete reuse','WITH q AS (SELECT * FROM dbo.prepare_heap WHERE a>@p) DELETE FROM q'],
  ['qualified CTE delete reuse','WITH q AS (SELECT src.* FROM dbo.prepare_heap AS src WHERE src.a>@p) DELETE FROM q'],
@@ -149,12 +161,12 @@ export async function retainedCteDelete(){
 }
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined
- if(![undefined,'--check','--write-fixture','--regressions','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --cte-delete] [output]')
+ if(![undefined,'--check','--write-fixture','--regressions','--declarations','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --cte-delete] [output]')
  if(mode==='--check'){const r=await retained();console.log('Checked prepared RPC records',r.runs[0].length);return}
  if(mode==='--write-fixture')await refuseExistingFixture(fixture)
  const output=resolve(args[0]??'artifacts/prepared-rpc-metadata/capture.json');assert.notEqual(output,fileURLToPath(fixture))
- const regression=mode==='--regressions';const cteDelete=mode==='--cte-delete'
- const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,connection=>observe(connection,cteDelete?cteDeleteOptions:regression?{profilePlan:regressionProfiles,variantPlan:['api-default','named-one'],execute:false}:{}))))
+ const regression=mode==='--regressions'||mode==='--declarations';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--declarations'?declarationProfiles:regressionProfiles
+ const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,connection=>observe(connection,cteDelete?cteDeleteOptions:regression?{profilePlan:preparationProfiles,variantPlan:['api-default','named-one'],execute:false}:{}))))
  if(cteDelete)for(const run of runs){
   assert.equal(run.length,10)
   for(const record of run.slice(2)){
@@ -173,7 +185,7 @@ async function main(){
  }
  else if(!regression)runs.forEach(validate)
  else for(const run of runs){
-  assertSameCapture(run.slice(2).map(({name,sql,variant})=>({name,sql,variant})),regressionProfiles.flatMap(([name,sql])=>['api-default','named-one'].map(variant=>({name,sql,variant}))),'regression preparation plan')
+  assertSameCapture(run.slice(2).map(({name,sql,variant})=>({name,sql,variant})),preparationProfiles.flatMap(([name,sql])=>['api-default','named-one'].map(variant=>({name,sql,variant}))),'regression preparation plan')
   for(const record of run.slice(2)){
    phase(record.preparation);assert.deepEqual(record.executions,[])
    assertSameCapture(record.afterPreparation.result.sets.map(s=>s.rows),[[[4]],[[0.041009986028273604]],[[0]]],'regression preparation does not execute')
