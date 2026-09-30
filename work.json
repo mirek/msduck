@@ -7759,6 +7759,21 @@
         "Commit reproducible generator and immutable full fixture, validate plan completeness/two-fresh agreement/raw token integrity with meaningful tests, and document exact evidence and remaining runtime work. No production Rust or engine.rs changes; reference agreement is not runtime compatibility. Independent owner-run review or authorized unavailable GitHubCodex fallback, required exact-head CI, worker-owned merge and prompt registry/project completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZ-2h"
+    },
+    {
+      "id": "tedious-compat-gaps-output-v1",
+      "title": "Pass the statement clock to the joined OUTPUT Translator for current-time functions",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-09-30), issue #697. Companion of tedious-compat-gaps-v2, delivered in the same PR. No external submission is input.",
+      "scope": [
+        "src/engine/joined_output.rs"
+      ],
+      "acceptance": [
+        "The joined OUTPUT Translator construction supplies the statement clock added by tedious-compat-gaps-v2, so current-time functions lower in OUTPUT stages; workspace checks pass."
+      ],
+      "dependencies": [],
+      "issue": 697,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZ76f"
     }
   ]
 }
