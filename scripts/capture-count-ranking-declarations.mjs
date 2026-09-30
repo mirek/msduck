@@ -162,14 +162,31 @@ export async function retained(){
  const result=JSON.parse(bytes);assert.equal(result.image,referenceImage);assert.equal(result.runs.length,2);
  result.runs.forEach(validate);assertSameCapture(result.runs[0],result.runs[1],'COUNT/ranking fresh runs');return result;
 }
+// Supplemental capture for the metadata option omitted by tedious.prepare().
+export async function observeDefaultPreparation(connection) {
+ const setup="CREATE TABLE dbo.order_heap(a INT,b INT,label NVARCHAR(8)); INSERT INTO dbo.order_heap VALUES(3,1,N'c'),(1,2,N'a'),(2,1,NULL),(4,2,N'd')";
+ assert.deepEqual((await captureBatch(connection,setup)).errors,[]);
+ const records=[];
+ for(const [name,sql] of [
+  ['prepared count','SELECT COUNT(@p) AS c,COUNT_BIG(@p) AS d FROM dbo.order_heap WHERE a>@p'],
+  ['prepared row number','SELECT ROW_NUMBER() OVER(ORDER BY a) AS r FROM dbo.order_heap WHERE a>@p ORDER BY r'],
+ ])for(const option of ['',',0'])for(const mode of ['batch','rpc']){
+  const batch=`DECLARE @h INT; EXEC sys.sp_prepare @h OUTPUT,N'@p INT',N'${sql}'${option}; EXEC sys.sp_execute @h,0; EXEC sys.sp_execute @h,9; EXEC sys.sp_execute @h,1; EXEC sys.sp_unprepare @h`;
+  const result=canonical(await(mode==='batch'?captureBatch(connection,batch):captureRpc(connection,batch)));
+  assert.deepEqual(result.errors,[]);assert.equal(result.sets.length,3);
+  records.push({name,option:option?'zero':'omitted',mode,sql:batch,result});
+ }
+ return records;
+}
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined;
- if(![undefined,'--check','--write-fixture'].includes(mode)||args.length>1)throw Error('usage: capture-count-ranking-declarations.mjs [--check | --write-fixture] [output]');
+ if(![undefined,'--check','--write-fixture','--default-prepare'].includes(mode)||args.length>1)throw Error('usage: capture-count-ranking-declarations.mjs [--check | --write-fixture] [output]');
  if(mode==='--check'){const r=await retained();console.log('Checked COUNT/ranking records',r.runs[0].length);return;}
  if(mode==='--write-fixture')await refuseExistingFixture(fixture);
  const output=resolve(args[0]??'artifacts/count-ranking-declarations/capture.json');assert.notEqual(output,fileURLToPath(fixture));
- const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,observeDeclarations)));
- runs.forEach(validate);assertSameCapture(runs[0],runs[1],'COUNT/ranking fresh runs');
+ const observer=mode==='--default-prepare'?observeDefaultPreparation:observeDeclarations;
+ const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,observer)));
+ if(mode!=='--default-prepare')runs.forEach(validate);assertSameCapture(runs[0],runs[1],'COUNT/ranking fresh runs');
  const result={image:referenceImage,runs};await mkdir(dirname(output),{recursive:true});await writeNewFixture(output,result);
  if(mode==='--write-fixture')await writeNewFixture(fixture,result);
  console.log('Captured COUNT/ranking records',runs[0].length);
