@@ -67,6 +67,18 @@ export const declarationProfiles=[
  ['datetime COALESCE','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIME2(7))) AS d'],
  ['datetime mixed offset','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIMEOFFSET(7))) AS d'],
 ]
+export const windowDeclarationProfiles=[
+ ['variant COUNT partition','SELECT a,COUNT(*) OVER(PARTITION BY COALESCE(CAST(b AS SQL_VARIANT),CAST(@p AS SQL_VARIANT))) AS c FROM dbo.prepare_heap ORDER BY a'],
+ ['variant COUNT_BIG partition','SELECT a,COUNT_BIG(*) OVER(PARTITION BY COALESCE(CAST(b AS SQL_VARIANT),CAST(@p AS SQL_VARIANT))) AS c FROM dbo.prepare_heap ORDER BY a'],
+ ['variant COUNT value','SELECT COUNT(COALESCE(CAST(b AS SQL_VARIANT),CAST(@p AS SQL_VARIANT))) AS c FROM dbo.prepare_heap'],
+ ['variant distinct COUNT value','SELECT COUNT(DISTINCT COALESCE(CAST(b AS SQL_VARIANT),CAST(@p AS SQL_VARIANT))) AS c FROM dbo.prepare_heap'],
+ ['variant declared source COUNT partition','SELECT a,COUNT(*) OVER(PARTITION BY COALESCE(v,CAST(@p AS SQL_VARIANT))) AS c FROM (SELECT a,CAST(b AS SQL_VARIANT) AS v FROM dbo.prepare_heap) q ORDER BY a'],
+ ['variant nested shadow partition','SELECT a,COUNT(*) OVER(PARTITION BY COALESCE(v,CAST(@p AS SQL_VARIANT))) AS c FROM (SELECT a,CAST(b AS SQL_VARIANT) AS v FROM dbo.prepare_heap) q WHERE a IN (SELECT a FROM dbo.prepare_heap WHERE b>@p) ORDER BY a'],
+ ['typed NULL COUNT window','SELECT COUNT(CAST(NULL AS INT)) OVER(PARTITION BY COALESCE(CAST(b AS SQL_VARIANT),CAST(@p AS SQL_VARIANT))) AS c FROM dbo.prepare_heap'],
+ ['untyped NULL COUNT window','SELECT COUNT(NULL) OVER(PARTITION BY COALESCE(CAST(b AS SQL_VARIANT),CAST(@p AS SQL_VARIANT))) AS c FROM dbo.prepare_heap'],
+ ['variant ROW_NUMBER partition','SELECT a,ROW_NUMBER() OVER(PARTITION BY COALESCE(CAST(b AS SQL_VARIANT),CAST(@p AS SQL_VARIANT)) ORDER BY a) AS n FROM dbo.prepare_heap ORDER BY a'],
+ ['variant ROW_NUMBER order','SELECT a,ROW_NUMBER() OVER(ORDER BY COALESCE(CAST(b AS SQL_VARIANT),CAST(@p AS SQL_VARIANT))) AS n FROM dbo.prepare_heap ORDER BY a'],
+]
 export const temporalSetProfiles=[
  ...['DATETIME2','DATETIMEOFFSET'].flatMap(type=>['UNION','UNION ALL','INTERSECT','EXCEPT'].map(op=>[
   type+' '+op,`SELECT CAST(NULL AS ${type}(2)) AS d ${op} SELECT CAST(NULL AS ${type}(7))`,
@@ -238,11 +250,11 @@ export async function retainedSetProperties(){
 }
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined
- if(![undefined,'--check','--write-fixture','--regressions','--declarations','--temporal-sets','--set-properties','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --temporal-sets | --set-properties | --cte-delete] [output]')
+ if(![undefined,'--check','--write-fixture','--regressions','--declarations','--window-declarations','--temporal-sets','--set-properties','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --window-declarations | --temporal-sets | --set-properties | --cte-delete] [output]')
  if(mode==='--check'){const r=await retained();console.log('Checked prepared RPC records',r.runs[0].length);return}
  if(mode==='--write-fixture')await refuseExistingFixture(fixture)
  const output=resolve(args[0]??'artifacts/prepared-rpc-metadata/capture.json');assert.notEqual(output,fileURLToPath(fixture))
- const regression=mode==='--regressions'||mode==='--declarations'||mode==='--temporal-sets'||mode==='--set-properties';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--set-properties'?setPropertyProfiles:mode==='--temporal-sets'?temporalSetProfiles:mode==='--declarations'?declarationProfiles:regressionProfiles
+ const regression=mode==='--window-declarations'||mode==='--regressions'||mode==='--declarations'||mode==='--temporal-sets'||mode==='--set-properties';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--window-declarations'?windowDeclarationProfiles:mode==='--set-properties'?setPropertyProfiles:mode==='--temporal-sets'?temporalSetProfiles:mode==='--declarations'?declarationProfiles:regressionProfiles
  const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,connection=>observe(connection,cteDelete?cteDeleteOptions:regression?{profilePlan:preparationProfiles,variantPlan:['api-default','named-one'],execute:false,...(mode==='--set-properties'?{setupSql:setPropertySetup}:{})}:{}))))
  if(cteDelete)for(const run of runs){
   assert.equal(run.length,10)
