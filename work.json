@@ -7516,7 +7516,7 @@
     {
       "id": "order-token-expanded-plan-v1",
       "title": "Resolve expanded logical ORDER profiles from retained SQL Server evidence",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing compatibility goal and original/expanded first-party ORDER captures; no external content intake.",
       "issue": 691,
       "scope": [
