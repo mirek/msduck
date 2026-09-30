@@ -67,6 +67,13 @@ export const declarationProfiles=[
  ['datetime COALESCE','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIME2(7))) AS d'],
  ['datetime mixed offset','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIMEOFFSET(7))) AS d'],
 ]
+export const temporalSetProfiles=[
+ ...['DATETIME2','DATETIMEOFFSET'].flatMap(type=>['UNION','UNION ALL','INTERSECT','EXCEPT'].map(op=>[
+  type+' '+op,`SELECT CAST(NULL AS ${type}(2)) AS d ${op} SELECT CAST(NULL AS ${type}(7))`,
+ ])),
+ ['mixed temporal forward','SELECT CAST(NULL AS DATETIME2(7)) AS d UNION ALL SELECT CAST(NULL AS DATETIMEOFFSET(2))'],
+ ['mixed temporal reverse','SELECT CAST(NULL AS DATETIMEOFFSET(2)) AS d UNION ALL SELECT CAST(NULL AS DATETIME2(7))'],
+]
 export const cteDeleteProfiles=[
  ['CTE delete reuse','WITH q AS (SELECT * FROM dbo.prepare_heap WHERE a>@p) DELETE FROM q'],
  ['qualified CTE delete reuse','WITH q AS (SELECT src.* FROM dbo.prepare_heap AS src WHERE src.a>@p) DELETE FROM q'],
@@ -161,11 +168,11 @@ export async function retainedCteDelete(){
 }
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined
- if(![undefined,'--check','--write-fixture','--regressions','--declarations','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --cte-delete] [output]')
+ if(![undefined,'--check','--write-fixture','--regressions','--declarations','--temporal-sets','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --temporal-sets | --cte-delete] [output]')
  if(mode==='--check'){const r=await retained();console.log('Checked prepared RPC records',r.runs[0].length);return}
  if(mode==='--write-fixture')await refuseExistingFixture(fixture)
  const output=resolve(args[0]??'artifacts/prepared-rpc-metadata/capture.json');assert.notEqual(output,fileURLToPath(fixture))
- const regression=mode==='--regressions'||mode==='--declarations';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--declarations'?declarationProfiles:regressionProfiles
+ const regression=mode==='--regressions'||mode==='--declarations'||mode==='--temporal-sets';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--temporal-sets'?temporalSetProfiles:mode==='--declarations'?declarationProfiles:regressionProfiles
  const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,connection=>observe(connection,cteDelete?cteDeleteOptions:regression?{profilePlan:preparationProfiles,variantPlan:['api-default','named-one'],execute:false}:{}))))
  if(cteDelete)for(const run of runs){
   assert.equal(run.length,10)
