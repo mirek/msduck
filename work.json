@@ -7133,6 +7133,24 @@
         "Same worker carries original task652 and this supplement through combined PR665. Full exact-head fmt/Clippy/workspace/build/default clients/focused replays/audit, required CI, independent review or owner-authorized availability fallback, exact-head merge then prompt both registry/project completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PY8Aw"
+    },
+    {
+      "id": "percentile-numeric-existing-pure-replay-v1",
+      "title": "Include captured numeric endpoints in existing pure percentile replay",
+      "state": "ready",
+      "authorization": "Owner continuing goal and first-party two identical numeric/reference captures; supplement same root PR665 after prior character task is Done.",
+      "scope": [
+        "crates/msduck-sql/tests/percentile_character_fraction.rs"
+      ],
+      "dependencies": [
+        "percentile-character-fraction-v1"
+      ],
+      "issue": 667,
+      "acceptance": [
+        "Remove old numeric endpoint exclusions and obsolete exact-decimal-policy note from existing pure character fraction fixture replay. Assert all102 percentile batches and unchanged error AST preservation; no skipping or normalizing.",
+        "Verify alongside original task652 and engine/client task666 on combined exact-head PR665. Required full Rust/client/audit/CI/review or owner-approved availability fallback, merge then prompt this registry/project completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PY8za"
     }
   ]
 }
