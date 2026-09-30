@@ -123,6 +123,16 @@ impl State {
                 } else {
                     None
                 };
+                if let Some(description) = &description
+                    && !description.accepted
+                {
+                    let mut response = description.prefix.clone();
+                    response.push(0x79);
+                    response.extend(description.status.to_le_bytes());
+                    prepare_metadata::handle(&mut response, &output.name, None)?;
+                    tds::done(&mut response, 0xfe, 2, 0xe0, 0);
+                    return Ok(response);
+                }
                 let bytes = execution_sql.len()
                     + declarations
                         .iter()
@@ -750,17 +760,20 @@ mod tests {
         assert!(state.prepared.contains_key(&1));
     }
     #[test]
-    fn unsupported_prepared_declaration_does_not_allocate_a_handle() {
+    fn failed_count_preparation_returns_diagnostics_without_allocating_a_handle() {
         let server = Server::open(":memory:").unwrap();
         let mut session = Session::new(server.connection().unwrap()).unwrap();
         let mut state = State::default();
-        assert!(
-            state
-                .execute(
-                    &mut session,
-                    &prepare_request("SELECT COUNT(NULL) AS unknown", "")
-                )
-                .is_err()
+        let response = state
+            .execute(
+                &mut session,
+                &prepare_request("SELECT COUNT(NULL) AS unknown", ""),
+            )
+            .unwrap();
+        assert_eq!(response[0], 0xaa);
+        assert_eq!(
+            &response[response.len() - 13..response.len() - 8],
+            &[0xfe, 2, 0, 0xe0, 0]
         );
         assert!(state.prepared.is_empty());
         assert_eq!(state.bytes, 0);

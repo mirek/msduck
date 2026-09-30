@@ -441,6 +441,7 @@ fn expression_declarations(
 pub(super) struct Description {
     pub prefix: Vec<u8>,
     pub status: i32,
+    pub accepted: bool,
 }
 
 fn wire(info: &TypeMetadata) -> Option<tds::Type> {
@@ -846,12 +847,66 @@ pub(super) fn describe(
             )
         })
         .collect();
+    // Native source/column binding has already succeeded. Detect typeless
+    // COUNT operands only afterwards, preserving captured binding precedence.
+    if let ControlFlow::Break(name) = sqlparser::ast::visit_expressions(&statements, |expr| {
+        let Expr::Function(function) = expr else {
+            return ControlFlow::Continue(());
+        };
+        let name = function.name.to_string().to_ascii_lowercase();
+        if !matches!(name.as_str(), "count" | "count_big")
+            || msduck_sql::aggregate::validate(function).is_err()
+        {
+            return ControlFlow::Continue(());
+        }
+        let FunctionArguments::List(args) = &function.args else {
+            return ControlFlow::Continue(());
+        };
+        let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] = args.args.as_slice() else {
+            return ControlFlow::Continue(());
+        };
+        fn typeless_null(expr: &Expr) -> bool {
+            match expr {
+                Expr::Nested(expr)
+                | Expr::UnaryOp {
+                    op: sqlparser::ast::UnaryOperator::Plus,
+                    expr,
+                } => typeless_null(expr),
+                _ => msduck_sql::expression_metadata::conditional::literal_null(expr),
+            }
+        }
+        if typeless_null(value) {
+            ControlFlow::Break(name)
+        } else {
+            ControlFlow::Continue(())
+        }
+    }) {
+        let mut prefix = Vec::new();
+        tds::sql_error(
+            &mut prefix,
+            &msduck_core::diagnostic::SqlError::new(
+                8117,
+                1,
+                format!("Operand data type NULL is invalid for {name} operator."),
+            ),
+        );
+        tds::sql_error(
+            &mut prefix,
+            &msduck_core::diagnostic::SqlError::new(8180, 1, "Statement(s) could not be prepared."),
+        );
+        return Ok(Description {
+            prefix,
+            status: 8180,
+            accepted: false,
+        });
+    }
     // Declaration collection never evaluates initializers or parameter values.
     let parameters = msduck_sql::preflight::variables(&statements, &parameters)?;
     if statements.len() > 1 && statements.iter().all(|s| matches!(s, Statement::Query(_))) {
         return Ok(Description {
             prefix: vec![],
             status: 8182,
+            accepted: true,
         });
     }
     let prefix = match statements.as_slice() {
@@ -900,7 +955,11 @@ pub(super) fn describe(
         // shapes have no proven description here and are documented gaps.
         _ => vec![],
     };
-    Ok(Description { prefix, status: 0 })
+    Ok(Description {
+        prefix,
+        status: 0,
+        accepted: true,
+    })
 }
 
 pub(super) fn handle(out: &mut Vec<u8>, name: &str, value: Option<i32>) -> Result<()> {
