@@ -12,7 +12,7 @@ import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFi
 import { canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/order-token.json', import.meta.url)
-export const fixtureSha256 = 'PENDING'
+export const fixtureSha256 = 'd35d174dabf26749937e6ca9a36bae3499551a4cdf5cc176dd9b0bb050ea4fac'
 const StreamParser = createRequire(import.meta.url)('tedious/lib/token/stream-parser.js')
 const doneKinds = new Map([[0xfd,'DONE'],[0xfe,'DONEPROC'],[0xff,'DONEINPROC']])
 export function decodeOrder(bytes) {
@@ -188,7 +188,12 @@ export async function observe(connection) {
 }
 export function validate(run) {
  assert.equal(run.length,2+queries.length*2+prepared.length,'missing request records')
+ assertSameCapture(run.slice(0,2).map(({name,mode,sql})=>({name,mode,sql})),[
+  {name:'version',mode:'batch',sql:"SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)) AS v"},
+  {name:'setup',mode:'batch',sql:setup},
+ ],'setup request plan differs')
  assertSameCapture(run.slice(2,2+queries.length*2).map(({name,sql,mode})=>({name,sql,mode})),queries.flatMap(([name,sql])=>['batch','rpc'].map(mode=>({name,sql,mode}))),'query plan differs')
+ assertSameCapture(run.slice(-prepared.length).map(({name,sql,values,mode,type})=>({name,sql,values,mode,type})),prepared.map(p=>({...p,mode:'prepared',type:'Int'})),'prepared plan differs')
  assertSameCapture(run[0].result.sets[0].rows,[['17.0.4065.4']],'reference version changed')
  assert.equal(run[1].result.errors.length,0,'setup failed')
  for(const record of run) {
@@ -196,7 +201,7 @@ export function validate(run) {
   if(record.mode==='prepared') {assert.equal(record.preparation.errors.length,0,'preparation failed');assert.equal(record.executions.length,3,'missing prepared execution');assert(record.unpreparation,'missing unprepare')}
   for(const phase of phases) {
    assert(phase.done.length>0,'missing completion');assert.equal(phase.done.length,phase.doneTokens.length)
-   for(const token of phase.doneTokens) {assert.equal(token.more,Boolean(token.status&1));assert.equal(token.sqlError,Boolean(token.status&2));assert.equal(token.rowCount===null,!(token.status&16))}
+   for(const token of phase.doneTokens) {assert.equal(token.more,Boolean(token.status&1));assert.equal(token.sqlError,Boolean(token.status&2));assert.equal(token.attention,Boolean(token.status&32));assert.equal(token.serverError,Boolean(token.status&256));assert.equal(token.rowCount===null,!(token.status&16))}
    for(const event of phase.events)if(event.kind==='ORDER')assertSameCapture(decodeOrder(Buffer.from(event.hex,'hex')),{hex:event.hex,length:event.length,ordinals:event.ordinals},'ORDER record invalid')
   }
  }
