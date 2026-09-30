@@ -7386,6 +7386,26 @@
       ],
       "issue": 680,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZegD"
+    },
+    {
+      "id": "order-token-reference-v1",
+      "title": "Capture SQL Server ORDER token bytes and emission rules",
+      "state": "ready",
+      "authorization": "Owner continuing goal and raw PR674 evidence; first-party capture, no external submission intake.",
+      "issue": 681,
+      "scope": [
+        "scripts/capture-order-token.mjs",
+        "reference/order-token.json",
+        "tests/order_token_reference.test.mjs",
+        "docs/order-token.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Capture exact ORDER bytes and decoded ordinals with raw full rows/descriptors/errors/DONE/event positions from two fresh pinned SQL Server containers. Cover aliases/ordinals, multi/descending keys, nonprojected/constant/duplicate expressions, empty/NULL, TOP/OFFSET, derived/set/window results and batch/RPC/prepared reuse.",
+        "Validate plan completeness, matching independent runs and raw/decoded ORDER payload correspondence. Preserve errors/unknowns, never derive an emission rule solely from syntactic ORDER BY; ground truth is prerequisite to codec/planner/adapters. No engine.rs edits.",
+        "Source/checksum and meaningful fixture invariants tests, locked Linux capture and retained evidence, independent review or recorded authorized Codex availability fallback, exact-head required CI, merge and registry/project completion by claiming worker."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZf11"
     }
   ]
 }
