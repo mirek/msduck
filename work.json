@@ -7623,7 +7623,7 @@
     {
       "id": "tedious-compat-gaps-reference-v1",
       "title": "Capture SQL Server current-time functions, sys.server_principals/SUSER_SNAME, computed columns, CLUSTERED/NONCLUSTERED keys, table hints and unchanged ALTER DATABASE options",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-09-30), issue #697. No external submission is input.",
       "scope": [
         "scripts/capture-tedious-compat-gaps.mjs",
