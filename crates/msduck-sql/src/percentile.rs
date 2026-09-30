@@ -84,6 +84,7 @@ pub fn runtime_plan(
         declarations: &'a crate::binding_scope::Scope,
         row_dependent: bool,
         unknown: bool,
+        literal_error: Option<msduck_core::diagnostic::SqlError>,
     }
     impl Visitor for Sources<'_> {
         type Break = ();
@@ -103,6 +104,10 @@ pub fn runtime_plan(
                 && query.format_clause.is_none()
                 && query.pipe_operators.is_empty()
                 && select.projection.len() == 1
+                && matches!(
+                    &select.projection[0],
+                    SelectItem::UnnamedExpr(_) | SelectItem::ExprWithAlias { .. }
+                )
                 && select.optimizer_hints.is_empty()
                 && select.distinct.is_none()
                 && select.select_modifiers.is_none()
@@ -139,13 +144,21 @@ pub fn runtime_plan(
                 }
                 Expr::CompoundIdentifier(_) => self.row_dependent = true,
                 Expr::Value(v) => {
+                    if let Value::Number(source, _) = &v.value
+                        && let Err(message) = numeric_literal(source)
+                    {
+                        if let Some(error) = literal_diagnostic(&message) {
+                            self.literal_error.get_or_insert(error);
+                        } else {
+                            self.unknown = true;
+                        }
+                    }
                     self.unknown |= !matches!(
                         v.value,
                         Value::Number(_, _)
                             | Value::Null
                             | Value::SingleQuotedString(_)
                             | Value::NationalStringLiteral(_)
-                            | Value::Boolean(_)
                     )
                 }
                 Expr::Nested(_)
@@ -193,7 +206,8 @@ pub fn runtime_plan(
                         "rand" => Some(0),
                         _ => None,
                     };
-                    let plain = f.filter.is_none()
+                    let plain = !f.uses_odbc_syntax
+                        && f.filter.is_none()
                         && f.over.is_none()
                         && f.within_group.is_empty()
                         && f.null_treatment.is_none()
@@ -213,8 +227,12 @@ pub fn runtime_plan(
         declarations,
         row_dependent: false,
         unknown: false,
+        literal_error: None,
     };
     let _ = Visit::visit(fraction, &mut sources);
+    if let Some(error) = sources.literal_error {
+        return Err(PlanError::Diagnostic(error));
+    }
     if sources.row_dependent {
         return Err(PlanError::Diagnostic(
             msduck_core::diagnostic::SqlError::new(

@@ -122,6 +122,8 @@ fn unknown_shapes_and_declarations_do_not_become_backend_guesses() {
         "missing(@p)",
         "RAND(42)",
         "(SELECT .5 WHERE 1=1)",
+        "(SELECT *)",
+        "(SELECT t.*)",
         "CAST(@p AS DATE)",
         "@undeclared",
         "[\u{40}p]",
@@ -154,6 +156,36 @@ fn unknown_shapes_and_declarations_do_not_become_backend_guesses() {
         percentile::runtime_plan(&expr, &changed),
         percentile::runtime_plan(&expr, &declarations())
     );
+}
+
+#[test]
+fn numeric_literal_syntax_stays_compile_time_but_range_and_text_stay_deferred() {
+    for source in [
+        "1e309",
+        "0.000000000000000000000000000000000000001",
+        "CASE WHEN 1=1 THEN .5 ELSE 1e309 END",
+    ] {
+        let expr = expression(&format!(
+            "PERCENTILE_CONT({source}) WITHIN GROUP(ORDER BY n) OVER()"
+        ));
+        let Err(PlanError::Diagnostic(error)) = percentile::runtime_plan(&expr, &declarations())
+        else {
+            panic!("{source}")
+        };
+        assert!(matches!(error.number, 168 | 1007));
+        assert_eq!((error.state, error.severity), (1, 15));
+    }
+    for source in ["2", "NULL", "'abc'", "'1e309'", "1e-400"] {
+        let expr = expression(&format!(
+            "PERCENTILE_CONT({source}) WITHIN GROUP(ORDER BY n) OVER()"
+        ));
+        assert!(
+            percentile::runtime_plan(&expr, &declarations())
+                .unwrap()
+                .is_some(),
+            "{source}"
+        );
+    }
 }
 #[test]
 fn sequence_tokens_require_unquoted_keywords_and_fraction_scope() {

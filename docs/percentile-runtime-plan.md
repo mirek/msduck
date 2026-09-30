@@ -2,8 +2,10 @@
 
 `msduck_sql::percentile::runtime_plan` consumes syntax and an explicit declaration
 snapshot. It preserves one original fraction expression, one ordering expression
-and the window. It reads no bound values or runtime state and performs no FLOAT
-conversion. CONT declaration intent is FLOAT(53); DISC still needs the caller's
+and the window. It reads no bound values or runtime state and exposes no converted
+fraction. Numeric source syntax uses the captured lexical diagnostic rules;
+1007/168 remain compile errors even in an unselected CASE branch. This never
+validates a bound value or folds the fraction. CONT declaration intent is FLOAT(53); DISC still needs the caller's
 ordering-source declaration. A successful plan does not invent unknown metadata.
 
 The retained runtime matrix supports declared parameters, literals, arithmetic,
