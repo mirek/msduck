@@ -176,3 +176,27 @@ lowering emitted an unsupported DuckDB DATETIMEOFFSET cast. Temporal merging is
 therefore restricted to catalog-based `set_info`; the numeric AST helper keeps
 its existing contract. Pure all-scale tests assert that separation, and the
 workspace offset-set regression exercises the downstream native consumer.
+
+At ca2beac, exact-head verification passed all1102executed Rust tests (one
+pre-existing ignored), formatting, strict workspace Clippy and all-targets build.
+Ten of eleven dedicated tests passed: base/scalar/temporal/set-property full
+preparation comparisons and reference integrity passed; strict surrounding CTE
+transaction completion still failed. All three targeted temporal clients passed.
+Default clients passed485/504, failed19, skipped0 in370.9seconds with unchanged
+revision, binary and inputs. Raw audit is preserved separately at
+`/tmp/msduck-prepared-metadata-audit-ca2beac.json`; it is diagnostic evidence only.
+
+The `--window-declarations PATH` mode captured 22records/run at bc4c07c in two
+fresh containers, with matching full captures (SHA-256
+`1a0e8940997357e2194097e7ea664b6bbf026376861019f55cdc1fa9bf92a631`).
+Complete records are embedded verbatim in the public window preparation test.
+Variant COALESCE keys/operands retain fixed INT COUNT and BIGINT COUNT_BIG /
+ROW_NUMBER declarations. Typed NULL COUNT is valid; bare NULL retains8117/8180.
+The metadata-only clone now uses explicit catalog scopes for each nested query,
+so an inner unknown or FLOAT source cannot inherit an outer SQL_VARIANT proof.
+Known conditional variant declarations may enrich COUNT partitions/operands;
+COUNT-containing trees and bare NULL remain barriers. Captured ROW_NUMBER
+conditional-key declarations additionally require valid function/window shape,
+proven supported key declarations and a resolved source column in each order key.
+The original query and execution operands remain unchanged; no values or volatile
+operands are evaluated for these declarations.

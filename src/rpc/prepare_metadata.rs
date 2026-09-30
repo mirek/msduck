@@ -2,7 +2,7 @@
 use crate::{engine::Session, parameter::Parameter, tds};
 use anyhow::{Result, bail, ensure};
 use msduck_core::{catalog::TypeMetadata, types::Type as SqlType, value::Value};
-use msduck_sql::{binding_scope::Scope, projection};
+use msduck_sql::{binding_scope::Scope, catalog_snapshot::CatalogSnapshot, projection};
 use sqlparser::ast::{
     DataType, ExactNumberInfo, Expr, FunctionArg, FunctionArgExpr, FunctionArguments, Query,
     Statement, VisitMut, VisitorMut,
@@ -117,12 +117,96 @@ fn variant_declaration(
         })
 }
 
+// A captured ROW_NUMBER over declared variant conditional keys has a BIGINT
+// declaration. Preserve the original key binding proof instead of assigning a
+// type to every function name or erasing ORDER BY columns in a metadata clone.
+fn variant_row_number(
+    expression: &Expr,
+    scope: &Scope,
+    parameters: &HashMap<String, Parameter>,
+) -> bool {
+    let Expr::Function(function) = expression else {
+        return false;
+    };
+    if !function.name.to_string().eq_ignore_ascii_case("ROW_NUMBER")
+        || function.parameters != FunctionArguments::None
+        || function.filter.is_some()
+        || function.null_treatment.is_some()
+        || !function.within_group.is_empty()
+        || function.uses_odbc_syntax
+        || !matches!(&function.args, FunctionArguments::List(args) if args.args.is_empty() && args.clauses.is_empty() && args.duplicate_treatment.is_none())
+    {
+        return false;
+    }
+    let Some(sqlparser::ast::WindowType::WindowSpec(window)) = &function.over else {
+        return false;
+    };
+    if window.window_name.is_some() || window.window_frame.is_some() || window.order_by.is_empty() {
+        return false;
+    }
+    let declared = |expr: &Expr| variant_declaration(expr, scope, parameters).is_some();
+    let has_column = |expr: &Expr| {
+        sqlparser::ast::visit_expressions(expr, |node| {
+            let ids = match node {
+                Expr::Identifier(id) if !id.value.starts_with('@') => vec![id],
+                Expr::CompoundIdentifier(ids) => ids.iter().collect(),
+                _ => return ControlFlow::Continue(()),
+            };
+            if msduck_sql::binding_scope::resolve(&ids, &[], &scope.rows)
+                .and_then(|field| field.info.as_ref())
+                .and_then(|info| info.system_type_id)
+                .is_some()
+            {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        })
+        .is_break()
+    };
+    window.partition_by.iter().all(declared)
+        && window.order_by.iter().all(|key| {
+            key.nulls_first.is_none()
+                && key.with_fill.is_none()
+                && declared(&key.expr)
+                && has_column(&key.expr)
+        })
+        && window
+            .partition_by
+            .iter()
+            .chain(window.order_by.iter().map(|key| &key.expr))
+            .any(|key| {
+                msduck_sql::expression_metadata::conditional::candidate(key)
+                    && variant_declaration(key, scope, parameters) == Some(true)
+            })
+}
+
 // This clone is used only for declaration inference, never execution. Native
 // validation has already checked the original seed expression and function.
-fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter>) -> Query {
-    struct Declare<'a>(&'a HashMap<String, Parameter>);
+fn expression_declarations(
+    query: &Query,
+    parameters: &HashMap<String, Parameter>,
+    catalog: &CatalogSnapshot,
+    outer: &Scope,
+) -> Query {
+    struct Declare<'a> {
+        parameters: &'a HashMap<String, Parameter>,
+        catalog: &'a CatalogSnapshot,
+        outer: &'a Scope,
+        scopes: Vec<Scope>,
+    }
     impl VisitorMut for Declare<'_> {
         type Break = ();
+        fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
+            let inherited = self.scopes.last().unwrap_or(self.outer);
+            let scope = projection::scopes(self.catalog, query, inherited).body;
+            self.scopes.push(scope);
+            ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &mut Query) -> ControlFlow<()> {
+            self.scopes.pop();
+            ControlFlow::Continue(())
+        }
         fn pre_visit_expr(&mut self, expression: &mut Expr) -> ControlFlow<()> {
             // COUNT's name alone cannot prove operand acceptance. Preserve its
             // declaration barriers even when enclosed in CASE/arithmetic. The
@@ -137,9 +221,31 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
             if msduck_sql::expression_metadata::conditional::literal_null(expression) {
                 return ControlFlow::Continue(());
             }
+            if msduck_sql::expression_metadata::conditional::candidate(expression)
+                && variant_declaration(
+                    expression,
+                    self.scopes.last().unwrap_or(self.outer),
+                    self.parameters,
+                ) == Some(true)
+            {
+                *expression = Expr::Convert {
+                    is_try: false,
+                    expr: Box::new(Expr::Value(sqlparser::ast::Value::Null.into())),
+                    data_type: Some(DataType::Custom(
+                        sqlparser::ast::ObjectName::from(vec![sqlparser::ast::Ident::new(
+                            "SQL_VARIANT",
+                        )]),
+                        vec![],
+                    )),
+                    charset: None,
+                    target_before_value: true,
+                    styles: vec![],
+                };
+                return ControlFlow::Continue(());
+            }
             let mut numeric = expression.clone();
-            msduck_sql::case_types::lower(&mut numeric, self.0);
-            let kind = msduck_sql::case_types::integer_rank(expression, self.0)
+            msduck_sql::case_types::lower(&mut numeric, self.parameters);
+            let kind = msduck_sql::case_types::integer_rank(expression, self.parameters)
                 .or_else(|| {
                     let Expr::BinaryOp { left, op, right } = expression else {
                         return None;
@@ -154,10 +260,10 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
                     }
                     // SQL Server permits one BIT operand; the other integer
                     // operand determines the declared result width.
-                    if msduck_sql::case_types::is_bit(left, self.0) {
-                        msduck_sql::case_types::integer_rank(right, self.0)
-                    } else if msduck_sql::case_types::is_bit(right, self.0) {
-                        msduck_sql::case_types::integer_rank(left, self.0)
+                    if msduck_sql::case_types::is_bit(left, self.parameters) {
+                        msduck_sql::case_types::integer_rank(right, self.parameters)
+                    } else if msduck_sql::case_types::is_bit(right, self.parameters) {
+                        msduck_sql::case_types::integer_rank(left, self.parameters)
                     } else {
                         None
                     }
@@ -169,18 +275,22 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
                     _ => DataType::BigInt(None),
                 })
                 .or_else(|| {
-                    msduck_sql::case_types::is_bit(expression, self.0)
+                    msduck_sql::case_types::is_bit(expression, self.parameters)
                         .then_some(DataType::Bit(None))
                 })
                 .or_else(|| {
-                    datetime2_declaration(expression, self.0).and_then(|scale| {
+                    datetime2_declaration(expression, self.parameters).and_then(|scale| {
                         Some(msduck_sql::sql_type::ast(SqlType::DateTime2(
                             msduck_core::types::Scale::new(scale).ok()?,
                         )))
                     })
                 })
                 .or_else(|| {
-                    msduck_sql::expression_metadata::storage::kind(&numeric, self.0, &|_| None)
+                    msduck_sql::expression_metadata::storage::kind(
+                        &numeric,
+                        self.parameters,
+                        &|_| None,
+                    )
                 })
                 .or_else(
                     || match msduck_sql::result_types::expression_type(expression)? {
@@ -296,7 +406,12 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
         }
     }
     let mut declared = query.clone();
-    let _ = declared.visit(&mut Declare(parameters));
+    let _ = declared.visit(&mut Declare {
+        parameters,
+        catalog,
+        outer,
+        scopes: vec![],
+    });
     // A bare projected NULL has an INT declaration. Do not type NULL while
     // traversing function arguments: COUNT(NULL) must keep its compile barrier.
     if let sqlparser::ast::SetExpr::Select(select) = declared.body.as_mut() {
@@ -537,13 +652,13 @@ fn query_description(
     // Preserve original explicit VALUES declarations before operand annotation
     // lowers temporal sources into native helper calls. The annotated candidate
     // additionally supplies catalog-bound aggregate/operand declarations.
-    let original_declarations = expression_declarations(query, parameters);
+    let original_declarations = expression_declarations(query, parameters, &catalog, &scope);
     let mut declaration_query = query.clone();
     crate::aggregate_columns::annotate(&session.db, &mut declaration_query, parameters)
         .map_err(anyhow::Error::msg)?;
     for candidate in [
         original_declarations,
-        expression_declarations(&declaration_query, parameters),
+        expression_declarations(&declaration_query, parameters, &catalog, &scope),
     ] {
         if let Some(declared) = projection::query_fields(&catalog, &candidate, &scope) {
             ensure!(
@@ -577,6 +692,22 @@ fn query_description(
                 | sqlparser::ast::SelectItem::ExprWithAlias { expr, .. } => expr,
                 _ => continue,
             };
+            if field.info.is_none() && variant_row_number(expression, &source_scope, parameters) {
+                field.info = catalog.cast_info(&DataType::BigInt(None));
+                if field.info.is_some() {
+                    field.properties = msduck_core::result::Properties {
+                        nullable: Some(true),
+                        origin: msduck_core::result::Origin::Derived,
+                    };
+                }
+            }
+            if msduck_sql::expression_metadata::conditional::candidate(expression)
+                && variant_declaration(expression, &source_scope, parameters) == Some(true)
+                && field.info.as_ref().and_then(|info| info.system_type_id) == Some(98)
+            {
+                field.properties =
+                    msduck_sql::result_properties::expression(expression, &[], &source_scope.rows);
+            }
             if field.info.is_none()
                 && variant_declaration(expression, &source_scope, parameters) == Some(true)
             {
@@ -804,9 +935,117 @@ mod tests {
             let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
                 panic!("query")
             };
-            let declared = expression_declarations(&query, &HashMap::new());
+            let declared = expression_declarations(
+                &query,
+                &HashMap::new(),
+                &CatalogSnapshot::default(),
+                &Scope::default(),
+            );
             assert!(declared.to_string().contains("COUNT"), "{sql}");
             assert!(declared.to_string().contains("NULL"), "{sql}");
+        }
+    }
+
+    #[test]
+    fn variant_window_declarations_follow_scopes_and_preserve_unknowns() {
+        use msduck_sql::binding_scope::Field;
+        let mut catalog = CatalogSnapshot::default();
+        for (name, id) in [("sql_variant", 98), ("int", 56), ("float", 62)] {
+            catalog.types.insert(
+                name.into(),
+                TypeMetadata {
+                    system_type_id: Some(id),
+                    user_type_id: Some(i32::from(id)),
+                    ..Default::default()
+                },
+            );
+        }
+        for (name, id) in [("variants", 98), ("floating", 62)] {
+            catalog.tables.insert(
+                name.into(),
+                vec![Field {
+                    name: "v".into(),
+                    info: Some(TypeMetadata {
+                        system_type_id: Some(id),
+                        user_type_id: Some(i32::from(id)),
+                        ..Default::default()
+                    }),
+                    collation: None,
+                    json_fragment: false,
+                    properties: msduck_core::result::Properties::expression(true),
+                }],
+            );
+        }
+        let parameters = HashMap::new();
+        let outer = Scope::default();
+        let parse = |sql: &str| {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            query
+        };
+        let query = parse(
+            "SELECT COUNT(*) OVER(PARTITION BY COALESCE(v,CAST(NULL AS SQL_VARIANT))) FROM variants",
+        );
+        let declared = expression_declarations(&query, &parameters, &catalog, &outer);
+        assert!(
+            projection::query_fields(&catalog, &query, &outer).unwrap()[0]
+                .info
+                .is_none()
+        );
+        assert_eq!(
+            projection::query_fields(&catalog, &declared, &outer).unwrap()[0]
+                .info
+                .as_ref()
+                .unwrap()
+                .system_type_id,
+            Some(56)
+        );
+        assert!(query.to_string().contains("COALESCE"));
+        let unknown = parse(
+            "SELECT COUNT(*) OVER(PARTITION BY COALESCE(v,CAST(NULL AS SQL_VARIANT))) FROM floating",
+        );
+        let declared = expression_declarations(&unknown, &parameters, &catalog, &outer);
+        assert!(declared.to_string().contains("COALESCE"));
+        let nested = parse(
+            "SELECT (SELECT COALESCE(v,CAST(NULL AS SQL_VARIANT)) FROM floating) FROM variants",
+        );
+        let declared = expression_declarations(&nested, &parameters, &catalog, &outer);
+        assert!(
+            declared.to_string().contains("COALESCE"),
+            "inner FLOAT must shadow outer variant"
+        );
+        for sql in [
+            "SELECT ROW_NUMBER() OVER(ORDER BY COALESCE(v,CAST(NULL AS SQL_VARIANT))) FROM variants",
+            "SELECT ROW_NUMBER() OVER(PARTITION BY COALESCE(v,CAST(NULL AS SQL_VARIANT)) ORDER BY v) FROM variants",
+        ] {
+            let query = parse(sql);
+            let source_scope = projection::scopes(&catalog, &query, &outer).body;
+            let sqlparser::ast::SetExpr::Select(select) = query.body.as_ref() else {
+                panic!("select")
+            };
+            let sqlparser::ast::SelectItem::UnnamedExpr(expr) = &select.projection[0] else {
+                panic!("expression")
+            };
+            assert!(variant_row_number(expr, &source_scope, &parameters));
+        }
+        for sql in [
+            "SELECT ROW_NUMBER() OVER(ORDER BY COALESCE(CAST(NULL AS SQL_VARIANT),CAST(NULL AS SQL_VARIANT))) FROM variants",
+            "SELECT ROW_NUMBER() OVER(ORDER BY COALESCE(v,CAST(NULL AS SQL_VARIANT))) FROM floating",
+            "SELECT ROW_NUMBER() OVER(ORDER BY COALESCE(v,CAST(NULL AS SQL_VARIANT)) ROWS UNBOUNDED PRECEDING) FROM variants",
+        ] {
+            let query = parse(sql);
+            let source_scope = projection::scopes(&catalog, &query, &outer).body;
+            let sqlparser::ast::SetExpr::Select(select) = query.body.as_ref() else {
+                panic!("select")
+            };
+            let sqlparser::ast::SelectItem::UnnamedExpr(expr) = &select.projection[0] else {
+                panic!("expression")
+            };
+            assert!(
+                !variant_row_number(expr, &source_scope, &parameters),
+                "{sql}"
+            );
         }
     }
 
