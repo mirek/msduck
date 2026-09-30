@@ -7432,7 +7432,7 @@
     {
       "id": "order-token-plan-v1",
       "title": "Infer logical ORDER metadata from explicit SQL declarations",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing goal and merged first-party ORDER reference/codec; no external content intake.",
       "issue": 686,
       "scope": [
