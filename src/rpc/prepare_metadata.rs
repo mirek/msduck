@@ -17,6 +17,16 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
     impl VisitorMut for Declare<'_> {
         type Break = ();
         fn pre_visit_expr(&mut self, expression: &mut Expr) -> ControlFlow<()> {
+            // COUNT's name alone cannot prove operand acceptance. Preserve its
+            // declaration barriers even when enclosed in CASE/arithmetic. The
+            // original projection already supplies proven COUNT declarations.
+            if sqlparser::ast::visit_expressions(expression, |node| {
+                if matches!(node, Expr::Function(f) if matches!(f.name.to_string().to_ascii_lowercase().as_str(), "count" | "count_big")) {
+                    ControlFlow::Break(())
+                } else { ControlFlow::Continue(()) }
+            }).is_break() {
+                return ControlFlow::Continue(());
+            }
             if msduck_sql::expression_metadata::conditional::literal_null(expression) {
                 return ControlFlow::Continue(());
             }
@@ -294,6 +304,23 @@ pub(super) fn handle(out: &mut Vec<u8>, name: &str, value: Option<i32>) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn declaration_enrichment_preserves_count_null_barriers_in_outer_expressions() {
+        for sql in [
+            "SELECT COUNT(NULL)",
+            "SELECT COUNT_BIG(NULL)",
+            "SELECT COUNT(NULL)+1",
+            "SELECT CASE WHEN 1=1 THEN COUNT(NULL) ELSE 0 END",
+        ] {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            let declared = expression_declarations(&query, &HashMap::new());
+            assert!(declared.to_string().contains("COUNT"), "{sql}");
+            assert!(declared.to_string().contains("NULL"), "{sql}");
+        }
+    }
 
     #[test]
     fn character_metadata_requires_valid_declared_byte_capacity() {
