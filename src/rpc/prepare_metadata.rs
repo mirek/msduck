@@ -255,6 +255,7 @@ fn query_description(
     session: &Session,
     query: &Query,
     parameters: &HashMap<String, Parameter>,
+    command: u16,
 ) -> Result<Vec<u8>> {
     let catalog = crate::query_catalog::snapshot(&session.db, query)?;
     let mut scope = Scope::default();
@@ -335,7 +336,7 @@ fn query_description(
         projection::order::Plan::NoToken => {}
         projection::order::Plan::Unknown(_) => bail!("unsupported prepared ORDER declaration"),
     }
-    tds::done(&mut out, 0xff, 17, 0xc1, 0);
+    tds::done(&mut out, 0xff, 17, command, 0);
     ensure!(
         out.len() <= tds::MAX_MESSAGE - 1024,
         "prepared metadata exceeds message bound"
@@ -379,7 +380,7 @@ pub(super) fn describe(
             tds::done(&mut out, 0xff, 17, 0xc4, 0);
             out
         }
-        [Statement::Query(query)] => query_description(session, query, &parameters)?,
+        [Statement::Query(query)] => query_description(session, query, &parameters, 0xc1)?,
         [Statement::Insert(insert)]
             if insert.returning.is_none()
                 && (insert.output.is_none()
@@ -394,6 +395,21 @@ pub(super) fn describe(
             let mut out = Vec::new();
             tds::done(&mut out, 0xff, 17, 0xc3, 0);
             out
+        }
+        [Statement::Insert(insert)] if insert.returning.is_none() => {
+            // Reuse the deterministic logical OUTPUT projection. The clone's
+            // lowered INSERT is never executed; only the explicit target
+            // catalog declarations are acquired for the projection.
+            let mut statement = Statement::Insert(insert.clone());
+            msduck_sql::output::validate(&statement)?;
+            let plan = msduck_sql::output::lower_native(&mut statement)?.ok_or_else(|| {
+                anyhow::anyhow!("unsupported prepared INSERT result declarations")
+            })?;
+            ensure!(
+                plan.sink.is_none(),
+                "unexpected prepared OUTPUT destination"
+            );
+            query_description(session, &plan.projection, &parameters, 0xc3)?
         }
         [Statement::Insert(_)] => bail!("unsupported prepared INSERT result declarations"),
         // Existing non-result/control-flow preparation stays available. These

@@ -60,7 +60,9 @@ starting at 1; every other preparation response field is compared verbatim.
 Both plans verify preparation leaves table rows, seeded RAND and transaction
 depth unchanged. CTE DELETE and INSERT OUTPUT INTO retain their captured no-result completion
 commands without performing either write. Other captured regression shapes remain
-implementation work, including returned OUTPUT, window/variant ORDER and temporal
+INSERT OUTPUT uses the existing pure logical projection over target catalog
+declarations and retains the INSERT completion command. Other captured regression
+shapes remain implementation work, including window/variant ORDER and temporal
 derived declarations.
 
 A bare projected NULL is declared INT, while NULL function operands retain their
