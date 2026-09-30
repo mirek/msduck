@@ -7171,7 +7171,7 @@
     {
       "id": "percentile-runtime-plan-v1",
       "title": "Plan percentile runtime fractions without evaluating bound values",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing goal and retained 137-record reference proves parameter/scalar eligibility versus row-dependent diagnostics and deferred execution validation.",
       "issue": 669,
       "scope": [
