@@ -72,3 +72,13 @@ and metadata rather than assuming they are equivalent. Tedious omits the option;
 its preparation metadata requires separate reference verification.
 The client diagnostic records preparation omissions and the full batch/RPC
 responses when option 1 is requested. Execution comparisons remain strict.
+
+The two fresh supplemental runs match (8 batch/RPC records each), capture hash
+`2ddf4c4a6b18fc7346000e488d5e7bf769ecf60f75d06d554077939a133c8440`.
+Omitted-option batches return preparation metadata plus three execution sets.
+Explicit zero yields error 214 and follow-on invalid-handle errors 8179 in these
+SQL invocation profiles; it is not equivalent to omission. Complete evidence
+and the reproducible generator are retained at
+`artifacts/count-ranking-declarations/default-prepare.json`.
+The original `reference/order-token.json` additionally preserves raw default
+Tedious API preparation metadata, providing independent driver-path evidence.
