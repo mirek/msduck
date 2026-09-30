@@ -376,7 +376,6 @@ fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Fiel
             ("host_name", 231, 231, 256, 0, 0, true, false),
             ("program_name", 231, 231, 256, 0, 0, true, false),
             ("host_process_id", 56, 56, 4, 10, 0, true, false),
-            ("client_version", 56, 56, 4, 10, 0, true, false),
             ("client_interface_name", 231, 231, 64, 0, 0, true, false),
             ("login_name", 231, 231, 256, 0, 0, false, false),
             ("status", 231, 231, 60, 0, 0, false, false),

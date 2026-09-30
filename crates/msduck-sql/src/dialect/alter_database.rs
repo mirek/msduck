@@ -111,9 +111,12 @@ pub fn parse_request(parser: &mut Parser<'_>) -> Result<Request, ParserError> {
                     let Token::Number(seconds, false) = &token.token else {
                         return parser.expected("a number of seconds", token);
                     };
+                    // SQL Server takes an int number of seconds.
                     let seconds = seconds
-                        .parse()
-                        .map_err(|_| unsupported(format!("invalid ROLLBACK AFTER {seconds}")))?;
+                        .parse::<i32>()
+                        .ok()
+                        .and_then(|seconds| u64::try_from(seconds).ok())
+                        .ok_or_else(|| unsupported(format!("invalid ROLLBACK AFTER {seconds}")))?;
                     if matches!(parser.peek_token().token, Token::Word(ref w) if w.value.eq_ignore_ascii_case("SECONDS"))
                     {
                         parser.next_token();
@@ -302,6 +305,7 @@ mod tests {
             "ALTER DATABASE p MODIFY NAME = q",
             "ALTER DATABASE p SET READ_COMMITTED_SNAPSHOT",
             "ALTER DATABASE p SET SINGLE_USER WITH ROLLBACK",
+            "ALTER DATABASE p SET SINGLE_USER WITH ROLLBACK AFTER 99999999999999999999",
         ] {
             let error = parse_one(sql).unwrap_err();
             assert!(!error.is_empty(), "{sql}");

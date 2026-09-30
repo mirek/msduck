@@ -45,6 +45,9 @@ option: READ_COMMITTED_SNAPSHOT { ON | OFF } | SINGLE_USER | RESTRICTED_USER | M
     (100%) before DONE.
   - `WITH ROLLBACK AFTER n` waits up to n seconds for the sessions to leave,
     then terminates the remaining ones the same way.
+  - Waiting happens without holding the database catalog lock, so logins and
+    `USE` elsewhere continue. Termination repeats every 500 ms for sessions
+    that were still logging in or entering the database, for up to 30 seconds.
   - Without a clause SQL Server waits indefinitely. msduck fails explicitly
     instead, so a statement cannot block other logins and `USE` forever.
 - The session that sets `SINGLE_USER` holds the database, even while its current
@@ -69,7 +72,6 @@ sessions with these columns, in SQL Server's order and with its declarations:
 | `login_time` | when the session was created, UTC |
 | `host_name`, `program_name`, `client_interface_name` | LOGIN7 HostName, AppName and CltIntName |
 | `host_process_id` | LOGIN7 ClientPID |
-| `client_version` | NULL; the value SQL Server reports was not captured |
 | `login_name`, `original_login_name` | the authenticated login |
 | `status` | `running` while the session executes a request, otherwise `sleeping` |
 | `is_user_process` | 1 |
@@ -91,5 +93,6 @@ inside the process, such as in Rust tests, have NULL client names.
   statement errors; SQL Server continues with the next statement.
 - Other ALTER DATABASE options and forms (`ALLOW_SNAPSHOT_ISOLATION`,
   `MODIFY NAME`, `COLLATE`, file options) fail as unsupported when parsed.
-- The other 40 `sys.dm_exec_sessions` columns are not provided, and the server
-  has no system sessions (SPIDs below 51).
+- The other 41 `sys.dm_exec_sessions` columns are not provided, including
+  `client_version`, whose value was not captured. The server has no system
+  sessions (SPIDs below 51).

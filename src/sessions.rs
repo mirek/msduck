@@ -208,13 +208,13 @@ pub struct Scan {
     next: AtomicUsize,
 }
 
-const COLUMNS: [(&str, LogicalTypeId); 12] = [
+// client_version is omitted: the value SQL Server reports was not captured.
+const COLUMNS: [(&str, LogicalTypeId); 11] = [
     ("session_id", LogicalTypeId::Smallint),
     ("login_time", LogicalTypeId::Timestamp),
     ("host_name", LogicalTypeId::Varchar),
     ("program_name", LogicalTypeId::Varchar),
     ("host_process_id", LogicalTypeId::Integer),
-    ("client_version", LogicalTypeId::Integer),
     ("client_interface_name", LogicalTypeId::Varchar),
     ("login_name", LogicalTypeId::Varchar),
     ("status", LogicalTypeId::Varchar),
@@ -275,14 +275,14 @@ impl VTab for SessionsTable {
                 .map(|r| r.client.as_ref().map(|c| c.program_name.as_str())),
         );
         text(
-            6,
+            5,
             &mut rows
                 .iter()
                 .map(|r| r.client.as_ref().map(|c| c.client_interface_name.as_str())),
         );
-        text(7, &mut rows.iter().map(|r| Some(r.login_name.as_str())));
-        text(8, &mut rows.iter().map(|r| Some(r.status)));
-        text(10, &mut rows.iter().map(|r| Some(r.login_name.as_str())));
+        text(6, &mut rows.iter().map(|r| Some(r.login_name.as_str())));
+        text(7, &mut rows.iter().map(|r| Some(r.status)));
+        text(9, &mut rows.iter().map(|r| Some(r.login_name.as_str())));
         let integers = |column: usize, values: &mut dyn Iterator<Item = Option<i32>>| {
             let mut vector = output.flat_vector(column);
             for (row, value) in values.enumerate() {
@@ -301,8 +301,6 @@ impl VTab for SessionsTable {
                 .iter()
                 .map(|r| r.client.as_ref().map(|c| c.host_process_id as i32)),
         );
-        // The TDS interface version SQL Server reports was not captured.
-        integers(5, &mut rows.iter().map(|_| None));
         // SAFETY: each vector holds at least `rows.len()` values of its type.
         unsafe {
             let mut vector = output.flat_vector(0);
@@ -315,10 +313,10 @@ impl VTab for SessionsTable {
             for (slot, row) in times.iter_mut().zip(rows) {
                 *slot = row.login_time;
             }
-            let mut vector = output.flat_vector(9);
+            let mut vector = output.flat_vector(8);
             let user = vector.as_mut_slice_with_len::<bool>(rows.len());
             user.fill(true);
-            let mut vector = output.flat_vector(11);
+            let mut vector = output.flat_vector(10);
             let databases = vector.as_mut_slice_with_len::<i16>(rows.len());
             for (slot, row) in databases.iter_mut().zip(rows) {
                 *slot = row.database_id;

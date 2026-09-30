@@ -153,6 +153,8 @@ pub struct Altered {
 
 /// How long ROLLBACK waits for terminated sessions to release the database.
 const RELEASE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+/// How long each termination round waits before terminating again.
+const ROUND: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// One registry row. Its values are ordinary SQL data.
 struct Row {
@@ -453,7 +455,93 @@ impl Catalog {
         own: &dyn Fn(&str) -> usize,
         terminate: &dyn Fn(&str) -> usize,
     ) -> Result<Altered> {
-        let _change = self.lock();
+        // Termination waits without the change lock, so logins, USE and
+        // the sessions being terminated are never blocked by it. Each round
+        // re-checks the database under the lock.
+        let exclusive = settings.iter().any(|setting| {
+            // RESTRICTED_USER admits db_owner, dbcreator and sysadmin
+            // members. Every msduck login is sysadmin, so only these options
+            // need the other sessions gone.
+            matches!(
+                setting,
+                Setting::ReadCommittedSnapshot(_) | Setting::UserAccess(UserAccess::Single)
+            )
+        });
+        let deadline = |timeout| {
+            std::time::Instant::now()
+                .checked_add(timeout)
+                .unwrap_or_else(|| std::time::Instant::now() + RELEASE_TIMEOUT * 1000)
+        };
+        let mut terminated = false;
+        let mut waited = false;
+        let mut release_deadline = None;
+        loop {
+            let change = self.lock();
+            let (alias, display) = self.alterable(db, name, settings)?;
+            let others = || self.users(&alias).saturating_sub(own(&alias));
+            let user_access: u8 = db.query_row(
+                &format!(
+                    "SELECT coalesce(user_access,0) FROM {} WHERE name=?",
+                    self.registry()
+                ),
+                [&alias],
+                |row| row.get(0),
+            )?;
+            if user_access == UserAccess::Single as u8 && others() > 0 {
+                bail!(SqlError::new(
+                    5064,
+                    1,
+                    format!(
+                        "Changes to the state or options of database '{display}' cannot be made at this time. The database is in single-user mode, and a user is currently connected to it."
+                    )
+                ));
+            }
+            if !exclusive || others() == 0 {
+                return self.apply(db, alias, settings, terminated, change);
+            }
+            let (wait, kill) = match termination {
+                Termination::NoWait => bail!(SqlError::new(
+                    5070,
+                    2,
+                    format!(
+                        "Database state cannot be changed while other users are using the database '{display}'"
+                    )
+                )),
+                Termination::Wait => bail!(
+                    "ALTER DATABASE without a termination clause would wait for the other sessions using database '{display}'; msduck supports WITH ROLLBACK IMMEDIATE, WITH ROLLBACK AFTER or WITH NO_WAIT here"
+                ),
+                Termination::RollbackAfter(delay) if !waited => {
+                    waited = true;
+                    (deadline(delay), false)
+                }
+                Termination::RollbackAfter(_) | Termination::RollbackImmediate => {
+                    let limit = *release_deadline.get_or_insert_with(|| deadline(RELEASE_TIMEOUT));
+                    ensure!(
+                        std::time::Instant::now() < limit,
+                        "the other sessions using database '{display}' did not end"
+                    );
+                    (deadline(ROUND).min(limit), true)
+                }
+            };
+            drop(change);
+            // A session still logging in or entering the database may not be
+            // terminable yet; a later round terminates it.
+            if kill {
+                terminated |= terminate(&alias) > 0;
+            }
+            while others() > 0 && std::time::Instant::now() < wait {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+        }
+    }
+
+    /// Resolve an ALTER DATABASE target that may be altered.
+    fn alterable(
+        &self,
+        db: &Connection,
+        name: &str,
+        settings: &[Setting],
+    ) -> Result<(String, String)> {
         let Some(alias) = self.resolve_published(db, name)? else {
             let mut error = SqlError::new(
                 5011,
@@ -478,66 +566,18 @@ impl Catalog {
                 format!("Option '{option}' cannot be set in database '{display}'.")
             ));
         }
-        let others = || self.users(&alias).saturating_sub(own(&alias));
-        let user_access: u8 = db.query_row(
-            &format!(
-                "SELECT coalesce(user_access,0) FROM {} WHERE name=?",
-                self.registry()
-            ),
-            [&alias],
-            |row| row.get(0),
-        )?;
-        if user_access == UserAccess::Single as u8 && others() > 0 {
-            bail!(SqlError::new(
-                5064,
-                1,
-                format!(
-                    "Changes to the state or options of database '{display}' cannot be made at this time. The database is in single-user mode, and a user is currently connected to it."
-                )
-            ));
-        }
-        // RESTRICTED_USER admits db_owner, dbcreator and sysadmin members.
-        // Every msduck login is sysadmin, so only these options need the
-        // other sessions gone.
-        let exclusive = settings.iter().any(|setting| {
-            matches!(
-                setting,
-                Setting::ReadCommittedSnapshot(_) | Setting::UserAccess(UserAccess::Single)
-            )
-        });
-        let released = |timeout: std::time::Duration| {
-            let deadline = std::time::Instant::now() + timeout;
-            while others() > 0 {
-                if std::time::Instant::now() >= deadline {
-                    return false;
-                }
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
-            true
-        };
-        let mut terminated = false;
-        if exclusive && others() > 0 {
-            match termination {
-                Termination::NoWait => bail!(SqlError::new(
-                    5070,
-                    2,
-                    format!(
-                        "Database state cannot be changed while other users are using the database '{display}'"
-                    )
-                )),
-                Termination::Wait => bail!(
-                    "ALTER DATABASE without a termination clause would wait for the other sessions using database '{display}'; msduck supports WITH ROLLBACK IMMEDIATE, WITH ROLLBACK AFTER or WITH NO_WAIT here"
-                ),
-                Termination::RollbackAfter(delay) if released(delay) => {}
-                Termination::RollbackAfter(_) | Termination::RollbackImmediate => {
-                    terminated = terminate(&alias) > 0;
-                    ensure!(
-                        released(RELEASE_TIMEOUT),
-                        "the other sessions using database '{display}' did not end"
-                    );
-                }
-            }
-        }
+        Ok((alias, display))
+    }
+
+    /// Store ALTER DATABASE options while holding the change lock.
+    fn apply(
+        self: &std::sync::Arc<Self>,
+        db: &Connection,
+        alias: String,
+        settings: &[Setting],
+        terminated: bool,
+        _change: std::sync::MutexGuard<'_, ()>,
+    ) -> Result<Altered> {
         let mut read_committed_snapshot = None;
         let mut access = None;
         for setting in settings {

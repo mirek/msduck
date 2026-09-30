@@ -238,10 +238,11 @@ pub fn login(data: &[u8]) -> Result<Login> {
             String::from_utf16_lossy(&units)
         };
         match index {
+            _ if count == 0 => {}
             0 => host_name = informational(),
             3 => app_name = informational(),
             6 => library_name = informational(),
-            8 if count > 0 => database = decode_text(&data[offset..offset + count * 2])?,
+            8 => database = decode_text(&data[offset..offset + count * 2])?,
             _ => {}
         }
     }
@@ -937,6 +938,30 @@ mod reference_vectors {
         invalid = request.clone();
         invalid[27] |= 1;
         assert!(login(&invalid).is_err());
+        // Client names are informational: decoded when present, and an
+        // empty one with any offset never slices the request.
+        let mut named = request.clone();
+        named[16..20].copy_from_slice(&4242u32.to_le_bytes());
+        for field in [0, 3, 6] {
+            named[36 + 4 * field..38 + 4 * field].copy_from_slice(&94u16.to_le_bytes());
+            named[38 + 4 * field..40 + 4 * field].copy_from_slice(&2u16.to_le_bytes());
+        }
+        let decoded = login(&named).unwrap();
+        assert_eq!(
+            (
+                decoded.host_name.as_str(),
+                decoded.app_name.as_str(),
+                decoded.library_name.as_str()
+            ),
+            ("sa", "sa", "sa")
+        );
+        assert_eq!(decoded.client_pid, 4242);
+        for field in [0, 3, 6] {
+            named[36 + 4 * field..38 + 4 * field].copy_from_slice(&0xffffu16.to_le_bytes());
+            named[38 + 4 * field..40 + 4 * field].copy_from_slice(&0u16.to_le_bytes());
+        }
+        let decoded = login(&named).unwrap();
+        assert_eq!(decoded.app_name, "");
         // A lone UTF-16 surrogate cannot become a silently replaced credential.
         request[94..96].copy_from_slice(&0xd800u16.to_le_bytes());
         assert!(login(&request).is_err());

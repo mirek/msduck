@@ -252,6 +252,20 @@ fn serve_login(
     // An unused clone supplies fresh sessions for RESETCONNECTION requests.
     let template = db.try_clone()?;
     let mut session = Session::new(db)?;
+    // Register the client first, so ALTER DATABASE ... WITH ROLLBACK can
+    // terminate the session as soon as it uses a database.
+    session.process().set_login(
+        crate::sessions::Client {
+            host_name: login.host_name.clone(),
+            program_name: login.app_name.clone(),
+            client_interface_name: login.library_name.clone(),
+            host_process_id: login.client_pid,
+        },
+        &authenticated_name,
+        Some(std::sync::Arc::new(move || {
+            let _ = socket.shutdown(std::net::Shutdown::Both);
+        })),
+    );
     // SQL Server fails the login when the requested database cannot be
     // opened, and reports the database it selected in the login response.
     // The captured failure (reference/login-database-error.json) is ERROR
@@ -283,18 +297,6 @@ fn serve_login(
     }
     login.database = session.database().name.clone();
     let login_database = login.database.clone();
-    session.process().set_login(
-        crate::sessions::Client {
-            host_name: login.host_name.clone(),
-            program_name: login.app_name.clone(),
-            client_interface_name: login.library_name.clone(),
-            host_process_id: login.client_pid,
-        },
-        &authenticated_name,
-        Some(std::sync::Arc::new(move || {
-            let _ = socket.shutdown(std::net::Shutdown::Both);
-        })),
-    );
     session.original_login = authenticated_name;
     let mut rpc = crate::rpc::State::default();
     tds::write_message(&mut stream, &tds::login_response(&login), 4096)?;
