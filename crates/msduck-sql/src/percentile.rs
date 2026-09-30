@@ -4,6 +4,140 @@ use sqlparser::ast::*;
 pub const RANGE: &str = "Input parameter of percentile function is outside of range [0, 1].";
 const LITERAL: &str = "Percentile requires a numeric literal between 0 and 1.";
 
+/// Convert an already evaluated fraction using its explicit source declaration.
+/// This does not evaluate syntax, read bindings, or decide whether an input
+/// relation is empty. Adapters defer these errors to the operator's input phase.
+/// `None` means the carrier/declaration pair is not proven; it is not NULL.
+pub fn runtime_fraction(
+    value: &msduck_core::value::Value,
+    declaration: msduck_core::types::Type,
+) -> Option<Result<f64, msduck_core::diagnostic::SqlError>> {
+    use msduck_core::{character::Family, diagnostic::SqlError, types::Type, value::Value};
+    let supported = matches!(
+        declaration,
+        Type::Bit
+            | Type::TinyInt
+            | Type::SmallInt
+            | Type::Int
+            | Type::BigInt
+            | Type::Real
+            | Type::Float
+            | Type::Decimal(_)
+            | Type::Character(_)
+    );
+    if !supported {
+        return None;
+    }
+    if matches!(value, Value::Null) {
+        return Some(Err(SqlError::new(8727, 1, RANGE)));
+    }
+    let number = match (value, declaration) {
+        (Value::Boolean(value), Type::Bit) => f64::from(u8::from(*value)),
+        (Value::UTinyInt(value), Type::TinyInt) => f64::from(*value),
+        (Value::SmallInt(value), Type::SmallInt) => f64::from(*value),
+        (Value::Int(value), Type::Int) => f64::from(*value),
+        (Value::BigInt(value), Type::BigInt) => *value as f64,
+        (Value::Float(value), Type::Real) if value.is_finite() => f64::from(*value),
+        (Value::Double(value), Type::Float) if value.is_finite() => *value,
+        (Value::Decimal(value), Type::Decimal(source))
+            if value.precision() == source.precision() && value.scale() == source.scale() =>
+        {
+            // Parse the exact decimal once into binary64, without an intermediate
+            // backend decimal-to-double conversion or a scientific literal reader.
+            value.to_string().parse::<f64>().ok()?
+        }
+        (Value::Text(text), Type::Character(source)) => {
+            return Some(runtime_character_fraction(
+                text,
+                matches!(source.family(), Family::Nchar | Family::Nvarchar),
+            ));
+        }
+        (Value::Unicode(units), Type::Character(source))
+            if matches!(source.family(), Family::Nchar | Family::Nvarchar) =>
+        {
+            // Conversion stops at the first NUL. Do not repair isolated UTF-16
+            // units, including ones in the part actually consumed by conversion.
+            let end = units
+                .iter()
+                .position(|&unit| unit == 0)
+                .unwrap_or(units.len());
+            let text = String::from_utf16(&units[..end]).ok()?;
+            return Some(runtime_character_fraction(&text, true));
+        }
+        _ => return None,
+    };
+    Some(if (0.0..=1.0).contains(&number) {
+        Ok(number)
+    } else {
+        Err(SqlError::new(8727, 1, RANGE))
+    })
+}
+
+fn runtime_character_fraction(
+    text: &str,
+    unicode: bool,
+) -> Result<f64, msduck_core::diagnostic::SqlError> {
+    character_fraction(text, unicode).map_err(|message| {
+        if message == RANGE {
+            msduck_core::diagnostic::SqlError::new(8727, 1, message)
+        } else {
+            // character_fraction emits only these captured conversion identities.
+            msduck_core::diagnostic::numeric(&message)
+                .expect("canonical percentile character conversion diagnostic")
+        }
+    })
+}
+
+/// Proven constant syntax uses SQL literal reading, unlike bound values.
+pub fn constant_fraction(expr: &Expr) -> Option<Result<f64, msduck_core::diagnostic::SqlError>> {
+    match normalized_fraction(expr) {
+        Ok((_, Expr::Value(value))) => {
+            let Value::Number(number, _) = value.value else {
+                return None;
+            };
+            Some(Ok(number.parse().ok()?))
+        }
+        Ok(_) => None,
+        Err(message) if message == RANGE => Some(Err(msduck_core::diagnostic::SqlError::new(
+            8727, 1, message,
+        ))),
+        Err(message) => msduck_core::diagnostic::numeric(&message)
+            .or_else(|| literal_diagnostic(&message))
+            .map(Err),
+    }
+}
+
+/// Normalize only scientific source literals in a cloned evaluation expression.
+/// Caller declarations and already evaluated FLOAT bindings are unaffected.
+pub fn normalize_runtime_literals(
+    expr: &mut Expr,
+) -> Result<(), msduck_core::diagnostic::SqlError> {
+    struct Literals;
+    impl VisitorMut for Literals {
+        type Break = msduck_core::diagnostic::SqlError;
+        fn pre_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<Self::Break> {
+            if let Expr::Value(value) = expr
+                && let Value::Number(source, _) = &value.value
+                && source.contains(['e', 'E'])
+            {
+                match numeric_literal(source) {
+                    Ok(number) => *expr = crate::expr::number(format!("{number:e}")),
+                    Err(message) => {
+                        if let Some(error) = literal_diagnostic(&message) {
+                            return std::ops::ControlFlow::Break(error);
+                        }
+                    }
+                }
+            }
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    match VisitMut::visit(expr, &mut Literals) {
+        std::ops::ControlFlow::Continue(()) => Ok(()),
+        std::ops::ControlFlow::Break(error) => Err(error),
+    }
+}
+
 /// Declaration intent; DISC requires the caller's ordering-source declaration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeKind {

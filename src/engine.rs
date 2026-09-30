@@ -29,6 +29,143 @@ static NEXT_TRANSACTION: AtomicU64 = AtomicU64::new(1);
 pub use crate::parameter::Parameter;
 use msduck_core::{types::Type as SqlType, value::Value as ParameterValue};
 
+fn percentile_plans<T: Visit>(
+    node: &T,
+    parameters: &HashMap<String, Parameter>,
+) -> Result<Vec<msduck_sql::percentile::RuntimePlan>> {
+    let declarations = msduck_sql::binding_scope::Scope {
+        parameters: parameters
+            .keys()
+            .map(|name| (name.clone(), Default::default()))
+            .collect(),
+        ..Default::default()
+    };
+    struct Plans<'a> {
+        declarations: &'a msduck_sql::binding_scope::Scope,
+        plans: Vec<msduck_sql::percentile::RuntimePlan>,
+    }
+    impl Visitor for Plans<'_> {
+        type Break = anyhow::Error;
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<Self::Break> {
+            use msduck_sql::percentile::PlanError;
+            match msduck_sql::percentile::runtime_plan(expr, self.declarations) {
+                Ok(Some(plan)) => self.plans.push(plan),
+                Ok(None) => {}
+                Err(PlanError::Diagnostic(error)) => return ControlFlow::Break(error.into()),
+                Err(PlanError::Shape(message)) => {
+                    return ControlFlow::Break(anyhow::anyhow!(message));
+                }
+                Err(PlanError::Unknown) => {
+                    return ControlFlow::Break(anyhow::anyhow!(
+                        "unsupported statement-wide percentile fraction source"
+                    ));
+                }
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut visitor = Plans {
+        declarations: &declarations,
+        plans: Vec::new(),
+    };
+    if let ControlFlow::Break(error) = node.visit(&mut visitor) {
+        return Err(error);
+    }
+    Ok(visitor.plans)
+}
+
+// Backend lowering owns binding slots and native fault tickets. Logical result
+// metadata must be acquired from the original percentile expression beforehand.
+fn lower_runtime_percentiles<T: VisitMut>(
+    node: &mut T,
+    bindings: &[(String, Option<String>, bool)],
+) -> Result<()> {
+    struct Lower<'a> {
+        bindings: &'a [(String, Option<String>, bool)],
+        index: usize,
+    }
+    impl VisitorMut for Lower<'_> {
+        type Break = anyhow::Error;
+        fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<Self::Break> {
+            let Expr::Function(function) = expr else {
+                return ControlFlow::Continue(());
+            };
+            let name = function.name.to_string().to_ascii_lowercase();
+            if !matches!(name.as_str(), "percentile_cont" | "percentile_disc") {
+                return ControlFlow::Continue(());
+            }
+            let Some((fraction, fault, zero)) = self.bindings.get(self.index) else {
+                return ControlFlow::Break(anyhow::anyhow!("percentile plan traversal changed"));
+            };
+            self.index += 1;
+            let Some(order) = function.within_group.first() else {
+                return ControlFlow::Break(anyhow::anyhow!("percentile ordering disappeared"));
+            };
+            let descending = order.options.sort == Some(OrderBySort::Desc);
+            let mut input = order.expr.clone();
+            if let Some(ticket) = fault {
+                input = binary_function(
+                    "__msduck_percentile_invalid_input",
+                    input,
+                    Expr::Identifier(Ident::new(ticket)),
+                );
+            }
+            if name == "percentile_cont" {
+                input = unary_function("__msduck_percentile_input", input);
+            }
+            let target = if descending && *zero {
+                "max"
+            } else if name == "percentile_cont" {
+                "quantile_cont"
+            } else {
+                "quantile_disc"
+            };
+            let mut fraction = Expr::Identifier(Ident::new(fraction));
+            if descending && !zero {
+                fraction = Expr::UnaryOp {
+                    op: UnaryOperator::Minus,
+                    expr: Box::new(fraction),
+                };
+            }
+            function.name = ObjectName::from(vec![Ident::new(target)]);
+            function.within_group.clear();
+            if let FunctionArguments::List(args) = &mut function.args {
+                args.args = vec![FunctionArg::Unnamed(FunctionArgExpr::Expr(input))];
+                if target != "max" {
+                    args.args
+                        .push(FunctionArg::Unnamed(FunctionArgExpr::Expr(fraction)));
+                }
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut lower = Lower { bindings, index: 0 };
+    if let ControlFlow::Break(error) = node.visit(&mut lower) {
+        return Err(error);
+    }
+    ensure!(
+        lower.index == bindings.len(),
+        "percentile plan traversal changed"
+    );
+    Ok(())
+}
+
+fn percentile_binding(
+    parameters: &mut HashMap<String, Parameter>,
+    value: ParameterValue,
+    data_type: SqlType,
+) -> String {
+    let mut index = parameters.len();
+    loop {
+        let name = format!("@__msduck_percentile_{index}");
+        if !parameters.keys().any(|key| key.eq_ignore_ascii_case(&name)) {
+            parameters.insert(name.clone(), Parameter { value, data_type });
+            return name;
+        }
+        index += 1;
+    }
+}
+
 fn runtime_diagnostic(message: &str) -> Option<SqlError> {
     crate::json_extract::diagnostic(message)
         .or_else(|| crate::integer_conversion::diagnostic(message))
@@ -727,6 +864,7 @@ impl Session {
                 crate::query_catalog::bind_query_with_parameters(&self.db, query, &parameters)?;
             }
             self.lower_output(&mut statement, &parameters)?;
+            let runtime_percentile_plans = percentile_plans(&statement, &parameters)?;
             self.bind_dml(&mut statement, &parameters)?;
             crate::query_catalog::lower_recursion(&self.db, &mut statement)?;
             let json = crate::for_json::Output::take(&self.db, &mut statement)?;
@@ -743,8 +881,24 @@ impl Session {
             crate::query_catalog::bind_unicode_operations(&self.db, &mut statement, &parameters)?;
             crate::concat_lower::annotated_unicode_casts(&mut statement);
             crate::for_json::lower_nested(&self.db, &mut statement, &parameters)?;
+            let mut percentile_parameters = parameters.clone();
+            let bindings = runtime_percentile_plans
+                .iter()
+                .map(|_| {
+                    (
+                        percentile_binding(
+                            &mut percentile_parameters,
+                            ParameterValue::Double(0.0),
+                            SqlType::Float,
+                        ),
+                        None,
+                        false,
+                    )
+                })
+                .collect::<Vec<_>>();
+            lower_runtime_percentiles(&mut statement, &bindings)?;
             let mut translator = Translator {
-                parameters: &parameters,
+                parameters: &percentile_parameters,
                 values: Vec::new(),
                 parameter_slots: HashMap::new(),
                 transactions: self.transactions,
@@ -2068,6 +2222,7 @@ impl Session {
     ) -> Result<Execution> {
         validate_transaction_syntax(&statement)?;
         crate::ntile::validate_constants(&statement)?;
+        let runtime_percentile_plans = percentile_plans(&statement, parameters)?;
         if let Some(execution) = self.database_statement(&statement)? {
             return Ok(execution);
         }
@@ -2450,8 +2605,35 @@ impl Session {
         } else {
             None
         };
+        let mut percentile_parameters = parameters.clone();
+        let mut percentile_faults = Vec::new();
+        let mut percentile_bindings = Vec::new();
+        for plan in &runtime_percentile_plans {
+            let fraction =
+                self.evaluate_percentile_fraction(&plan.fraction, parameters, diagnostics)?;
+            let (value, ticket) = match fraction {
+                Ok(value) => (value, None),
+                Err(error) => {
+                    let index = i64::try_from(percentile_faults.len())?;
+                    percentile_faults.push(Some(error));
+                    let ticket = percentile_binding(
+                        &mut percentile_parameters,
+                        ParameterValue::BigInt(index),
+                        SqlType::BigInt,
+                    );
+                    (0.0, Some(ticket))
+                }
+            };
+            let name = percentile_binding(
+                &mut percentile_parameters,
+                ParameterValue::Double(value),
+                SqlType::Float,
+            );
+            percentile_bindings.push((name, ticket, value == 0.0));
+        }
+        lower_runtime_percentiles(&mut statement, &percentile_bindings)?;
         let mut translator = Translator {
-            parameters,
+            parameters: &percentile_parameters,
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: self.transactions,
@@ -2760,15 +2942,30 @@ impl Session {
             } else {
                 prepared.query_arrow(duckdb::params_from_iter(translator.values.iter()))
             };
-            let batches = execution.map_err(|error| match &error_metadata {
-                Some(metadata) => {
-                    crate::query_error::attach(error, metadata.clone(), output_command)
+            let batches = execution.map_err(|error| {
+                if let Some(ticket) = crate::percentile_input::fault_ticket(&error.to_string())
+                    && let Some(Some(diagnostic)) = percentile_faults.get_mut(ticket)
+                {
+                    let diagnostic = diagnostic.clone();
+                    return match &error_metadata {
+                        Some(metadata) => crate::query_error::attach_context(
+                            diagnostic.into(),
+                            metadata.clone(),
+                            output_command,
+                        ),
+                        None => diagnostic.into(),
+                    };
                 }
-                None if output_sink.is_some() => crate::output_sink::failed(
-                    anyhow::Error::new(error),
-                    output.as_ref().unwrap().operation,
-                ),
-                None => anyhow::Error::new(error),
+                match &error_metadata {
+                    Some(metadata) => {
+                        crate::query_error::attach(error, metadata.clone(), output_command)
+                    }
+                    None if output_sink.is_some() => crate::output_sink::failed(
+                        anyhow::Error::new(error),
+                        output.as_ref().unwrap().operation,
+                    ),
+                    None => anyhow::Error::new(error),
+                }
             })?;
             if let Some((_, _, values)) = &materialized {
                 image
@@ -3103,6 +3300,67 @@ impl Session {
         predicate: bool,
     ) -> Result<Value> {
         self.evaluate_expression_observed(expression, parameters, predicate, None)
+    }
+
+    fn evaluate_percentile_fraction(
+        &self,
+        expression: &Expr,
+        parameters: &HashMap<String, Parameter>,
+        diagnostics: Option<&crate::statement_diagnostics::Scope>,
+    ) -> Result<Result<f64, SqlError>> {
+        if let Some(constant) = msduck_sql::percentile::constant_fraction(expression) {
+            return Ok(constant);
+        }
+        let mut source = expression;
+        while let Expr::Nested(inner) = source {
+            source = inner;
+        }
+        if let Expr::Identifier(name) = source
+            && let Some(parameter) = parameters
+                .iter()
+                .find_map(|(key, value)| key.eq_ignore_ascii_case(&name.value).then_some(value))
+        {
+            return msduck_sql::percentile::runtime_fraction(&parameter.value, parameter.data_type)
+                .ok_or_else(|| {
+                    anyhow::anyhow!("unsupported percentile fraction binding representation")
+                });
+        }
+        let Statement::Query(mut query) =
+            Parser::parse_sql(&crate::dialect::ServerDialect, "SELECT NULL")?.remove(0)
+        else {
+            unreachable!()
+        };
+        let SetExpr::Select(select) = query.body.as_mut() else {
+            unreachable!()
+        };
+        select.projection = vec![SelectItem::UnnamedExpr(expression.clone())];
+        let declaration =
+            crate::query_catalog::projection_with_parameters(&self.db, &query, parameters)?
+                .and_then(|fields| fields.into_iter().next())
+                .and_then(|field| field.info)
+                .and_then(|info| info.logical_type())
+                .ok_or_else(|| anyhow::anyhow!("unsupported percentile fraction declaration"))?;
+        let mut expression = expression.clone();
+        msduck_sql::percentile::normalize_runtime_literals(&mut expression)?;
+        let value =
+            match self.evaluate_expression_observed(expression, parameters, false, diagnostics) {
+                Ok(value) => crate::backend_value::from_backend(value)?,
+                Err(error) => {
+                    let diagnostic = error
+                        .downcast_ref::<SqlError>()
+                        .cloned()
+                        .or_else(|| runtime_diagnostic(&error.to_string()));
+                    if let Some(diagnostic) = diagnostic
+                        && matches!(diagnostic.number, 8134 | 8114 | 8115)
+                    {
+                        return Ok(Err(diagnostic));
+                    }
+                    return Err(error);
+                }
+            };
+        msduck_sql::percentile::runtime_fraction(&value, declaration).ok_or_else(|| {
+            anyhow::anyhow!("unsupported evaluated percentile fraction representation")
+        })
     }
 
     fn evaluate_expression_observed(
