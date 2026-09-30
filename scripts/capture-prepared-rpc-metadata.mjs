@@ -74,6 +74,21 @@ export const temporalSetProfiles=[
  ['mixed temporal forward','SELECT CAST(NULL AS DATETIME2(7)) AS d UNION ALL SELECT CAST(NULL AS DATETIMEOFFSET(2))'],
  ['mixed temporal reverse','SELECT CAST(NULL AS DATETIMEOFFSET(2)) AS d UNION ALL SELECT CAST(NULL AS DATETIME2(7))'],
 ]
+export const setPropertyProfiles=[
+ ...[
+  ['nullable integer','SELECT CAST(NULL AS INT) AS d','SELECT CAST(NULL AS INT)'],
+  ['nonnull integer','SELECT CAST(1 AS INT) AS d','SELECT CAST(2 AS INT)'],
+  ['nonnull then nullable','SELECT CAST(1 AS INT) AS d','SELECT CAST(NULL AS INT)'],
+  ['nullable then nonnull','SELECT CAST(NULL AS INT) AS d','SELECT CAST(1 AS INT)'],
+  ['stored then expression','SELECT a AS d FROM dbo.prepare_heap','SELECT CAST(NULL AS INT)'],
+  ['expression then stored','SELECT CAST(NULL AS INT) AS d','SELECT a FROM dbo.prepare_heap'],
+  ['temporal nonnull then nullable',"SELECT CAST('2024-01-01' AS DATETIME2(2)) AS d",'SELECT CAST(NULL AS DATETIME2(7))'],
+  ['temporal nullable then nonnull','SELECT CAST(NULL AS DATETIME2(2)) AS d',"SELECT CAST('2024-01-01' AS DATETIME2(7))"],
+ ].flatMap(([name,left,right])=>['UNION','UNION ALL','INTERSECT','EXCEPT'].map(op=>[name+' '+op,left+' '+op+' '+right])),
+ ['nested intersect union','(SELECT CAST(NULL AS INT) AS d INTERSECT SELECT CAST(1 AS INT)) UNION ALL SELECT CAST(2 AS INT)'],
+ ['nested union except','(SELECT CAST(1 AS INT) AS d UNION ALL SELECT CAST(NULL AS INT)) EXCEPT SELECT CAST(2 AS INT)'],
+ ['nested except intersect','SELECT CAST(NULL AS INT) AS d EXCEPT (SELECT CAST(1 AS INT) INTERSECT SELECT CAST(NULL AS INT))'],
+]
 export const cteDeleteProfiles=[
  ['CTE delete reuse','WITH q AS (SELECT * FROM dbo.prepare_heap WHERE a>@p) DELETE FROM q'],
  ['qualified CTE delete reuse','WITH q AS (SELECT src.* FROM dbo.prepare_heap AS src WHERE src.a>@p) DELETE FROM q'],
@@ -193,11 +208,11 @@ export async function retainedTemporalSets(){
 }
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined
- if(![undefined,'--check','--write-fixture','--regressions','--declarations','--temporal-sets','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --temporal-sets | --cte-delete] [output]')
+ if(![undefined,'--check','--write-fixture','--regressions','--declarations','--temporal-sets','--set-properties','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --temporal-sets | --set-properties | --cte-delete] [output]')
  if(mode==='--check'){const r=await retained();console.log('Checked prepared RPC records',r.runs[0].length);return}
  if(mode==='--write-fixture')await refuseExistingFixture(fixture)
  const output=resolve(args[0]??'artifacts/prepared-rpc-metadata/capture.json');assert.notEqual(output,fileURLToPath(fixture))
- const regression=mode==='--regressions'||mode==='--declarations'||mode==='--temporal-sets';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--temporal-sets'?temporalSetProfiles:mode==='--declarations'?declarationProfiles:regressionProfiles
+ const regression=mode==='--regressions'||mode==='--declarations'||mode==='--temporal-sets'||mode==='--set-properties';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--set-properties'?setPropertyProfiles:mode==='--temporal-sets'?temporalSetProfiles:mode==='--declarations'?declarationProfiles:regressionProfiles
  const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,connection=>observe(connection,cteDelete?cteDeleteOptions:regression?{profilePlan:preparationProfiles,variantPlan:['api-default','named-one'],execute:false}:{}))))
  if(cteDelete)for(const run of runs){
   assert.equal(run.length,10)
