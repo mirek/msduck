@@ -63,6 +63,13 @@ pub const TEXT_INT_OVERFLOW: &str = "The conversion of a character value overflo
 pub fn numeric(message: &str) -> Option<SqlError> {
     if matches!(
         message,
+        "Error converting data type varchar to float."
+            | "Error converting data type nvarchar to float."
+    ) {
+        return Some(SqlError::new(8114, 5, message));
+    }
+    if matches!(
+        message,
         "Arithmetic overflow error converting expression to data type numeric."
             | "Arithmetic overflow error converting expression to data type float."
     ) {
@@ -99,6 +106,31 @@ pub fn numeric(message: &str) -> Option<SqlError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn float_text_conversion_recognition_is_exact_and_preserves_application_identity() {
+        for source in ["varchar", "nvarchar"] {
+            let message = format!("Error converting data type {source} to float.");
+            assert_eq!(numeric(&message), Some(SqlError::new(8114, 5, &message)));
+            for changed in [
+                format!("Invalid Input Error: {message}"),
+                format!("user text: {message}"),
+                format!("{message} trailing text"),
+                message.trim_end_matches('.').into(),
+            ] {
+                assert!(numeric(&changed).is_none(), "{changed}");
+            }
+            let application = SqlError::new(50001, 7, &message);
+            assert_eq!((application.number, application.state), (50001, 7));
+        }
+        for message in [
+            "Error converting data type char to float.",
+            "Error converting data type varchar to real.",
+            "Error converting data type nvarchar to bigint.",
+        ] {
+            assert!(numeric(message).is_none());
+        }
+    }
+
     #[test]
     fn numeric_recognition_requires_complete_canonical_messages() {
         let decimal = "Arithmetic overflow error converting expression to data type numeric.";
