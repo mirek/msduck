@@ -146,3 +146,71 @@ fn unknown_declarations_and_mismatched_carriers_are_barriers() {
         );
     }
 }
+
+#[test]
+fn captured_ordering_diagnostics_precede_execution_fraction_conversion() {
+    use msduck_sql::{
+        binding_scope::Scope,
+        percentile::{PlanError, runtime_plan},
+    };
+    use sqlparser::parser::Parser;
+    for (kind, ordering, number, message) in [
+        (
+            "CONT",
+            "1",
+            5308,
+            "Windowed functions, aggregates and NEXT VALUE FOR functions do not support integer indices as ORDER BY clause expressions.",
+        ),
+        (
+            "DISC",
+            "1",
+            5308,
+            "Windowed functions, aggregates and NEXT VALUE FOR functions do not support integer indices as ORDER BY clause expressions.",
+        ),
+        (
+            "CONT",
+            "CAST(NULL AS VARCHAR(10))",
+            402,
+            "The data types numeric and varchar are incompatible in the percentile_cont operator.",
+        ),
+        (
+            "CONT",
+            "CAST(NULL AS DATETIME)",
+            402,
+            "The data types numeric and datetime are incompatible in the percentile_cont operator.",
+        ),
+        (
+            "CONT",
+            "CAST(NULL AS DATETIME2)",
+            402,
+            "The data types numeric and datetime2 are incompatible in the percentile_cont operator.",
+        ),
+        (
+            "CONT",
+            "CAST(NULL AS INT)",
+            5309,
+            "Windowed functions, aggregates and NEXT VALUE FOR functions do not support constants as ORDER BY clause expressions.",
+        ),
+    ] {
+        let sql = format!("PERCENTILE_{kind}(.5) WITHIN GROUP(ORDER BY {ordering}) OVER()");
+        let expr = Parser::new(&msduck_sql::dialect::ServerDialect)
+            .try_with_sql(&sql)
+            .unwrap()
+            .parse_expr()
+            .unwrap();
+        let before = expr.clone();
+        let Err(PlanError::Diagnostic(error)) = runtime_plan(&expr, &Scope::default()) else {
+            panic!("{sql}")
+        };
+        assert_eq!(
+            (
+                error.number,
+                error.state,
+                error.severity,
+                error.message.as_str()
+            ),
+            (number, 1, 16, message)
+        );
+        assert_eq!(expr, before);
+    }
+}

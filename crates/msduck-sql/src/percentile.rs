@@ -197,6 +197,17 @@ pub fn runtime_plan(
         args.args[0] = FunctionArg::Unnamed(FunctionArgExpr::Expr(crate::expr::number(0)));
     }
     lower(&mut shape).map_err(PlanError::Shape)?;
+    if matches!(&function.within_group[0].expr, Expr::Value(value)
+        if matches!(&value.value, Value::Number(number, _) if number.parse::<i32>().is_ok()))
+    {
+        return Err(PlanError::Diagnostic(
+            msduck_core::diagnostic::SqlError::new(
+                5308,
+                1,
+                "Windowed functions, aggregates and NEXT VALUE FOR functions do not support integer indices as ORDER BY clause expressions.",
+            ),
+        ));
+    }
     fn null_order(expr: &Expr) -> bool {
         let expr = crate::variant_cast::source(expr).unwrap_or(expr);
         match expr {
@@ -206,6 +217,45 @@ pub fn runtime_plan(
         }
     }
     if null_order(&function.within_group[0].expr) {
+        fn null_cast_type(expr: &Expr) -> Option<&'static str> {
+            let expr = crate::variant_cast::source(expr).unwrap_or(expr);
+            match expr {
+                Expr::Nested(value) => null_cast_type(value),
+                Expr::Cast { data_type, .. } => Some(crate::catalog_shape::cast(data_type)?.name),
+                _ => None,
+            }
+        }
+        fn fraction_type(expr: &Expr) -> Option<&'static str> {
+            match expr {
+                Expr::Nested(value) | Expr::UnaryOp { expr: value, .. } => fraction_type(value),
+                Expr::Cast { data_type, .. } => Some(crate::catalog_shape::cast(data_type)?.name),
+                Expr::Value(value) => match &value.value {
+                    Value::Number(number, _) if number.contains(['e', 'E']) => Some("float"),
+                    Value::Number(number, _) if number.parse::<i32>().is_ok() => Some("int"),
+                    Value::Number(_, _) => Some("numeric"),
+                    Value::Null => Some("int"),
+                    Value::SingleQuotedString(_) => Some("varchar"),
+                    Value::NationalStringLiteral(_) => Some("nvarchar"),
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
+        if kind == RuntimeKind::Continuous
+            && let Some(order_type @ ("varchar" | "datetime" | "datetime2")) =
+                null_cast_type(&function.within_group[0].expr)
+        {
+            let fraction_type = fraction_type(fraction).ok_or(PlanError::Unknown)?;
+            return Err(PlanError::Diagnostic(
+                msduck_core::diagnostic::SqlError::new(
+                    402,
+                    1,
+                    format!(
+                        "The data types {fraction_type} and {order_type} are incompatible in the percentile_cont operator."
+                    ),
+                ),
+            ));
+        }
         return Err(PlanError::Diagnostic(
             msduck_core::diagnostic::SqlError::new(
                 5309,
