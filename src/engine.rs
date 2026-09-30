@@ -393,6 +393,14 @@ impl Session {
                  % 86400000000000
              ) AS VARCHAR), 12) AS TIME_NS)",
         )?;
+        // Microseconds since the epoch on SQL Server's datetime grid (1/300 s,
+        // shown as .000/.003/.007), for current-time functions in stored
+        // definitions.
+        db.execute_batch(
+            "CREATE TEMP MACRO __msduck_legacy_datetime(us) AS make_timestamp(
+                 ((us * 3 + 5000) // 10000) // 300 * 1000000
+                 + ((((us * 3 + 5000) // 10000) % 300) * 10 + 1) // 3 * 1000)",
+        )?;
         db.execute_batch("CREATE TEMP MACRO __msduck_int_div(a,b) AS CASE WHEN b=0 THEN error('Divide by zero error encountered.') ELSE a // b END;
             CREATE TEMP MACRO __msduck_int_mod(a,b) AS CASE WHEN b=0 THEN error('Divide by zero error encountered.') ELSE a % b END")?;
         Ok(Self {

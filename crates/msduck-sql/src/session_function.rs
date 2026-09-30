@@ -277,6 +277,19 @@ pub fn current_time_runtime(kind: CurrentTime, offset_minutes: i16) -> Expr {
         data_type,
         format: None,
     };
+    if matches!(kind, CurrentTime::GetUtcDate | CurrentTime::GetDate) {
+        // Round to datetime's 1/300 second with the session macro, as the
+        // folded literal is.
+        return Expr::Cast {
+            kind: CastKind::Cast,
+            expr: Box::new(crate::expr::unary_function(
+                "__msduck_legacy_datetime",
+                crate::expr::unary_function("epoch_us", timestamp),
+            )),
+            data_type: current_time_type(kind),
+            format: None,
+        };
+    }
     if kind != CurrentTime::SysDateTimeOffset {
         return cast(current_time_type(kind));
     }

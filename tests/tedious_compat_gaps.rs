@@ -160,6 +160,13 @@ fn stored_definitions_read_the_clock_when_used() {
     );
     assert_eq!(distinct, [202]);
     assert!(run(&mut session, "SELECT zoned FROM stamped"));
+    // datetime defaults sit on the 1/300 second grid like GETDATE() values.
+    let micros: Vec<i64> = column(&session, "SELECT epoch_us(legacy) FROM stamped");
+    assert_eq!(micros.len(), 2);
+    for value in micros {
+        assert_eq!(value % 1000, 0, "{value}");
+        assert!([0, 3, 7].contains(&(value / 1000 % 10)), "{value}");
+    }
     // A view evaluates the clock per query, not at CREATE VIEW.
     assert!(run(
         &mut session,
