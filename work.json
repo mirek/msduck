@@ -7567,7 +7567,7 @@
     {
       "id": "count-ranking-declarations-v1",
       "title": "Infer COUNT and ROW_NUMBER result declarations from explicit logical inputs",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing compatibility goal and first-party projection/type evidence; no external submission intake.",
       "issue": 694,
       "scope": [
