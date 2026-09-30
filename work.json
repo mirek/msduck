@@ -7271,6 +7271,24 @@
         "Meaningful deterministic result declaration tests and captured root prepared-error metadata regression. Same claiming root worker combines with adapter671/conversion672 PR674; exact-head full Rust/client/audit checks, CI and review or authorized fallback, merge and prompt all registry/project completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZNkU"
+    },
+    {
+      "id": "percentile-runtime-client-expectations-v1",
+      "title": "Align percentile client checks with captured ordering diagnostics and supported bindings",
+      "state": "ready",
+      "authorization": "Owner continuing compatibility goal; same root adapter worker verified fourteen exact ordering/reference records twice. Existing tests need source-backed expectations without hiding the discovered ordering bug.",
+      "issue": 677,
+      "scope": [
+        "tests/tedious.test.mjs"
+      ],
+      "dependencies": [
+        "percentile-runtime-plan-v1"
+      ],
+      "acceptance": [
+        "Retain rejection of integer ORDER BY indices; verify5308 after root/pure implementation fix. Assert captured402 for CONT nonnumeric typed NULL before constant checking. Add valid prepared fraction over a row-source ordering and invalid/recovery checks using captured behavior; never skip or merely relabel real implementation defects.",
+        "Same worker combines with claims671672676 in PR674. Focused and full exact-head required Rust/client/audit checks, CI and review or authorized fallback; merge only complete adapter, then promptly complete all registry/project items."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZQln"
     }
   ]
 }
