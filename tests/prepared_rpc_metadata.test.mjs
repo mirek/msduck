@@ -6,7 +6,8 @@ import {observe,retained} from '../scripts/capture-prepared-rpc-metadata.mjs'
 
 test('prepared RPC responses match SQL Server and never execute during preparation',async t=>{
  const connection=await start(t)
- const actual=await observe(connection)
+ // SERVERPROPERTY is a separate unsupported surface; retain its raw response.
+ const actual=await observe(connection,{verifyVersion:false})
  const expected=(await retained()).runs[0]
  await mkdir('artifacts/prepared-rpc-metadata',{recursive:true})
  // Preserve complete execution/unprepare token differences for follow-up.

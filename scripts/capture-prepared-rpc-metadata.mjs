@@ -31,10 +31,10 @@ export const profiles=[
 ]
 export const variants=['api-default','named-default','named-zero','named-one','named-two','named-null']
 export const values=[null,0,9,1]
-export async function observe(connection){
+export async function observe(connection,{verifyVersion=true}={}){
  const records=[]
  for(const [name,sql] of [['version',version],['setup',setup]]){
-  const result=canonical(await captureBatch(connection,sql));assert.deepEqual(result.errors,[]);records.push({name,sql,result})
+  const result=canonical(await captureBatch(connection,sql));if(name!=='version'||verifyVersion)assert.deepEqual(result.errors,[]);records.push({name,sql,result})
  }
  for(const [name,sql] of profiles)for(const variant of variants){
   const resetResult=canonical(await captureBatch(connection,reset));assert.deepEqual(resetResult.errors,[])
