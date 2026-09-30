@@ -12,6 +12,7 @@ pub mod ansi_padding;
 pub mod character_extrema;
 mod collation_validation;
 mod constant_case;
+pub mod order;
 pub use collation_validation::{
     annotate_unicode_case_inputs, lower_bin2_comparisons, lower_unicode_binary_conversions,
     validate_query_operations,
