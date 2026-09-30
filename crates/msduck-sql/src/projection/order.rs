@@ -64,21 +64,130 @@ fn same(left: &Expr, right: &Expr, sources: &[Source], scope: &Scope) -> bool {
         _ => left == right,
     }
 }
-fn plus_column(expr: &Expr, sources: &[Source], scope: &Scope) -> bool {
-    let Expr::BinaryOp {
-        left,
-        op: BinaryOperator::Plus,
-        right,
-    } = inner(expr)
-    else {
-        return false;
-    };
-    column(left, sources, scope).is_some_and(|field| {
+fn integer_column(expr: &Expr, sources: &[Source], scope: &Scope) -> bool {
+    column(expr, sources, scope).is_some_and(|field| {
         field
             .info
             .as_ref()
             .is_some_and(|info| info.system_type_id == Some(56))
-    }) && matches!(inner(right),Expr::Value(v) if matches!(&v.value, Value::Number(n,false) if n == "1"))
+    })
+}
+fn integer_operand(expr: &Expr, scope: &Scope) -> bool {
+    match inner(expr) {
+        Expr::Value(value) => {
+            matches!(&value.value,Value::Number(number,false) if number.parse::<i32>().is_ok())
+        }
+        Expr::Identifier(name) if name.value.starts_with('@') => scope
+            .parameters
+            .get(&name.value.to_lowercase())
+            .is_some_and(|info| info.system_type_id == Some(56)),
+        _ => false,
+    }
+}
+fn arithmetic(expr: &Expr, sources: &[Source], scope: &Scope) -> bool {
+    matches!(inner(expr),Expr::BinaryOp {left,op:BinaryOperator::Plus|BinaryOperator::Multiply,right}
+        if integer_column(left,sources,scope)&&integer_operand(right,scope))
+}
+fn sum_column(expr: &Expr, sources: &[Source], scope: &Scope) -> bool {
+    let Expr::Function(f) = inner(expr) else {
+        return false;
+    };
+    let FunctionArguments::List(args) = &f.args else {
+        return false;
+    };
+    f.name.to_string().eq_ignore_ascii_case("SUM")
+        && plain_function(f)
+        && f.over.is_none()
+        && args.clauses.is_empty()
+        && args.duplicate_treatment.is_none()
+        && matches!(args.args.as_slice(),[FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] if integer_column(value,sources,scope))
+}
+fn ordered_expression(expr: &Expr, sources: &[Source], scope: &Scope) -> bool {
+    if column(expr, sources, scope).is_some()
+        || arithmetic(expr, sources, scope)
+        || row_number(expr, sources, scope)
+        || count_star(expr)
+        || sum_column(expr, sources, scope)
+    {
+        return true;
+    }
+    match inner(expr) {
+        Expr::Cast {
+            expr,
+            data_type: DataType::BigInt(None),
+            kind: CastKind::Cast,
+            format: None,
+        } => integer_column(
+            crate::variant_cast::source(expr).unwrap_or(expr),
+            sources,
+            scope,
+        ),
+        Expr::Collate { expr, collation } => {
+            column(expr, sources, scope).is_some()
+                && collation
+                    .to_string()
+                    .eq_ignore_ascii_case("Latin1_General_100_BIN2")
+        }
+        // This profile retains its ORDER ordinal, despite equal result branches.
+        Expr::Case {
+            operand: None,
+            conditions,
+            else_result: Some(other),
+            ..
+        } => {
+            conditions.len() == 1
+                && matches!(&conditions[0].condition,Expr::BinaryOp {left,op:BinaryOperator::Gt,right} if integer_column(left,sources,scope)&&matches!(inner(right),Expr::Value(v) if v.value==Value::Number("0".into(),false)))
+                && matches!(inner(&conditions[0].result),Expr::Value(v) if v.value==Value::Number("1".into(),false))
+                && matches!(inner(other),Expr::Value(v) if v.value==Value::Number("1".into(),false))
+        }
+        _ => false,
+    }
+}
+fn folded(expr: &Expr) -> bool {
+    typed_null(expr)
+        || matches!(inner(expr),Expr::Value(value) if value.value==Value::Number("1".into(),false))
+        || matches!(inner(expr),Expr::BinaryOp {left,op:BinaryOperator::Plus,right} if matches!(inner(left),Expr::Value(v) if v.value==Value::Number("1".into(),false))&&matches!(inner(right),Expr::Value(v) if v.value==Value::Number("2".into(),false)))
+}
+fn projected_expressions(select: &Select, sources: &[Source], scope: &Scope) -> Option<Vec<Expr>> {
+    let mut out = Vec::new();
+    let append = |out: &mut Vec<Expr>, source: &Source| -> Option<()> {
+        let qualifier = source.qualifiers.first()?;
+        for field in &source.fields {
+            let mut ids = qualifier.split('.').map(Ident::new).collect::<Vec<_>>();
+            ids.push(Ident::new(&field.name));
+            out.push(Expr::CompoundIdentifier(ids));
+        }
+        Some(())
+    };
+    for item in &select.projection {
+        match item {
+            SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } => {
+                out.push(expr.clone())
+            }
+            SelectItem::Wildcard(options) if *options == WildcardAdditionalOptions::default() => {
+                for source in sources {
+                    append(&mut out, source)?;
+                }
+            }
+            SelectItem::QualifiedWildcard(
+                SelectItemQualifiedWildcardKind::ObjectName(name),
+                options,
+            ) if *options == WildcardAdditionalOptions::default() => {
+                let qualifier = name
+                    .0
+                    .iter()
+                    .map(|part| part.as_ident().map(|id| id.value.as_str()))
+                    .collect::<Option<Vec<_>>>()?
+                    .join(".");
+                append(
+                    &mut out,
+                    crate::binding_scope::resolve_source(&qualifier, sources, &scope.rows)?,
+                )?;
+            }
+            _ => return None,
+        }
+    }
+    Some(out)
 }
 fn null_subquery(expr: &Expr) -> bool {
     let Expr::Subquery(query) = inner(expr) else {
@@ -137,7 +246,7 @@ fn row_number(expr: &Expr, sources: &[Source], scope: &Scope) -> bool {
         && window
             .order_by
             .iter()
-            .all(|key| column(&key.expr, sources, scope).is_some())
+            .all(|key| column(&key.expr, sources, scope).is_some() || null_subquery(&key.expr))
         && window
             .partition_by
             .iter()
@@ -197,24 +306,17 @@ pub fn infer(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -> Plan {
             let Some(sources) = super::sources(catalog, select, &scope) else {
                 return Plan::Unknown(Barrier::Source);
             };
-            let expressions = select
-                .projection
-                .iter()
-                .map(|item| match item {
-                    SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } => {
-                        Some(expr)
-                    }
-                    _ => None,
-                })
-                .collect::<Option<Vec<_>>>();
-            let Some(expressions) = expressions else {
+            let Some(expressions) = projected_expressions(select, &sources, &scope) else {
                 return Plan::Unknown(Barrier::Projection);
             };
             if expressions.len() != fields.len() {
                 return Plan::Unknown(Barrier::Projection);
             };
             if fields.iter().zip(&expressions).any(|(field, expr)| {
-                field.info.is_none() && !row_number(expr, &sources, &scope) && !count_star(expr)
+                field.info.is_none()
+                    && !row_number(expr, &sources, &scope)
+                    && !count_star(expr)
+                    && !sum_column(expr, &sources, &scope)
             }) {
                 return Plan::Unknown(Barrier::Projection);
             }
@@ -267,17 +369,11 @@ pub fn infer(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -> Plan {
         };
         if let Some(index) = target {
             if select.is_some() {
-                let expression = expressions[index];
-                if keys.len() == 1
-                    && typed_null(expression)
-                    && matches!(inner(&key.expr), Expr::Identifier(_))
-                {
-                    return Plan::NoToken;
+                let expression = &expressions[index];
+                if folded(expression) {
+                    continue;
                 }
-                if column(expression, &sources, &scope).is_none()
-                    && !plus_column(expression, &sources, &scope)
-                    && !row_number(expression, &sources, &scope)
-                {
+                if !ordered_expression(expression, &sources, &scope) {
                     return Plan::Unknown(Barrier::Constant);
                 }
             }
@@ -291,9 +387,7 @@ pub fn infer(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -> Plan {
             result.push(0);
             continue;
         };
-        if column(&key.expr, &sources, &scope).is_none()
-            && !plus_column(&key.expr, &sources, &scope)
-        {
+        if !ordered_expression(&key.expr, &sources, &scope) {
             return Plan::Unknown(Barrier::Expression);
         }
         let target = expressions
@@ -301,5 +395,9 @@ pub fn infer(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -> Plan {
             .position(|expr| same(expr, &key.expr, &sources, &scope));
         result.push(target.map_or(0, |index| (index + 1) as u16));
     }
-    Plan::Token(result)
+    if result.is_empty() {
+        Plan::NoToken
+    } else {
+        Plan::Token(result)
+    }
 }
