@@ -3325,6 +3325,14 @@ impl Session {
         while let Expr::Nested(inner) = source {
             source = inner;
         }
+        if let Expr::Subquery(query) = source
+            && let SetExpr::Select(select) = query.body.as_ref()
+            && select.from.is_empty()
+            && let [SelectItem::UnnamedExpr(value) | SelectItem::ExprWithAlias { expr: value, .. }] =
+                select.projection.as_slice()
+        {
+            return self.evaluate_percentile_fraction(value, parameters, diagnostics);
+        }
         if let Expr::Identifier(name) = source
             && let Some(parameter) = parameters
                 .iter()
@@ -5620,6 +5628,11 @@ mod tests {
                     std::sync::Arc::new(StringArray::from(values.clone())),
                 ],
             )
+            .or_else(|| {
+                (!runtime_percentile_plans.is_empty())
+                    .then(|| crate::query_error::describe_fields(&result_fields, &result_types))
+                    .flatten()
+            })
             .unwrap();
             let (out, count) =
                 Session::encode_batches(std::iter::once(batch), &schema, &fields, &[]).unwrap();
