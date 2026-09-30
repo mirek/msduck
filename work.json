@@ -7110,6 +7110,29 @@
       ],
       "issue": 663,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PYy6u"
+    },
+    {
+      "id": "percentile-numeric-client-expectations-v1",
+      "title": "Integrate captured percentile numeric literal diagnostics and client expectations",
+      "state": "ready",
+      "authorization": "Owner continuing SQL Server compatibility goal; same root worker claim652 owns numeric lowerer and needs separately claimed engine/default client integration after retained SQL Server probes.",
+      "scope": [
+        "src/engine.rs",
+        "tests/tedious.test.mjs",
+        "tests/percentile_character_fraction.test.mjs",
+        "docs/percentile-character-fraction.md"
+      ],
+      "dependencies": [
+        "ntile-binding-diagnostics-v1",
+        "percentile-character-fraction-v1"
+      ],
+      "issue": 666,
+      "acceptance": [
+        "Integrate only complete canonical numeric literal diagnostics1007/state1/severity15 and168/state1/severity15 from claimed pure percentile module. Preserve structured THROW and unrelated backend errors; compiler metadata must not depend on parameter values.",
+        "Replace contradicted default percentile endpoint rejection with captured acceptance and stop excluding old numeric controls from character replay once they agree. Update numeric gap documentation while preserving runtime/prepare/wire gaps; never skip tests or normalize differences.",
+        "Same worker carries original task652 and this supplement through combined PR665. Full exact-head fmt/Clippy/workspace/build/default clients/focused replays/audit, required CI, independent review or owner-authorized availability fallback, exact-head merge then prompt both registry/project completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PY8Aw"
     }
   ]
 }
