@@ -10,7 +10,7 @@ import {withReferenceContainer,referenceImage} from './lib/reference-container.m
 import {isolatedReference,assertSameCapture,refuseExistingFixture,writeNewFixture} from './lib/reference.mjs';
 import {canonical} from './lib/compatibility.mjs';
 const fixture=new URL('../reference/order-token-expanded.json',import.meta.url);
-export const fixtureSha256='PENDING';
+export const fixtureSha256='d91c7525cc15bf5797c31786733a5ce1e92362e395f7624868f1e55d258eba0b';
 export const queries=[
   [
     "union same",
