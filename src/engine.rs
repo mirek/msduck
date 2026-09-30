@@ -46,6 +46,7 @@ fn runtime_diagnostic(message: &str) -> Option<SqlError> {
         .or_else(|| msduck_sql::top::diagnostic(message))
         .or_else(|| crate::money_range::diagnostic(message))
         .or_else(|| crate::ntile::diagnostic(message))
+        .or_else(|| msduck_sql::percentile::literal_diagnostic(message))
         .or_else(|| {
             msduck_core::diagnostic::numeric(
                 message
@@ -4056,6 +4057,10 @@ impl VisitorMut for Translator<'_> {
         ControlFlow::Continue(())
     }
     fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<String> {
+        // Fold proven constant percentile sources before child casts become native adapters.
+        if let Err(error) = crate::percentile::lower(expr) {
+            return ControlFlow::Break(error);
+        }
         msduck_sql::expr::lower_unary_plus(expr);
         if let Err(error) = crate::concat_lower::lower(expr, self.parameters) {
             return ControlFlow::Break(error);

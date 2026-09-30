@@ -210,32 +210,229 @@ fn character_literal(expr: &Expr) -> Option<(String, bool)> {
 fn normalized_fraction(fraction: &Expr) -> Result<(bool, Expr), String> {
     if let Some((text, unicode)) = character_literal(fraction) {
         let number = character_fraction(&text, unicode)?;
-        return Ok((number == 0.0, crate::expr::number(number)));
+        return Ok((number == 0.0, crate::expr::number(format!("{number:e}"))));
     }
-    let zero = match fraction {
-        Expr::Value(literal) => match &literal.value {
-            Value::Number(number, _) => fraction_is_zero(number).ok_or(RANGE)?,
-            Value::Null => return Err(RANGE.into()),
-            _ => return Err(LITERAL.into()),
+    let Some(number) = numeric_constant(fraction) else {
+        return Err(LITERAL.into());
+    };
+    let number = number?.ok_or(RANGE)?;
+    if !(0.0..=1.0).contains(&number) {
+        return Err(RANGE.into());
+    }
+    // A fixed-point spelling would make DuckDB parse this as DECIMAL and
+    // convert it to DOUBLE again, which can round a neighboring FLOAT to one.
+    // Scientific round-trip spelling preserves the already converted bits.
+    Ok((number == 0.0, crate::expr::number(format!("{number:e}"))))
+}
+
+// Distinguish a numeric source literal from character-to-FLOAT conversion.
+// SQL Server's scientific literal reader flushes subnormal FLOAT values to zero;
+// conversion through REAL can retain subnormals, so do not apply that rule later.
+fn numeric_literal(number: &str) -> Result<f64, String> {
+    if !numeric_spelling(number) {
+        return Err(LITERAL.into());
+    }
+    let scientific = number.contains(['e', 'E']);
+    if !scientific && decimal_precision(number) > 38 {
+        return Err(format!(
+            "The number '{number}' is out of the range for numeric representation (maximum precision 38)."
+        ));
+    }
+    let number_value = number.parse::<f64>().map_err(|_| LITERAL)?;
+    if !number_value.is_finite() {
+        return Err(format!(
+            "The floating point value '{number}' is out of the range of computer representation (8 bytes)."
+        ));
+    }
+    Ok(if scientific && number_value.abs() < f64::MIN_POSITIVE {
+        0.0
+    } else {
+        number_value
+    })
+}
+fn numeric_spelling(number: &str) -> bool {
+    let (mantissa, exponent) = number
+        .split_once(['e', 'E'])
+        .map_or((number, None), |(m, e)| (m, Some(e)));
+    let mut dots = 0;
+    let mut digits = 0;
+    for byte in mantissa.bytes() {
+        if byte == b'.' {
+            dots += 1;
+        } else if byte.is_ascii_digit() {
+            digits += 1;
+        } else {
+            return false;
+        }
+    }
+    digits > 0
+        && dots <= 1
+        && exponent.is_none_or(|e| {
+            let e = e.strip_prefix(['+', '-']).unwrap_or(e);
+            !e.is_empty() && e.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+fn decimal_precision(number: &str) -> usize {
+    let (whole, fraction) = number.split_once('.').unwrap_or((number, ""));
+    (whole.trim_start_matches('0').len() + fraction.len()).max(1)
+}
+/// Recognize complete canonical literal-reader diagnostics, never application
+/// identity or text with a backend wrapper, altered suffix or invalid spelling.
+pub fn literal_diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
+    let (number, text) = if let Some(text) = message.strip_prefix("The number '").and_then(|s| {
+        s.strip_suffix("' is out of the range for numeric representation (maximum precision 38).")
+    }) {
+        (1007, text)
+    } else if let Some(text) = message
+        .strip_prefix("The floating point value '")
+        .and_then(|s| s.strip_suffix("' is out of the range of computer representation (8 bytes)."))
+    {
+        (168, text)
+    } else {
+        return None;
+    };
+    if !numeric_spelling(text)
+        || numeric_literal(text).as_ref().map_err(String::as_str) != Err(message)
+    {
+        return None;
+    }
+    Some(msduck_core::diagnostic::SqlError::syntax(
+        number, 1, message,
+    ))
+}
+fn numeric_constant(expr: &Expr) -> Option<Result<Option<f64>, String>> {
+    let expr = crate::variant_cast::source(expr).unwrap_or(expr);
+    match expr {
+        Expr::Value(value) => match &value.value {
+            Value::Number(n, _) => Some(numeric_literal(n).map(Some)),
+            Value::Null => Some(Ok(None)),
+            _ => None,
         },
+        Expr::Nested(inner)
+        | Expr::UnaryOp {
+            op: UnaryOperator::Plus,
+            expr: inner,
+        } => numeric_constant(inner),
         Expr::UnaryOp {
             op: UnaryOperator::Minus,
-            expr,
+            expr: inner,
+        } => numeric_constant(inner).map(|n| n.map(|n| n.map(|n| -n))),
+        Expr::Cast {
+            kind: CastKind::Cast,
+            expr: inner,
+            data_type,
+            format: None,
         } => {
-            let Expr::Value(literal) = expr.as_ref() else {
-                return Err(LITERAL.into());
-            };
-            let Value::Number(number, _) = &literal.value else {
-                return Err(LITERAL.into());
-            };
-            if fraction_is_zero(number) != Some(true) {
-                return Err(RANGE.into());
+            if !numeric_cast_supported(data_type) {
+                return None;
             }
-            true
+            let value = match numeric_constant(inner)? {
+                Ok(value) => value,
+                Err(e) => return Some(Err(e)),
+            };
+            let Some(value) = value else {
+                return Some(Ok(None));
+            };
+            let number = match data_type {
+                DataType::Float(ExactNumberInfo::None | ExactNumberInfo::Precision(25..=53))
+                | DataType::Double(ExactNumberInfo::None) => value,
+                DataType::Real | DataType::Float(ExactNumberInfo::Precision(1..=24)) => {
+                    f64::from(value as f32)
+                }
+                DataType::Bit(_) | DataType::Boolean => {
+                    if value != 0.0 {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                }
+                DataType::Int(_) | DataType::Integer(_)
+                    if value >= f64::from(i32::MIN) && value <= f64::from(i32::MAX) =>
+                {
+                    value.trunc()
+                }
+                DataType::Decimal(info) | DataType::Numeric(info) => decimal_cast(inner, *info)?,
+                DataType::Custom(_, _) if crate::money_cast::money_type(data_type).is_some() => {
+                    let text = decimal_source(inner)?;
+                    let scaled = msduck_core::money::parse_text(&text).ok()?;
+                    crate::money_cast::money_type(data_type)?
+                        .check_scaled(i128::from(scaled))
+                        .ok()?;
+                    scaled as f64 / 10_000.0
+                }
+                _ => return None,
+            };
+            number.is_finite().then_some(Ok(Some(number)))
         }
-        _ => return Err(LITERAL.into()),
+        _ => None,
+    }
+}
+fn numeric_cast_supported(kind: &DataType) -> bool {
+    match kind {
+        DataType::Float(ExactNumberInfo::None | ExactNumberInfo::Precision(1..=53))
+        | DataType::Double(ExactNumberInfo::None)
+        | DataType::Real
+        | DataType::Bit(_)
+        | DataType::Boolean
+        | DataType::Int(_)
+        | DataType::Integer(_) => true,
+        DataType::Decimal(info) | DataType::Numeric(info) => match info {
+            ExactNumberInfo::None => true,
+            ExactNumberInfo::Precision(p) => (1..=38).contains(p),
+            ExactNumberInfo::PrecisionAndScale(p, s) => {
+                (1..=38).contains(p) && *s >= 0 && *s <= *p as i64
+            }
+        },
+        _ => crate::money_cast::money_type(kind).is_some(),
+    }
+}
+fn decimal_source(expr: &Expr) -> Option<String> {
+    let expr = crate::variant_cast::source(expr).unwrap_or(expr);
+    match expr {
+        Expr::Value(value) => match &value.value {
+            Value::Number(n, _) if !n.contains(['e', 'E']) => Some(n.clone()),
+            _ => None,
+        },
+        Expr::Nested(n)
+        | Expr::UnaryOp {
+            op: UnaryOperator::Plus,
+            expr: n,
+        } => decimal_source(n),
+        Expr::UnaryOp {
+            op: UnaryOperator::Minus,
+            expr: n,
+        } => decimal_source(n).map(|n| format!("-{n}")),
+        _ => None,
+    }
+}
+fn decimal_cast(expr: &Expr, info: ExactNumberInfo) -> Option<f64> {
+    let (precision, scale) = match info {
+        ExactNumberInfo::None => (18, 0),
+        ExactNumberInfo::Precision(p) => (p, 0),
+        ExactNumberInfo::PrecisionAndScale(p, s) => (p, s),
     };
-    Ok((zero, fraction.clone()))
+    if precision == 0 || precision > 38 || scale < 0 || scale > precision as i64 {
+        return None;
+    }
+    let text = decimal_source(expr)?;
+    let negative = text.starts_with('-');
+    let text = text.strip_prefix('-').unwrap_or(&text);
+    let (whole, fraction) = text.split_once('.').unwrap_or((text, ""));
+    let coefficient = format!("{whole}{fraction}").parse::<i128>().ok()?;
+    let shift = scale - i64::try_from(fraction.len()).ok()?;
+    let coefficient = if shift >= 0 {
+        coefficient.checked_mul(10i128.checked_pow(shift.try_into().ok()?)?)?
+    } else {
+        let factor = 10i128.checked_pow((-shift).try_into().ok()?)?;
+        coefficient / factor + i128::from(coefficient % factor >= factor / 2)
+    };
+    let decimal = msduck_core::value::Decimal::new(
+        precision.try_into().ok()?,
+        scale.try_into().ok()?,
+        if negative { -coefficient } else { coefficient },
+    )
+    .ok()?;
+    decimal.to_string().parse().ok()
 }
 
 fn character_fraction(text: &str, unicode: bool) -> Result<f64, String> {
@@ -304,36 +501,6 @@ fn character_fraction(text: &str, unicode: bool) -> Result<f64, String> {
     Ok(number)
 }
 
-// Compare the decimal literal exactly: rounding to f64 here would admit
-// 1.00000000000000000001 and misclassify tiny positive fractions as zero.
-fn fraction_is_zero(number: &str) -> Option<bool> {
-    let (mantissa, exponent) = number.split_once(['e', 'E']).unwrap_or((number, "0"));
-    let exponent = exponent.parse::<i64>().unwrap_or_else(|_| {
-        if exponent.starts_with('-') {
-            i64::MIN
-        } else {
-            i64::MAX
-        }
-    });
-    let whole = mantissa.split('.').next()?.len() as i64;
-    let digits: String = mantissa.chars().filter(|c| *c != '.').collect();
-    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    let significant = digits.trim_start_matches('0');
-    if significant.is_empty() {
-        return Some(true);
-    }
-    let position = whole
-        .saturating_sub((digits.len() - significant.len()) as i64)
-        .saturating_add(exponent);
-    (position <= 0
-        || (position == 1
-            && significant.starts_with('1')
-            && significant[1..].bytes().all(|b| b == b'0')))
-    .then_some(false)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -357,7 +524,7 @@ mod tests {
     #[test]
     fn captured_invalid_fractions_keep_error_identity_and_ast() {
         for function in ["PERCENTILE_CONT", "PERCENTILE_DISC"] {
-            for fraction in ["-0.1", "1.1", "NULL", "1.00000000000000000001"] {
+            for fraction in ["-0.1", "1.1", "NULL", "1.0000000000000002"] {
                 let sql =
                     format!("SELECT {function}({fraction}) WITHIN GROUP (ORDER BY n) OVER ()");
                 let mut expr = expression(&sql);
@@ -396,31 +563,18 @@ mod tests {
     }
 
     #[test]
-    fn fraction_classification_retains_extreme_decimal_exponents() {
-        for number in [
+    fn numeric_sources_round_and_flush_only_scientific_literal_subnormals() {
+        for n in [
             "0",
-            "0.0000",
             "0e999999999999999999999",
-            "000.0e-999999999999999999999",
-        ] {
-            assert_eq!(fraction_is_zero(number), Some(true), "{number}");
-        }
-        for number in [
-            "1",
-            "1.00000000000000000000",
-            "0.00000000000000000001",
             "1e-999999999999999999999",
+            "1e-308",
         ] {
-            assert_eq!(fraction_is_zero(number), Some(false), "{number}");
+            assert_eq!(numeric_literal(n), Ok(0.0), "{n}");
         }
-        for number in [
-            "1.00000000000000000001",
-            "1e999999999999999999999",
-            "2",
-            "99.99",
-            "bad",
-        ] {
-            assert_eq!(fraction_is_zero(number), None, "{number}");
-        }
+        assert_eq!(numeric_literal("1.00000000000000000001"), Ok(1.0));
+        assert_eq!(numeric_literal("1e-307"), Ok(1e-307));
+        assert!(numeric_literal("1e999999999999999999999").is_err());
+        assert!(numeric_literal("bad").is_err());
     }
 }

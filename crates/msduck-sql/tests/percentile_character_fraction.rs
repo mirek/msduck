@@ -27,12 +27,6 @@ fn retained_character_fraction_matrix_lowers_or_preserves_captured_error_text() 
         if record["mode"] != "batch" || !(name.starts_with("CONT") || name.starts_with("DISC")) {
             continue;
         }
-        // Existing numeric-literal exact-range policy is unchanged in this
-        // character task. Both captured numeric endpoint discrepancies remain
-        // in the raw client report and docs, rather than being called matches.
-        if name.ends_with("expression 1.00000000000000000001") {
-            continue;
-        }
         let sql = record["sql"].as_str().unwrap();
         let mut expr = expression(sql);
         let original = expr.clone();
@@ -58,18 +52,18 @@ fn retained_character_fraction_matrix_lowers_or_preserves_captured_error_text() 
         }
         checked += 1;
     }
-    assert_eq!(checked, 100);
+    assert_eq!(checked, 102);
 }
 
 #[test]
 fn captured_whitespace_exponents_and_nul_termination_are_source_sensitive() {
     for (fraction, expected) in [
-        ("N'\u{180e}0.5'", "0.5"),
-        ("N'1D-1'", "0.1"),
-        ("N'0.5\0junk'", "0.5"),
-        ("N'\0junk'", "0"),
-        ("'1.00000000000000000001'", "1"),
-        ("'1e-400'", "0"),
+        ("N'\u{180e}0.5'", "5e-1"),
+        ("N'1D-1'", "1e-1"),
+        ("N'0.5\0junk'", "5e-1"),
+        ("N'\0junk'", "0e0"),
+        ("'1.00000000000000000001'", "1e0"),
+        ("'1e-400'", "0e0"),
     ] {
         let mut expr = expression(&format!(
             "SELECT PERCENTILE_CONT({fraction}) WITHIN GROUP (ORDER BY n) OVER ()"
