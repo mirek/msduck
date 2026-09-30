@@ -251,6 +251,154 @@ fn wire(info: &TypeMetadata) -> Option<tds::Type> {
     })
 }
 
+// Additional captured ORDER shapes use the already-proven output width, while
+// resolving keys against original explicit row scopes. Unknowns remain barriers.
+fn prepared_order(
+    catalog: &msduck_sql::catalog_snapshot::CatalogSnapshot,
+    query: &Query,
+    outer: &Scope,
+    fields: &[msduck_sql::binding_scope::Field],
+) -> projection::order::Plan {
+    use sqlparser::ast::*;
+    let original = projection::order::infer(catalog, query, outer);
+    if !matches!(original, projection::order::Plan::Unknown(_)) {
+        return original;
+    }
+    let infer = || -> Option<Vec<u16>> {
+        let order = query.order_by.as_ref()?;
+        let OrderByKind::Expressions(keys) = &order.kind else {
+            return None;
+        };
+        if keys.is_empty()
+            || keys.len() > usize::from(u16::MAX) / 2
+            || query.for_clause.is_some()
+            || order.interpolate.is_some()
+            || keys.iter().any(|key| {
+                key.with_fill.is_some()
+                    || key.options.nulls_first.is_some()
+                    || matches!(key.options.sort, Some(OrderBySort::Using(_)))
+            })
+            || fields.is_empty()
+            || fields.len() >= usize::from(u16::MAX)
+            || fields.iter().any(|field| field.info.is_none())
+        {
+            return None;
+        }
+        let mut expanded = query.clone();
+        projection::expand_stars(catalog, &mut expanded, outer)?;
+        let SetExpr::Select(select) = expanded.body.as_ref() else {
+            return None;
+        };
+        let scope = projection::scopes(catalog, &expanded, outer).body;
+        let expressions = select
+            .projection
+            .iter()
+            .map(|item| match item {
+                SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } => {
+                    Some(expr)
+                }
+                _ => None,
+            })
+            .collect::<Option<Vec<_>>>()?;
+        if expressions.len() != fields.len() {
+            return None;
+        }
+        fn column<'a>(
+            expr: &Expr,
+            scope: &'a Scope,
+        ) -> Option<&'a msduck_sql::binding_scope::Field> {
+            let ids = match expr {
+                Expr::Nested(expr) => return column(expr, scope),
+                Expr::Identifier(id) if !id.value.starts_with('@') => vec![id],
+                Expr::CompoundIdentifier(ids) => ids.iter().collect(),
+                _ => return None,
+            };
+            let field = msduck_sql::binding_scope::resolve(&ids, &[], &scope.rows)?;
+            field.info.as_ref()?;
+            Some(field)
+        }
+        let projected_key = |expr: &Expr| {
+            if column(expr, &scope).is_some() {
+                return true;
+            }
+            match expr {
+                Expr::Cast {
+                    expr, data_type, ..
+                }
+                | Expr::Convert {
+                    expr,
+                    data_type: Some(data_type),
+                    ..
+                } if msduck_sql::variant_pack::is_variant(data_type) => column(expr, &scope)
+                    .is_some_and(|field| {
+                        matches!(
+                            field.info.as_ref().and_then(|i| i.system_type_id),
+                            Some(48 | 52 | 56 | 127 | 104)
+                        )
+                    }),
+                Expr::Function(f)
+                    if f.name.to_string().eq_ignore_ascii_case("SUM")
+                        && msduck_sql::aggregate::validate(f).is_ok()
+                        && (f.over.is_some()
+                            || matches!(&select.group_by, GroupByExpr::Expressions(keys,_) if !keys.is_empty())) =>
+                {
+                    let FunctionArguments::List(args) = &f.args else {
+                        return false;
+                    };
+                    matches!(args.args.as_slice(), [FunctionArg::Unnamed(FunctionArgExpr::Expr(expr))]
+                        if column(expr,&scope).is_some_and(|field| matches!(field.info.as_ref().and_then(|i|i.system_type_id),Some(48|52|56|127|59|62|106|108|60|122))))
+                }
+                _ => false,
+            }
+        };
+        let mut ordinals = Vec::with_capacity(keys.len());
+        for key in keys {
+            let ordinal = match &key.expr {
+                Expr::Value(value) => match &value.value {
+                    Value::Number(number, false) if number.bytes().all(|b| b.is_ascii_digit()) => {
+                        let index = number.parse::<usize>().ok()?;
+                        if index == 0 || index > fields.len() {
+                            return None;
+                        }
+                        Some(index - 1)
+                    }
+                    _ => return None,
+                },
+                Expr::Identifier(name) => {
+                    let matching = fields
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, field)| field.name.eq_ignore_ascii_case(&name.value))
+                        .map(|(index, _)| index)
+                        .collect::<Vec<_>>();
+                    if matching.len() > 1 {
+                        return None;
+                    }
+                    matching.first().copied()
+                }
+                _ => None,
+            };
+            if let Some(index) = ordinal {
+                if !projected_key(expressions[index]) {
+                    return None;
+                }
+                ordinals.push(u16::try_from(index + 1).ok()?);
+            } else {
+                let field = column(&key.expr, &scope)?;
+                let projected = expressions.iter().position(|expr| {
+                    column(expr, &scope).is_some_and(|other| std::ptr::eq(field, other))
+                });
+                if projected.is_none() && select.distinct.is_some() {
+                    return None;
+                }
+                ordinals.push(projected.map_or(Some(0), |index| u16::try_from(index + 1).ok())?);
+            }
+        }
+        Some(ordinals)
+    };
+    infer().map_or(original, projection::order::Plan::Token)
+}
+
 fn query_description(
     session: &Session,
     query: &Query,
@@ -331,7 +479,7 @@ fn query_description(
         }
         out.extend_from_slice(&encoded[3..]);
     }
-    match projection::order::infer(&catalog, query, &scope) {
+    match prepared_order(&catalog, query, &scope, &fields) {
         projection::order::Plan::Token(ordinals) => tds::order::encode(&mut out, &ordinals)?,
         projection::order::Plan::NoToken => {}
         projection::order::Plan::Unknown(_) => bail!("unsupported prepared ORDER declaration"),
