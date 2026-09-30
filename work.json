@@ -7588,6 +7588,37 @@
         "Meaningful fixture-backed pure and dedicated public client regressions for declarations/consumers, raw+normalized AST and empty/prepared independence. Exact-head fmt/strict workspace Clippy/workspace tests/all-targets build/default+focused independent clients and copied-corpus diagnostic audit; independent review or availability fallback and required CI, worker-owned merge and prompt registry/project completion. Any exposed root/runtime gap remains explicitly evidenced for follow-up. Engine.rs and other root files excluded."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZ0Cu"
+    },
+    {
+      "id": "count-ranking-runtime-fidelity-v1",
+      "title": "Close COUNT/ranking runtime diagnostic and preparation metadata gaps",
+      "state": "backlog",
+      "authorization": "Owner continuing full compatibility goal and first-party retained reference/runtime differences from PR695. Backlog only, reserves no files while owner works separately on engine.rs.",
+      "issue": 696,
+      "dependencies": [
+        "count-ranking-declarations-v1"
+      ],
+      "scope": [
+        "src/engine.rs",
+        "src/rpc.rs",
+        "src/checked_projection.rs",
+        "src/query_catalog.rs",
+        "src/lib.rs",
+        "crates/msduck-sql/src/aggregate.rs",
+        "crates/msduck-sql/src/ranking.rs",
+        "tests/count_ranking_runtime.rs",
+        "tests/count_ranking_runtime.test.mjs",
+        "docs/count-ranking-runtime.md",
+        "README.md",
+        "ROADMAP.md"
+      ],
+      "acceptance": [
+        "After owner publishes a ready non-overlapping task, exclusively claim before implementation. Replay reference/count-ranking-declarations.json and supplemental default-preparation evidence; retain full raw differences, not normalized rows/errors/tokens.",
+        "Fix COUNT(NULL)8117 vs accepted result, aggregate/window missing-column207 vs50000 and ROW_NUMBER argument4114 vs174 using explicit declaration-aware binding and captured error precedence. Preserve typed NULL success and unknown/unsupported shapes; capture further evidence before generalizing.",
+        "Implement metadata-only sp_prepare for captured explicit option1 and omitted-option paths without stepping queries or evaluating volatile operands. Preserve type/flags/capacity and ORDER/completion context across preparation, empty/repeated executions and unprepare; distinguish explicit zero reference errors rather than guessing acceptance. Coordinate root ORDER emission with task693.",
+        "Exact-head workspace formatting/strictClippy/tests/alltargets build/default+focused independent clients, semantic copied-corpus audit, independent review or authorized GitHubCodexavailabilityfallback and required CI. Claiming worker merges and promptly completes registry/project. No reservation while backlog."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZ7ls"
     }
   ]
 }
