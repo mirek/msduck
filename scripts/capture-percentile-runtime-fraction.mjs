@@ -12,7 +12,7 @@ import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFi
 import { canonical } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/percentile-runtime-fraction.json', import.meta.url)
-const fixtureSha256 = 'PENDING_CAPTURE'
+const fixtureSha256 = '499a6af4c764ad0f2176fdd97a4776a1d1c51829b23a882bc92404b676f0e808'
 const args = process.argv.slice(2)
 const mode = args[0]?.startsWith('--') ? args.shift() : undefined
 if (![undefined, '--check', '--write-fixture'].includes(mode) || args.length > 1 || args[0]?.startsWith('--')) throw Error('usage: capture-percentile-runtime-fraction.mjs [--check | --write-fixture] [output]')
@@ -216,7 +216,15 @@ function validate(run) {
       for(const field of ['sets','errors','info','done','doneTokens','events','returnValues']) assert(Array.isArray(result[field]),'missing capture field')
       assert(result.done.length>0,'missing completion')
       assert.equal(result.done.length,result.doneTokens.length)
-      for(const token of result.doneTokens) assert(Number.isInteger(token.status),'missing raw DONE status')
+      for(const token of result.doneTokens) {
+        assert(Number.isInteger(token.status) && Number.isInteger(token.command),'missing raw DONE words')
+        assert.equal(token.more,Boolean(token.status & 1),'DONE_MORE differs')
+        assert.equal(token.sqlError,Boolean(token.status & 2),'DONE_ERROR differs')
+        assert.equal(token.attention,Boolean(token.status & 32),'DONE_ATTN differs')
+        assert.equal(token.serverError,Boolean(token.status & 256),'DONE_SRVERROR differs')
+        assert.equal(token.rowCount === null,!(token.status & 16),'DONE_COUNT validity differs')
+      }
+      assert.equal(result.returnValues.length,result.events.filter(e=>e.kind==='RETURNVALUE').length,'missing typed RPC return value')
       for(const set of result.sets) for(const column of set.columns) assert(Number.isInteger(column.userType),'missing COLMETADATA userType')
     }
     if(record.mode==='prepared') assert.equal(record.executions.length,record.preparation.errors.length?0:record.values.length,'missing prepared bindings')
@@ -225,6 +233,56 @@ function validate(run) {
   const reuse=run.at(-1).result
   assertSameCapture(reuse.sets.map(s=>s.rows),[[[1]]],'connection not reusable')
   assert.equal(reuse.errors.length,0)
+  validateBoundaries(run)
+}
+function validateBoundaries(run) {
+  const get = name => { const found=run.find(r=>r.name===name); assert(found,`missing ${name}`); return found }
+  const rows = result => result.sets.map(set=>set.rows)
+  const diagnostics = result => result.errors.map(({number,state,class:severity,message})=>[number,state,severity,message])
+  const words = result => result.doneTokens.map(({kind,status,command,rowCount})=>[kind,status,command,rowCount])
+  const range=[8727,1,16,'Input parameter of percentile function is outside of range [0, 1].']
+  const control=get('RAND seeded control').result
+  assert.equal(control.sets.length,4,'RAND controls missing')
+  for(const kind of ['CONT','DISC']) {
+    const p=kind==='CONT'?2.5:2
+    const expectedRows=[1,2,3,4,5].map(id=>[id,p])
+    const numeric=get(`prepared ${kind} FLOAT`)
+    assertSameCapture(diagnostics(numeric.preparation),[],'numeric prepare failed')
+    assertSameCapture(numeric.preparation.returnValues.map(v=>[v.name,v.type,v.length,v.flags]),[['handle','IntN',4,0]],'prepared handle descriptor changed')
+    const first=numeric.executions[0].result
+    assertSameCapture(rows(first),[expectedRows],'valid percentile changed')
+    assertSameCapture(first.sets[0].columns.map(c=>[c.name,c.userType,c.type,c.length,c.flags]),[['id',0,'Int',null,8],['p',0,kind==='CONT'?'FloatN':'IntN',kind==='CONT'?8:4,1]],'source-derived descriptor changed')
+    const invalid=numeric.executions[1].result
+    assertSameCapture(diagnostics(invalid),[range],'NULL range diagnostic changed')
+    assertSameCapture(invalid.events.map(e=>e.kind),['COLMETADATA','ORDER','ERROR','DONEPROC'],'runtime error boundary changed')
+    assertSameCapture(words(invalid),[['DONEPROC',2,224,null]],'runtime error completion changed')
+    assertSameCapture(rows(numeric.executions.at(-1).result),[expectedRows],'same handle did not recover')
+    for(const label of ['empty numeric','empty character']) for(const execution of get(`prepared ${kind} ${label}`).executions) {
+      assertSameCapture(diagnostics(execution.result),[],'empty input validated fraction')
+      assertSameCapture(rows(execution.result),[[]],'empty metadata/result changed')
+      assertSameCapture(words(execution.result),[['DONEINPROC',17,193,0],['DONEPROC',0,224,null]],'empty completion changed')
+    }
+    const allNull=get(`prepared ${kind} all NULL input`)
+    assertSameCapture(rows(allNull.executions[0].result),[[1,2,3,4,5].map(id=>[id,null])],'all-NULL result changed')
+    assertSameCapture(diagnostics(allNull.executions[1].result),[[8114,5,16,'Error converting data type nvarchar to float.']],'all-NULL input suppressed conversion')
+    assertSameCapture(diagnostics(allNull.executions[3].result),[range],'all-NULL input suppressed range validation')
+    for(const [label,diagnostic] of [['constant bad',[8114,5,16,'Error converting data type varchar to float.']],['constant range',range]]) {
+      const record=get(`prepared ${kind} ${label}`)
+      assertSameCapture(diagnostics(record.preparation),[],'invalid constant rejected during prepare')
+      for(const execution of record.executions) assertSameCapture(diagnostics(execution.result),[diagnostic],'invalid constant execution changed')
+    }
+    for(const label of ['varying column','varying character column','scalar table subquery','varying CASE']) {
+      const result=get(`${kind} expression ${label}`).result
+      assertSameCapture(rows(result),[],'row-dependent expression emitted metadata')
+      assertSameCapture(diagnostics(result),[[8726,1,16,`Input parameter of PERCENTILE_${kind} function must be a constant.`]],'constant restriction changed')
+    }
+    assertSameCapture(rows(get(`${kind} sequence state`).result),[[[0,null]]],'forbidden sequence expression advanced sequence')
+    for(const label of ['populated','empty','all NULL','partitioned']) {
+      const result=get(`${kind} RAND advancement ${label}`).result
+      assertSameCapture(diagnostics(result),[],'volatile expression rejected')
+      assertSameCapture(result.sets.at(-1).rows,control.sets[2].rows,'volatile fraction random state advancement changed')
+    }
+  }
 }
 async function canonicalOutput(path) {
   try { return await realpath(path) } catch (error) {
