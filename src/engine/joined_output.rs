@@ -367,6 +367,7 @@ impl Session {
             transactions: self.transactions,
             transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
+            clock: crate::current_time::now(),
             rowcount: self.rowcount,
             last_error: self.last_error,
             caught_error: self.caught_error.as_ref(),

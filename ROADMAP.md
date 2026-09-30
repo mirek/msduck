@@ -272,8 +272,13 @@ for concrete evidence and observed failures.
    USE, DB_NAME/DB_ID, sys.databases and LOGIN7 selection exist
    ([Databases](docs/databases.md)), as do ALTER DATABASE
    READ_COMMITTED_SNAPSHOT and user access with session termination,
-   sys.dm_exec_sessions and @@SPID ([ALTER DATABASE](docs/alter-database-sessions.md)).
-   Still open: tempdb/model/msdb, other ALTER DATABASE options, the remaining
+   sys.dm_exec_sessions and @@SPID ([ALTER DATABASE](docs/alter-database-sessions.md)),
+   and sys.server_principals for the logins seen since startup
+   ([tedious gaps](docs/tedious-compat-gaps.md)).
+   Still open: a login catalog (CREATE LOGIN, default databases), sys.computed_columns,
+   clustered-index catalog state and CREATE CLUSTERED INDEX, computed columns over
+   carrier types and non-deterministic computed columns, table hint index
+   validation, tempdb/model/msdb, other ALTER DATABASE options, the remaining
    sys.dm_exec_sessions columns, cross-database references and transactions,
    compile-time USE and three-part name resolution, and sys.databases
    descriptor fidelity.

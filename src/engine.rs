@@ -393,6 +393,14 @@ impl Session {
                  % 86400000000000
              ) AS VARCHAR), 12) AS TIME_NS)",
         )?;
+        // Microseconds since the epoch on SQL Server's datetime grid (1/300 s,
+        // shown as .000/.003/.007), for current-time functions in stored
+        // definitions.
+        db.execute_batch(
+            "CREATE TEMP MACRO __msduck_legacy_datetime(us) AS make_timestamp(
+                 ((us * 3 + 5000) // 10000) // 300 * 1000000
+                 + ((((us * 3 + 5000) // 10000) % 300) * 10 + 1) // 3 * 1000)",
+        )?;
         db.execute_batch("CREATE TEMP MACRO __msduck_int_div(a,b) AS CASE WHEN b=0 THEN error('Divide by zero error encountered.') ELSE a // b END;
             CREATE TEMP MACRO __msduck_int_mod(a,b) AS CASE WHEN b=0 THEN error('Divide by zero error encountered.') ELSE a % b END")?;
         Ok(Self {
@@ -1095,6 +1103,7 @@ impl Session {
                 transactions: self.transactions,
                 transaction_doomed: self.transaction_doomed,
                 original_login: &self.original_login,
+                clock: crate::current_time::now(),
                 rowcount: self.rowcount,
                 last_error: self.last_error,
                 caught_error: self.caught_error.as_ref(),
@@ -1195,6 +1204,7 @@ impl Session {
             transactions: self.transactions,
             transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
+            clock: crate::current_time::now(),
             rowcount: self.rowcount,
             last_error: self.last_error,
             caught_error: self.caught_error.as_ref(),
@@ -2253,6 +2263,10 @@ impl Session {
         self.lower_database_functions(&mut statement)?;
         self.qualify_databases(&mut statement)?;
         self.lower_session_functions(&mut statement, parameters)?;
+        if let Statement::CreateTable(table) = &mut statement {
+            crate::computed_columns::plan(&self.db, table)?;
+        }
+        crate::computed_columns::check_writes(&self.db, &statement)?;
         if !matches!(
             statement,
             Statement::Rollback { .. }
@@ -2324,6 +2338,8 @@ impl Session {
                 crate::index_catalog::sync(&self.db)?;
                 crate::object_catalog::touch(&self.db, &statement)?;
                 crate::declared_columns::record(&self.db, &statement)?;
+                crate::computed_columns::record(&self.db, &statement)?;
+                crate::computed_columns::prune(&self.db)?;
                 crate::object_catalog::sync_lob(&self.db)?;
                 if let Some((name, fields)) = view_columns {
                     crate::query_catalog::record(&self.db, &name, &fields)?;
@@ -2743,6 +2759,7 @@ impl Session {
                 transactions: self.transactions,
                 transaction_doomed: self.transaction_doomed,
                 original_login: &self.original_login,
+                clock: crate::current_time::now(),
                 rowcount: self.rowcount,
                 last_error: self.last_error,
                 caught_error: self.caught_error.as_ref(),
@@ -2875,6 +2892,7 @@ impl Session {
             transactions: self.transactions,
             transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
+            clock: crate::current_time::now(),
             rowcount: self.rowcount,
             last_error: self.last_error,
             caught_error: self.caught_error.as_ref(),
@@ -2986,6 +3004,7 @@ impl Session {
                 transactions: self.transactions,
                 transaction_doomed: self.transaction_doomed,
                 original_login: &self.original_login,
+                clock: crate::current_time::now(),
                 rowcount: self.rowcount,
                 last_error: self.last_error,
                 caught_error: self.caught_error.as_ref(),
@@ -3648,6 +3667,7 @@ impl Session {
             transactions: self.transactions,
             transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
+            clock: crate::current_time::now(),
             rowcount: self.rowcount,
             last_error: self.last_error,
             caught_error: self.caught_error.as_ref(),
@@ -4130,6 +4150,7 @@ fn parse_batch(sql: &str) -> Result<Vec<Statement>> {
     let mut statements = msduck_sql::batch::parse(sql)?;
     msduck_sql::session_function::positional_arguments(&mut statements);
     msduck_sql::session_function::validate_set_calls(&statements)?;
+    msduck_sql::dialect::table_hints::normalize(&mut statements)?;
     Ok(statements)
 }
 /// A database name is a single identifier; server or other qualifiers are
@@ -4147,6 +4168,8 @@ struct Translator<'a> {
     transactions: u32,
     transaction_doomed: bool,
     original_login: &'a str,
+    /// Read once per translated statement for current-time functions.
+    clock: msduck_sql::session_function::Clock,
     rowcount: u64,
     last_error: i32,
     caught_error: Option<&'a SqlError>,
@@ -4318,6 +4341,7 @@ fn translate_type(kind: &mut DataType) -> ControlFlow<String> {
 }
 impl VisitorMut for Translator<'_> {
     fn pre_visit_table_factor(&mut self, factor: &mut TableFactor) -> ControlFlow<String> {
+        msduck_sql::dialect::table_hints::clear(factor);
         if let Err(error) = msduck_sql::generate_series::lower(factor, self.parameters) {
             return ControlFlow::Break(error);
         }
@@ -4334,6 +4358,41 @@ impl VisitorMut for Translator<'_> {
         ControlFlow::Continue(())
     }
     fn pre_visit_statement(&mut self, stmt: &mut Statement) -> ControlFlow<String> {
+        // Stored definitions are evaluated when used, not when defined.
+        if matches!(
+            stmt,
+            Statement::CreateTable(_)
+                | Statement::AlterTable(_)
+                | Statement::CreateView(_)
+                | Statement::AlterView { .. }
+        ) {
+            let offset = self.clock.offset_minutes;
+            visit_expressions_mut(stmt, |expr| {
+                match expr {
+                    Expr::Function(function) => {
+                        if let Some(kind) = msduck_sql::session_function::current_time(function) {
+                            *expr =
+                                msduck_sql::session_function::current_time_runtime(kind, offset);
+                        } else if msduck_sql::session_function::is_login_name(function) {
+                            return ControlFlow::Break(format!(
+                                "unsupported {} in a stored definition",
+                                function.name
+                            ));
+                        }
+                    }
+                    Expr::Identifier(id)
+                        if id.quote_style.is_none()
+                            && msduck_sql::session_function::is_system_user(&id.value) =>
+                    {
+                        return ControlFlow::Break(
+                            "unsupported SYSTEM_USER in a stored definition".into(),
+                        );
+                    }
+                    _ => {}
+                }
+                ControlFlow::Continue(())
+            })?;
+        }
         if let Statement::Insert(insert) = stmt {
             // INTO is optional in T-SQL but required by DuckDB.
             insert.into = true;
@@ -4394,6 +4453,13 @@ impl VisitorMut for Translator<'_> {
         }
         if let Statement::CreateTable(table) = stmt {
             for col in &mut table.columns {
+                // A computed column takes DuckDB's type for its lowered
+                // expression; its declaration is recorded separately.
+                if msduck_sql::dialect::computed_column::computed(col).is_some() {
+                    col.data_type = DataType::Unspecified;
+                    msduck_sql::dialect::computed_column::lower(col);
+                    continue;
+                }
                 if let Err(error) = crate::declared_columns::lower_collation(col) {
                     return ControlFlow::Break(error);
                 }
@@ -4414,6 +4480,38 @@ impl VisitorMut for Translator<'_> {
                     return ControlFlow::Break("invalid time scale".into());
                 }
                 translate_type(&mut col.data_type)?;
+            }
+        }
+        ControlFlow::Continue(())
+    }
+    fn post_visit_statement(&mut self, stmt: &mut Statement) -> ControlFlow<String> {
+        // Key columns of PRIMARY KEY and UNIQUE constraints are parsed as
+        // ordering expressions, but DuckDB accepts neither ASC/DESC nor the
+        // NULLS placement added to ORDER BY. The index key order has no effect
+        // on results.
+        let constraints: Vec<&mut TableConstraint> = match stmt {
+            Statement::CreateTable(table) => table.constraints.iter_mut().collect(),
+            Statement::AlterTable(table) => table
+                .operations
+                .iter_mut()
+                .filter_map(|operation| match operation {
+                    AlterTableOperation::AddConstraint { constraint, .. } => Some(constraint),
+                    _ => None,
+                })
+                .collect(),
+            _ => vec![],
+        };
+        for constraint in constraints {
+            let columns = match constraint {
+                TableConstraint::PrimaryKey(key) => &mut key.columns,
+                TableConstraint::Unique(key) => &mut key.columns,
+                _ => continue,
+            };
+            for column in columns {
+                column.column.options = OrderByOptions {
+                    sort: None,
+                    nulls_first: None,
+                };
             }
         }
         ControlFlow::Continue(())
@@ -4590,6 +4688,12 @@ impl VisitorMut for Translator<'_> {
         ControlFlow::Continue(())
     }
     fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<String> {
+        // A typed literal of the statement's clock, lowered below like any cast.
+        if let Expr::Function(function) = expr
+            && let Some(kind) = msduck_sql::session_function::current_time(function)
+        {
+            *expr = msduck_sql::session_function::current_time_value(kind, self.clock);
+        }
         // Fold proven constant percentile sources before child casts become native adapters.
         rand::seed_conversion(expr, self.parameters);
         if let Err(error) = crate::percentile::lower(expr) {
@@ -4853,6 +4957,12 @@ impl VisitorMut for Translator<'_> {
             }
         }
         match expr {
+            Expr::Identifier(id)
+                if id.quote_style.is_none()
+                    && msduck_sql::session_function::is_system_user(&id.value) =>
+            {
+                *expr = msduck_sql::session_function::system_user(self.original_login);
+            }
             Expr::Identifier(id) if id.value.starts_with("@@") => {
                 *expr = match id.value.to_uppercase().as_str() {
                     "@@DATEFIRST" => Expr::Cast {
@@ -5194,6 +5304,8 @@ impl VisitorMut for Translator<'_> {
                     }
                 } else if msduck_sql::session_function::is_original_login(f) {
                     *expr = msduck_sql::session_function::original_login(self.original_login);
+                } else if msduck_sql::session_function::is_login_name(f) {
+                    *expr = msduck_sql::session_function::login_name(f, self.original_login);
                 }
             }
             _ => {}
@@ -5993,6 +6105,7 @@ mod tests {
             transactions: 0,
             transaction_doomed: false,
             original_login: "sa",
+            clock: crate::current_time::now(),
             rowcount: 0,
             last_error: 0,
             caught_error: None,

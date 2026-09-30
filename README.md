@@ -35,6 +35,12 @@ another database's objects. `ALTER DATABASE ... SET READ_COMMITTED_SNAPSHOT`,
 (which closes the other sessions using the database), `ROLLBACK AFTER` or
 `NO_WAIT`, `sys.dm_exec_sessions` and `@@SPID` also follow SQL Server captures;
 see [ALTER DATABASE options, sessions and @@SPID](docs/alter-database-sessions.md).
+`SYSDATETIMEOFFSET`, `SYSUTCDATETIME`, `SYSDATETIME`, `GETUTCDATE`, `GETDATE`,
+`CURRENT_TIMESTAMP`, `sys.server_principals`, `SUSER_SNAME`/`SUSER_NAME`/`SYSTEM_USER`,
+computed columns (`name AS expr [PERSISTED]`, stored as DuckDB virtual columns),
+`CLUSTERED`/`NONCLUSTERED` keys and locking or access-path table hints (accepted
+and ignored) follow SQL Server captures, with the limits listed in
+[tedious compatibility gaps](docs/tedious-compat-gaps.md).
 
 ```sql
 CREATE TABLE dbo.items (id INT PRIMARY KEY, name NVARCHAR(100));

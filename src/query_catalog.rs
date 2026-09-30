@@ -383,6 +383,23 @@ fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Fiel
             ("original_login_name", 231, 231, 256, 0, 0, false, false),
             ("database_id", 52, 52, 2, 5, 0, false, false),
         ],
+        // reference/tedious-compat-gaps.json
+        "server_principals" => vec![
+            ("name", 231, 256, 256, 0, 0, false, false),
+            ("principal_id", 56, 56, 4, 10, 0, false, false),
+            ("sid", 165, 165, 85, 0, 0, true, false),
+            ("type", 175, 175, 1, 0, 0, false, false),
+            ("type_desc", 231, 231, 120, 0, 0, true, false),
+            ("is_disabled", 104, 104, 1, 1, 0, true, true),
+            ("create_date", 61, 61, 8, 23, 3, false, false),
+            ("modify_date", 61, 61, 8, 23, 3, false, false),
+            ("default_database_name", 231, 256, 256, 0, 0, true, false),
+            ("default_language_name", 231, 256, 256, 0, 0, true, false),
+            ("credential_id", 56, 56, 4, 10, 0, true, false),
+            ("owning_principal_id", 56, 56, 4, 10, 0, true, true),
+            ("is_fixed_role", 104, 104, 1, 1, 0, false, true),
+            ("tenant_id", 36, 36, 16, 0, 0, true, false),
+        ],
         "schemas" => vec![
             ("name", 231, 256, 256, 0, 0, false, false),
             ("schema_id", 56, 56, 4, 10, 0, false, false),
@@ -559,7 +576,9 @@ fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Fiel
             let collation_name = matches!(system, 175 | 231).then(|| {
                 if name == "name" || (view == "databases" && name == "collation_name") {
                     catalog_collation
-                } else if view == "dm_exec_sessions" {
+                } else if view == "dm_exec_sessions"
+                    || (view == "server_principals" && name.starts_with("default_"))
+                {
                     "SQL_Latin1_General_CP1_CI_AS"
                 } else {
                     "Latin1_General_CI_AS_KS_WS"
@@ -684,7 +703,7 @@ fn snapshot_with_views<T: Visit>(
         .types
         .get("nvarchar")
         .and_then(|t| t.collation_name.clone());
-    let mut columns = db.prepare("SELECT c.name,c.system_type_id,c.user_type_id,c.max_length,c.precision,c.scale,c.collation_name,c.is_nullable,c.is_identity,o.type FROM sys.columns c JOIN sys.objects o ON c.object_id=o.object_id WHERE c.object_id=__msduck_object_id(?,NULL) ORDER BY c.column_id")?;
+    let mut columns = db.prepare("SELECT c.name,c.system_type_id,c.user_type_id,c.max_length,c.precision,c.scale,c.collation_name,c.is_nullable,c.is_identity,o.type,c.is_computed FROM sys.columns c JOIN sys.objects o ON c.object_id=o.object_id WHERE c.object_id=__msduck_object_id(?,NULL) ORDER BY c.column_id")?;
     for (name, object_name) in names.0 {
         let system_view = match object_name.0.as_slice() {
             [
@@ -738,6 +757,8 @@ fn snapshot_with_views<T: Visit>(
                             nullable: Some(row.get(7)?),
                             origin: if row.get::<_, bool>(8)? {
                                 msduck_core::result::Origin::Identity
+                            } else if row.get::<_, bool>(10)? {
+                                msduck_core::result::Origin::Expression
                             } else {
                                 msduck_core::result::Origin::Stored
                             },

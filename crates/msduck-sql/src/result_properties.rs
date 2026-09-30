@@ -22,7 +22,7 @@ pub fn expression_with(
             Properties::expression(matches!(v.value, Value::Null | Value::Placeholder(_)))
         }
         Expr::Identifier(id) if crate::session_function::counter_type(&id.value).is_some() => {
-            Properties::expression(false)
+            Properties::expression(crate::session_function::is_system_user(&id.value))
         }
         Expr::Identifier(id) if id.value.starts_with('@') => Properties::expression(true),
         Expr::Identifier(id) => binding_scope::resolve(&[id], sources, outer)
@@ -144,7 +144,8 @@ pub fn expression_with(
                 return Properties::expression(!nonnull);
             }
             if crate::session_function::result_type(f).is_some() {
-                return Properties::expression(true);
+                // Current-time functions are never NULL.
+                return Properties::expression(crate::session_function::current_time(f).is_none());
             }
             // Function provenance is not universally fComputed in SQL Server.
             // Preserve unknown rather than guessing from scalar syntax alone.

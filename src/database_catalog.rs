@@ -481,15 +481,17 @@ impl Catalog {
         // Termination waits without the change lock, so logins, USE and
         // the sessions being terminated are never blocked by it. Each round
         // re-checks the database under the lock.
-        let exclusive = settings.iter().any(|setting| {
-            // RESTRICTED_USER admits db_owner, dbcreator and sysadmin
-            // members. Every msduck login is sysadmin, so only these options
-            // need the other sessions gone.
-            matches!(
-                setting,
-                Setting::ReadCommittedSnapshot(_) | Setting::UserAccess(UserAccess::Single)
-            )
-        });
+        // RESTRICTED_USER admits db_owner, dbcreator and sysadmin members.
+        // Every msduck login is sysadmin, so only these options need the
+        // other sessions gone. Setting READ_COMMITTED_SNAPSHOT to its current
+        // value completes at once, even WITH NO_WAIT
+        // (reference/tedious-compat-gaps.json).
+        let exclusive = |read_committed_snapshot: bool| {
+            settings.iter().any(|setting| match setting {
+                Setting::ReadCommittedSnapshot(on) => *on != read_committed_snapshot,
+                Setting::UserAccess(access) => *access == UserAccess::Single,
+            })
+        };
         let deadline = |timeout| {
             std::time::Instant::now()
                 .checked_add(timeout)
@@ -516,13 +518,13 @@ impl Catalog {
             let change = self.lock();
             let (alias, display) = self.alterable(db, name, settings)?;
             let others = || self.users(&alias).saturating_sub(own(&alias));
-            let user_access: u8 = db.query_row(
+            let (user_access, read_committed_snapshot): (u8, bool) = db.query_row(
                 &format!(
-                    "SELECT coalesce(user_access,0) FROM {} WHERE name=?",
+                    "SELECT coalesce(user_access,0),coalesce(read_committed_snapshot,false) FROM {} WHERE name=?",
                     self.registry()
                 ),
                 [&alias],
-                |row| row.get(0),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )?;
             if user_access == UserAccess::Single as u8 && others() > 0 {
                 bail!(SqlError::new(
@@ -533,7 +535,7 @@ impl Catalog {
                     )
                 ));
             }
-            if !exclusive || others() == 0 {
+            if !exclusive(read_committed_snapshot) || others() == 0 {
                 return self.apply(db, alias, settings, terminated, change);
             }
             let (wait, kill) = match termination {
@@ -1016,6 +1018,31 @@ impl Catalog {
              );
              CREATE OR REPLACE VIEW {target}.sys.dm_exec_sessions AS
              SELECT * FROM __msduck_sessions();
+             CREATE OR REPLACE VIEW {target}.sys.server_principals AS
+             SELECT CAST(name AS VARCHAR) AS name,
+                    CAST(principal_id AS INTEGER) AS principal_id,
+                    CASE WHEN principal_id=1 THEN CAST('\x01' AS BLOB)
+                         ELSE unhex(md5(lower(name))) END AS sid,
+                    CAST('S' AS VARCHAR) AS type,
+                    CAST('SQL_LOGIN' AS VARCHAR) AS type_desc,
+                    false AS is_disabled,
+                    CAST(create_date AS TIMESTAMP) AS create_date,
+                    CAST(create_date AS TIMESTAMP) AS modify_date,
+                    CAST('{MASTER}' AS VARCHAR) AS default_database_name,
+                    CAST('us_english' AS VARCHAR) AS default_language_name,
+                    CAST(NULL AS INTEGER) AS credential_id,
+                    CAST(NULL AS INTEGER) AS owning_principal_id,
+                    false AS is_fixed_role,
+                    CAST(NULL AS UUID) AS tenant_id
+             FROM (
+                 SELECT 'sa' AS name,1 AS principal_id,
+                        TIMESTAMP '2003-04-08 09:10:35.46' AS create_date
+                 UNION ALL
+                 SELECT name,principal_id,create_date FROM __msduck_server_principals()
+             );
+             CREATE OR REPLACE MACRO {target}.main.__msduck_login_name(value) AS
+                 (SELECT p.name FROM (SELECT value AS v) a, {target}.sys.server_principals p
+                  WHERE p.sid=a.v);
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_key(value) AS
                  translate(rtrim(CAST(value AS VARCHAR), ' '), {upper}, {lower});
              CREATE OR REPLACE MACRO {target}.main.__msduck_db_id(value) AS
