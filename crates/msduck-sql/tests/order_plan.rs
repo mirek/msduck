@@ -512,3 +512,28 @@ fn order_payload_count_is_bounded_before_projection_work() {
         Plan::Unknown(Barrier::Length)
     );
 }
+
+#[test]
+fn captured_case_and_literal_spellings_preserve_projected_identity() {
+    for (sql, expected) in [
+        (
+            "SELECT b,SUM(a) AS n FROM dbo.order_heap h GROUP BY b ORDER BY sum(h.a)",
+            2,
+        ),
+        (
+            "SELECT label COLLATE Latin1_General_100_BIN2 AS k FROM dbo.order_heap h ORDER BY h.label COLLATE latin1_general_100_bin2",
+            1,
+        ),
+        ("SELECT a+1 AS k FROM dbo.order_heap ORDER BY a+(1)", 1),
+        ("SELECT a+1 AS k FROM dbo.order_heap ORDER BY a+01", 1),
+    ] {
+        assert_eq!(plan(sql), Plan::Token(vec![expected]));
+        let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+            panic!("query");
+        };
+        assert_eq!(
+            infer(&catalog(), &query, &Scope::default()),
+            Plan::Token(vec![expected])
+        );
+    }
+}

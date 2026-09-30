@@ -70,6 +70,15 @@ capture SHA-256 is
 These ignored supplemental artifacts do not overwrite either committed fixture;
 regression SQL and exact expectations are committed in `tests/order_plan.rs`.
 
+Two fresh case/spelling runs confirmed SUM/collation case differences,
+parenthesized literal operands and leading-zero integer operands retain the
+projected ordinal. Cloned comparison trees normalize only the supported builtin
+and collation identities, INT literal spellings and redundant parentheses.
+Complete records and driver are retained under
+`artifacts/order-plan-case-identity/`; capture SHA-256 is
+`02572bf3b363a69a36d0ab8b0ae53cfa2b95f73a64500645d460d889c7841e43`.
+The original AST remains unchanged.
+
 ## Remaining boundaries
 
 Ambiguous names, unknown declarations, modified wildcard shapes, arbitrary

@@ -50,6 +50,41 @@ fn same(left: &Expr, right: &Expr, sources: &[Source], scope: &Scope) -> bool {
     impl VisitorMut for Canonical<'_> {
         type Break = ();
         fn pre_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<()> {
+            if matches!(expr, Expr::Nested(_)) {
+                *expr = inner(expr).clone();
+            }
+            match expr {
+                Expr::Function(function)
+                    if ["COUNT", "SUM", "ROW_NUMBER"]
+                        .iter()
+                        .any(|name| function.name.to_string().eq_ignore_ascii_case(name)) =>
+                {
+                    for part in &mut function.name.0 {
+                        if let ObjectNamePart::Identifier(name) = part {
+                            name.value = name.value.to_uppercase();
+                        }
+                    }
+                }
+                Expr::Collate { collation, .. }
+                    if collation
+                        .to_string()
+                        .eq_ignore_ascii_case("Latin1_General_100_BIN2") =>
+                {
+                    for part in &mut collation.0 {
+                        if let ObjectNamePart::Identifier(name) = part {
+                            name.value = name.value.to_lowercase();
+                        }
+                    }
+                }
+                Expr::Value(value) => {
+                    if let Value::Number(number, false) = &mut value.value
+                        && let Ok(value) = number.parse::<i32>()
+                    {
+                        *number = value.to_string();
+                    }
+                }
+                _ => {}
+            }
             if let Some(source) = crate::variant_cast::source(expr) {
                 *expr = source.clone();
             }
