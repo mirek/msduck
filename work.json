@@ -7213,6 +7213,26 @@
         "Add native/public interoperability coverage including typed empty/NULL results and real client preparation phases. Use shared locked Linux builder; full exact-head fmt/strictClippy/workspace/build/default and focused clients/audit/reference checks, independent review/authorized availability fallback, required CI, merge and registry/project completion. Further frontend/wire files require separate conflict-free claims before edits."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZF_y"
+    },
+    {
+      "id": "percentile-runtime-conversion-v1",
+      "title": "Convert runtime percentile values using explicit source declarations",
+      "state": "ready",
+      "authorization": "Owner continuing goal and merged source/runtime captures; supplement same root adapter worker with deterministic conversion over explicit values/types.",
+      "issue": 672,
+      "scope": [
+        "crates/msduck-sql/src/percentile.rs",
+        "crates/msduck-sql/tests/percentile_runtime_conversion.rs"
+      ],
+      "dependencies": [
+        "percentile-runtime-plan-v1"
+      ],
+      "acceptance": [
+        "Expose deterministic runtime fraction conversion over explicit core scalar value and declaration; retain bound FLOAT/REAL payloads, exact DECIMAL conversion, captured character source rules, NULL/range8727 and source8114/8115 identity. Never read runtime/session state or infer compile metadata from values.",
+        "Do not reuse scientific SQL literal underflow reading for already-bound FLOAT/REAL. Preserve signed zero and unknown or structurally mismatched carriers/types as explicit barriers; invalid UTF16 cannot be repaired to fake acceptance.",
+        "Meaningful retained-source/endpoint/diagnostic tests; same worker integrates with root adapter671 under original separate claim. Combined exact-head full checks/CI/review or owner-authorized fallback, merge and prompt both registry/project completion; do not mark this supplement Done as a substitute for unfinished adapter."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZJaa"
     }
   ]
 }
