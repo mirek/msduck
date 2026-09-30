@@ -58,8 +58,10 @@ preparation responses for calendar, mixed BIT/integer bitwise, catalog, identity
 NULL projections from that capture. Its smaller plan asserts consecutive handles
 starting at 1; every other preparation response field is compared verbatim.
 Both plans verify preparation leaves table rows, seeded RAND and transaction
-depth unchanged. The other captured regression shapes remain implementation
-work, including OUTPUT, window/variant ORDER and temporal derived declarations.
+depth unchanged. CTE DELETE and INSERT OUTPUT INTO retain their captured no-result completion
+commands without performing either write. Other captured regression shapes remain
+implementation work, including returned OUTPUT, window/variant ORDER and temporal
+derived declarations.
 
 A bare projected NULL is declared INT, while NULL function operands retain their
 original declaration barriers. VARBINARY(MAX) uses the existing PLP binary codec.

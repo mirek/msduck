@@ -370,8 +370,27 @@ pub(super) fn describe(
         });
     }
     let prefix = match statements.as_slice() {
+        [Statement::Query(query)]
+            if matches!(query.body.as_ref(), sqlparser::ast::SetExpr::Delete(statement)
+                if matches!(statement, Statement::Delete(delete)
+                    if delete.output.is_none() && delete.returning.is_none())) =>
+        {
+            let mut out = Vec::new();
+            tds::done(&mut out, 0xff, 17, 0xc4, 0);
+            out
+        }
         [Statement::Query(query)] => query_description(session, query, &parameters)?,
-        [Statement::Insert(insert)] if insert.output.is_none() && insert.returning.is_none() => {
+        [Statement::Insert(insert)]
+            if insert.returning.is_none()
+                && (insert.output.is_none()
+                    || matches!(
+                        &insert.output,
+                        Some(sqlparser::ast::OutputClause::Output {
+                            into_table: Some(_),
+                            ..
+                        })
+                    )) =>
+        {
             let mut out = Vec::new();
             tds::done(&mut out, 0xff, 17, 0xc3, 0);
             out
