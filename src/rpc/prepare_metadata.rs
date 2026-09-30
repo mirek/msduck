@@ -33,6 +33,28 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
             let mut numeric = expression.clone();
             msduck_sql::case_types::lower(&mut numeric, self.0);
             let kind = msduck_sql::case_types::integer_rank(expression, self.0)
+                .or_else(|| {
+                    let Expr::BinaryOp { left, op, right } = expression else {
+                        return None;
+                    };
+                    if !matches!(
+                        op,
+                        sqlparser::ast::BinaryOperator::BitwiseAnd
+                            | sqlparser::ast::BinaryOperator::BitwiseOr
+                            | sqlparser::ast::BinaryOperator::BitwiseXor
+                    ) {
+                        return None;
+                    }
+                    // SQL Server permits one BIT operand; the other integer
+                    // operand determines the declared result width.
+                    if msduck_sql::case_types::is_bit(left, self.0) {
+                        msduck_sql::case_types::integer_rank(right, self.0)
+                    } else if msduck_sql::case_types::is_bit(right, self.0) {
+                        msduck_sql::case_types::integer_rank(left, self.0)
+                    } else {
+                        None
+                    }
+                })
                 .map(|rank| match rank {
                     0 => DataType::TinyInt(None),
                     1 => DataType::SmallInt(None),
