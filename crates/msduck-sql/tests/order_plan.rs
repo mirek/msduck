@@ -21,7 +21,7 @@ fn catalog() -> CatalogSnapshot {
             name.into(),
             TypeMetadata {
                 system_type_id: Some(id),
-                user_type_id: Some(id),
+                user_type_id: Some(i32::from(id)),
                 max_length: Some(width),
                 precision: Some(precision),
                 scale: Some(0),
