@@ -184,6 +184,27 @@ test('options change sys.databases and refusals match SQL Server', { timeout: 60
   assert.equal(await closed(own.events), true)
 })
 
+test('sessions cannot enter a database while ALTER DATABASE terminates its users', { timeout: 60000 }, async t => {
+  const c = await start(t, { options: client })
+  await run(c, 'CREATE DATABASE [probe_db]')
+  const idle = await open(c, 'probe_db')
+  const pending = run(c, 'ALTER DATABASE [probe_db] SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK AFTER 2 SECONDS')
+  await new Promise(resolve => setTimeout(resolve, 500))
+  // Reconnecting clients cannot keep the database in use meanwhile.
+  const login = await open(c, 'probe_db')
+  assert.equal(login.events.error?.code, 'ELOGIN')
+  assert.deepEqual(login.events.tokens.map(m => m[0]), [4060, 18456])
+  const other = await open(c, 'master')
+  assert.deepEqual((await run(other.connection, 'USE [probe_db]')).errors,
+    [[952, 1, 16, "Database 'probe_db' is in transition. Try the statement later."]])
+  const altered = await pending
+  assert.deepEqual(altered.errors, [])
+  assert.deepEqual(altered.infos, messages(observed('rollback immediate with users').info))
+  assert.equal(await closed(idle.events), true)
+  assert.deepEqual((await run(other.connection, 'USE [probe_db]; SELECT DB_NAME()')).rows, [['probe_db']])
+  other.connection.close()
+})
+
 test('sys.dm_exec_sessions and @@SPID describe sessions as SQL Server does', { timeout: 60000 }, async t => {
   const c = await start(t, { options: client })
   const spid = await run(c, 'SELECT @@SPID AS spid, @@spid')

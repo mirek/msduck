@@ -271,11 +271,12 @@ fn serve_login(
     // The captured failure (reference/login-database-error.json) is ERROR
     // 4060, ERROR 18456 naming the login, DONE_ERROR, then connection close.
     if let Err(error) = session.use_database(&login.database) {
-        // A missing database (911) and a SINGLE_USER database another
-        // session holds (924) fail the login the same way.
+        // A missing database (911), a SINGLE_USER database another session
+        // holds (924) and one an ALTER DATABASE is changing (952) fail the
+        // login the same way.
         if error
             .downcast_ref::<msduck_core::diagnostic::SqlError>()
-            .is_none_or(|error| !matches!(error.number, 911 | 924))
+            .is_none_or(|error| !matches!(error.number, 911 | 924 | 952))
         {
             return Err(error);
         }

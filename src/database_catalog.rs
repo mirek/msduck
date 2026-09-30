@@ -43,6 +43,10 @@ pub struct Catalog {
     /// How many sessions currently use each attached catalog. DROP refuses
     /// a database that any session uses.
     users: std::sync::Mutex<std::collections::HashMap<String, usize>>,
+    /// Databases whose ALTER is terminating or waiting for other sessions.
+    /// Sessions cannot enter them meanwhile, as under SQL Server's
+    /// exclusive database lock.
+    altering: std::sync::Mutex<std::collections::HashSet<String>>,
 }
 
 impl Drop for Catalog {
@@ -234,6 +238,7 @@ impl Catalog {
                 temporary: true,
                 changes: std::sync::Mutex::new(()),
                 users: Default::default(),
+                altering: Default::default(),
             }
         } else {
             // Resolve the directory once, so later file work depends neither
@@ -257,6 +262,7 @@ impl Catalog {
                 temporary: false,
                 changes: std::sync::Mutex::new(()),
                 users: Default::default(),
+                altering: Default::default(),
             }
         };
         owner.execute_batch(&format!(
@@ -399,6 +405,16 @@ impl Catalog {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )?
         };
+        if self.in_transition(&alias) {
+            bail!(SqlError::new(
+                952,
+                1,
+                format!(
+                    "Database '{}' is in transition. Try the statement later.",
+                    self.display(&alias)
+                ),
+            ));
+        }
         if user_access == UserAccess::Single as u8 && self.users(&alias) > own(&alias) {
             let mut error = SqlError::new(
                 924,
@@ -429,6 +445,13 @@ impl Catalog {
 
     fn users(&self, alias: &str) -> usize {
         self.user_counts().get(alias).copied().unwrap_or(0)
+    }
+
+    fn in_transition(&self, alias: &str) -> bool {
+        self.altering
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .contains(alias)
     }
 
     fn release(&self, alias: &str) {
@@ -472,6 +495,20 @@ impl Catalog {
                 .checked_add(timeout)
                 .unwrap_or_else(|| std::time::Instant::now() + RELEASE_TIMEOUT * 1000)
         };
+        /// Keeps a database in transition until the ALTER ends.
+        struct Transition<'a>(&'a Catalog, Option<String>);
+        impl Drop for Transition<'_> {
+            fn drop(&mut self) {
+                if let Some(alias) = self.1.take() {
+                    self.0
+                        .altering
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .remove(&alias);
+                }
+            }
+        }
+        let mut transition = Transition(self, None);
         let mut terminated = false;
         let mut waited = false;
         let mut release_deadline = None;
@@ -523,6 +560,13 @@ impl Catalog {
                     (deadline(ROUND).min(limit), true)
                 }
             };
+            if transition.1.is_none() {
+                self.altering
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .insert(alias.clone());
+                transition.1 = Some(alias.clone());
+            }
             drop(change);
             // A session still logging in or entering the database may not be
             // terminable yet; a later round terminates it.

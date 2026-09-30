@@ -46,7 +46,11 @@ option: READ_COMMITTED_SNAPSHOT { ON | OFF } | SINGLE_USER | RESTRICTED_USER | M
   - `WITH ROLLBACK AFTER n` waits up to n seconds for the sessions to leave,
     then terminates the remaining ones the same way.
   - Waiting happens without holding the database catalog lock, so logins and
-    `USE` elsewhere continue. Termination repeats every 500 ms for sessions
+    `USE` of other databases continue. Meanwhile the database is in transition:
+    `USE` fails with 952 ("Database '...' is in transition. Try the statement
+    later.") and a login naming it fails with 4060 then 18456, so reconnecting
+    clients cannot keep the database in use. SQL Server makes them wait for its
+    exclusive database lock instead; that wait was not captured. Termination repeats every 500 ms for sessions
     that were still logging in or entering the database, for up to 30 seconds.
   - Without a clause SQL Server waits indefinitely. msduck fails explicitly
     instead, so a statement cannot block other logins and `USE` forever.
