@@ -1,3 +1,5 @@
+-- Computed columns (src/computed_columns.rs), by lower-case column name.
+CREATE TABLE IF NOT EXISTS main.__msduck_computed_columns(object_id INTEGER NOT NULL,name_key VARCHAR NOT NULL,is_persisted BOOLEAN NOT NULL,PRIMARY KEY(object_id,name_key));
 CREATE OR REPLACE VIEW sys.columns AS
 SELECT c.object_id,c.name,c.column_id,
     coalesce(d.system_type_id,t.system_type_id) AS system_type_id,
@@ -7,11 +9,11 @@ SELECT c.object_id,c.name,c.column_id,
     coalesce(d.scale,t.scale) AS scale,
     d.collation_name,c.is_nullable,
     coalesce(d.system_type_id,t.system_type_id) IN (165,167,173,175,231,239,98) AS is_ansi_padded,
-    false AS is_rowguidcol,c.is_identity,false AS is_computed,false AS is_filestream,
+    false AS is_rowguidcol,c.is_identity,cc.object_id IS NOT NULL AS is_computed,false AS is_filestream,
     false AS is_replicated,false AS is_non_sql_subscribed,false AS is_merge_published,
     false AS is_dts_replicated,false AS is_xml_document,
     CAST(0 AS INTEGER) AS xml_collection_id,
-    coalesce(dc.object_id,CASE WHEN ic.column_default IS NULL OR c.is_identity THEN CAST(0 AS INTEGER) ELSE CAST(NULL AS INTEGER) END) AS default_object_id,
+    coalesce(dc.object_id,CASE WHEN ic.column_default IS NULL OR c.is_identity OR cc.object_id IS NOT NULL THEN CAST(0 AS INTEGER) ELSE CAST(NULL AS INTEGER) END) AS default_object_id,
     CAST(0 AS INTEGER) AS rule_object_id,false AS is_sparse,false AS is_column_set,
     CAST(0 AS UTINYINT) AS generated_always_type,'NOT_APPLICABLE' AS generated_always_type_desc,
     CAST(NULL AS INTEGER) AS encryption_type,CAST(NULL AS VARCHAR) AS encryption_type_desc,
@@ -32,6 +34,7 @@ JOIN main.__msduck_schemas s USING(schema_id)
 JOIN information_schema.columns ic ON ic.table_catalog=current_database() AND lower(ic.table_schema)=lower(s.name) AND lower(ic.table_name)=lower(o.name) AND lower(ic.column_name)=lower(c.name)
 LEFT JOIN main.__msduck_declared_columns d ON d.object_id=c.object_id AND d.column_id=c.column_id
 LEFT JOIN main.__msduck_default_constraints dc ON dc.parent_object_id=c.object_id AND dc.column_id=c.column_id
+LEFT JOIN main.__msduck_computed_columns cc ON cc.object_id=c.object_id AND cc.name_key=lower(c.name)
 LEFT JOIN sys.types t ON t.name=CASE ic.data_type
     WHEN 'INTEGER' THEN 'int' WHEN 'SMALLINT' THEN 'smallint' WHEN 'BIGINT' THEN 'bigint'
     WHEN 'UTINYINT' THEN 'tinyint' WHEN 'BOOLEAN' THEN 'bit' WHEN 'FLOAT' THEN 'real'

@@ -35,9 +35,11 @@ option: READ_COMMITTED_SNAPSHOT { ON | OFF } | SINGLE_USER | RESTRICTED_USER | M
   5058 (state 2 for `READ_COMMITTED_SNAPSHOT`, 5 for user access); `CURRENT`
   in `master` 12104; inside a user transaction 226 (state 6, the transaction
   stays open).
-- `READ_COMMITTED_SNAPSHOT` and `SINGLE_USER` need the other sessions using the
-  database gone. `RESTRICTED_USER` does not, because every msduck login is
-  sysadmin and SQL Server admits sysadmin members.
+- Changing `READ_COMMITTED_SNAPSHOT`, and setting `SINGLE_USER`, need the other
+  sessions using the database gone. `RESTRICTED_USER` does not, because every
+  msduck login is sysadmin and SQL Server admits sysadmin members. Setting
+  `READ_COMMITTED_SNAPSHOT` to its current value completes at once without a
+  termination clause, even `WITH NO_WAIT` (reference/tedious-compat-gaps.json).
   - `WITH NO_WAIT` fails with 5070 then 5069.
   - `WITH ROLLBACK IMMEDIATE` interrupts the other sessions' statements, closes
     their connections, waits until they have released the database (their

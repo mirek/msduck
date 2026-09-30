@@ -8,6 +8,9 @@ use sqlparser::{
 };
 
 pub mod alter_database;
+pub mod computed_column;
+pub mod key_index_type;
+pub mod table_hints;
 
 #[derive(Debug)]
 pub struct ServerDialect;
@@ -45,6 +48,9 @@ pub fn tokenize(sql: &str) -> Result<Vec<TokenWithSpan>, ParserError> {
         }
     }
     crate::openjson_path::path_tokens(&mut result);
+    key_index_type::strip(&mut result);
+    computed_column::mark(&mut result);
+    table_hints::strip_insert_hints(&mut result);
     Ok(result)
 }
 macro_rules! forward_flags {
@@ -155,6 +161,9 @@ impl Dialect for ServerDialect {
         &self,
         parser: &mut Parser,
     ) -> Result<Option<Result<Option<ColumnOption>, ParserError>>, ParserError> {
+        if let Some(option) = computed_column::parse(parser) {
+            return Ok(Some(option));
+        }
         if parser.peek_keyword(Keyword::WITH)
             && matches!(parser.peek_nth_token(1).token, Token::Word(w) if w.keyword == Keyword::VALUES)
         {

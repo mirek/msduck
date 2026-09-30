@@ -107,6 +107,7 @@ jobs:
             tests/datepart_numeric.test.mjs tests/reference-compare.test.mjs \
             tests/session_reset.test.mjs tests/databases.test.mjs \
             tests/login_database_error.test.mjs tests/alter_database_sessions.test.mjs \
+            tests/tedious_compat_gaps.test.mjs \
             2>&1 | tee artifacts/ci/clients.log
       - name: Aggregate diagnostic reference replays
         run: node --test --test-concurrency=1 tests/aggregate_diagnostics.test.mjs tests/character_extrema.test.mjs 2>&1 | tee artifacts/ci/aggregate-diagnostics.log

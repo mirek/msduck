@@ -75,6 +75,10 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
             ))
         })?
         .collect::<duckdb::Result<Vec<_>>>()?;
+    // Computed columns are never INSERT targets; DuckDB reports their
+    // generated expression as a column default.
+    let computed = crate::computed_columns::names(db, schema, table)?;
+    columns.retain(|column| !computed.contains(&column.0.to_lowercase()));
     let utf16 = crate::assignment::utf16_targets(&columns);
     crate::assignment::declared_targets(db, schema, table, &mut columns)?;
     if insert.columns.is_empty()

@@ -27,6 +27,8 @@ mod character;
 mod character_storage;
 mod checked_projection;
 mod column_catalog;
+mod computed_columns;
+mod current_time;
 pub mod database_catalog;
 mod datalength;
 mod dateadd;
