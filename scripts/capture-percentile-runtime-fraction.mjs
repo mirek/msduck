@@ -121,19 +121,20 @@ async function captureTokens(connection, action) {
 }
 
 async function capturePreparedPhase(connection, request, issue, setComplete, prepared = false) {
-  const result = { sets: [], done: [], errors: [], info: [], returnStatus: null }
+  const result = { sets: [], done: [], errors: [], info: [], returnStatus: null, returnValues: [] }
   const onError = e => result.errors.push({ number: e.number, state: e.state, class: e.class, lineNumber: e.lineNumber, message: e.message })
   const onInfo = e => result.info.push({ number: e.number, state: e.state, class: e.class, lineNumber: e.lineNumber, message: e.message })
   const onMetadata = metadata => result.sets.push({ columns: metadata.map(c => ({ name: c.colName, userType: c.userType, type: c.type.name,
     length: c.dataLength ?? null, precision: c.precision ?? null, scale: c.scale ?? null,
     flags: c.flags, collation: canonical(c.collation ?? null) })), rows: [] })
+  const onReturnValue = (name,value,c) => result.returnValues.push({ name, value: canonical(value), userType: c.userType, type: c.type.name, length: c.dataLength ?? null, precision: c.precision ?? null, scale: c.scale ?? null, flags: c.flags, collation: canonical(c.collation ?? null) })
   const onRow = row => result.sets.at(-1).rows.push(row.map(c => c.value))
   const done = Object.fromEntries(['done', 'doneInProc', 'doneProc'].map(kind => [kind, (rowCount, more, status) => {
     result.done.push({ kind, rowCount: rowCount ?? null, more })
     if (kind === 'doneProc') result.returnStatus = status
   }]))
   connection.on('errorMessage', onError); connection.on('infoMessage', onInfo)
-  request.on('columnMetadata', onMetadata); request.on('row', onRow)
+  request.on('columnMetadata', onMetadata); request.on('row', onRow); request.on('returnValue', onReturnValue)
   for (const [kind, listener] of Object.entries(done)) request.on(kind, listener)
   try {
     return await captureTokens(connection, async () => {
@@ -164,7 +165,7 @@ async function capturePreparedPhase(connection, request, issue, setComplete, pre
     })
   } finally {
     connection.off('errorMessage', onError); connection.off('infoMessage', onInfo)
-    request.off('columnMetadata', onMetadata); request.off('row', onRow)
+    request.off('columnMetadata', onMetadata); request.off('row', onRow); request.off('returnValue', onReturnValue)
     for (const [kind, listener] of Object.entries(done)) request.off(kind, listener)
   }
 }
@@ -210,7 +211,7 @@ function validate(run) {
   for(const record of run) {
     const phases=record.mode==='batch'?[record.result]:[record.preparation,...record.executions.map(e=>e.result),record.unpreparation].filter(Boolean)
     for(const result of phases) {
-      for(const field of ['sets','errors','info','done','doneTokens','events']) assert(Array.isArray(result[field]),'missing capture field')
+      for(const field of ['sets','errors','info','done','doneTokens','events','returnValues']) assert(Array.isArray(result[field]),'missing capture field')
       assert(result.done.length>0,'missing completion')
       assert.equal(result.done.length,result.doneTokens.length)
       for(const token of result.doneTokens) assert(Number.isInteger(token.status),'missing raw DONE status')
