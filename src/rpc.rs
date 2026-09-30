@@ -12,6 +12,7 @@ use msduck_core::{
 };
 use std::collections::HashMap;
 
+mod prepare_delete;
 mod prepare_metadata;
 
 struct RpcParameter {
@@ -110,13 +111,19 @@ impl State {
                     bind(&declarations, &parameters[3..])?
                 };
                 // Validate both syntax and database binding without executing the statement.
-                session.validate_prepared_sql(sql, &declarations)?;
+                let lowered = if procedure == "sp_prepare" {
+                    prepare_delete::lower(sql)?
+                } else {
+                    None
+                };
+                let execution_sql = lowered.as_deref().unwrap_or(sql);
+                session.validate_prepared_sql(execution_sql, &declarations)?;
                 let description = if procedure == "sp_prepare" {
                     Some(prepare_metadata::describe(session, sql, &declarations)?)
                 } else {
                     None
                 };
-                let bytes = sql.len()
+                let bytes = execution_sql.len()
                     + declarations
                         .iter()
                         .map(|(name, kind)| name.len() + std::mem::size_of_val(kind))
@@ -145,7 +152,7 @@ impl State {
                     self.prepared.insert(
                         handle,
                         Prepared {
-                            sql: sql.to_owned(),
+                            sql: execution_sql.to_owned(),
                             declarations,
                             bytes,
                         },

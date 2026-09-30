@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {test} from 'node:test'
-import {retained,validate} from '../scripts/capture-prepared-rpc-metadata.mjs'
+import {retained,validate,retainedCteDelete} from '../scripts/capture-prepared-rpc-metadata.mjs'
 
 test('preparation preserves declarations, option errors and handle allocation',async()=>{
  const {runs}=await retained()
@@ -43,4 +43,31 @@ test('raw capture validation rejects missing phases and damaged ORDER or DONE',a
  assert.throws(()=>validate(done))
  const order=structuredClone(runs[0]);order.find(r=>r.name==='row number').preparation.events.find(e=>e.kind==='ORDER').ordinals=[0]
  assert.throws(()=>validate(order))
+})
+
+
+test('CTE DELETE captures preserve reuse counts, exact preparation and rollback',async()=>{
+ const {runs}=await retainedCteDelete()
+ for(const run of runs){
+  assert.equal(run.length,10)
+  let handle=0
+  for(const record of run.slice(2)){
+   assert.deepEqual(record.preparation.errors,[])
+   assert.deepEqual(record.preparation.sets,[])
+   assert.equal(record.preparation.returnValues[0].value,++handle)
+   assert.deepEqual(record.preparation.doneTokens.map(t=>[t.kind,t.status,t.command,t.rowCount]),[['DONEINPROC',17,196,0],['DONEPROC',0,224,null]])
+   assert.deepEqual(record.afterPreparation.result.sets.map(s=>s.rows),[[[4]],[[0.041009986028273604]],[[0]]])
+   assert.deepEqual(record.executions.map(e=>e.value),[null,9,1,0])
+   const rollback=record.name.endsWith('rollback')
+   assert.deepEqual(record.executions.map(e=>e.result.doneTokens[0].rowCount),rollback?[0,0,3,4]:[0,0,3,1])
+   for(const execution of record.executions){
+    assert.deepEqual(execution.result.errors,[])
+    if(rollback){
+     assert.deepEqual(execution.beforeRollback.sets[1].rows,[[1]])
+     assert.deepEqual(execution.afterRollback.sets.map(s=>s.rows),[[[1,2,'a'],[2,1,null],[3,1,'c'],[4,2,'d']],[[0]]])
+    }
+   }
+   assert.deepEqual(record.afterExecution.result.sets.map(s=>s.rows),[[[rollback?4:0]],[[42]]])
+  }
+ }
 })

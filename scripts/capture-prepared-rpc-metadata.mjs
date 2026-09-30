@@ -140,6 +140,13 @@ export async function retained(){
  const bytes=await readFile(fixture);assert.equal(createHash('sha256').update(bytes).digest('hex'),fixtureSha256)
  const result=JSON.parse(bytes);assert.equal(result.image,referenceImage);assert.equal(result.runs.length,2);result.runs.forEach(validate);assertSameCapture(result.runs[0],result.runs[1],'prepared RPC independent captures');return result
 }
+export async function retainedCteDelete(){
+ const bytes=await readFile(new URL('../reference/prepared-cte-delete.json',import.meta.url))
+ assert.equal(createHash('sha256').update(bytes).digest('hex'),'82b301242462bc0ce227173523a96d4b06b15ddf85ec1c8c2fdd9c4ad0120a81')
+ const result=JSON.parse(bytes);assert.equal(result.image,referenceImage);assert.equal(result.runs.length,2)
+ assertSameCapture(result.runs[0],result.runs[1],'prepared CTE DELETE independent captures')
+ return result
+}
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined
  if(![undefined,'--check','--write-fixture','--regressions','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --cte-delete] [output]')

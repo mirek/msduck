@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import {test} from 'node:test'
 import {mkdir,writeFile} from 'node:fs/promises'
 import {start} from './support/client.mjs'
-import {observe,retained} from '../scripts/capture-prepared-rpc-metadata.mjs'
+import {observe,retained,retainedCteDelete,cteDeleteOptions} from '../scripts/capture-prepared-rpc-metadata.mjs'
 
 test('prepared RPC responses match SQL Server and never execute during preparation',async t=>{
  const connection=await start(t)
@@ -55,5 +55,30 @@ test('scalar and non-result preparations match SQL Server without executing SQL'
   assert.deepEqual(record.executions,[])
   assert.deepEqual(record.unpreparation.errors,[])
   assert.equal(record.unpreparation.returnStatus,0)
+ }
+})
+
+
+test('prepared CTE DELETE matches SQL Server through reuse and rollback',async t=>{
+ const connection=await start(t)
+ const actual=await observe(connection,{...cteDeleteOptions,verifyVersion:false})
+ const expected=(await retainedCteDelete()).runs[0]
+ await mkdir('artifacts/prepared-rpc-metadata',{recursive:true})
+ await writeFile('artifacts/prepared-rpc-metadata/cte-delete-runtime.json',JSON.stringify({expected,actual},null,2)+'\n')
+ for(let i=2;i<expected.length;i++){
+  const a=actual[i],e=expected[i],name=e.name+' '+e.variant
+  assert.deepEqual(a.preparation,e.preparation,name+' preparation')
+  assert.deepEqual(a.afterPreparation.result.sets,e.afterPreparation.result.sets,name+' no preparation effects')
+  assert.deepEqual(a.afterExecution.result.sets,e.afterExecution.result.sets,name+' final rows')
+  assert.equal(a.executions.length,e.executions.length,name)
+  for(let j=0;j<e.executions.length;j++){
+   const execution=a.executions[j],reference=e.executions[j]
+   assert.deepEqual(execution.result,reference.result,name+' execution '+j)
+   for(const phase of ['begin','beforeRollback','rollback','afterRollback']){
+    if(!reference[phase])continue
+    assert.deepEqual(execution[phase],reference[phase],name+' '+phase+' '+j)
+   }
+  }
+  assert.deepEqual(a.unpreparation,e.unpreparation,name+' unprepare')
  }
 })
