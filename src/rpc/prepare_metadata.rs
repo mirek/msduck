@@ -154,3 +154,61 @@ pub(super) fn handle(out: &mut Vec<u8>, name: &str, value: Option<i32>) -> Resul
         },
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn character_metadata_requires_valid_declared_byte_capacity() {
+        for id in [167, 175, 231, 239, 165, 173] {
+            for width in [None, Some(-2), Some(0), Some(8001)] {
+                assert!(
+                    wire(&TypeMetadata {
+                        system_type_id: Some(id),
+                        max_length: width,
+                        ..Default::default()
+                    })
+                    .is_none()
+                );
+            }
+        }
+        for id in [231, 239] {
+            assert!(
+                wire(&TypeMetadata {
+                    system_type_id: Some(id),
+                    max_length: Some(3),
+                    ..Default::default()
+                })
+                .is_none()
+            );
+        }
+        assert!(matches!(
+            wire(&TypeMetadata {
+                system_type_id: Some(231),
+                max_length: Some(16),
+                ..Default::default()
+            }),
+            Some(tds::Type::Nvarchar(8))
+        ));
+        assert!(matches!(
+            wire(&TypeMetadata {
+                system_type_id: Some(231),
+                max_length: Some(-1),
+                ..Default::default()
+            }),
+            Some(tds::Type::Text)
+        ));
+        assert!(wire(&TypeMetadata::default()).is_none());
+    }
+
+    #[test]
+    fn handle_output_is_nullable_and_never_truncates_names() {
+        let mut out = Vec::new();
+        handle(&mut out, "@handle", None).unwrap();
+        assert_eq!(out[0], 0xac);
+        assert_eq!(out[3], 6);
+        assert_eq!(&out[out.len() - 4..], &[0, 0x26, 4, 0]);
+        assert!(handle(&mut Vec::new(), &"h".repeat(256), Some(1)).is_err());
+    }
+}

@@ -712,6 +712,51 @@ mod tests {
         assert!(state.prepared.contains_key(&1));
     }
     #[test]
+    fn rejected_options_do_not_consume_handles_or_prepare_statements() {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        let mut state = State::default();
+        for option in [Some(0i32), Some(2), None] {
+            let mut request = prepare_request("SELECT @x AS x", "@x int");
+            request.extend([0, 0, 0x26, 4]);
+            if let Some(value) = option {
+                request.push(4);
+                request.extend(value.to_le_bytes());
+            } else {
+                request.push(0);
+            }
+            let response = state.execute(&mut session, &request).unwrap();
+            assert_eq!(response[0], 0xaa, "expected SQL error token");
+            assert_eq!(&response[3..7], &214i32.to_le_bytes());
+            assert_eq!(
+                &response[response.len() - 13..response.len() - 8],
+                &[0xfe, 2, 0, 0xe0, 0]
+            );
+            assert!(state.prepared.is_empty());
+            assert_eq!(state.bytes, 0);
+            assert_eq!(state.next_handle, 0);
+        }
+        let response = state
+            .execute(&mut session, &prepare_request("SELECT @x AS x", "@x int"))
+            .unwrap();
+        assert_eq!(response[0], 0x81, "metadata must precede status and handle");
+        assert!(state.prepared.contains_key(&1));
+    }
+    #[test]
+    fn unsupported_prepared_declaration_does_not_allocate_a_handle() {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        let mut state = State::default();
+        assert!(
+            state
+                .execute(&mut session, &prepare_request("SELECT NULL AS unknown", ""))
+                .is_err()
+        );
+        assert!(state.prepared.is_empty());
+        assert_eq!(state.bytes, 0);
+        assert_eq!(state.next_handle, 0);
+    }
+    #[test]
     fn failed_prepexec_does_not_leak_a_handle() {
         let server = Server::open(":memory:").unwrap();
         let mut session = Session::new(server.connection().unwrap()).unwrap();
