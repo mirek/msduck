@@ -7834,6 +7834,28 @@
         "Wire and test using the worker already-claimed RPC metadata files; add both claim receipts to PR703. Exact-head formatting/strict workspaceClippy/workspace tests/alltargets build/full default and dedicated clients/diagnostic audit, independent review or authorized availability fallback/required CI. Claiming worker completes both tasks/projects/issues after merge."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PaX_x"
+    },
+    {
+      "id": "transaction-done-command-v1",
+      "title": "Retain captured SQL transaction DONE command identities",
+      "state": "backlog",
+      "authorization": "Owner continuing compatibility goal. Two fresh owner-run reference/prepared-cte-delete.json captures show212 for BEGIN and210 forROLLBACK; root runtime currentlyreturns0. No external submission input. Backlog reserves nofiles.",
+      "issue": 705,
+      "scope": [
+        "src/engine.rs",
+        "tests/transaction_done_commands.rs",
+        "reference/transaction-done-commands.json",
+        "scripts/capture-transaction-done-commands.mjs"
+      ],
+      "dependencies": [
+        "tedious-compat-gaps-v2"
+      ],
+      "acceptance": [
+        "After active engine worker completes, capture full BEGIN/ROLLBACK/COMMIT/savepoint/nested/error DONE andENVCHANGE frames twice from fresh pinnedSQLServer. Preserve raw differences and diagnosticprecedence; existingpreparedCTEreference gives initialBEGIN212/ROLLBACK210 evidence.",
+        "Retain command IDs in successful/failed ordinarySQL transaction statement completion withoutalteringtransaction effects, count/status ormanagerRPCframing. Do notguessothercommands orreadexternalcontent.",
+        "Exact-headrequiredformat/strictClippy/workspace/build/default/dedicatedclienttests/audit/revieworownerfallback/CI/merge/completion. CoordinatewithstrictpreparedCTErollbackcomparison inPR703; noengineeditswhiletask697active."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Paat6"
     }
   ]
 }
