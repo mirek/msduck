@@ -59,10 +59,8 @@ NULL projections from that capture. Its smaller plan asserts consecutive handles
 starting at 1; every other preparation response field is compared verbatim.
 Both plans verify preparation leaves table rows, seeded RAND and transaction
 depth unchanged. INSERT OUTPUT INTO retains its captured no-result completion
-command without performing either write. The CTE DELETE capture proves command
-196, but the direct CTE target still fails original native validation with
-`Binder Error: Can only delete from base table` (error 50000) instead of preparing.
-The expanded public test retains this failing regression and full raw comparison.
+command without performing either write. Single-table CTE DELETE uses the bounded
+root adapter described below and retains the captured no-result command 196.
 INSERT OUTPUT uses the existing pure logical projection over target catalog
 declarations and retains the INSERT completion command. Other captured regression
 shapes remain implementation work, including window/variant ORDER and temporal
@@ -70,3 +68,38 @@ derived declarations.
 
 A bare projected NULL is declared INT, while NULL function operands retain their
 original declaration barriers. VARBINARY(MAX) uses the existing PLP binary codec.
+
+
+## Prepared single-table CTE DELETE
+
+Companion task #704 adds `src/rpc/prepare_delete.rs` and the immutable
+`reference/prepared-cte-delete.json` (SHA-256
+`82b301242462bc0ce227173523a96d4b06b15ddf85ec1c8c2fdd9c4ad0120a81`). Two fresh
+pinned SQL Server runs agree on all ten records per run: version/setup and plain
+or qualified source profiles, through API/named preparation, reuse and rollback.
+The capture mode is `--cte-delete PATH`.
+
+The adapter accepts one nonrecursive CTE over a plain single-table wildcard
+projection, optional source alias and predicate, with no other query/DELETE
+modifiers. It preserves the base relation, alias and predicate once as AST nodes.
+A same-named unqualified source remains a self-reference barrier. The existing
+native binder validates the equivalent DELETE without stepping it before a
+handle is allocated. Original logical SQL supplies preparation framing; the
+validated transformed SQL is cached for execution and its actual byte length
+counts toward capacity. Wider shapes retain their original binding behavior.
+Ordinary batch CTE writes and `sp_prepexec` are not adapted here.
+
+At implementation checkpoint `45d61e5`, all 32 complete prepared DELETE execution
+responses match SQL Server verbatim. Parameters NULL, 9, 1 and 0 produce counts
+0/0/3/1 for reuse and 0/0/3/4 when each execution is rolled back. All preparation,
+unprepare, before/after table rows, descriptors and transaction depths match.
+The complete raw runtime comparison is retained in
+`artifacts/prepared-rpc-metadata/cte-delete-runtime.json`.
+
+The strict rollback test still fails on ordinary SQL transaction wire framing:
+BEGIN/ROLLBACK advertise DONE command 0 instead of the captured 212/210. These
+are tracked in owner-approved backlog issue #705; no transaction semantics are
+normalized away. Surrounding ordered row snapshots also retain the existing
+missing ORDER / ROW instead of NBCROW gaps. The public comparison remains
+failing on those exact surrounding responses, so this checkpoint is not merge
+ready and does not establish complete CTE or transaction compatibility.
