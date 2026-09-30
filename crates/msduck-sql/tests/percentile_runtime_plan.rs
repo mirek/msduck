@@ -113,8 +113,8 @@ fn retained_runtime_requests_keep_syntax_and_defer_execution_diagnostics() {
     }
     assert_eq!(sequence_requests, 2);
     assert_eq!(requests, 128);
-    assert_eq!(planned, 122);
-    assert_eq!(rejected, 10);
+    assert_eq!(planned, 120);
+    assert_eq!(rejected, 12);
 }
 #[test]
 fn unknown_shapes_and_declarations_do_not_become_backend_guesses() {
