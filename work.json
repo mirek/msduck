@@ -7252,6 +7252,25 @@
         "Own focused PR through source review, required CI, verified Codex review or authorized availability fallback, merge and prompt registry/project completion. Reference evidence alone does not claim an implemented compatible RNG."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZKwJ"
+    },
+    {
+      "id": "percentile-result-declarations-v1",
+      "title": "Infer percentile results independently of bound fraction values",
+      "state": "ready",
+      "authorization": "Owner continuing goal and failed exact-head client preparation/error tests; same root adapter worker owns this nonconflicting supplement.",
+      "issue": 676,
+      "scope": [
+        "crates/msduck-sql/src/projection.rs",
+        "crates/msduck-sql/tests/percentile_result_declarations.rs"
+      ],
+      "dependencies": [
+        "percentile-runtime-plan-v1"
+      ],
+      "acceptance": [
+        "Infer CONT FLOAT and DISC ordering-source metadata over explicit catalog/scope without reading fraction values or session/backend state. Preserve source width precision scale and unknown barriers, including NULL/invalid/prepared fraction independence.",
+        "Meaningful deterministic result declaration tests and captured root prepared-error metadata regression. Same claiming root worker combines with adapter671/conversion672 PR674; exact-head full Rust/client/audit checks, CI and review or authorized fallback, merge and prompt all registry/project completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZNkU"
     }
   ]
 }
