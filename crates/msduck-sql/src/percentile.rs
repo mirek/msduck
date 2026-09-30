@@ -386,7 +386,7 @@ fn decimal_cast(expr: &Expr, info: ExactNumberInfo) -> Option<f64> {
         ExactNumberInfo::Precision(p) => (p, 0),
         ExactNumberInfo::PrecisionAndScale(p, s) => (p, s),
     };
-    if precision == 0 || precision > 38 || scale > precision {
+    if precision == 0 || precision > 38 || scale < 0 || scale > precision as i64 {
         return None;
     }
     let text = decimal_source(expr)?;
