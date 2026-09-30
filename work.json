@@ -7737,6 +7737,28 @@
       ],
       "issue": 697,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZ76f"
+    },
+    {
+      "id": "count-null-compilation-reference-v1",
+      "title": "Capture COUNT typeless NULL validation and compilation boundaries",
+      "state": "ready",
+      "authorization": "Owner continuing compatibility goal and first-party COUNT(NULL)8117 mismatch retained at535c125. Reference acquisition only; no engine.rs reservation.",
+      "issue": 699,
+      "scope": [
+        "scripts/capture-count-null-compilation.mjs",
+        "reference/count-null-compilation.json",
+        "tests/count_null_compilation_reference.test.mjs",
+        "docs/count-null-compilation.md"
+      ],
+      "dependencies": [
+        "count-ranking-declarations-v1"
+      ],
+      "acceptance": [
+        "Capture exact batch/RPC rows, descriptors, errors, DONE/ORDER and follow-up side effects in two fresh pinned SQL Server containers for COUNT/COUNT_BIG bare/parenthesized/DISTINCT/window NULL, typed NULL, NULL arithmetic and typed parameters. Preserve NULL validity and parameter declaration/value distinctions.",
+        "Capture nested/subquery and missing-source diagnostic precedence, prior results/writes, unreachable branches, TRY/CATCH/dynamic SQL and preparation boundaries. Retain observations without guessing batch atomicity, catchability or unsupported shape acceptance. Use existing bounded raw helpers, isolated owned databases/containers and the shared Linux lock.",
+        "Commit reproducible generator and immutable full fixture, validate plan completeness/two-fresh agreement/raw token integrity with meaningful tests, and document exact evidence and remaining runtime work. No production Rust or engine.rs changes; reference agreement is not runtime compatibility. Independent owner-run review or authorized unavailable GitHubCodex fallback, required exact-head CI, worker-owned merge and prompt registry/project completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZ-2h"
     }
   ]
 }
