@@ -26,6 +26,7 @@ const plan = [
   {name:'server version',sql:"SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)) AS product_version"},
   {name:'setup',sql:"CREATE TABLE dbo.percentile_runtime(id INT NOT NULL,g INT NOT NULL,n INT,p FLOAT,ptext NVARCHAR(16)); INSERT INTO dbo.percentile_runtime VALUES(1,1,1,0,N'0'),(2,2,2,0.25,N'0.25'),(3,1,3,0.75,N'0.75'),(4,2,4,1,N'1'),(5,1,NULL,NULL,NULL); CREATE TABLE dbo.percentile_runtime_null(id INT NOT NULL,g INT NOT NULL,n INT,p FLOAT,ptext NVARCHAR(16)); INSERT INTO dbo.percentile_runtime_null SELECT id,g,NULL,p,ptext FROM dbo.percentile_runtime; CREATE SEQUENCE dbo.percentile_fraction_sequence AS INT START WITH 0 INCREMENT BY 1"},
 ]
+plan.push({name:'RAND seeded control',sql:'SELECT RAND(42) AS seed; SELECT RAND() AS first; SELECT RAND() AS second; SELECT RAND() AS third'})
 for (const kind of ['CONT','DISC']) {
   for (const [type,values] of [['FLOAT',['0.5','0','1','NULL','-0.1','1.1']],['NVARCHAR(16)',["N'0.5'","N'-0'","N'abc'","N'1.1'",'NULL']],['DECIMAL(8,4)',['0.5','NULL']],['INT',['0','1']],['BIT',['0','1']]]) {
     for(const value of values) plan.push({name:`${kind} variable ${type} ${value}`,sql:`DECLARE @p ${type}=${value}; ${query(kind,'@p')}`})
@@ -45,6 +46,7 @@ for (const kind of ['CONT','DISC']) {
     ['volatile RAND stable value','RAND()*0+.5',''],
     ['sequence side effect','NEXT VALUE FOR dbo.percentile_fraction_sequence','']
   ]) plan.push({name:`${kind} expression ${name}`,sql:`${prefix} ${query(kind,expression)}`})
+  for(const [label,options] of [['populated',{}],['empty',{empty:true}],['all NULL',{allNull:true}],['partitioned',{partition:true}]]) plan.push({name:`${kind} RAND advancement ${label}`,sql:`SELECT RAND(42) AS seed; ${query(kind,'RAND()*0+.5',options)}; SELECT RAND() AS after`})
   plan.push({name:`${kind} sequence state`,sql:"SELECT current_value,last_used_value FROM sys.sequences WHERE name=N'percentile_fraction_sequence'"})
   plan.push({name:`${kind} partition variable`,sql:`DECLARE @p FLOAT=.5; ${query(kind,'@p',{partition:true})}`})
   plan.push({name:`${kind} partition varying column`,sql:query(kind,'p',{partition:true})})
