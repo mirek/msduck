@@ -87,6 +87,35 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
                     && msduck_sql::aggregate::validate(f).is_ok()
                 {
                     Some(DataType::Double(ExactNumberInfo::None))
+                } else if matches!(&f.args, FunctionArguments::List(a) if a.clauses.is_empty() && a.duplicate_treatment.is_none() && a.args.iter().all(|arg| matches!(arg, FunctionArg::Unnamed(FunctionArgExpr::Expr(_)))))
+                    && f.over.is_none()
+                    && f.filter.is_none()
+                    && f.within_group.is_empty()
+                    && f.null_treatment.is_none()
+                    && matches!(f.parameters, FunctionArguments::None)
+                    && !f.uses_odbc_syntax
+                {
+                    // Fixed return declarations, checked without evaluating
+                    // catalog lookups, dates, identity state or JSON operands.
+                    match name.as_str() {
+                        "eomonth" | "datefromparts" => Some(DataType::Date),
+                        "object_id" | "schema_id" | "type_id" | "columnproperty"
+                        | "json_path_exists" => Some(DataType::Int(None)),
+                        "schema_name" | "type_name" | "col_name" | "object_name"
+                        | "object_schema_name" => {
+                            Some(msduck_sql::sql_type::ast(SqlType::Character(
+                                msduck_core::character::CharacterType::new(
+                                    msduck_core::character::Family::Nvarchar,
+                                    msduck_core::character::Length::Bounded(128),
+                                )
+                                .expect("sysname declaration"),
+                            )))
+                        }
+                        "ident_current" | "ident_seed" | "ident_incr" => {
+                            Some(DataType::Numeric(ExactNumberInfo::PrecisionAndScale(38, 0)))
+                        }
+                        _ => None,
+                    }
                 } else {
                     None
                 };
@@ -126,6 +155,29 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
     }
     let mut declared = query.clone();
     let _ = declared.visit(&mut Declare(parameters));
+    // A bare projected NULL has an INT declaration. Do not type NULL while
+    // traversing function arguments: COUNT(NULL) must keep its compile barrier.
+    if let sqlparser::ast::SetExpr::Select(select) = declared.body.as_mut() {
+        for item in &mut select.projection {
+            let expression = match item {
+                sqlparser::ast::SelectItem::UnnamedExpr(expression)
+                | sqlparser::ast::SelectItem::ExprWithAlias {
+                    expr: expression, ..
+                } => expression,
+                _ => continue,
+            };
+            if msduck_sql::expression_metadata::conditional::literal_null(expression) {
+                *expression = Expr::Convert {
+                    is_try: false,
+                    expr: Box::new(expression.clone()),
+                    data_type: Some(DataType::Int(None)),
+                    charset: None,
+                    target_before_value: true,
+                    styles: vec![],
+                };
+            }
+        }
+    }
     declared
 }
 
@@ -170,7 +222,7 @@ fn wire(info: &TypeMetadata) -> Option<tds::Type> {
         231 if info.max_length == Some(-1) => Type::Text,
         231 => Type::Nvarchar(unicode()?),
         239 => Type::Nchar(unicode()?),
-        165 if info.max_length == Some(-1) => Type::Varbinary(u16::MAX),
+        165 if info.max_length == Some(-1) => Type::Binary,
         165 => Type::Varbinary(width().filter(|n| (1..=8000).contains(n))?),
         173 => Type::FixedBinary(width().filter(|n| (1..=8000).contains(n))?),
         _ => return None,

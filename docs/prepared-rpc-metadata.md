@@ -48,3 +48,18 @@ effects, typeless NULL error precedence, all unproven ORDER shapes and wider
 type coverage need further ground truth and integration. `sp_prepexec` and
 `sp_unprepare` keep their existing execution behavior. No changes to engine.rs,
 root module registration or catalog acquisition are part of this task.
+
+The `--regressions --output PATH` capture mode retains a separate preparation-only
+plan of 23 profiles across API-default and named option 1. Two fresh matching
+48-record runs are retained in the Linux ignored artifact
+`artifacts/prepared-rpc-metadata/regression-reference.json` (SHA-256
+`5f71ef2b908936b40784b5f2b59c56a8fdf5ffd2d3c7b5daae7d5e71d229563c`). The public scalar regression test embeds the complete
+preparation responses for calendar, catalog, identity, JSON-presence and bare
+NULL projections from that capture. Its smaller plan asserts consecutive handles
+starting at 1; every other preparation response field is compared verbatim.
+Both plans verify preparation leaves table rows, seeded RAND and transaction
+depth unchanged. The other captured regression shapes remain implementation
+work, including OUTPUT, window/variant ORDER and temporal derived declarations.
+
+A bare projected NULL is declared INT, while NULL function operands retain their
+original declaration barriers. VARBINARY(MAX) uses the existing PLP binary codec.

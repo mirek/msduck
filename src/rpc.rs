@@ -749,7 +749,10 @@ mod tests {
         let mut state = State::default();
         assert!(
             state
-                .execute(&mut session, &prepare_request("SELECT NULL AS unknown", ""))
+                .execute(
+                    &mut session,
+                    &prepare_request("SELECT COUNT(NULL) AS unknown", "")
+                )
                 .is_err()
         );
         assert!(state.prepared.is_empty());
