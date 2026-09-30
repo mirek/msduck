@@ -7816,6 +7816,24 @@
         "Meaningful focused Rust/public client/reference tests invoked explicitly alongside the default client inventory (package.json is reserved by prepared-capture-helper-v1), exact-head formatting/strict workspace-alltargetsClippy/workspace tests/alltargets build/full independent clients and semantic copied-corpus diagnostic audit. Independent owner-run review or authorized GitHubCodex unavailable fallback and required exact-head CI. Claiming worker merges and promptly completes task/board; respect other active file reservations."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PaD96"
+    },
+    {
+      "id": "prepared-cte-delete-v1",
+      "title": "Bind prepared single-table CTE DELETE without executing preparation",
+      "state": "ready",
+      "authorization": "Owner continuing full compatibility goal and first-party two-run prepared CTE DELETE reference/failing regression in PR703. Companion delivered by prepared-rpc-metadata-v1 worker in the same isolated worktree and PR. Engine.rs/root lib/query_catalog remain excluded.",
+      "issue": 704,
+      "dependencies": [],
+      "scope": [
+        "src/rpc/prepare_delete.rs",
+        "reference/prepared-cte-delete.json"
+      ],
+      "acceptance": [
+        "Capture complete preparation/execution/unpreparation, NULL/zero/positive reuse, resulting rows and rollback in two fresh pinned SQL Server containers. Keep the immutable base RPC fixture unchanged; retain raw response/error/metadata/DONE differences.",
+        "Implement a root backend adapter for proven updatable single-table CTE DELETE shapes with explicit AST transformations. Retain original logical metadata, validate equivalent native SQL without stepping statements, preserve exact predicate and parameter semantics and handle allocation. No value-dependent compile metadata, text substitution, duplicate volatile evaluation or engine.rs/root lib/query_catalog edits. Unproven wider CTE/DML shapes remain explicit gaps.",
+        "Wire and test using the worker already-claimed RPC metadata files; add both claim receipts to PR703. Exact-head formatting/strict workspaceClippy/workspace tests/alltargets build/full default and dedicated clients/diagnostic audit, independent review or authorized availability fallback/required CI. Claiming worker completes both tasks/projects/issues after merge."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PaX_x"
     }
   ]
 }
