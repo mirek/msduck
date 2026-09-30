@@ -7455,7 +7455,7 @@
     {
       "id": "alter-database-sessions-v2",
       "title": "Execute ALTER DATABASE READ_COMMITTED_SNAPSHOT/user access with ROLLBACK IMMEDIATE, sys.dm_exec_sessions and @@SPID",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-09-30), issue #680; owner approved local implementation while src/engine.rs was held. Successor of unclaimed backlog task alter-database-sessions-v1, adding src/engine/joined_output.rs (Translator construction) and tests/sys_databases_descriptors.rs (sys.databases SELECT * gains is_read_committed_snapshot_on). No external submission is input.",
       "scope": [
         "src/engine.rs",
