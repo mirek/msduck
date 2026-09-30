@@ -293,3 +293,56 @@ fn supplemental_fresh_sql_server_optimizer_cases() {
         Plan::Unknown(Barrier::AmbiguousName)
     );
 }
+
+#[test]
+fn expanded_reference_replays_known_plans_and_identifies_remaining_profiles() {
+    let reference: Value =
+        serde_json::from_str(include_str!("../../../reference/order-token-expanded.json")).unwrap();
+    let mut resolved = 0;
+    let mut unknown = Vec::new();
+    for record in reference["runs"][0].as_array().unwrap().iter().skip(2) {
+        // Explicit prepare lifecycles contain the parameterized SQL as a string;
+        // their inner query is checked separately against declaration-only plans.
+        if record["name"].as_str().unwrap().starts_with("prepared ") {
+            continue;
+        }
+        let ast = queries(record["sql"].as_str().unwrap());
+        let plans: Vec<_> = ast
+            .iter()
+            .map(|query| infer(&catalog(), query, &Scope::default()))
+            .collect();
+        if plans.iter().any(|plan| matches!(plan, Plan::Unknown(_))) {
+            unknown.push((
+                record["name"].as_str().unwrap(),
+                record["mode"].as_str().unwrap(),
+                plans,
+            ));
+            continue;
+        }
+        let actual: Vec<_> = plans
+            .into_iter()
+            .filter_map(|plan| match plan {
+                Plan::Token(ordinals) => Some(ordinals),
+                _ => None,
+            })
+            .collect();
+        let expected: Vec<Vec<u16>> = record["result"]["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|event| event["kind"] == "ORDER")
+            .map(|event| {
+                event["ordinals"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|value| value.as_u64().unwrap() as u16)
+                    .collect()
+            })
+            .collect();
+        assert_eq!(actual, expected, "{} {}", record["name"], record["mode"]);
+        resolved += 1;
+    }
+    eprintln!("expanded resolved {resolved}, unknown {unknown:?}");
+    assert!(resolved > 0);
+}
