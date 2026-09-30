@@ -285,6 +285,10 @@ fn query_description(
     // framing but a distinct TYPE_INFO ID, retained by SQL Server for these
     // declarations. Encode each bounded column with the shared codec, then
     // select that declaration's ID at its fixed TYPE_INFO position.
+    ensure!(
+        columns.len() < usize::from(u16::MAX),
+        "too many prepared columns"
+    );
     out.push(0x81);
     out.extend(u16::try_from(columns.len())?.to_le_bytes());
     for (column, field) in columns.iter().zip(&fields) {
