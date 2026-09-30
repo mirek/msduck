@@ -166,7 +166,7 @@ fn variant_row_number(
     };
     window.partition_by.iter().all(declared)
         && window.order_by.iter().all(|key| {
-            key.nulls_first.is_none()
+            key.options.nulls_first.is_none()
                 && key.with_fill.is_none()
                 && declared(&key.expr)
                 && has_column(&key.expr)
