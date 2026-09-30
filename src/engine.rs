@@ -2624,6 +2624,7 @@ impl Session {
             let (value, ticket) = match fraction {
                 Ok(value) => (value, None),
                 Err(error) => {
+                    eprintln!("PCT DEBUG deferred: {error}");
                     let index = i64::try_from(percentile_faults.len())?;
                     percentile_faults.push(Some(error));
                     let ticket = percentile_binding(
@@ -2845,6 +2846,7 @@ impl Session {
             }
         }
         let mut prepared = self.db.prepare(&rendered).map_err(|error| {
+            eprintln!("PCT DEBUG prepare: {error}");
             if let Some(diagnostic) = crate::query_error::integer_overflow(&error.to_string()) {
                 if is_query
                     && output.is_none()
@@ -2958,6 +2960,10 @@ impl Session {
                 prepared.query_arrow(duckdb::params_from_iter(translator.values.iter()))
             };
             let batches = execution.map_err(|error| {
+                eprintln!(
+                    "PCT DEBUG execute: {error}; metadata={:?}",
+                    error_metadata.as_ref().map(Vec::len)
+                );
                 if let Some(ticket) = crate::percentile_input::fault_ticket(&error.to_string())
                     && let Some(Some(diagnostic)) = percentile_faults.get_mut(ticket)
                 {

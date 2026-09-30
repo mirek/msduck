@@ -41,3 +41,41 @@ fn declaration_only_preparation_and_runtime_empty_null_distinction() {
         }
     }
 }
+
+#[test]
+fn invalid_character_keeps_error_metadata() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let sql = "SELECT PERCENTILE_CONT(@p) WITHIN GROUP(ORDER BY n) OVER() AS p FROM(VALUES(1),(2),(3),(4))s(n)";
+    session
+        .validate_prepared_sql(
+            sql,
+            &[(
+                "@p".into(),
+                msduck_core::types::Type::Character(
+                    msduck_core::character::CharacterType::new(
+                        msduck_core::character::Family::Nvarchar,
+                        msduck_core::character::Length::Bounded(16),
+                    )
+                    .unwrap(),
+                ),
+            )],
+        )
+        .unwrap();
+    let parameters = HashMap::from([(
+        "@p".into(),
+        Parameter {
+            value: Value::Text("abc".into()),
+            data_type: msduck_core::types::Type::Character(
+                msduck_core::character::CharacterType::new(
+                    msduck_core::character::Family::Nvarchar,
+                    msduck_core::character::Length::Bounded(16),
+                )
+                .unwrap(),
+            ),
+        },
+    )]);
+    let (bytes, ok) = session.batch_response(sql, &parameters, false, None);
+    assert!(!ok);
+    assert_eq!(bytes.first(), Some(&0x81), "{bytes:?}");
+}
