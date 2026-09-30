@@ -49,6 +49,31 @@ struct Entry {
 #[derive(Default)]
 pub struct Registry {
     entries: Mutex<BTreeMap<i16, Entry>>,
+    principals: Mutex<Principals>,
+}
+
+/// Logins seen since the server started, for `sys.server_principals`.
+/// msduck has no login catalog: `sa` always exists (principal_id 1) and
+/// every other authenticated name gets the next ID from 256 at its first
+/// login.
+#[derive(Default)]
+struct Principals {
+    /// By case-insensitive name: display name, principal_id and first login
+    /// time (microseconds since the Unix epoch).
+    logins: BTreeMap<String, (String, i32, i64)>,
+    next: i32,
+}
+
+impl Principals {
+    fn add(&mut self, name: &str, login_time: i64) {
+        let key = name.to_lowercase();
+        if key == "sa" || self.logins.contains_key(&key) {
+            return;
+        }
+        let id = 256 + self.next;
+        self.next += 1;
+        self.logins.insert(key, (name.into(), id, login_time));
+    }
 }
 
 impl Registry {
@@ -150,6 +175,16 @@ impl Registration {
     }
 
     pub fn set_login(&self, client: Client, login_name: &str, terminator: Option<Terminator>) {
+        let login_time = self
+            .registry
+            .entries()
+            .get(&self.spid)
+            .map_or(0, |entry| entry.login_time);
+        self.registry
+            .principals
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .add(login_name, login_time);
         self.update(|entry| {
             entry.client = Some(client);
             entry.login_name = login_name.into();
@@ -327,7 +362,85 @@ impl VTab for SessionsTable {
     }
 }
 
-/// Register `__msduck_sessions()` for the server instance.
+/// `__msduck_server_principals()`: the logins seen since the server started
+/// (name, principal_id, first login time), without `sa`.
+pub struct PrincipalsTable;
+
+pub struct PrincipalScan {
+    rows: Vec<(String, i32, i64)>,
+    done: AtomicUsize,
+}
+
+impl VTab for PrincipalsTable {
+    type InitData = PrincipalScan;
+    type BindData = ();
+
+    fn bind(bind: &BindInfo) -> Result<(), Box<dyn std::error::Error>> {
+        bind.add_result_column("name", LogicalTypeHandle::from(LogicalTypeId::Varchar));
+        bind.add_result_column(
+            "principal_id",
+            LogicalTypeHandle::from(LogicalTypeId::Integer),
+        );
+        bind.add_result_column(
+            "create_date",
+            LogicalTypeHandle::from(LogicalTypeId::Timestamp),
+        );
+        Ok(())
+    }
+
+    fn init(init: &InitInfo) -> Result<PrincipalScan, Box<dyn std::error::Error>> {
+        // SAFETY: registration stores an `Arc<Registry>` as extra info.
+        let registry = unsafe { &*init.get_extra_info::<Arc<Registry>>() };
+        let rows = registry
+            .principals
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .logins
+            .values()
+            .cloned()
+            .collect();
+        Ok(PrincipalScan {
+            rows,
+            done: AtomicUsize::new(0),
+        })
+    }
+
+    fn func(
+        function: &TableFunctionInfo<Self>,
+        output: &mut DataChunkHandle,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let scan = function.get_init_data();
+        let start = scan.done.load(Ordering::Relaxed).min(scan.rows.len());
+        let rows = &scan.rows[start..(start + 2048).min(scan.rows.len())];
+        scan.done.store(start + rows.len(), Ordering::Relaxed);
+        let names = output.flat_vector(0);
+        for (row, (name, _, _)) in rows.iter().enumerate() {
+            names.insert(row, name.as_str());
+        }
+        // SAFETY: each vector holds at least `rows.len()` values of its type.
+        unsafe {
+            let mut vector = output.flat_vector(1);
+            let ids = vector.as_mut_slice_with_len::<i32>(rows.len());
+            for (slot, (_, id, _)) in ids.iter_mut().zip(rows) {
+                *slot = *id;
+            }
+            let mut vector = output.flat_vector(2);
+            let times = vector.as_mut_slice_with_len::<i64>(rows.len());
+            for (slot, (_, _, time)) in times.iter_mut().zip(rows) {
+                *slot = *time;
+            }
+        }
+        output.set_len(rows.len());
+        Ok(())
+    }
+}
+
+/// Register `__msduck_sessions()` and `__msduck_server_principals()` for the
+/// server instance.
 pub fn register(db: &duckdb::Connection, registry: &Arc<Registry>) -> duckdb::Result<()> {
-    db.register_table_function_with_extra_info::<SessionsTable, _>("__msduck_sessions", registry)
+    db.register_table_function_with_extra_info::<SessionsTable, _>("__msduck_sessions", registry)?;
+    db.register_table_function_with_extra_info::<PrincipalsTable, _>(
+        "__msduck_server_principals",
+        registry,
+    )
 }
