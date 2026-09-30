@@ -7563,6 +7563,31 @@
         "After owner makes a ready non-overlapping task available, exclusively claim before implementation. Exact-head workspace fmt/strict Clippy/tests/all-targets build, independent clients and semantic copied-corpus audit; review or authorized availability fallback and required CI, worker-owned merge and prompt registry/project completion. Backlog only now, so engine.rs is not reserved by this session."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZy8e"
+    },
+    {
+      "id": "count-ranking-declarations-v1",
+      "title": "Infer COUNT and ROW_NUMBER result declarations from explicit logical inputs",
+      "state": "ready",
+      "authorization": "Owner continuing compatibility goal and first-party projection/type evidence; no external submission intake.",
+      "issue": 694,
+      "scope": [
+        "crates/msduck-sql/src/projection.rs",
+        "crates/msduck-sql/tests/count_ranking_declarations.rs",
+        "scripts/capture-count-ranking-declarations.mjs",
+        "reference/count-ranking-declarations.json",
+        "tests/count_ranking_reference.test.mjs",
+        "tests/count_ranking_declarations.test.mjs",
+        "docs/count-ranking-declarations.md"
+      ],
+      "dependencies": [
+        "order-token-expanded-plan-v1"
+      ],
+      "acceptance": [
+        "First capture COUNT/COUNT_BIG star, known column/literal/typeless NULL and invalid/missing inputs, grouped/window/empty results and ROW_NUMBER plus derived/CTE and prepared/downstream arithmetic declaration use in two fresh pinned SQL Server containers. Preserve raw rows/descriptors/errors/DONE/ORDER events with reproducible generator and fixture integrity tests, never assume unsupported argument acceptance.",
+        "Infer captured logical result types in existing root-consumed projection rules from explicit AST/catalog/parameter declarations only. Keep missing/ambiguous sources, unsupported arguments and unknown declarations explicit barriers; preserve binding-error precedence and captured result properties. No bound values/backend rows/hidden effects may supply compile metadata. Do not implement unrelated wider aggregates or claim runtime aggregate completion.",
+        "Meaningful fixture-backed pure and dedicated public client regressions for declarations/consumers, raw+normalized AST and empty/prepared independence. Exact-head fmt/strict workspace Clippy/workspace tests/all-targets build/default+focused independent clients and copied-corpus diagnostic audit; independent review or availability fallback and required CI, worker-owned merge and prompt registry/project completion. Any exposed root/runtime gap remains explicitly evidenced for follow-up. Engine.rs and other root files excluded."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZ0Cu"
     }
   ]
 }
