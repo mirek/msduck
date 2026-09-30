@@ -49,7 +49,10 @@ ROW_NUMBER. Invalid shapes must not receive fabricated known declarations.
 Pure tests replay successful descriptors and unknown barriers without backend
 rows, preserve the query AST, and check prepared declarations against all
 captured phases in both runs and transport modes. Dedicated public tests compare
-full successful rows/descriptors and tedious prepare/execute/unprepare metadata.
+full successful rows/descriptors and tedious prepared execution metadata.
+Preparation metadata differences are retained separately rather than asserted
+as compatible; msduck emits no metadata for the omitted option and rejects
+explicit option 1.
 They create the exact captured heap declarations and rows. The shared reference
 setup also creates an unrelated PRIMARY KEY CLUSTERED table; msduck rejects that
 DDL, so it is not used as setup for these heap-only execution comparisons.
@@ -62,3 +65,10 @@ raw completion-token or ORDER fidelity. Root ORDER emission remains separate
 backlog work (#693). Wider aggregate acceptance, runtime validation, overflow
 and every unproven window shape still need exact ground truth and integration.
 No root source files or engine.rs are changed by this task.
+
+The supplemental `--default-prepare` capture records omitted and explicit zero
+options separately in two fresh containers. Omitting the option returns a
+metadata-only preparation set; zero suppresses it. Thus omission is not an
+alias for zero. Tedious omits the option, exposing a runtime metadata gap.
+The client diagnostic records preparation omissions and the full batch/RPC
+responses when option 1 is requested. Execution comparisons remain strict.
