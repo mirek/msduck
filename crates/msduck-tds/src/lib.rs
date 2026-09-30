@@ -5,6 +5,7 @@ use anyhow::{Result, bail, ensure};
 pub mod attention_completion;
 pub mod collation;
 pub mod framing;
+pub mod order;
 pub mod request_lifecycle;
 pub mod return_value;
 pub mod smp;
