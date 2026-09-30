@@ -7333,7 +7333,7 @@
     {
       "id": "alter-database-sessions-reference-v1",
       "title": "Capture SQL Server ALTER DATABASE options, session termination, sys.dm_exec_sessions and @@SPID",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-09-30), issue #680. No external submission is input.",
       "scope": [
         "scripts/capture-alter-database-sessions.mjs",
