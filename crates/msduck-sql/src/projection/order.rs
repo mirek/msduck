@@ -85,8 +85,8 @@ fn same(left: &Expr, right: &Expr, sources: &[Source], scope: &Scope) -> bool {
     };
     let mut left = inner(left).clone();
     let mut right = inner(right).clone();
-    let _ = left.visit(&mut canonical);
-    let _ = right.visit(&mut canonical);
+    let _ = VisitMut::visit(&mut left, &mut canonical);
+    let _ = VisitMut::visit(&mut right, &mut canonical);
     left == right
 }
 fn integer_column(expr: &Expr, sources: &[Source], scope: &Scope) -> bool {
