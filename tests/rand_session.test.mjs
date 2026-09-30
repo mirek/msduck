@@ -91,3 +91,24 @@ test('prepared FLOAT seed conversion retains 232 state 3 and does not advance on
  request.error=undefined
  await new Promise((resolve,reject)=>{callback=error=>error?reject(error):resolve();c.unprepare(request)})
 })
+test('RAND source character and BIGINT diagnostics recover without advancing',async t=>{
+ const c=await start(t)
+ for(const [seed,number,state,message] of [["'abc'",245,1,"Conversion failed when converting the varchar value 'abc' to data type int."],["N'abc'",245,1,"Conversion failed when converting the nvarchar value 'abc' to data type int."],["CAST(2147483648 AS BIGINT)",8115,2,'Arithmetic overflow error converting expression to data type int.']]) {
+  await query(c,'SELECT RAND(42) AS seed')
+  await assert.rejects(query(c,`SELECT RAND(${seed}) AS r`),error=>error.number===number && error.state===state && error.message===message)
+  assert.deepEqual((await query(c,'SELECT RAND() AS after')).rows,[[stream[1]]])
+ }
+ let callback=()=>{}
+ const request=new Request('SELECT RAND(@seed) AS r',error=>callback(error))
+ request.addParameter('seed',TYPES.NVarChar,undefined,{length:16})
+ await new Promise((resolve,reject)=>{request.once('prepared',resolve);request.once('error',reject);c.prepare(request)})
+ for(const seed of ['42','abc','1.9',null,'42']) {
+  const rows=[];const onRow=cells=>rows.push(cells.map(cell=>cell.value));request.on('row',onRow);request.error=undefined
+  const run=new Promise((resolve,reject)=>{callback=error=>error?reject(error):resolve();c.execute(request,{seed})})
+  if(seed==='abc'||seed==='1.9') await assert.rejects(run,error=>error.number===245 && error.state===1 && error.message===`Conversion failed when converting the nvarchar value '${seed}' to data type int.`)
+  else {await run;assert.deepEqual(rows,[[seed===null?null:stream[0]]])}
+  request.off('row',onRow)
+ }
+ request.error=undefined
+ await new Promise((resolve,reject)=>{callback=error=>error?reject(error):resolve();c.unprepare(request)})
+})

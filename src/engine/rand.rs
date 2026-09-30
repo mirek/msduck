@@ -85,10 +85,9 @@ pub(super) fn seed_conversion(
             kind @ (DataType::Varchar(_)
             | DataType::Char(_)
             | DataType::Text
-            | DataType::Nvarchar(_)
-            | DataType::Nchar(_)),
+            | DataType::Nvarchar(_)),
         ) => {
-            let unicode = matches!(kind, DataType::Nvarchar(_) | DataType::Nchar(_));
+            let unicode = matches!(kind, DataType::Nvarchar(_));
             *seed = super::binary_function(
                 "__msduck_rand_character_seed",
                 seed.clone(),
@@ -645,6 +644,95 @@ pub(super) fn declarations<T: VisitMut>(node: &mut T) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn character_seed_preserves_source_and_raw_unicode_diagnostics() {
+        let db = Connection::open_in_memory().unwrap();
+        Registry::default().register(&db).unwrap();
+        for unicode in [false, true] {
+            for text in ["abc", "1.9", "nvarchar"] {
+                let error = db
+                    .query_row(
+                        "SELECT __msduck_rand_character_seed(?,?)",
+                        duckdb::params![text, unicode],
+                        |row| row.get::<_, i32>(0),
+                    )
+                    .unwrap_err();
+                let error = diagnostic(&error.to_string()).unwrap();
+                assert_eq!((error.number, error.state, error.severity), (245, 1, 16));
+                assert_eq!(
+                    error.message,
+                    format!(
+                        "Conversion failed when converting the {} value '{text}' to data type int.",
+                        if unicode { "nvarchar" } else { "varchar" }
+                    )
+                );
+            }
+            let value: i32 = db
+                .query_row(
+                    "SELECT __msduck_rand_character_seed('42',?)",
+                    [unicode],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(value, 42);
+            let value: Option<i32> = db
+                .query_row(
+                    "SELECT __msduck_rand_character_seed(CAST(NULL AS VARCHAR),?)",
+                    [unicode],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(value, None);
+        }
+        let error = db.query_row("SELECT __msduck_rand_character_seed(struct_pack(__msduck_utf16le:=from_hex('00d8')),true)",[],|row| row.get::<_,i32>(0)).unwrap_err();
+        let error = diagnostic(&error.to_string()).unwrap();
+        assert_eq!(error.number, 245);
+        assert!(error.message_utf16.unwrap().contains(&0xd800));
+        let error = db
+            .query_row(
+                "SELECT __msduck_rand_character_seed(repeat('x',4001),true)",
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .unwrap_err();
+        let error = diagnostic(&error.to_string()).unwrap();
+        assert_eq!((error.number, error.state), (8152, 10));
+        assert!(
+            diagnostic("Invalid Input Error: __msduck_rand_character_seed_failure:u:0034")
+                .is_none()
+        );
+        assert!(
+            diagnostic("Invalid Input Error: __msduck_rand_character_seed_failure:u:00d8 extra")
+                .is_none()
+        );
+    }
+    #[test]
+    fn bigint_seed_keeps_checked_bounds_and_overflow_state() {
+        let db = Connection::open_in_memory().unwrap();
+        Registry::default().register(&db).unwrap();
+        for value in [i64::from(i32::MIN), 42, i64::from(i32::MAX)] {
+            let result: i32 = db
+                .query_row("SELECT __msduck_rand_bigint_seed(?)", [value], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert_eq!(i64::from(result), value);
+        }
+        for value in [
+            i64::from(i32::MIN) - 1,
+            i64::from(i32::MAX) + 1,
+            i64::MIN,
+            i64::MAX,
+        ] {
+            let error = db
+                .query_row("SELECT __msduck_rand_bigint_seed(?)", [value], |row| {
+                    row.get::<_, i32>(0)
+                })
+                .unwrap_err();
+            let error = diagnostic(&error.to_string()).unwrap();
+            assert_eq!((error.number, error.state), (8115, 2));
+        }
+    }
     #[test]
     fn float_seed_truncates_and_retains_captured_overflow_identity() {
         let db = Connection::open_in_memory().unwrap();
