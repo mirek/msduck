@@ -55,8 +55,16 @@ export const regressionProfiles=[
  ['bare NULL','SELECT NULL AS n'],
  ['count NULL','SELECT COUNT(NULL) AS n'],
 ]
+export const cteDeleteProfiles=[
+ ['CTE delete reuse','WITH q AS (SELECT * FROM dbo.prepare_heap WHERE a>@p) DELETE FROM q'],
+ ['qualified CTE delete reuse','WITH q AS (SELECT src.* FROM dbo.prepare_heap AS src WHERE src.a>@p) DELETE FROM q'],
+ ['CTE delete rollback','WITH q AS (SELECT * FROM dbo.prepare_heap WHERE a>@p) DELETE FROM q'],
+ ['qualified CTE delete rollback','WITH q AS (SELECT src.* FROM dbo.prepare_heap AS src WHERE src.a>@p) DELETE FROM q'],
+]
+export const cteDeleteOptions={profilePlan:cteDeleteProfiles,variantPlan:['api-default','named-one'],executionValues:[null,9,1,0],rollbackProfiles:cteDeleteProfiles.filter(([name])=>name.endsWith('rollback')).map(([name])=>name)}
+const deleteState='SELECT a,b,label FROM dbo.prepare_heap ORDER BY a; SELECT @@TRANCOUNT AS depth'
 export const values=[null,0,9,1]
-export async function observe(connection,{verifyVersion=true,profilePlan=profiles,variantPlan=variants,execute=true}={}){
+export async function observe(connection,{verifyVersion=true,profilePlan=profiles,variantPlan=variants,execute=true,executionValues=values,rollbackProfiles=[]}={}){
  const records=[]
  for(const [name,sql] of [['version',version],['setup',setup]]){
   const result=canonical(await captureBatch(connection,sql));if(name!=='version'||verifyVersion)assert.deepEqual(result.errors,[]);records.push({name,sql,result})
@@ -82,7 +90,20 @@ export async function observe(connection,{verifyVersion=true,profilePlan=profile
   }
   const executions=[];let unpreparation=null
   if(!preparation.errors.length&&Number.isInteger(executionRequest.handle)&&executionRequest.handle>0)try{
-   if(execute)for(const value of values)executions.push({value,result:canonical(await capturePreparedPhase(connection,executionRequest,()=>connection.execute(executionRequest,{p:value}),callback=>{complete=callback}))})
+   if(execute)for(const value of executionValues){
+    const execution={value}
+    if(rollbackProfiles.includes(name))execution.begin=canonical(await captureBatch(connection,'BEGIN TRANSACTION'))
+    try{
+     execution.result=canonical(await capturePreparedPhase(connection,executionRequest,()=>connection.execute(executionRequest,{p:value}),callback=>{complete=callback}))
+     if(rollbackProfiles.includes(name))execution.beforeRollback=canonical(await captureBatch(connection,deleteState))
+    }finally{
+     if(rollbackProfiles.includes(name)){
+      execution.rollback=canonical(await captureBatch(connection,'ROLLBACK TRANSACTION'))
+      execution.afterRollback=canonical(await captureBatch(connection,deleteState))
+     }
+    }
+    executions.push(execution)
+   }
   }finally{
    unpreparation=canonical(await capturePreparedPhase(connection,executionRequest,()=>connection.unprepare(executionRequest),callback=>{complete=callback}))
   }
@@ -121,13 +142,29 @@ export async function retained(){
 }
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined
- if(![undefined,'--check','--write-fixture','--regressions'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions] [output]')
+ if(![undefined,'--check','--write-fixture','--regressions','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --cte-delete] [output]')
  if(mode==='--check'){const r=await retained();console.log('Checked prepared RPC records',r.runs[0].length);return}
  if(mode==='--write-fixture')await refuseExistingFixture(fixture)
  const output=resolve(args[0]??'artifacts/prepared-rpc-metadata/capture.json');assert.notEqual(output,fileURLToPath(fixture))
- const regression=mode==='--regressions'
- const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,connection=>observe(connection,regression?{profilePlan:regressionProfiles,variantPlan:['api-default','named-one'],execute:false}:{}))))
- if(!regression)runs.forEach(validate)
+ const regression=mode==='--regressions';const cteDelete=mode==='--cte-delete'
+ const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,connection=>observe(connection,cteDelete?cteDeleteOptions:regression?{profilePlan:regressionProfiles,variantPlan:['api-default','named-one'],execute:false}:{}))))
+ if(cteDelete)for(const run of runs){
+  assert.equal(run.length,10)
+  for(const record of run.slice(2)){
+   phase(record.preparation);assert.deepEqual(record.preparation.errors,[])
+   assertSameCapture(record.afterPreparation.result.sets.map(s=>s.rows),[[[4]],[[0.041009986028273604]],[[0]]],'CTE DELETE preparation does not execute')
+   assert.deepEqual(record.executions.map(e=>e.value),cteDeleteOptions.executionValues)
+   for(const execution of record.executions){
+    phase(execution.result);assert.deepEqual(execution.result.errors,[])
+    if(record.name.endsWith('rollback')){
+     assert.deepEqual(execution.begin.errors,[]);assert.deepEqual(execution.rollback.errors,[])
+     assertSameCapture(execution.afterRollback.sets.map(s=>s.rows),[[[1,2,'a'],[2,1,null],[3,1,'c'],[4,2,'d']],[[0]]],'CTE DELETE rollback restores every row')
+    }
+   }
+   assertSameCapture(record.afterExecution.result.sets.map(s=>s.rows),[[[record.name.endsWith('rollback')?4:0]],[[42]]],'CTE DELETE final state')
+  }
+ }
+ else if(!regression)runs.forEach(validate)
  else for(const run of runs){
   assertSameCapture(run.slice(2).map(({name,sql,variant})=>({name,sql,variant})),regressionProfiles.flatMap(([name,sql])=>['api-default','named-one'].map(variant=>({name,sql,variant}))),'regression preparation plan')
   for(const record of run.slice(2)){
