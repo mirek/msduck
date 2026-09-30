@@ -464,3 +464,51 @@ fn equivalent_qualified_expression_keys_reuse_captured_projected_ordinals() {
         );
     }
 }
+
+#[test]
+fn captured_arithmetic_identities_remain_distinct_and_mixed_constants_drop() {
+    for expression in ["a+0", "a*0", "a*1"] {
+        assert_eq!(
+            plan(&format!(
+                "SELECT {expression} AS k FROM dbo.order_heap ORDER BY k"
+            )),
+            Plan::Token(vec![1])
+        );
+        assert_eq!(
+            plan(&format!(
+                "SELECT a FROM dbo.order_heap ORDER BY {expression}"
+            )),
+            Plan::Token(vec![0])
+        );
+    }
+    for expression in ["1", "1+2"] {
+        assert_eq!(
+            plan(&format!(
+                "SELECT a,{expression} AS k FROM dbo.order_heap ORDER BY k,a"
+            )),
+            Plan::Token(vec![1])
+        );
+    }
+}
+#[test]
+fn order_payload_count_is_bounded_before_projection_work() {
+    use sqlparser::ast::OrderByKind;
+    let mut query = queries("SELECT a FROM dbo.order_heap ORDER BY a").remove(0);
+    let OrderByKind::Expressions(keys) = &mut query.order_by.as_mut().unwrap().kind else {
+        panic!("keys");
+    };
+    let key = keys[0].clone();
+    *keys = vec![key.clone(); u16::MAX as usize / 2];
+    assert_eq!(
+        infer(&catalog(), &query, &Scope::default()),
+        Plan::Token(vec![1; u16::MAX as usize / 2])
+    );
+    let OrderByKind::Expressions(keys) = &mut query.order_by.as_mut().unwrap().kind else {
+        panic!("keys");
+    };
+    keys.push(key);
+    assert_eq!(
+        infer(&catalog(), &query, &Scope::default()),
+        Plan::Unknown(Barrier::Length)
+    );
+}

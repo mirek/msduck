@@ -10,9 +10,12 @@ An unknown plan must never be replaced with guessed bytes.
 The planner reads neither parameter values nor backend rows. Empty predicates,
 TOP(0) and prepared execution values do not change the captured plans. Source
 identity comes from fields borrowed from the same caller-supplied snapshot;
-equally named columns from different sources remain distinct. The planner does
-not modify the query AST. Integer conversion markers inserted by `batch::parse`
-are unwrapped when recognizing the captured typed-NULL sort expression.
+equally named columns from different sources remain distinct. Wildcards expand
+in declared source/field order, including qualified, joined, derived and CTE
+sources. Modified wildcards and unresolved sources remain barriers. Expression
+matching canonicalizes borrowed field identity through cloned trees, including
+CAST, COLLATE and aggregate arguments. It never changes the caller's query or
+catalog. Integer conversion markers inserted by `batch::parse` are unwrapped.
 
 ## Retained evidence
 
@@ -22,45 +25,62 @@ errors for a missing projected column. Tests compare preparation and all three
 executions of each prepared query with the same declaration-only plan, including
 the execution producing no rows. Unpreparation has no ORDER token.
 
-Supported retained shapes include projected keys, aliases and numeric ordinals,
-multiple keys, hidden keys, INT-column-plus-one expressions, empty results,
-TOP/OFFSET, DISTINCT and grouped projected keys, derived outputs, UNION outputs,
-and an outer order on ROW_NUMBER. Internal window or derived ordering alone
-produces no outer token. A sort on a projected `CAST(NULL AS INT)` alias has no
-ORDER token, including a scalar query or a projection with additional columns.
+`reference/order-token-expanded.json` retains another two matching fresh runs.
+All 86 successful nonprepared query records resolve and match exact ORDER
+presence and ordinal sequence. The six unresolved records are the batch/RPC
+copies of binding errors 209 (duplicate names), 408 (literal sort expression)
+and 1008 (parameter-only sort expression). The two prepared arithmetic profiles
+also resolve from an explicit INT parameter declaration: preparation and all
+three executions retain one plan, with row counts 0,4,0,3. Both transport modes,
+both fresh runs, and raw/batch-normalized ASTs are checked. A missing declaration
+remains unknown, rather than inferred from captured rows or values.
 
-A supplemental capture on 2026-09-30 used the same pinned image and trusted raw
-ORDER/DONE capture helpers from checkpoint
-`bd2ffbe48edae503485bb4b8c523557bc4250628`. Two fresh containers agreed on 18
-queries in both batch and RPC modes. The complete rows, descriptors, errors and
-raw ORDER events are retained locally in
-`artifacts/order-plan-probes/capture.json`, SHA-256
-`d948cab4148b3c8c17ac12f1d09bafb06b85835e17395f3961dd52ae5cbc2bf2`.
-The supplemental driver is retained beside it as `harness.mjs`; these artifacts
-are ignored and do not replace the committed reference fixture. Regression SQL
-and exact ORDER expectations are present in `tests/order_plan.rs`.
+Supported profiles include projected columns, aliases and numeric ordinals,
+multiple keys, hidden keys, wildcard expansion, INT-column plus/multiply INT
+operands, CAST of an INT column to BIGINT, COUNT(*), SUM of an INT column,
+Latin1_General_100_BIN2 collation of a declared column, and captured ROW_NUMBER
+window shapes. Prepared arithmetic takes only the operand's INT declaration.
+TOP/OFFSET, DISTINCT, grouping, derived/CTE outputs and UNION output ordinals
+are covered. Internal window or derived ordering alone produces no outer token.
 
-The supplemental observations establish these concrete optimizer cases:
+The captured typed-NULL, literal 1 and literal arithmetic 1+2 projected keys
+are removed from ordering. With remaining column keys, their sequence/ordinals
+are preserved; with no remaining keys, no ORDER is emitted. A CASE over an INT
+column predicate with identical literal branches retains its own ordinal. This
+is an explicitly captured distinction, not a general constant-folding engine.
+Constant UNION branches retain their projected ordinal instead of taking the
+single-SELECT folding rule.
 
-- Identical constant UNION and UNION ALL branches, typed-NULL branches and mixed
-  NULL/integer branches retain ordinal 1.
-- Equality joins do not substitute another source's projected column: ordering
-  by the unprojected joined column retains zero; projecting both columns uses
-  ordinal 2. Inequality and LEFT joins retain zero in the corresponding probe.
-- A fixed-key predicate and TOP(1) retain ordinal 1.
-- Typed-NULL alias ordering has no token with an empty predicate, TOP(0), no
-  FROM clause, or an additional ordinary projected column.
-- Partitioned ROW_NUMBER and its empty-input variant retain ordinal 2.
-- Duplicate bare projected names are a SQL Server binding error, not a token.
+## Supplemental expression identity evidence
+
+Review found that raw AST comparison could mistake qualified/unqualified
+references inside CAST, COLLATE or SUM for different expressions. Two fresh
+pinned captures on 2026-09-30 establish ordinal 1 for equivalent CAST/COLLATE
+references and ordinal 2 for SUM. Complete rows/descriptors/errors/ORDER/DONE
+records and the driver are retained locally under
+`artifacts/order-plan-identity/`; capture SHA-256 is
+`b1d165a76154c177f721e40a913749252a763f364b020831664d0684938d509a`.
+
+Two further fresh runs show a+0, a*0 and a*1 retain ordinal 1 when projected,
+and zero when used as a hidden key even when a itself is projected. Mixed
+literal 1 or arithmetic 1+2 keys disappear, retaining the column's ordinal 1.
+Complete records and driver are retained under `artifacts/order-plan-folding/`;
+capture SHA-256 is
+`4870f453216683e4a84d811ee1babab27abb4b1c178b4a64c48014d8ea0ab121`.
+These ignored supplemental artifacts do not overwrite either committed fixture;
+regression SQL and exact expectations are committed in `tests/order_plan.rs`.
 
 ## Remaining boundaries
 
-Wildcard expansion, ambiguous names, unknown declarations, arbitrary arithmetic,
-parameter-valued sort expressions and unproven folded expressions remain
-explicit barriers. Aggregate result sorting and wider expression profiles need
-further ground truth. The supported profiles are not a general optimizer or a
-complete SQL Server ORDER-emission specification.
+Ambiguous names, unknown declarations, modified wildcard shapes, arbitrary
+functions/expressions, parameter-only keys and unproven folded expressions remain
+explicit barriers. Wider expression profiles need further ground truth. The
+supported profiles are not a general optimizer or complete SQL Server
+ORDER-emission specification. The planner checks the USHORT token count bound
+before projection work; the bound does not establish SQL Server acceptance of
+arbitrary large or duplicate key lists. Binding remains the caller's job.
 
 This module is not wired into the server. Root-side result framing, successful
 binding/error precedence, prepared phases and ORDER placement still require a
-separate adapter task. `engine.rs` is outside this task's scope.
+separate adapter task. `engine.rs` is outside this task's scope. Fixture agreement
+proves these logical plans, not server row/descriptor/token compatibility.
