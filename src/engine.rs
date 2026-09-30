@@ -1025,6 +1025,12 @@ impl Session {
         }
         // Bind only: evaluating an initializer here could invoke a volatile
         // function or raise an execution-time error during sp_prepare.
+        let _rand_scopes = rand::lower(
+            &mut expression,
+            &mut translator.values,
+            &self.diagnostics.rand,
+            &self.rand,
+        )?;
         let prepared = self.db.prepare(&format!("SELECT {expression}"))?;
         // Unlike Arrow schema access, this obtains bound logical metadata
         // directly from the prepared statement without executing it.
