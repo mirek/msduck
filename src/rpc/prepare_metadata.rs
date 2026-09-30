@@ -16,20 +16,56 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
     struct Declare<'a>(&'a HashMap<String, Parameter>);
     impl VisitorMut for Declare<'_> {
         type Break = ();
-        fn post_visit_expr(&mut self, expression: &mut Expr) -> ControlFlow<()> {
-            if let Expr::Identifier(id) = expression
-                && let Some(parameter) = self.0.get(&id.value.to_lowercase())
-            {
-                // Shared expression helpers accept explicit syntax types. This
-                // non-literal declaration surrogate supplies no bound value.
+        fn pre_visit_expr(&mut self, expression: &mut Expr) -> ControlFlow<()> {
+            if msduck_sql::expression_metadata::conditional::literal_null(expression) {
+                return ControlFlow::Continue(());
+            }
+            let mut numeric = expression.clone();
+            msduck_sql::case_types::lower(&mut numeric, self.0);
+            let kind = msduck_sql::case_types::integer_rank(expression, self.0)
+                .map(|rank| match rank {
+                    0 => DataType::TinyInt(None),
+                    1 => DataType::SmallInt(None),
+                    2 => DataType::Int(None),
+                    _ => DataType::BigInt(None),
+                })
+                .or_else(|| {
+                    msduck_sql::case_types::is_bit(expression, self.0)
+                        .then_some(DataType::Bit(None))
+                })
+                .or_else(|| {
+                    msduck_sql::expression_metadata::storage::kind(&numeric, self.0, &|_| None)
+                })
+                .or_else(
+                    || match msduck_sql::result_types::expression_type(expression)? {
+                        msduck_sql::result_types::ResultType::Character { family, length } => {
+                            let kind =
+                                msduck_core::character::CharacterType::new(family, length).ok()?;
+                            Some(msduck_sql::sql_type::ast(SqlType::Character(kind)))
+                        }
+                        msduck_sql::result_types::ResultType::Time(scale) => {
+                            Some(msduck_sql::sql_type::ast(SqlType::Time(
+                                msduck_core::types::Scale::new(scale).ok()?,
+                            )))
+                        }
+                        msduck_sql::result_types::ResultType::Money(kind) => {
+                            Some(msduck_sql::sql_type::ast(match kind {
+                                msduck_core::money::MoneyType::Money => SqlType::Money,
+                                msduck_core::money::MoneyType::SmallMoney => SqlType::SmallMoney,
+                            }))
+                        }
+                    },
+                );
+            if let Some(kind) = kind {
                 *expression = Expr::Convert {
                     is_try: false,
                     expr: Box::new(Expr::Value(sqlparser::ast::Value::Null.into())),
-                    data_type: Some(parameter.ast_type()),
+                    data_type: Some(kind),
                     charset: None,
                     target_before_value: true,
                     styles: vec![],
                 };
+                return ControlFlow::Continue(());
             }
             if let Expr::Function(f) = expression
                 && f.name.to_string().eq_ignore_ascii_case("rand")
