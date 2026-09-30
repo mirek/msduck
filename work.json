@@ -7237,7 +7237,7 @@
     {
       "id": "rand-session-reference-v1",
       "title": "Capture SQL Server RAND session seeding and advancement",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing goal; issue673 created under mirek for missing seeded RAND reference behavior.",
       "issue": 673,
       "scope": [
