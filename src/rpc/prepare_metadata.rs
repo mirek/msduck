@@ -17,25 +17,24 @@ fn rand_declarations(query: &Query) -> Query {
     impl VisitorMut for Declare {
         type Break = ();
         fn post_visit_expr(&mut self, expression: &mut Expr) -> ControlFlow<()> {
-            if let Expr::Function(f) = expression {
-                if f.name.to_string().eq_ignore_ascii_case("rand")
-                    && matches!(&f.args, FunctionArguments::List(a) if matches!(a.args.as_slice(), [] | [FunctionArg::Unnamed(FunctionArgExpr::Expr(_))]) && a.clauses.is_empty() && a.duplicate_treatment.is_none())
-                    && f.over.is_none()
-                    && f.filter.is_none()
-                    && f.within_group.is_empty()
-                    && f.null_treatment.is_none()
-                    && matches!(f.parameters, FunctionArguments::None)
-                    && !f.uses_odbc_syntax
-                {
-                    *expression = Expr::Convert {
-                        is_try: false,
-                        expr: Box::new(Expr::Value(sqlparser::ast::Value::Null.into())),
-                        data_type: Some(DataType::Double(ExactNumberInfo::None)),
-                        charset: None,
-                        target_before_value: true,
-                        styles: vec![],
-                    };
-                }
+            if let Expr::Function(f) = expression
+                && f.name.to_string().eq_ignore_ascii_case("rand")
+                && matches!(&f.args, FunctionArguments::List(a) if matches!(a.args.as_slice(), [] | [FunctionArg::Unnamed(FunctionArgExpr::Expr(_))]) && a.clauses.is_empty() && a.duplicate_treatment.is_none())
+                && f.over.is_none()
+                && f.filter.is_none()
+                && f.within_group.is_empty()
+                && f.null_treatment.is_none()
+                && matches!(f.parameters, FunctionArguments::None)
+                && !f.uses_odbc_syntax
+            {
+                *expression = Expr::Convert {
+                    is_try: false,
+                    expr: Box::new(Expr::Value(sqlparser::ast::Value::Null.into())),
+                    data_type: Some(DataType::Double(ExactNumberInfo::None)),
+                    charset: None,
+                    target_before_value: true,
+                    styles: vec![],
+                };
             }
             ControlFlow::Continue(())
         }
@@ -113,8 +112,10 @@ fn query_description(
             "prepared declaration alignment changed"
         );
         for (field, declaration) in fields.iter_mut().zip(declared) {
-            if field.info.is_none() {
+            if field.info.is_none() && declaration.info.is_some() {
                 field.info = declaration.info;
+                field.properties = declaration.properties;
+                field.collation = declaration.collation;
             }
         }
     }
