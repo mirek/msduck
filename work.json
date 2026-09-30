@@ -7289,6 +7289,28 @@
         "Same worker combines with claims671672676 in PR674. Focused and full exact-head required Rust/client/audit checks, CI and review or authorized fallback; merge only complete adapter, then promptly complete all registry/project items."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZQln"
+    },
+    {
+      "id": "rand-session-runtime-v1",
+      "title": "Execute seeded RAND with bounded session state and lazy statement call sites",
+      "state": "ready",
+      "authorization": "Owner continuing compatibility goal; same root worker integrates merged RAND reference with percentile PR674. Existing engine.rs claim671 owns session wiring; supplement reserves native/session component and explicit registry factory.",
+      "scope": [
+        "src/statement_diagnostics.rs",
+        "src/engine/rand.rs",
+        "tests/rand_session.rs",
+        "tests/rand_session.test.mjs"
+      ],
+      "dependencies": [
+        "rand-session-reference-v1"
+      ],
+      "acceptance": [
+        "Implement captured seed recurrence with explicit state; session-owned bounded registry scopes, cleanup/reset and no hidden process-global state or per-session permanent function registrations. Native volatile calls preserve one draw per expression across rows/chunks, separate projection calls, lazy CASE, ordinary empty input and NULL seed no advance. Preparation and declaration-only metadata never advance.",
+        "Integrate seeded RAND percentile fractions under existing engine adapter claim671, including empty percentile advancement, rollback/session independence and captured source conversion failures. Preserve complete raw reference evidence and report unimplemented source/error/ORDER/DONE gaps rather than fabricating acceptance.",
+        "Add meaningful native/client regressions; use locked shared Linux cache, exact-head workspace fmt/clippy/tests/build, default/focused clients and audit, independent review or authorized Codex availability fallback, required CI. Combined PR674 stays draft until implementation acceptance; claiming worker owns merge and prompt all registry/project completion."
+      ],
+      "issue": 678,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZSzJ"
     }
   ]
 }
