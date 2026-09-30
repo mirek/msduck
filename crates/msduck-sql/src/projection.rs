@@ -961,6 +961,7 @@ fn count_ranking_info(
     {
         return None;
     }
+    crate::aggregate::validate(function).ok()?;
     let FunctionArguments::List(args) = &function.args else {
         return None;
     };
@@ -968,6 +969,7 @@ fn count_ranking_info(
         return None;
     }
     struct Declared<'a> {
+        catalog: &'a CatalogSnapshot,
         sources: &'a [Source],
         scope: &'a Scope,
         known: bool,
@@ -998,6 +1000,11 @@ fn count_ranking_info(
                     self.known = false;
                     return std::ops::ControlFlow::Continue(());
                 }
+                Expr::Function(_) => {
+                    self.known &=
+                        expression(self.catalog, expr, self.sources, self.scope).is_some();
+                    return std::ops::ControlFlow::Continue(());
+                }
                 _ => return std::ops::ControlFlow::Continue(()),
             };
             self.known &= crate::binding_scope::resolve(&ids, self.sources, &self.scope.rows)
@@ -1012,6 +1019,7 @@ fn count_ranking_info(
     }
     let declared = |expr: &Expr| {
         let mut check = Declared {
+            catalog,
             sources,
             scope,
             known: true,
@@ -1020,7 +1028,18 @@ fn count_ranking_info(
         check.known
     };
     let key = |expr: &Expr| {
-        if declared(expr) && expression(catalog, expr, sources, scope).is_some() {
+        struct ColumnReference(bool);
+        impl Visitor for ColumnReference {
+            type Break = ();
+            fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
+                self.0 |= matches!(expr, Expr::Identifier(id) if !id.value.starts_with('@'))
+                    || matches!(expr, Expr::CompoundIdentifier(_));
+                std::ops::ControlFlow::Continue(())
+            }
+        }
+        let mut reference = ColumnReference(false);
+        let _ = expr.visit(&mut reference);
+        if reference.0 && declared(expr) && expression(catalog, expr, sources, scope).is_some() {
             return true;
         }
         if let Expr::Subquery(query) = expr {
@@ -1036,6 +1055,7 @@ fn count_ranking_info(
             return None;
         };
         if window.window_name.is_some()
+            || window.window_frame.is_some()
             || !window
                 .partition_by
                 .iter()

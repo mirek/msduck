@@ -132,9 +132,15 @@ fn explicit_parameters_and_unknown_arguments_remain_separate() {
     }
     for sql in [
         "SELECT COUNT(@missing) FROM dbo.order_heap",
+        "SELECT COUNT(CAST(unknown_function(a) AS INT)) FROM dbo.order_heap",
+        "SELECT ROW_NUMBER() OVER(ORDER BY 1) FROM dbo.order_heap",
+        "SELECT ROW_NUMBER() OVER(ORDER BY CAST(NULL AS INT)) FROM dbo.order_heap",
         "SELECT COUNT(CAST(missing AS INT)) FROM dbo.order_heap",
         "SELECT COUNT((SELECT 1)) FROM dbo.order_heap",
         "SELECT COUNT(COUNT(a)) FROM dbo.order_heap",
+        "SELECT COUNT(DISTINCT b) OVER() FROM dbo.order_heap",
+        "SELECT COUNT(ROW_NUMBER() OVER(ORDER BY a)) FROM dbo.order_heap",
+        "SELECT COUNT(*) OVER(ORDER BY a ROWS BETWEEN @missing PRECEDING AND CURRENT ROW) FROM dbo.order_heap",
         "SELECT ROW_NUMBER() OVER(ORDER BY CAST(missing AS INT)) FROM dbo.order_heap",
     ] {
         let fields = query_fields(&catalog, &query(sql), &scope).unwrap();
