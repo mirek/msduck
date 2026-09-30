@@ -88,7 +88,7 @@ fn query_description(
     match projection::order::infer(&catalog, query, &scope) {
         projection::order::Plan::Token(ordinals) => tds::order::encode(&mut out, &ordinals)?,
         projection::order::Plan::NoToken => {}
-        projection::order::Plan::Unknown => bail!("unsupported prepared ORDER declaration"),
+        projection::order::Plan::Unknown(_) => bail!("unsupported prepared ORDER declaration"),
     }
     tds::done(&mut out, 0xff, 17, 0xc1, 0);
     ensure!(
@@ -118,10 +118,7 @@ pub(super) fn describe(
         .collect();
     // Declaration collection never evaluates initializers or parameter values.
     let parameters = msduck_sql::preflight::variables(&statements, &parameters)?;
-    if matches!(
-        statements.as_slice(),
-        [Statement::Query(_), Statement::Query(_), ..]
-    ) {
+    if statements.len() > 1 && statements.iter().all(|s| matches!(s, Statement::Query(_))) {
         return Ok(Description {
             prefix: vec![],
             status: 8182,
