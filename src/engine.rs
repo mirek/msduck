@@ -3343,7 +3343,9 @@ impl Session {
         let SetExpr::Select(select) = query.body.as_mut() else {
             unreachable!()
         };
-        select.projection = vec![SelectItem::UnnamedExpr(expression.clone())];
+        let mut declared_expression = expression.clone();
+        msduck_sql::case_types::lower(&mut declared_expression, parameters);
+        select.projection = vec![SelectItem::UnnamedExpr(declared_expression)];
         let declaration =
             crate::query_catalog::projection_with_parameters(&self.db, &query, parameters)?
                 .and_then(|fields| fields.into_iter().next())

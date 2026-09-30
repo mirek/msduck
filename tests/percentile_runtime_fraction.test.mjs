@@ -40,7 +40,7 @@ test('prepared percentile bindings recover without inspecting values during prep
     let error
     try {error=await new Promise(resolve=>{callback=e=>resolve(e);request.error=undefined;c.execute(request,{b:value})})}
     finally {request.off('row',row);request.off('columnMetadata',metadata)}
-    assert.equal(columns.length,1,'execution retains typed metadata')
+    assert.equal(columns.length,1,`${kind} empty=${empty} value=${value} error=${error?.message}: execution retains typed metadata`)
     assert.equal(columns[0][0].type.name,kind==='CONT'?'FloatN':'IntN')
     if(!empty && ['abc',null,'1.1'].includes(value)) {assert.equal(error?.number,value==='abc'?8114:8727);assert.deepEqual(rows,[])}
     else {assert.ifError(error);assert.deepEqual(rows,empty?[]:Array.from({length:4},()=>[kind==='CONT'?2.5:2]))}
