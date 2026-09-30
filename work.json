@@ -7167,6 +7167,28 @@
       ],
       "issue": 668,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZAy8"
+    },
+    {
+      "id": "percentile-runtime-plan-v1",
+      "title": "Plan percentile runtime fractions without evaluating bound values",
+      "state": "ready",
+      "authorization": "Owner continuing goal and retained 137-record reference proves parameter/scalar eligibility versus row-dependent diagnostics and deferred execution validation.",
+      "issue": 669,
+      "scope": [
+        "crates/msduck-sql/src/percentile.rs",
+        "crates/msduck-sql/tests/percentile_runtime_plan.rs",
+        "docs/percentile-runtime-plan.md"
+      ],
+      "dependencies": [
+        "percentile-numeric-rounding-v1",
+        "percentile-runtime-fraction-reference-v1"
+      ],
+      "acceptance": [
+        "Expose deterministic runtime plan over syntax and explicit declarations, never parameter values/catalog I/O/session state. Preserve original fraction/order/window expressions and single-producer shape. Structural validation remains distinct from deferred NULL/text/range conversion; do not relax current runtime lowerer into backend guesses.",
+        "Use retained reference to recognize supported statement-wide literal/parameter/arithmetic/CAST/ABS/CASE/constant scalar subquery/RAND shapes, reject proven row-dependent sources with exact8726/class16 and NEXT VALUE FOR with11720/class15; unknown shapes remain explicit barriers. No volatile evaluation or metadata inference from values.",
+        "Meaningful pure tests cover retained batch/prepared expressions and invalid/unknown/volatile cases. Full exact-head required Rust/client/audit checks, review/fallback, CI, merge and registry/project completion. Document that root runtime adapter and full wire/error timing still need implementation."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZEK5"
     }
   ]
 }
