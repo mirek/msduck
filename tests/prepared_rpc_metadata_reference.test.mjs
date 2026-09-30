@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {test} from 'node:test'
-import {retained,validate,retainedCteDelete,retainedTemporalSets,validateTemporalSets} from '../scripts/capture-prepared-rpc-metadata.mjs'
+import {retained,validate,retainedCteDelete,retainedTemporalSets,validateTemporalSets,retainedSetProperties,validateSetProperties} from '../scripts/capture-prepared-rpc-metadata.mjs'
 
 test('preparation preserves declarations, option errors and handle allocation',async()=>{
  const {runs}=await retained()
@@ -87,4 +87,19 @@ test('temporal set captures preserve both runs, complete plan and raw descriptor
  assert.throws(()=>validateTemporalSets(reordered))
  const damaged=structuredClone(runs[0]);damaged[2].preparation.doneTokens[0].status^=16
  assert.throws(()=>validateTemporalSets(damaged))
+})
+
+
+test('set property captures distinguish declared nullability and preserve the full plan',async()=>{
+ const {runs}=await retainedSetProperties()
+ assert.equal(runs[0].length,104)
+ const flags=name=>runs[0].find(r=>r.name===name&&r.variant==='api-default').preparation.sets[0].columns[0].flags
+ assert.equal(flags('nonnull stored then nullable stored INTERSECT'),8)
+ assert.equal(flags('nullable stored then nonnull stored INTERSECT'),8)
+ assert.equal(flags('nullable stored then nonnull stored EXCEPT'),9)
+ assert.equal(flags('expression then stored EXCEPT'),33)
+ assert.equal(flags('nested union except'),1)
+ assert.throws(()=>validateSetProperties(runs[0].slice(0,-1)))
+ const bad=structuredClone(runs[0]);bad[2].afterPreparation.result.sets[0].rows=[[3]]
+ assert.throws(()=>validateSetProperties(bad))
 })

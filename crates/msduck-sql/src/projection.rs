@@ -545,7 +545,9 @@ fn body_fields(
     let select = match body {
         SetExpr::Select(s) => s,
         SetExpr::Query(q) => return query_fields_in(catalog, q, scope, view_definition),
-        SetExpr::SetOperation { left, right, .. } => {
+        SetExpr::SetOperation {
+            left, right, op, ..
+        } => {
             let (Some(left), Some(right)) = (
                 body_fields(catalog, left, scope, view_definition),
                 body_fields(catalog, right, scope, view_definition),
@@ -578,7 +580,23 @@ fn body_fields(
                 fields.push(Field {
                     collation: merge_collations(left.collation.as_ref(), right.collation.as_ref()),
                     name: left.name,
-                    properties: left.properties.union(right.properties),
+                    // Captured set descriptors retain left expression/source
+                    // provenance for EXCEPT/INTERSECT. INTERSECT cannot emit a
+                    // NULL when either declaration proves NOT NULL; EXCEPT's
+                    // nullability depends only on its left input. UNION uses
+                    // both inputs and has derived provenance.
+                    properties: match op {
+                        SetOperator::Except => left.properties,
+                        SetOperator::Intersect => msduck_core::result::Properties {
+                            nullable: match (left.properties.nullable, right.properties.nullable) {
+                                (Some(false), _) | (_, Some(false)) => Some(false),
+                                (Some(true), Some(true)) => Some(true),
+                                _ => None,
+                            },
+                            origin: left.properties.origin,
+                        },
+                        _ => left.properties.union(right.properties),
+                    },
                     json_fragment: false,
                     info,
                 });

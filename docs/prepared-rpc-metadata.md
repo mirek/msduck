@@ -156,3 +156,16 @@ the complete plan, independent agreement, nonexecution and raw completion tokens
 A separate public test compares every preparation field verbatim: SQL Server's
 captured INTERSECT/EXCEPT flags are 33 versus UNION's 1, so declaration inference
 alone is not evidence of complete wire parity.
+
+The companion `reference/prepared-set-properties.json` retains 104 records/run
+from two fresh captures (SHA-256
+`fc4d1ee4fe991cca987be3d261f01da58e0c59032a2a35825c28fe2993aa9e50`).
+Reproduce with `--set-properties PATH`; this mode adds a separate NOT NULL source
+table while leaving the base fixture's setup unchanged. Captured EXCEPT retains
+left nullability and provenance; INTERSECT retains left provenance but cannot
+emit NULL if either input is declared NOT NULL. UNION combines nullability with
+derived provenance. The shared projection rule now distinguishes these operators,
+including nested set boundaries. Fixture-backed pure and complete public response
+tests cover the captured nullable/nonnullable source, expression and temporal
+profiles. Unknown properties remain unknown unless explicit input declarations
+prove a nonnullable intersection; row values never establish that proof.

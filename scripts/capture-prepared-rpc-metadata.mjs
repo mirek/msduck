@@ -211,6 +211,31 @@ export async function retainedTemporalSets(){
  assertSameCapture(result.runs[0],result.runs[1],'temporal set independent captures')
  return result
 }
+export function validateSetProperties(run){
+ assert.equal(run.length,2+setPropertyProfiles.length*2)
+ assertSameCapture(run.slice(0,2).map(({name,sql})=>({name,sql})),[{name:'version',sql:version},{name:'setup',sql:setPropertySetup}],'set property setup plan')
+ assertSameCapture(run[0].result.sets[0].rows,[['17.0.4065.4']],'set property version')
+ assertSameCapture(run.slice(2).map(({name,sql,variant})=>({name,sql,variant})),setPropertyProfiles.flatMap(([name,sql])=>['api-default','named-one'].map(variant=>({name,sql,variant}))),'set property request plan')
+ for(const record of run.slice(2)){
+  phase(record.preparation);assert.deepEqual(record.preparation.errors,[])
+  assert.equal(record.preparation.sets.length,1);assert.deepEqual(record.preparation.sets[0].rows,[])
+  assert.deepEqual(record.executions,[]);phase(record.unpreparation)
+  assert.deepEqual(record.unpreparation.errors,[])
+  for(const [key,sql] of [['reset',reset],['seed',seed],['afterPreparation',afterPreparation],['afterExecution',afterExecution]]){
+   assert.equal(record[key]?.sql,sql);phase(record[key].result);assert.deepEqual(record[key].result.errors,[])
+  }
+  assertSameCapture(record.afterPreparation.result.sets.map(s=>s.rows),[[[4]],[[0.041009986028273604]],[[0]]],'set property nonexecution')
+  assertSameCapture(record.afterExecution.result.sets.map(s=>s.rows),[[[4]],[[42]]],'set property final state')
+ }
+}
+export async function retainedSetProperties(){
+ const bytes=await readFile(new URL('../reference/prepared-set-properties.json',import.meta.url))
+ assert.equal(createHash('sha256').update(bytes).digest('hex'),'fc4d1ee4fe991cca987be3d261f01da58e0c59032a2a35825c28fe2993aa9e50')
+ const result=JSON.parse(bytes);assert.equal(result.image,referenceImage);assert.equal(result.runs.length,2)
+ result.runs.forEach(validateSetProperties)
+ assertSameCapture(result.runs[0],result.runs[1],'set property independent captures')
+ return result
+}
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined
  if(![undefined,'--check','--write-fixture','--regressions','--declarations','--temporal-sets','--set-properties','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --temporal-sets | --set-properties | --cte-delete] [output]')
@@ -243,6 +268,7 @@ async function main(){
    assertSameCapture(record.afterPreparation.result.sets.map(s=>s.rows),[[[4]],[[0.041009986028273604]],[[0]]],'regression preparation does not execute')
   }
  }
+ if(mode==='--set-properties')runs.forEach(validateSetProperties)
  if(mode==='--temporal-sets')runs.forEach(validateTemporalSets)
  assertSameCapture(runs[0],runs[1],'prepared RPC independent captures')
  const result={image:referenceImage,runs};await mkdir(dirname(output),{recursive:true});await writeNewFixture(output,result)
