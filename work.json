@@ -6903,7 +6903,7 @@
     {
       "id": "percentile-character-fraction-v1",
       "title": "Capture and implement SQL Server percentile character fraction conversion",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server compatibility goal; complete first-party PR648 replay identifies accepted SQL Server character fraction 0.5 rejected by msduck.",
       "scope": [
         "crates/msduck-sql/src/percentile.rs",
@@ -6927,7 +6927,7 @@
     {
       "id": "float-character-diagnostic-v1",
       "title": "Recognize canonical VARCHAR NVARCHAR to FLOAT conversion diagnostics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing SQL Server compatibility goal and two identical first-party SQL Server captures from task649.",
       "scope": [
         "crates/msduck-core/src/diagnostic.rs",
@@ -6989,7 +6989,7 @@
     {
       "id": "percentile-client-character-acceptance-v1",
       "title": "Replace obsolete percentile character rejection with captured acceptance",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing SQL Server compatibility goal; captured character fractions are accepted by SQL Server, but default tedious client signature test still asserts rejection.",
       "scope": [
         "tests/tedious.test.mjs"
