@@ -23,15 +23,18 @@ fn catalog(source: Option<TypeMetadata>) -> CatalogSnapshot {
         "dbo.input".into(),
         vec![Field {
             name: "n".into(),
-            info: source,
-            collation: None,
+            info: source.clone(),
+            collation: source
+                .as_ref()
+                .and_then(|info| info.collation_name.clone())
+                .map(|name| Ok(msduck_core::collation::Label::Implicit(name))),
             json_fragment: false,
             properties: Default::default(),
         }],
     );
     catalog
 }
-fn metadata(catalog: &CatalogSnapshot, kind: &str, fraction: &str) -> Option<TypeMetadata> {
+fn field(catalog: &CatalogSnapshot, kind: &str, fraction: &str) -> Field {
     let sql = format!(
         "SELECT PERCENTILE_{kind}({fraction}) WITHIN GROUP(ORDER BY n) OVER() AS p FROM dbo.input"
     );
@@ -45,7 +48,10 @@ fn metadata(catalog: &CatalogSnapshot, kind: &str, fraction: &str) -> Option<Typ
     scope.parameters.insert("@p".into(), Default::default());
     let fields = projection::query_fields(catalog, &query, &scope).unwrap();
     assert_eq!(fields[0].name, "p");
-    fields[0].info.clone()
+    fields[0].clone()
+}
+fn metadata(catalog: &CatalogSnapshot, kind: &str, fraction: &str) -> Option<TypeMetadata> {
+    field(catalog, kind, fraction).info
 }
 #[test]
 fn fraction_values_do_not_change_continuous_or_discrete_declarations() {
@@ -91,6 +97,12 @@ fn discrete_retains_character_source_width_and_unknowns_remain_barriers() {
     };
     let known = catalog(Some(source.clone()));
     assert_eq!(metadata(&known, "DISC", "@p"), Some(source));
+    assert_eq!(
+        field(&known, "DISC", "@p").collation,
+        Some(Ok(msduck_core::collation::Label::Implicit(
+            "example".into()
+        )))
+    );
     assert!(metadata(&known, "CONT", "@p").is_none());
     let unknown = catalog(None);
     for kind in ["CONT", "DISC"] {

@@ -419,6 +419,15 @@ fn expression_collation(
             let FunctionArguments::List(args) = &function.args else {
                 return None;
             };
+            if function
+                .name
+                .to_string()
+                .eq_ignore_ascii_case("percentile_disc")
+                && function.over.is_some()
+                && let [ordering] = function.within_group.as_slice()
+            {
+                return recurse(&ordering.expr);
+            }
             if matches!(
                 function.name.to_string().to_ascii_uppercase().as_str(),
                 "MIN" | "MAX"
