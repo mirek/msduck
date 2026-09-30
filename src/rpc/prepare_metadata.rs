@@ -67,6 +67,31 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
                 };
                 return ControlFlow::Continue(());
             }
+            if let Expr::Function(f) = expression {
+                let name = f.name.to_string().to_ascii_lowercase();
+                let fixed = if name == "newid"
+                    && matches!(&f.args, FunctionArguments::List(a) if a.args.is_empty())
+                {
+                    Some(DataType::Uuid)
+                } else if matches!(name.as_str(), "stdev" | "stdevp" | "var" | "varp")
+                    && msduck_sql::aggregate::validate(f).is_ok()
+                {
+                    Some(DataType::Double(ExactNumberInfo::None))
+                } else {
+                    None
+                };
+                if let Some(kind) = fixed {
+                    *expression = Expr::Convert {
+                        is_try: false,
+                        expr: Box::new(Expr::Value(sqlparser::ast::Value::Null.into())),
+                        data_type: Some(kind),
+                        charset: None,
+                        target_before_value: true,
+                        styles: vec![],
+                    };
+                    return ControlFlow::Continue(());
+                }
+            }
             if let Expr::Function(f) = expression
                 && f.name.to_string().eq_ignore_ascii_case("rand")
                 && matches!(&f.args, FunctionArguments::List(a) if matches!(a.args.as_slice(), [] | [FunctionArg::Unnamed(FunctionArgExpr::Expr(_))]) && a.clauses.is_empty() && a.duplicate_treatment.is_none())
@@ -156,9 +181,12 @@ fn query_description(
     }
     let mut fields = projection::query_fields(&catalog, query, &scope)
         .ok_or_else(|| anyhow::anyhow!("unsupported prepared result declarations"))?;
+    let mut declaration_query = query.clone();
+    crate::aggregate_columns::annotate(&session.db, &mut declaration_query, parameters)
+        .map_err(anyhow::Error::msg)?;
     if let Some(declared) = projection::query_fields(
         &catalog,
-        &expression_declarations(query, parameters),
+        &expression_declarations(&declaration_query, parameters),
         &scope,
     ) {
         ensure!(
