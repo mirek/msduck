@@ -10,6 +10,35 @@ use sqlparser::ast::{
 use std::collections::HashMap;
 use std::ops::ControlFlow;
 
+// Every contributing branch must have an explicit DATETIME2 declaration.
+// In particular, a known branch cannot conceal an unknown or higher-precedence
+// operand. ISNULL/NULLIF use the first declaration through conditional::values.
+fn datetime2_declaration(expression: &Expr, parameters: &HashMap<String, Parameter>) -> Option<u8> {
+    use msduck_sql::expression_metadata::conditional;
+    if conditional::candidate(expression) {
+        let scales = conditional::values(expression)
+            .into_iter()
+            .filter(|value| !conditional::literal_null(value))
+            .map(|value| datetime2_declaration(value, parameters))
+            .collect::<Option<Vec<_>>>()?;
+        return scales.into_iter().max();
+    }
+    match expression {
+        Expr::Nested(value) => datetime2_declaration(value, parameters),
+        Expr::Cast { data_type, .. }
+        | Expr::Convert {
+            data_type: Some(data_type),
+            ..
+        } => msduck_sql::datetime2_cast::scale(data_type).ok().flatten(),
+        Expr::Identifier(id) if id.value.starts_with('@') => {
+            msduck_sql::datetime2_cast::scale(&parameters.get(&id.value.to_lowercase())?.ast_type())
+                .ok()
+                .flatten()
+        }
+        _ => None,
+    }
+}
+
 // This clone is used only for declaration inference, never execution. Native
 // validation has already checked the original seed expression and function.
 fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter>) -> Query {
@@ -64,6 +93,13 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
                 .or_else(|| {
                     msduck_sql::case_types::is_bit(expression, self.0)
                         .then_some(DataType::Bit(None))
+                })
+                .or_else(|| {
+                    datetime2_declaration(expression, self.0).and_then(|scale| {
+                        Some(msduck_sql::sql_type::ast(SqlType::DateTime2(
+                            msduck_core::types::Scale::new(scale).ok()?,
+                        )))
+                    })
                 })
                 .or_else(|| {
                     msduck_sql::expression_metadata::storage::kind(&numeric, self.0, &|_| None)
@@ -436,6 +472,43 @@ fn query_description(
             }
         }
     }
+    // Preparation retains fComputed for the captured CAST of an INT column
+    // to SQL_VARIANT. Ordinary execution projection rules omit it for this
+    // family, so derive this preparation property from the original AST and
+    // explicit source declaration, never from returned payloads.
+    let mut expanded = query.clone();
+    if projection::expand_stars(&catalog, &mut expanded, &scope).is_some()
+        && let sqlparser::ast::SetExpr::Select(select) = expanded.body.as_ref()
+        && select.projection.len() == fields.len()
+    {
+        let source_scope = projection::scopes(&catalog, &expanded, &scope).body;
+        for (field, item) in fields.iter_mut().zip(&select.projection) {
+            let expression = match item {
+                sqlparser::ast::SelectItem::UnnamedExpr(expr)
+                | sqlparser::ast::SelectItem::ExprWithAlias { expr, .. } => expr,
+                _ => continue,
+            };
+            if let Expr::Cast {
+                expr, data_type, ..
+            } = expression
+                && msduck_sql::variant_pack::is_variant(data_type)
+                && field.info.as_ref().and_then(|info| info.system_type_id) == Some(98)
+            {
+                let ids = match expr.as_ref() {
+                    Expr::Identifier(id) if !id.value.starts_with('@') => vec![id],
+                    Expr::CompoundIdentifier(ids) => ids.iter().collect(),
+                    _ => continue,
+                };
+                if msduck_sql::binding_scope::resolve(&ids, &[], &source_scope.rows)
+                    .and_then(|source| source.info.as_ref())
+                    .and_then(|info| info.system_type_id)
+                    == Some(56)
+                {
+                    field.properties = msduck_core::result::Properties::expression(true);
+                }
+            }
+        }
+    }
     ensure!(
         !fields.is_empty(),
         "unsupported empty prepared result declarations"
@@ -602,6 +675,43 @@ mod tests {
             let declared = expression_declarations(&query, &HashMap::new());
             assert!(declared.to_string().contains("COUNT"), "{sql}");
             assert!(declared.to_string().contains("NULL"), "{sql}");
+        }
+    }
+
+    #[test]
+    fn datetime2_conditionals_require_all_result_declarations() {
+        fn declaration(sql: &str) -> Option<u8> {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            let sqlparser::ast::SetExpr::Select(select) = query.body.as_ref() else {
+                panic!("select")
+            };
+            let sqlparser::ast::SelectItem::UnnamedExpr(expr) = &select.projection[0] else {
+                panic!("expression")
+            };
+            datetime2_declaration(expr, &HashMap::new())
+        }
+        assert_eq!(
+            declaration("SELECT ISNULL(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIME2(7)))"),
+            Some(2)
+        );
+        assert_eq!(
+            declaration("SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIME2(7)))"),
+            Some(7)
+        );
+        assert_eq!(
+            declaration(
+                "SELECT CASE WHEN 1=1 THEN CAST(NULL AS DATETIME2(2)) ELSE CAST(NULL AS DATETIME2(7)) END"
+            ),
+            Some(7)
+        );
+        for sql in [
+            "SELECT COALESCE(CAST(NULL AS DATETIME2(2)),@unknown)",
+            "SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIMEOFFSET(7)))",
+            "SELECT COALESCE(CAST(NULL AS DATETIME2(2)),a)",
+        ] {
+            assert_eq!(declaration(sql), None, "{sql}");
         }
     }
 

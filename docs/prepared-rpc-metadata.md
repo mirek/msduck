@@ -63,8 +63,18 @@ command without performing either write. Single-table CTE DELETE uses the bounde
 root adapter described below and retains the captured no-result command 196.
 INSERT OUTPUT uses the existing pure logical projection over target catalog
 declarations and retains the INSERT completion command. Other captured regression
-shapes remain implementation work, including window/variant ORDER and temporal
-derived declarations.
+shapes remain implementation work, including wider ORDER and temporal
+derived declarations. The preparation ORDER fallback preserves existing proven
+plans and uses original typed source identities for direct columns, projected
+INT-to-variant casts and captured SUM keys. It rejects unresolved/computed keys,
+ambiguous aliases and hidden DISTINCT keys. Captured INT-column variant casts
+retain preparation fComputed even though execution inference omits it.
+
+DATETIME2 conditionals use explicit contributing declarations: ISNULL retains
+the first argument scale, while CASE/COALESCE use the largest known DATETIME2
+scale. Any unresolved or mixed-family contributing branch remains a barrier.
+The retained ISNULL scale-2/scale-7 response is compared verbatim. This does not
+add temporal derived-table/set type inference.
 
 A bare projected NULL is declared INT, while NULL function operands retain their
 original declaration barriers. VARBINARY(MAX) uses the existing PLP binary codec.
