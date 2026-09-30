@@ -719,7 +719,7 @@ mod tests {
             );
             assert_eq!(
                 fields[0].properties.origin,
-                msduck_core::result::Origin::Derived
+                msduck_core::result::Origin::Expression
             );
         }
         for sql in ["SELECT RAND(1,2)", "SELECT RAND() OVER()"] {
