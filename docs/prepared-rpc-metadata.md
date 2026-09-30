@@ -169,3 +169,10 @@ including nested set boundaries. Fixture-backed pure and complete public respons
 tests cover the captured nullable/nonnullable source, expression and temporal
 profiles. Unknown properties remain unknown unless explicit input declarations
 prove a nonnullable intersection; row values never establish that proof.
+
+Full verification at a45fee6 exposed a backend regression when temporal AST
+results were returned by the numeric `set_type` helper: native numeric set
+lowering emitted an unsupported DuckDB DATETIMEOFFSET cast. Temporal merging is
+therefore restricted to catalog-based `set_info`; the numeric AST helper keeps
+its existing contract. Pure all-scale tests assert that separation, and the
+workspace offset-set regression exercises the downstream native consumer.

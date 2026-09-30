@@ -79,7 +79,9 @@ fn every_temporal_scale_contributes_in_both_operand_orders_and_values() {
                     let left = kind(a, sa);
                     let right = kind(b, sb);
                     let expected = kind(a.max(b), sa.max(sb));
-                    assert_eq!(arithmetic::set_type(&left, &right), Some(expected.clone()));
+                    // This numeric AST helper is also used by native numeric casts.
+                    // Temporal declarations must not leak into that lowering path.
+                    assert_eq!(arithmetic::set_type(&left, &right), None);
                     let info = arithmetic::set_info(
                         &catalog,
                         &catalog.cast_info(&left).unwrap(),
