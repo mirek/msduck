@@ -124,7 +124,7 @@ fn retained_order_presence_and_ordinals_match_for_every_resolved_query() {
             assert_eq!(actual, expected, "{} {}", record["name"], record["mode"]);
             if record["mode"] == "prepared" {
                 for execution in record["executions"].as_array().unwrap() {
-                    let actual_orders: Vec<Vec<u16>> = execution["events"]
+                    let actual_orders: Vec<Vec<u16>> = execution["result"]["events"]
                         .as_array()
                         .unwrap()
                         .iter()
