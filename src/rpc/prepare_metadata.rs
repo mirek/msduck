@@ -281,7 +281,29 @@ fn query_description(
         })
         .collect::<Result<Vec<_>>>()?;
     let mut out = Vec::new();
-    tds::metadata(&mut out, &columns)?;
+    // The shared decimal codec emits DECIMALN. NUMERICN has identical value
+    // framing but a distinct TYPE_INFO ID, retained by SQL Server for these
+    // declarations. Encode each bounded column with the shared codec, then
+    // select that declaration's ID at its fixed TYPE_INFO position.
+    out.push(0x81);
+    out.extend(u16::try_from(columns.len())?.to_le_bytes());
+    for (column, field) in columns.iter().zip(&fields) {
+        let mut encoded = Vec::new();
+        tds::metadata(&mut encoded, std::slice::from_ref(column))?;
+        if field
+            .info
+            .as_ref()
+            .is_some_and(|info| info.system_type_id == Some(108))
+        {
+            // COLMETADATA(1) + count(2) + USERTYPE(4) + FLAGS(2).
+            ensure!(
+                encoded.get(9) == Some(&0x6a),
+                "invalid numeric metadata codec"
+            );
+            encoded[9] = 0x6c;
+        }
+        out.extend_from_slice(&encoded[3..]);
+    }
     match projection::order::infer(&catalog, query, &scope) {
         projection::order::Plan::Token(ordinals) => tds::order::encode(&mut out, &ordinals)?,
         projection::order::Plan::NoToken => {}
