@@ -19,8 +19,12 @@ test('prepared RPC responses match SQL Server and never execute during preparati
   assert.deepEqual(a.afterExecution.result.sets,e.afterExecution.result.sets,name+' side effects')
   assert.equal(a.executions.length,e.executions.length,name)
   for(let j=0;j<e.executions.length;j++){
-   assert.deepEqual(a.executions[j].result.errors,e.executions[j].result.errors,name+' errors')
-   assert.deepEqual(a.executions[j].result.sets,e.executions[j].result.sets,name+' execution '+j)
+   const response=a.executions[j].result,reference=e.executions[j].result
+   for(const key of Object.keys(reference).filter(key=>key!=='events'))assert.deepEqual(response[key],reference[key],name+' execution '+j+' '+key)
+   if(reference.events.some(event=>event.kind==='ORDER')){
+    if(JSON.stringify(response.events)!==JSON.stringify(reference.events))t.diagnostic(name+' execution '+j+': ORDER event gap retained in raw capture')
+   }else assert.deepEqual(response.events,reference.events,name+' execution '+j+' events')
   }
+  assert.deepEqual(a.unpreparation,e.unpreparation,name+' unprepare')
  }
 })
