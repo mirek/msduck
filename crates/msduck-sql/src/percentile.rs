@@ -320,6 +320,9 @@ fn numeric_constant(expr: &Expr) -> Option<Result<Option<f64>, String>> {
             data_type,
             format: None,
         } => {
+            if !numeric_cast_supported(data_type) {
+                return None;
+            }
             let value = match numeric_constant(inner)? {
                 Ok(value) => value,
                 Err(e) => return Some(Err(e)),
@@ -361,6 +364,25 @@ fn numeric_constant(expr: &Expr) -> Option<Result<Option<f64>, String>> {
         _ => None,
     }
 }
+fn numeric_cast_supported(kind: &DataType) -> bool {
+    match kind {
+        DataType::Float(ExactNumberInfo::None | ExactNumberInfo::Precision(1..=53))
+        | DataType::Double(ExactNumberInfo::None)
+        | DataType::Real
+        | DataType::Bit(_)
+        | DataType::Boolean
+        | DataType::Int(_)
+        | DataType::Integer(_) => true,
+        DataType::Decimal(info) | DataType::Numeric(info) => match info {
+            ExactNumberInfo::None => true,
+            ExactNumberInfo::Precision(p) => (1..=38).contains(p),
+            ExactNumberInfo::PrecisionAndScale(p, s) => {
+                (1..=38).contains(p) && *s >= 0 && *s <= *p as i64
+            }
+        },
+        _ => crate::money_cast::money_type(kind).is_some(),
+    }
+}
 fn decimal_source(expr: &Expr) -> Option<String> {
     let expr = crate::variant_cast::source(expr).unwrap_or(expr);
     match expr {
@@ -394,7 +416,7 @@ fn decimal_cast(expr: &Expr, info: ExactNumberInfo) -> Option<f64> {
     let text = text.strip_prefix('-').unwrap_or(&text);
     let (whole, fraction) = text.split_once('.').unwrap_or((text, ""));
     let coefficient = format!("{whole}{fraction}").parse::<i128>().ok()?;
-    let shift = i64::try_from(scale).ok()? - i64::try_from(fraction.len()).ok()?;
+    let shift = scale - i64::try_from(fraction.len()).ok()?;
     let coefficient = if shift >= 0 {
         coefficient.checked_mul(10i128.checked_pow(shift.try_into().ok()?)?)?
     } else {
