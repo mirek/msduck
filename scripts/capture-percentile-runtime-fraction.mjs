@@ -20,11 +20,11 @@ const output = resolve(args[0] ?? 'artifacts/compatibility/percentile-runtime-fr
 const StreamParser = createRequire(import.meta.url)('tedious/lib/token/stream-parser.js')
 const doneKinds = new Map([[0xFD, 'DONE'], [0xFE, 'DONEPROC'], [0xFF, 'DONEINPROC']])
 const source = 'dbo.percentile_runtime'
-const query = (kind, fraction, { descending = false, partition = false, empty = false, allNull = false } = {}) =>
-  `SELECT id,PERCENTILE_${kind}(${fraction}) WITHIN GROUP (ORDER BY ${allNull ? 'CAST(NULL AS INT)' : 'n'}${descending ? ' DESC' : ''}) OVER (${partition ? 'PARTITION BY g' : ''}) AS p FROM ${source}${empty ? ' WHERE 1=0' : ''} ORDER BY id`
+const query = (kind, fraction, { descending = false, partition = false, empty = false, allNull = false, constantNullOrder = false } = {}) =>
+  `SELECT id,PERCENTILE_${kind}(${fraction}) WITHIN GROUP (ORDER BY ${constantNullOrder ? 'CAST(NULL AS INT)' : 'n'}${descending ? ' DESC' : ''}) OVER (${partition ? 'PARTITION BY g' : ''}) AS p FROM ${allNull ? 'dbo.percentile_runtime_null' : source}${empty ? ' WHERE 1=0' : ''} ORDER BY id`
 const plan = [
   {name:'server version',sql:"SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)) AS product_version"},
-  {name:'setup',sql:"CREATE TABLE dbo.percentile_runtime(id INT NOT NULL,g INT NOT NULL,n INT,p FLOAT,ptext NVARCHAR(16)); INSERT INTO dbo.percentile_runtime VALUES(1,1,1,0,N'0'),(2,2,2,0.25,N'0.25'),(3,1,3,0.75,N'0.75'),(4,2,4,1,N'1'),(5,1,NULL,NULL,NULL); CREATE SEQUENCE dbo.percentile_fraction_sequence AS INT START WITH 0 INCREMENT BY 1"},
+  {name:'setup',sql:"CREATE TABLE dbo.percentile_runtime(id INT NOT NULL,g INT NOT NULL,n INT,p FLOAT,ptext NVARCHAR(16)); INSERT INTO dbo.percentile_runtime VALUES(1,1,1,0,N'0'),(2,2,2,0.25,N'0.25'),(3,1,3,0.75,N'0.75'),(4,2,4,1,N'1'),(5,1,NULL,NULL,NULL); CREATE TABLE dbo.percentile_runtime_null(id INT NOT NULL,g INT NOT NULL,n INT,p FLOAT,ptext NVARCHAR(16)); INSERT INTO dbo.percentile_runtime_null SELECT id,g,NULL,p,ptext FROM dbo.percentile_runtime; CREATE SEQUENCE dbo.percentile_fraction_sequence AS INT START WITH 0 INCREMENT BY 1"},
 ]
 for (const kind of ['CONT','DISC']) {
   for (const [type,values] of [['FLOAT',['0.5','0','1','NULL','-0.1','1.1']],['NVARCHAR(16)',["N'0.5'","N'-0'","N'abc'","N'1.1'",'NULL']],['DECIMAL(8,4)',['0.5','NULL']],['INT',['0','1']],['BIT',['0','1']]]) {
@@ -65,7 +65,9 @@ for (const kind of ['CONT','DISC']) {
     ['descending zero',query(kind,'@b',{descending:true}),TYPES.Float,[0,.5,null,0]],
     ['empty numeric',query(kind,'@b',{empty:true}),TYPES.Float,[null,-.1,1.1,.5]],
     ['empty character',query(kind,'@b',{empty:true}),TYPES.NVarChar,['abc','1.1',null,'0.5']],
+    ['constant NULL ORDER BY',query(kind,'@b',{constantNullOrder:true}),TYPES.NVarChar,['0.5']],
     ['all NULL input',query(kind,'@b',{allNull:true}),TYPES.NVarChar,['0.5','abc','1.1',null,'0.5']],
+    ['all NULL numeric',query(kind,'@b',{allNull:true}),TYPES.Float,[.5,null,-.1,1.1,.5]],
     ['partitioned',query(kind,'@b',{partition:true}),TYPES.Float,[.5,null,0,.5]],
     ['constant bad',query(kind,"'abc'")+'; SELECT @b AS bound',TYPES.Int,[1,2]],
     ['constant range',query(kind,"'1.1'")+'; SELECT @b AS bound',TYPES.Int,[1,2]],
