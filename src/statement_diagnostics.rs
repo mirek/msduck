@@ -20,7 +20,10 @@ type Ticket = [u8; 16];
 type Entries = HashMap<Ticket, Arc<AtomicBool>>;
 
 #[derive(Clone, Default)]
-pub struct Registry(Arc<Mutex<Entries>>);
+pub struct Registry {
+    entries: Arc<Mutex<Entries>>,
+    pub(crate) rand: crate::engine::rand::Registry,
+}
 
 pub struct Scope {
     registry: Registry,
@@ -30,7 +33,10 @@ pub struct Scope {
 
 impl Registry {
     pub fn begin(&self) -> Result<Scope, &'static str> {
-        let mut entries = self.0.lock().map_err(|_| "diagnostic registry poisoned")?;
+        let mut entries = self
+            .entries
+            .lock()
+            .map_err(|_| "diagnostic registry poisoned")?;
         if entries.len() >= LIMIT {
             return Err("too many active statement diagnostic contexts");
         }
@@ -53,7 +59,7 @@ impl Registry {
     }
 
     fn find(&self, ticket: &Ticket) -> Result<Arc<AtomicBool>, &'static str> {
-        self.0
+        self.entries
             .lock()
             .map_err(|_| "diagnostic registry poisoned")?
             .get(ticket)
@@ -64,6 +70,7 @@ impl Registry {
     /// Registration alone does not rewrite SQL or emit warnings. The caller
     /// must retain this registry and open a fresh scope for every execution.
     pub fn register(&self, db: &Connection) -> duckdb::Result<()> {
+        self.rand.register(db)?;
         count_frame::register(db)?;
         integer_frame::register(db)?;
         db.register_scalar_function_with_state::<Observe>("__msduck_observe_null", self)
@@ -84,7 +91,7 @@ impl Drop for Scope {
         // Cleanup must not panic while unwinding an execution error. A poisoned
         // registry still refuses future use through begin/find.
         self.registry
-            .0
+            .entries
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .remove(&self.ticket);
@@ -357,7 +364,7 @@ mod tests {
             panic!("execution failed");
         });
         assert!(caught.is_err());
-        assert!(registry.0.lock().unwrap().is_empty());
+        assert!(registry.entries.lock().unwrap().is_empty());
         assert!(!registry.begin().unwrap().null_eliminated());
     }
 
@@ -420,7 +427,7 @@ mod tests {
         for worker in workers {
             worker.join().unwrap();
         }
-        assert!(registry.0.lock().unwrap().is_empty());
+        assert!(registry.entries.lock().unwrap().is_empty());
         let scope = registry.begin().unwrap();
         let ticket = *scope.ticket();
         drop(scope);

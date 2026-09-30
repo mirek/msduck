@@ -1,5 +1,6 @@
 //! Session-owned DuckDB execution with AST-based T-SQL translation.
 mod joined_output;
+pub(crate) mod rand;
 mod session_context;
 use crate::tds::{self, Column, Type};
 use anyhow::{Result, bail, ensure};
@@ -351,6 +352,7 @@ enum RpcExecution {
 pub struct Session {
     pub db: Connection,
     diagnostics: crate::statement_diagnostics::Registry,
+    rand: std::sync::Arc<std::sync::Mutex<rand::Generator>>,
     pub nocount: bool,
     pub transactions: u32,
     pub rowcount: u64,
@@ -389,6 +391,7 @@ impl Session {
         Ok(Self {
             db,
             diagnostics,
+            rand: rand::Generator::new()?,
             nocount: false,
             transactions: 0,
             rowcount: 0,
@@ -921,6 +924,12 @@ impl Session {
             if let ControlFlow::Break(error) = VisitMut::visit(&mut statement, &mut translator) {
                 bail!(error);
             }
+            let _rand_scopes = rand::lower(
+                &mut statement,
+                &mut translator.values,
+                &self.diagnostics.rand,
+                &self.rand,
+            )?;
             crate::insert::lower(&self.db, &mut statement, &money_columns)?;
             crate::update::lower(&self.db, &mut statement, &money_assignments)?;
             if let Some(target) = into {
@@ -2656,6 +2665,12 @@ impl Session {
         if let ControlFlow::Break(error) = VisitMut::visit(&mut statement, &mut translator) {
             bail!(error);
         }
+        let _rand_scopes = rand::lower(
+            &mut statement,
+            &mut translator.values,
+            &self.diagnostics.rand,
+            &self.rand,
+        )?;
         crate::insert::lower(&self.db, &mut statement, &money_columns)?;
         crate::update::lower(&self.db, &mut statement, &money_assignments)?;
         if let Some(diagnostics) = diagnostics {
@@ -3357,6 +3372,7 @@ impl Session {
             unreachable!()
         };
         let mut declared_expression = expression.clone();
+        rand::declarations(&mut declared_expression);
         msduck_sql::case_types::lower(&mut declared_expression, parameters);
         select.projection = vec![SelectItem::UnnamedExpr(declared_expression)];
         let declaration =
@@ -3432,11 +3448,18 @@ impl Session {
         for name in ["@@trancount", "@@rowcount", "@@error"] {
             declarations.insert(name.into(), Kind::Int);
         }
+        let mut rand_scopes = Vec::new();
         let (sql, checked) = if let Some(mut checked) = plan(&expression, &declarations) {
             if let ControlFlow::Break(error) = VisitMut::visit(&mut checked.query, &mut translator)
             {
                 bail!(error);
             }
+            rand_scopes.extend(rand::lower(
+                &mut checked.query,
+                &mut translator.values,
+                &self.diagnostics.rand,
+                &self.rand,
+            )?);
             if let Some(diagnostics) = diagnostics {
                 crate::aggregate_diagnostics::bind_expressions(
                     &mut checked.query,
@@ -3449,6 +3472,12 @@ impl Session {
             if let ControlFlow::Break(error) = VisitMut::visit(&mut expression, &mut translator) {
                 bail!(error);
             }
+            rand_scopes.extend(rand::lower(
+                &mut expression,
+                &mut translator.values,
+                &self.diagnostics.rand,
+                &self.rand,
+            )?);
             if let Some(diagnostics) = diagnostics {
                 crate::aggregate_diagnostics::bind_expressions(
                     &mut expression,
