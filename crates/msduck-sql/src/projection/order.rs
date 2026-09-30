@@ -84,18 +84,12 @@ fn null_subquery(expr: &Expr) -> bool {
     let Expr::Subquery(query) = inner(expr) else {
         return false;
     };
-    let SetExpr::Select(select) = query.body.as_ref() else {
+    let Ok(expected) =
+        sqlparser::parser::Parser::parse_sql(&crate::dialect::ServerDialect, "SELECT NULL")
+    else {
         return false;
     };
-    query.with.is_none()
-        && query.order_by.is_none()
-        && query.limit_clause.is_none()
-        && query.fetch.is_none()
-        && query.for_clause.is_none()
-        && select.from.is_empty()
-        && select.selection.is_none()
-        && select.projection.len() == 1
-        && matches!(&select.projection[0],SelectItem::UnnamedExpr(Expr::Value(v)) if v.value == Value::Null)
+    matches!(expected.as_slice(),[Statement::Query(expected)] if query == expected)
 }
 fn typed_null(expr: &Expr) -> bool {
     matches!(inner(expr),Expr::Cast {expr,data_type:DataType::Int(None),kind:CastKind::Cast,format:None}
@@ -112,7 +106,59 @@ fn ordinal(expr: &Expr, width: usize) -> Option<usize> {
         return None;
     };
     let number = number.parse::<usize>().ok()?;
-    (number > 0 && number <= width).then_some(number - 1)
+    (number > 0 && number <= width).then(|| number - 1)
+}
+
+fn plain_function(function: &Function) -> bool {
+    function.parameters == FunctionArguments::None
+        && function.filter.is_none()
+        && function.null_treatment.is_none()
+        && function.within_group.is_empty()
+        && !function.uses_odbc_syntax
+}
+fn row_number(expr: &Expr, sources: &[Source], scope: &Scope) -> bool {
+    let Expr::Function(f) = inner(expr) else {
+        return false;
+    };
+    let FunctionArguments::List(args) = &f.args else {
+        return false;
+    };
+    let Some(WindowType::WindowSpec(window)) = &f.over else {
+        return false;
+    };
+    f.name.to_string().eq_ignore_ascii_case("ROW_NUMBER")
+        && plain_function(f)
+        && args.args.is_empty()
+        && args.clauses.is_empty()
+        && args.duplicate_treatment.is_none()
+        && window.window_name.is_none()
+        && window.window_frame.is_none()
+        && !window.order_by.is_empty()
+        && window
+            .order_by
+            .iter()
+            .all(|key| column(&key.expr, sources, scope).is_some())
+        && window
+            .partition_by
+            .iter()
+            .all(|key| column(key, sources, scope).is_some())
+}
+fn count_star(expr: &Expr) -> bool {
+    let Expr::Function(f) = inner(expr) else {
+        return false;
+    };
+    let FunctionArguments::List(args) = &f.args else {
+        return false;
+    };
+    f.name.to_string().eq_ignore_ascii_case("COUNT")
+        && plain_function(f)
+        && f.over.is_none()
+        && args.clauses.is_empty()
+        && args.duplicate_treatment.is_none()
+        && matches!(
+            args.args.as_slice(),
+            [FunctionArg::Unnamed(FunctionArgExpr::Wildcard)]
+        )
 }
 
 /// Infer metadata for an original logical query before backend lowering. The
@@ -139,13 +185,10 @@ pub fn infer(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -> Plan {
     if keys.len() > u16::MAX as usize / 2 {
         return Plan::Unknown(Barrier::Length);
     };
-    let Some(fields) = super::query_fields(catalog, query, outer) else {
+    let Some(mut fields) = super::member_fields(catalog, query, outer) else {
         return Plan::Unknown(Barrier::Projection);
     };
-    if fields.is_empty()
-        || fields.len() > u16::MAX as usize
-        || fields.iter().any(|field| field.info.is_none())
-    {
+    if fields.is_empty() || fields.len() > u16::MAX as usize {
         return Plan::Unknown(Barrier::Projection);
     }
     let scope = super::declaration_scopes(catalog, query, outer).body;
@@ -170,12 +213,38 @@ pub fn infer(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -> Plan {
             if expressions.len() != fields.len() {
                 return Plan::Unknown(Barrier::Projection);
             };
+            if fields.iter().zip(&expressions).any(|(field, expr)| {
+                field.info.is_none() && !row_number(expr, &sources, &scope) && !count_star(expr)
+            }) {
+                return Plan::Unknown(Barrier::Projection);
+            }
             (Some(select.as_ref()), sources, expressions)
         }
         SetExpr::SetOperation {
             op: SetOperator::Union,
+            left,
+            right,
             ..
-        } => (None, Vec::new(), Vec::new()),
+        } => {
+            let mut branch = query.clone();
+            branch.order_by = None;
+            branch.body = left.clone();
+            let Some(left) = super::member_fields(catalog, &branch, outer) else {
+                return Plan::Unknown(Barrier::Projection);
+            };
+            branch.body = right.clone();
+            let Some(right) = super::member_fields(catalog, &branch, outer) else {
+                return Plan::Unknown(Barrier::Projection);
+            };
+            if left.len() != fields.len()
+                || right.len() != fields.len()
+                || left.iter().chain(&right).any(|field| field.info.is_none())
+            {
+                return Plan::Unknown(Barrier::Projection);
+            }
+            fields = left;
+            (None, Vec::new(), Vec::new())
+        }
         _ => return Plan::Unknown(Barrier::Shape),
     };
     let mut result = Vec::with_capacity(keys.len());
@@ -206,10 +275,9 @@ pub fn infer(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -> Plan {
                 {
                     return Plan::NoToken;
                 }
-                let row_number = matches!(inner(expression),Expr::Function(f) if f.name.to_string().eq_ignore_ascii_case("ROW_NUMBER") && f.over.is_some());
                 if column(expression, &sources, &scope).is_none()
                     && !plus_column(expression, &sources, &scope)
-                    && !row_number
+                    && !row_number(expression, &sources, &scope)
                 {
                     return Plan::Unknown(Barrier::Constant);
                 }
