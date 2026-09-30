@@ -27,12 +27,6 @@ fn retained_character_fraction_matrix_lowers_or_preserves_captured_error_text() 
         if record["mode"] != "batch" || !(name.starts_with("CONT") || name.starts_with("DISC")) {
             continue;
         }
-        // Existing numeric-literal exact-range policy is unchanged in this
-        // character task. Both captured numeric endpoint discrepancies remain
-        // in the raw client report and docs, rather than being called matches.
-        if name.ends_with("expression 1.00000000000000000001") {
-            continue;
-        }
         let sql = record["sql"].as_str().unwrap();
         let mut expr = expression(sql);
         let original = expr.clone();
@@ -58,7 +52,7 @@ fn retained_character_fraction_matrix_lowers_or_preserves_captured_error_text() 
         }
         checked += 1;
     }
-    assert_eq!(checked, 100);
+    assert_eq!(checked, 102);
 }
 
 #[test]

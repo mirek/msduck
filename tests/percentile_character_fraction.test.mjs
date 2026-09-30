@@ -175,12 +175,11 @@ test('percentile character fraction replay preserves raw gaps and captured value
   const path = `artifacts/compatibility/percentile-character-fraction/execution-${sourceRevision}-${randomUUID()}.json`
   await mkdir('artifacts/compatibility/percentile-character-fraction',{recursive:true})
   await writeFile(path,JSON.stringify({sourceRevision,fixtureSha256,referenceImage:fixture.image,
-    limitations:['two numeric exact-range endpoint controls','prepared invalid/range error timing','dynamic fraction binding','metadata and wire event differences'],cases},null,2)+'\n',{flag:'wx'})
+    limitations:['prepared invalid/range error timing','dynamic fraction binding','metadata and wire event differences'],cases},null,2)+'\n',{flag:'wx'})
   let checked=0
   for(const record of cases){
     const {name,local,reference}=record
     if(local.mode==='batch'){
-      if(name.endsWith('expression 1.00000000000000000001'))continue
       assertSameCapture(diagnostics(local.result),diagnostics(reference.result),`${name}: diagnostic identity`)
       if(!reference.result.errors.length){
         assertSameCapture(rows(local.result),rows(reference.result),`${name}: exact values / FLOAT bits`)
@@ -197,7 +196,7 @@ test('percentile character fraction replay preserves raw gaps and captured value
       assertSameCapture(diagnostics(local.unpreparation),[],`${name}: unprepare failed`)
     }
   }
-  assert.equal(checked,101) // 100 percentile batches and final reuse; no hidden missing request
+  assert.equal(checked,103) // All 102 percentile batches and final reuse.
 })
 
 test('percentile constant cast widths descending zero and supplementary lexical probes agree', async t=>{

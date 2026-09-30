@@ -3315,12 +3315,16 @@ test('percentile windows validate ordered-set signatures and window restrictions
       [`SELECT ${fn}(.5) WITHIN GROUP (ORDER BY 1) OVER (ROWS UNBOUNDED PRECEDING)`,4106],
       [`SELECT ${fn}(.5) WITHIN GROUP (ORDER BY ROW_NUMBER() OVER (ORDER BY (SELECT 1))) OVER ()`,4109]
     ]) await assert.rejects(query(c,sql), error => error.number === number)
-    for (const q of ['-0.1','1.1','1.00000000000000000001','(0.5)','NULL']) {
+    for (const q of ['-0.1','1.1','1.0000000000000002','NULL']) {
       await assert.rejects(query(c, `SELECT ${fn}(${q}) WITHIN GROUP (ORDER BY 1) OVER ()`))
     }
     const characterFraction = await query(c, `SELECT ${fn}('0.5') WITHIN GROUP (ORDER BY n) OVER () FROM (VALUES (1),(2),(3),(4)) s(n)`)
     const expected = fn === 'PERCENTILE_CONT' ? 2.5 : 2
     assert.deepEqual(characterFraction.rows, [[expected],[expected],[expected],[expected]])
+    const nestedFraction = await query(c, `SELECT ${fn}((0.5)) WITHIN GROUP (ORDER BY n) OVER () FROM (VALUES (1),(2),(3),(4)) s(n)`)
+    assert.deepEqual(nestedFraction.rows, [[expected],[expected],[expected],[expected]])
+    const roundedEndpoint = await query(c, `SELECT ${fn}(1.00000000000000000001) WITHIN GROUP (ORDER BY n) OVER () FROM (VALUES (1),(2),(3),(4)) s(n)`)
+    assert.deepEqual(roundedEndpoint.rows, [[4],[4],[4],[4]])
     await assert.rejects(query(c, `SELECT ${fn}(.5) WITHIN GROUP (ORDER BY 1,2) OVER ()`))
     await assert.rejects(query(c, `SELECT ${fn}(.5) WITHIN GROUP (ORDER BY 1) OVER (ORDER BY 1)`))
     await assert.rejects(prepare(c, `SELECT ${fn}(@p) WITHIN GROUP (ORDER BY 1) OVER ()`, [['p',TYPES.Float]]))

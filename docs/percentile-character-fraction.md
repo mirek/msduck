@@ -34,7 +34,7 @@ path. A separately claimed core diagnostic change recognizes only the exact
 captured VARCHAR/NVARCHAR-to-FLOAT messages as 8114/state 5; explicit
 application errors retain their supplied number/state.
 
-Focused pure tests cover 100 applicable percentile batch shapes, malformed
+Focused pure tests cover 102 applicable percentile batch shapes, malformed
 AST preservation, cast truncation, descending zero, lexical edge cases and
 single operand evaluation. The independent client replay executes all 108
 non-version records and saves every raw difference, with exact FLOAT-value
@@ -45,13 +45,12 @@ widths, supplementary lexical cases, catchability and application identity.
 
 ## Remaining gaps
 
-The task deliberately preserves the prior exact-decimal numeric-literal range
-policy. The two new numeric controls show it is not SQL Server compatible:
-SQL Server rounds numeric `1.00000000000000000001` to one, while the current
-lowerer rejects it with 8727. Both original requests and differences remain in
-the client report; they are not counted as successful reference comparisons.
-A following numeric-fraction change needs source-aware conversion rather than
-extending this incompatible policy.
+The original character-only task retained two numeric endpoint differences.
+The separately captured numeric-literal conversion now fixes those endpoints:
+SQL Server rounds numeric `1.00000000000000000001` to one, and the lowerer
+matches it. Both numeric controls now participate in the pure/default/client
+comparisons without exclusion. The numeric source matrix and its remaining
+source/diagnostic timing gaps are documented in `percentile-numeric-rounding.md`.
 
 SQL Server prepares invalid/range character constants successfully, then
 reports conversion/range errors on execution; the current constant lowerer

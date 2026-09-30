@@ -59,7 +59,7 @@ fn retained_numeric_shapes_lower_or_preserve_captured_diagnostics_without_mutati
         }
         checked += 1;
     }
-    assert_eq!(checked, 152);
+    assert_eq!(checked, 144);
 }
 #[test]
 fn canonical_literal_diagnostics_reject_wrappers_altered_text_and_wrong_source_shapes() {
