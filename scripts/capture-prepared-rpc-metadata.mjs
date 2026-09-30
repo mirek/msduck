@@ -74,12 +74,17 @@ export const temporalSetProfiles=[
  ['mixed temporal forward','SELECT CAST(NULL AS DATETIME2(7)) AS d UNION ALL SELECT CAST(NULL AS DATETIMEOFFSET(2))'],
  ['mixed temporal reverse','SELECT CAST(NULL AS DATETIMEOFFSET(2)) AS d UNION ALL SELECT CAST(NULL AS DATETIME2(7))'],
 ]
+export const setPropertySetup=setup+'; CREATE TABLE dbo.prepare_required(n INT NOT NULL); INSERT INTO dbo.prepare_required VALUES(1),(2)'
 export const setPropertyProfiles=[
  ...[
   ['nullable integer','SELECT CAST(NULL AS INT) AS d','SELECT CAST(NULL AS INT)'],
   ['nonnull integer','SELECT CAST(1 AS INT) AS d','SELECT CAST(2 AS INT)'],
   ['nonnull then nullable','SELECT CAST(1 AS INT) AS d','SELECT CAST(NULL AS INT)'],
   ['nullable then nonnull','SELECT CAST(NULL AS INT) AS d','SELECT CAST(1 AS INT)'],
+  ['nonnull stored','SELECT n AS d FROM dbo.prepare_required','SELECT n FROM dbo.prepare_required'],
+  ['nonnull stored then nullable stored','SELECT n AS d FROM dbo.prepare_required','SELECT a FROM dbo.prepare_heap'],
+  ['nullable stored then nonnull stored','SELECT a AS d FROM dbo.prepare_heap','SELECT n FROM dbo.prepare_required'],
+  ['nonnull stored then expression','SELECT n AS d FROM dbo.prepare_required','SELECT CAST(NULL AS INT)'],
   ['stored then expression','SELECT a AS d FROM dbo.prepare_heap','SELECT CAST(NULL AS INT)'],
   ['expression then stored','SELECT CAST(NULL AS INT) AS d','SELECT a FROM dbo.prepare_heap'],
   ['temporal nonnull then nullable',"SELECT CAST('2024-01-01' AS DATETIME2(2)) AS d",'SELECT CAST(NULL AS DATETIME2(7))'],
@@ -98,9 +103,9 @@ export const cteDeleteProfiles=[
 export const cteDeleteOptions={profilePlan:cteDeleteProfiles,variantPlan:['api-default','named-one'],executionValues:[null,9,1,0],rollbackProfiles:cteDeleteProfiles.filter(([name])=>name.endsWith('rollback')).map(([name])=>name)}
 const deleteState='SELECT a,b,label FROM dbo.prepare_heap ORDER BY a; SELECT @@TRANCOUNT AS depth'
 export const values=[null,0,9,1]
-export async function observe(connection,{verifyVersion=true,profilePlan=profiles,variantPlan=variants,execute=true,executionValues=values,rollbackProfiles=[]}={}){
+export async function observe(connection,{verifyVersion=true,profilePlan=profiles,variantPlan=variants,execute=true,executionValues=values,rollbackProfiles=[],setupSql=setup}={}){
  const records=[]
- for(const [name,sql] of [['version',version],['setup',setup]]){
+ for(const [name,sql] of [['version',version],['setup',setupSql]]){
   const result=canonical(await captureBatch(connection,sql));if(name!=='version'||verifyVersion)assert.deepEqual(result.errors,[]);records.push({name,sql,result})
  }
  for(const [name,sql] of profilePlan)for(const variant of variantPlan){
@@ -213,7 +218,7 @@ async function main(){
  if(mode==='--write-fixture')await refuseExistingFixture(fixture)
  const output=resolve(args[0]??'artifacts/prepared-rpc-metadata/capture.json');assert.notEqual(output,fileURLToPath(fixture))
  const regression=mode==='--regressions'||mode==='--declarations'||mode==='--temporal-sets'||mode==='--set-properties';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--set-properties'?setPropertyProfiles:mode==='--temporal-sets'?temporalSetProfiles:mode==='--declarations'?declarationProfiles:regressionProfiles
- const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,connection=>observe(connection,cteDelete?cteDeleteOptions:regression?{profilePlan:preparationProfiles,variantPlan:['api-default','named-one'],execute:false}:{}))))
+ const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,connection=>observe(connection,cteDelete?cteDeleteOptions:regression?{profilePlan:preparationProfiles,variantPlan:['api-default','named-one'],execute:false,...(mode==='--set-properties'?{setupSql:setPropertySetup}:{})}:{}))))
  if(cteDelete)for(const run of runs){
   assert.equal(run.length,10)
   for(const record of run.slice(2)){
