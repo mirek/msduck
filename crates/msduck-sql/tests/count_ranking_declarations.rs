@@ -80,7 +80,7 @@ fn retained_success_descriptors_are_inferred_without_rows() {
             let info = field
                 .info
                 .as_ref()
-                .unwrap_or_else(|| panic!("unknown {} in {sql}", field.name));
+                .unwrap_or_else(|| panic!("unknown {} in {sql}: {ast:#?}", field.name));
             if column["type"] == "IntN" {
                 assert_eq!(
                     info.max_length.map(i64::from),
@@ -158,4 +158,62 @@ fn explicit_parameters_and_unknown_arguments_remain_separate() {
             .info
             .is_none()
     );
+}
+
+#[test]
+fn prepared_metadata_uses_declarations_in_every_captured_phase() {
+    let reference: Value = serde_json::from_str(include_str!(
+        "../../../reference/count-ranking-declarations.json"
+    ))
+    .unwrap();
+    let catalog = catalog();
+    let mut scope = Scope::default();
+    scope
+        .parameters
+        .insert("@p".into(), catalog.types["int"].clone());
+    for (name, sql) in [
+        (
+            "prepared count",
+            "SELECT COUNT(@p) AS c,COUNT_BIG(@p) AS d FROM dbo.order_heap WHERE a>@p",
+        ),
+        (
+            "prepared row number",
+            "SELECT ROW_NUMBER() OVER(ORDER BY a) AS r FROM dbo.order_heap WHERE a>@p ORDER BY r",
+        ),
+    ] {
+        let Statement::Query(raw) =
+            sqlparser::parser::Parser::parse_sql(&msduck_sql::dialect::ServerDialect, sql)
+                .unwrap()
+                .remove(0)
+        else {
+            panic!("query")
+        };
+        for ast in [*raw, query(sql)] {
+            let before = ast.clone();
+            let fields = query_fields(&catalog, &ast, &scope).unwrap();
+            assert_eq!(ast, before);
+            for record in reference["runs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|run| run.as_array().unwrap())
+                .filter(|record| record["name"] == name)
+            {
+                let sets = record["result"]["sets"].as_array().unwrap();
+                assert_eq!(sets.len(), 4);
+                for set in sets {
+                    let columns = set["columns"].as_array().unwrap();
+                    assert_eq!(fields.len(), columns.len());
+                    for (field, column) in fields.iter().zip(columns) {
+                        let info = field.info.as_ref().unwrap();
+                        assert_eq!(info.max_length.map(i64::from), column["length"].as_i64());
+                        assert_eq!(
+                            info.system_type_id,
+                            Some(if column["length"] == 8 { 127 } else { 56 })
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
