@@ -498,25 +498,30 @@ fn query_description(
     }
     let mut fields = projection::query_fields(&catalog, query, &scope)
         .ok_or_else(|| anyhow::anyhow!("unsupported prepared result declarations"))?;
+    // Preserve original explicit VALUES declarations before operand annotation
+    // lowers temporal sources into native helper calls. The annotated candidate
+    // additionally supplies catalog-bound aggregate/operand declarations.
+    let original_declarations = expression_declarations(query, parameters);
     let mut declaration_query = query.clone();
     crate::aggregate_columns::annotate(&session.db, &mut declaration_query, parameters)
         .map_err(anyhow::Error::msg)?;
-    if let Some(declared) = projection::query_fields(
-        &catalog,
-        &expression_declarations(&declaration_query, parameters),
-        &scope,
-    ) {
-        ensure!(
-            declared.len() == fields.len(),
-            "prepared declaration alignment changed"
-        );
-        for (field, declaration) in fields.iter_mut().zip(declared) {
-            if field.info.is_none() && declaration.info.is_some() {
-                field.info = declaration.info;
-                if field.properties.origin == msduck_core::result::Origin::Unknown {
-                    field.properties = declaration.properties;
+    for candidate in [
+        original_declarations,
+        expression_declarations(&declaration_query, parameters),
+    ] {
+        if let Some(declared) = projection::query_fields(&catalog, &candidate, &scope) {
+            ensure!(
+                declared.len() == fields.len(),
+                "prepared declaration alignment changed"
+            );
+            for (field, declaration) in fields.iter_mut().zip(declared) {
+                if field.info.is_none() && declaration.info.is_some() {
+                    field.info = declaration.info;
+                    if field.properties.origin == msduck_core::result::Origin::Unknown {
+                        field.properties = declaration.properties;
+                    }
+                    field.collation = declaration.collation;
                 }
-                field.collation = declaration.collation;
             }
         }
     }
