@@ -2,7 +2,11 @@
 
 Two independent pinned SQL Server 2025 containers produced identical 213-record
 runs. The fixture SHA-256 is
-`c649224a9bd1215b8ab071590884dd5c9aee00c8f03bc6bdd425c4036a1e7a31`.
+`8e35c6caf8ffdce5a342576d016eee563d57eea701615459f22d06af66c69ee9`.
+The active successor `reference/percentile-numeric-rounding-v2.json` encodes
+negative FLOAT zero explicitly as `{kind: 'number', value: '-0'}` because JSON
+otherwise loses its sign. The original fixture remains unchanged as historical
+evidence; fresh replay compares every successor property without normalization.
 It retains 144 percentile queries, 66 standalone source controls, setup/version
 and final reuse. Raw columns include userType, declared type/width/precision/
 scale/flags and collation. Rows, diagnostics, token order, raw DONE status/command
@@ -33,6 +37,9 @@ flushing must not be applied again after it. Unknown/effectful sources remain
 unknown, unsupported casts stay explicit, and parameters are not inspected to
 infer compile metadata. Only supported constant shapes are folded. Descending
 zero uses the existing maximum path and ordering operands occur once.
+
+Folded fractions use round-trip scientific notation to preserve binary64 bits
+when DuckDB parses them, avoiding a second rounding through DECIMAL.
 
 The root folds these proven constant sources before child casts turn into native
 adapters. It recognizes only complete canonical literal diagnostics and preserves

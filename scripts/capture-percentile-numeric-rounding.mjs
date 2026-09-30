@@ -12,7 +12,7 @@ import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFi
 import { canonical as canonicalBase } from './lib/compatibility.mjs'
 
 const fixture = new URL('../reference/percentile-numeric-rounding-v2.json', import.meta.url)
-const fixtureSha256 = 'pending-v2-capture'
+const fixtureSha256 = '8e35c6caf8ffdce5a342576d016eee563d57eea701615459f22d06af66c69ee9'
 const args = process.argv.slice(2)
 const mode = args[0]?.startsWith('--') ? args.shift() : undefined
 if (![undefined, '--check', '--write-fixture'].includes(mode) || args.length > 1 || args[0]?.startsWith('--')) throw Error('usage: capture-percentile-numeric-rounding.mjs [--check | --write-fixture] [output]')

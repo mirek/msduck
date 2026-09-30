@@ -136,7 +136,7 @@ async function captureBatch(connection, sql) {
 test('numeric percentile replay keeps captured FLOAT bits source diagnostics and raw gaps', {timeout:120000},async t=>{
   const bytes=await readFile(new URL('../reference/percentile-numeric-rounding-v2.json',import.meta.url))
   const fixtureSha256=createHash('sha256').update(bytes).digest('hex')
-  assert.equal(fixtureSha256,'pending-v2-capture')
+  assert.equal(fixtureSha256,'8e35c6caf8ffdce5a342576d016eee563d57eea701615459f22d06af66c69ee9')
   const fixture=JSON.parse(bytes);assertSameCapture(fixture.runs[0],fixture.runs[1],'reference runs differ')
   const connection=await start(t)
   const setup=fixture.runs[0].find(r=>r.name==='setup')
