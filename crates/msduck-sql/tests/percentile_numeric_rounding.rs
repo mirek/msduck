@@ -16,7 +16,7 @@ fn expression(sql: &str) -> Expr {
 #[test]
 fn retained_numeric_shapes_lower_or_preserve_captured_diagnostics_without_mutation() {
     let fixture: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../reference/percentile-numeric-rounding.json"
+        "../../../reference/percentile-numeric-rounding-v2.json"
     ))
     .unwrap();
     assert_eq!(fixture["runs"][0], fixture["runs"][1]);

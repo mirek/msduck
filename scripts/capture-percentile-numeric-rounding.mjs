@@ -9,14 +9,24 @@ import { fileURLToPath } from 'node:url'
 import { Request, TYPES } from 'tedious'
 import { withReferenceContainer, referenceImage } from './lib/reference-container.mjs'
 import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
-import { canonical } from './lib/compatibility.mjs'
+import { canonical as canonicalBase } from './lib/compatibility.mjs'
 
-const fixture = new URL('../reference/percentile-numeric-rounding.json', import.meta.url)
-const fixtureSha256 = 'c649224a9bd1215b8ab071590884dd5c9aee00c8f03bc6bdd425c4036a1e7a31'
+const fixture = new URL('../reference/percentile-numeric-rounding-v2.json', import.meta.url)
+const fixtureSha256 = 'pending-v2-capture'
 const args = process.argv.slice(2)
 const mode = args[0]?.startsWith('--') ? args.shift() : undefined
 if (![undefined, '--check', '--write-fixture'].includes(mode) || args.length > 1 || args[0]?.startsWith('--')) throw Error('usage: capture-percentile-numeric-rounding.mjs [--check | --write-fixture] [output]')
 const output = resolve(args[0] ?? 'artifacts/compatibility/percentile-numeric-rounding/capture.json')
+// JSON has no signed zero. Retain this FLOAT observation explicitly.
+function canonical(value) {
+  function signedZeros(item) {
+    if (Object.is(item, -0)) return { kind: 'number', value: '-0' }
+    if (Array.isArray(item)) return item.map(signedZeros)
+    if (item && typeof item === 'object') return Object.fromEntries(Object.entries(item).map(([k,v]) => [k,signedZeros(v)]))
+    return item
+  }
+  return signedZeros(canonicalBase(value))
+}
 const StreamParser = createRequire(import.meta.url)('tedious/lib/token/stream-parser.js')
 const doneKinds = new Map([[0xFD, 'DONE'], [0xFE, 'DONEPROC'], [0xFF, 'DONEINPROC']])
 const query = (kind,fraction,descending=false) => `SELECT id,PERCENTILE_${kind}(${fraction}) WITHIN GROUP(ORDER BY n${descending?' DESC':''}) OVER() AS p FROM dbo.percentile_numeric ORDER BY id`

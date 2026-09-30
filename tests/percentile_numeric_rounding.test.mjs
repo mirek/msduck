@@ -6,8 +6,18 @@ import { execFileSync } from 'node:child_process'
 import { mkdir,readFile,writeFile } from 'node:fs/promises'
 import { Request } from 'tedious'
 import { start } from './support/client.mjs'
-import { canonical,differences,capture } from '../scripts/lib/compatibility.mjs'
+import { canonical as canonicalBase,differences,capture } from '../scripts/lib/compatibility.mjs'
 import { assertSameCapture } from '../scripts/lib/reference.mjs'
+// JSON has no signed zero. Retain this FLOAT observation explicitly.
+function canonical(value) {
+  function signedZeros(item) {
+    if (Object.is(item, -0)) return { kind: 'number', value: '-0' }
+    if (Array.isArray(item)) return item.map(signedZeros)
+    if (item && typeof item === 'object') return Object.fromEntries(Object.entries(item).map(([k,v]) => [k,signedZeros(v)]))
+    return item
+  }
+  return signedZeros(canonicalBase(value))
+}
 const StreamParser=createRequire(import.meta.url)('tedious/lib/token/stream-parser.js')
 const doneKinds=new Map([[0xFD,'DONE'],[0xFE,'DONEPROC'],[0xFF,'DONEINPROC']])
 const diagnostics=result=>result.errors.map(({number,state,class:severity,message})=>[number,state,severity,message])
@@ -124,9 +134,9 @@ async function captureBatch(connection, sql) {
   return capturePreparedPhase(connection,request,()=>connection.execSqlBatch(request),callback=>{complete=callback})
 }
 test('numeric percentile replay keeps captured FLOAT bits source diagnostics and raw gaps', {timeout:120000},async t=>{
-  const bytes=await readFile(new URL('../reference/percentile-numeric-rounding.json',import.meta.url))
+  const bytes=await readFile(new URL('../reference/percentile-numeric-rounding-v2.json',import.meta.url))
   const fixtureSha256=createHash('sha256').update(bytes).digest('hex')
-  assert.equal(fixtureSha256,'c649224a9bd1215b8ab071590884dd5c9aee00c8f03bc6bdd425c4036a1e7a31')
+  assert.equal(fixtureSha256,'pending-v2-capture')
   const fixture=JSON.parse(bytes);assertSameCapture(fixture.runs[0],fixture.runs[1],'reference runs differ')
   const connection=await start(t)
   const setup=fixture.runs[0].find(r=>r.name==='setup')
