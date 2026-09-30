@@ -60,6 +60,44 @@ pub(super) fn seed_conversion(
         *seed = super::unary_function("__msduck_rand_float_seed", seed.clone());
         return;
     }
+    fn source(seed: &Expr, parameters: &HashMap<String, super::Parameter>) -> Option<DataType> {
+        match seed {
+            Expr::Nested(seed) => source(seed, parameters),
+            Expr::Identifier(name) => parameters.iter().find_map(|(key, parameter)| {
+                key.eq_ignore_ascii_case(&name.value)
+                    .then(|| parameter.ast_type())
+            }),
+            Expr::Cast { data_type, .. } => Some(data_type.clone()),
+            Expr::Value(value) => match value.value {
+                sqlparser::ast::Value::SingleQuotedString(_) => Some(DataType::Varchar(None)),
+                sqlparser::ast::Value::NationalStringLiteral(_) => Some(DataType::Nvarchar(None)),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+    match source(seed, parameters) {
+        Some(DataType::BigInt(_)) => {
+            *seed = super::unary_function("__msduck_rand_bigint_seed", seed.clone());
+            return;
+        }
+        Some(
+            kind @ (DataType::Varchar(_)
+            | DataType::Char(_)
+            | DataType::Text
+            | DataType::Nvarchar(_)
+            | DataType::Nchar(_)),
+        ) => {
+            let unicode = matches!(kind, DataType::Nvarchar(_) | DataType::Nchar(_));
+            *seed = super::binary_function(
+                "__msduck_rand_character_seed",
+                seed.clone(),
+                Expr::Value(sqlparser::ast::Value::Boolean(unicode).into()),
+            );
+            return;
+        }
+        _ => {}
+    }
     *seed = Expr::Cast {
         kind: CastKind::Cast,
         expr: Box::new(seed.clone()),
@@ -156,12 +194,160 @@ impl Registry {
     }
     pub(crate) fn register(&self, db: &Connection) -> duckdb::Result<()> {
         db.register_scalar_function::<FloatSeed>("__msduck_rand_float_seed")?;
+        db.register_scalar_function::<BigIntSeed>("__msduck_rand_bigint_seed")?;
+        db.register_scalar_function::<CharacterSeed>("__msduck_rand_character_seed")?;
         db.register_scalar_function_with_state::<Draw<false>>("__msduck_rand", self)?;
         db.register_scalar_function_with_state::<Draw<true>>("__msduck_rand_seed", self)
     }
 }
 
 const FLOAT_OVERFLOW: &str = "__msduck_rand_float_seed_overflow:";
+const BIGINT_OVERFLOW: &str = "__msduck_rand_bigint_seed_overflow";
+const CHARACTER_FAILURE: &str = "__msduck_rand_character_seed_failure:";
+
+struct BigIntSeed;
+impl VScalar for BigIntSeed {
+    type State = ();
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        vec![ScalarFunctionSignature::exact(
+            vec![LogicalTypeId::Bigint.into()],
+            LogicalTypeId::Integer.into(),
+        )]
+    }
+    fn volatile() -> bool {
+        true
+    }
+    fn special_null_handling() -> bool {
+        true
+    }
+    fn invoke(
+        _: &(),
+        input: &mut DataChunkHandle,
+        output: &mut dyn WritableVector,
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let values = input.flat_vector(0);
+        let mut result = output.flat_vector();
+        for row in 0..input.len() {
+            if values.row_is_null(row as u64) {
+                result.set_null(row);
+                continue;
+            }
+            let value = unsafe { values.as_slice_with_len::<i64>(input.len())[row] };
+            let value = i32::try_from(value).map_err(|_| BIGINT_OVERFLOW)?;
+            unsafe {
+                result.as_mut_slice::<i32>()[row] = value;
+            }
+        }
+        Ok(())
+    }
+}
+
+struct CharacterSeed;
+impl VScalar for CharacterSeed {
+    type State = ();
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        vec![ScalarFunctionSignature::exact(
+            vec![LogicalTypeId::Any.into(), LogicalTypeId::Boolean.into()],
+            LogicalTypeId::Integer.into(),
+        )]
+    }
+    fn volatile() -> bool {
+        true
+    }
+    fn special_null_handling() -> bool {
+        true
+    }
+    fn invoke(
+        _: &(),
+        input: &mut DataChunkHandle,
+        output: &mut dyn WritableVector,
+    ) -> std::result::Result<(), Box<dyn std::error::Error>> {
+        let source = input.flat_vector(0);
+        let labels = input.flat_vector(1);
+        let text = source.logical_type().id() == LogicalTypeId::Varchar;
+        let carrier = crate::unicode_carrier::is_logical(&source.logical_type());
+        if !text && !carrier {
+            return Err("unsupported RAND character seed carrier".into());
+        }
+        let structure = carrier.then(|| input.struct_vector(0));
+        let payload = structure
+            .as_ref()
+            .map(|structure| structure.child(0, input.len()));
+        let mut result = output.flat_vector();
+        for row in 0..input.len() {
+            if labels.row_is_null(row as u64) {
+                return Err("NULL RAND source family".into());
+            }
+            if source.row_is_null(row as u64) {
+                result.set_null(row);
+                continue;
+            }
+            let unicode = unsafe { labels.as_slice_with_len::<bool>(input.len())[row] };
+            let units = if let Some(payload) = &payload {
+                if !unicode {
+                    return Err("unsupported ANSI RAND Unicode carrier".into());
+                }
+                if payload.row_is_null(row as u64) {
+                    return Err("NULL RAND Unicode payload".into());
+                }
+                let bytes = crate::unicode_carrier::bytes(payload, row, input.len())?;
+                if bytes.len() % 2 != 0 {
+                    return Err("invalid RAND Unicode payload length".into());
+                }
+                if bytes.len() > 8000 {
+                    return Err(format!("{CHARACTER_FAILURE}u:oversize").into());
+                }
+                bytes
+                    .chunks_exact(2)
+                    .map(|bytes| u16::from_le_bytes([bytes[0], bytes[1]]))
+                    .collect::<Vec<_>>()
+            } else {
+                let mut value = unsafe {
+                    source.as_slice_with_len::<duckdb::ffi::duckdb_string_t>(input.len())[row]
+                };
+                let bytes = unsafe {
+                    std::slice::from_raw_parts(
+                        duckdb::ffi::duckdb_string_t_data(&mut value).cast::<u8>(),
+                        duckdb::ffi::duckdb_string_t_length(value) as usize,
+                    )
+                };
+                if bytes.len() > 12000 {
+                    return Err(format!(
+                        "{CHARACTER_FAILURE}{}:oversize",
+                        if unicode { 'u' } else { 'a' }
+                    )
+                    .into());
+                }
+                std::str::from_utf8(bytes)?
+                    .encode_utf16()
+                    .take(4001)
+                    .collect::<Vec<_>>()
+            };
+            match crate::integer_conversion::unicode_integer(&units, "INT") {
+                Ok(value) => {
+                    let value = value.parse::<i32>()?;
+                    unsafe {
+                        result.as_mut_slice::<i32>()[row] = value;
+                    }
+                }
+                Err(_) => {
+                    use std::fmt::Write;
+                    let mut message =
+                        format!("{CHARACTER_FAILURE}{}:", if unicode { 'u' } else { 'a' });
+                    if units.len() > 4000 {
+                        message.push_str("oversize");
+                    } else {
+                        for unit in units {
+                            write!(message, "{unit:04x}")?;
+                        }
+                    }
+                    return Err(message.into());
+                }
+            }
+        }
+        Ok(())
+    }
+}
 struct FloatSeed;
 impl VScalar for FloatSeed {
     type State = ();
@@ -206,9 +392,68 @@ impl VScalar for FloatSeed {
 }
 
 pub(super) fn diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
-    let bits = message
-        .strip_prefix("Invalid Input Error: ")?
-        .strip_prefix(FLOAT_OVERFLOW)?;
+    use msduck_core::diagnostic::SqlError;
+    let message = message.strip_prefix("Invalid Input Error: ")?;
+    if message == BIGINT_OVERFLOW {
+        return Some(SqlError::new(
+            8115,
+            2,
+            "Arithmetic overflow error converting expression to data type int.",
+        ));
+    }
+    if let Some(encoded) = message.strip_prefix(CHARACTER_FAILURE) {
+        let (family, encoded) = encoded.split_once(':')?;
+        if !matches!(family, "u" | "a") {
+            return None;
+        }
+        let units = if encoded == "oversize" {
+            vec![65; 4001]
+        } else {
+            if encoded.len() > 16000
+                || encoded.len() % 4 != 0
+                || !encoded.bytes().all(|byte| byte.is_ascii_hexdigit())
+            {
+                return None;
+            }
+            encoded
+                .as_bytes()
+                .chunks_exact(4)
+                .map(|bytes| u16::from_str_radix(std::str::from_utf8(bytes).ok()?, 16).ok())
+                .collect::<Option<Vec<_>>>()?
+        };
+        let error = crate::integer_conversion::unicode_integer(&units, "INT").err()?;
+        if family == "u" {
+            return Some(error);
+        }
+        // Replace only the generated prefix. The original value (possibly
+        // containing the word nvarchar or unpaired units) remains untouched.
+        let (old, new) = match error.number {
+            245 => (
+                "Conversion failed when converting the nvarchar value '",
+                "Conversion failed when converting the varchar value '",
+            ),
+            248 => (
+                "The conversion of the nvarchar value '",
+                "The conversion of the varchar value '",
+            ),
+            _ => return Some(error),
+        };
+        let original = error
+            .message_utf16
+            .clone()
+            .unwrap_or_else(|| error.message.encode_utf16().collect());
+        let old = old.encode_utf16().collect::<Vec<_>>();
+        let remainder = original.strip_prefix(old.as_slice())?;
+        return Some(SqlError::from_utf16(
+            error.number,
+            error.state,
+            error.severity,
+            new.encode_utf16()
+                .chain(remainder.iter().copied())
+                .collect(),
+        ));
+    }
+    let bits = message.strip_prefix(FLOAT_OVERFLOW)?;
     if bits.len() != 16 || !bits.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return None;
     }
