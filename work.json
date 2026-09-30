@@ -7151,6 +7151,22 @@
         "Verify alongside original task652 and engine/client task666 on combined exact-head PR665. Required full Rust/client/audit/CI/review or owner-approved availability fallback, merge then prompt this registry/project completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PY8za"
+    },
+    {
+      "id": "percentile-numeric-signed-zero-fixture-v1",
+      "title": "Preserve signed FLOAT zero in successor numeric percentile capture",
+      "state": "ready",
+      "authorization": "Owner continuing goal and first-party final replay failure on source -0e0; retain original fixture and add signed-zero-aware successor for same root PR665.",
+      "scope": [
+        "reference/percentile-numeric-rounding-v2.json"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Keep original numeric fixture unchanged. Capture two fresh independent pinned SQL Server runs with explicit signed-zero representation in a new v2 fixture and preserve complete descriptors diagnostics and events.",
+        "Same root worker integrates capture/client/pure/doc changes only under its existing PR665 claims. Verify exact-head full required gates and fresh whole-fixture replay without normalization, review/fallback, merge and complete all related tasks."
+      ],
+      "issue": 668,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZAy8"
     }
   ]
 }
