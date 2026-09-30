@@ -200,12 +200,9 @@ fn catalog_alias_identity_is_explicit_and_empty_predicates_do_not_change_plans()
 #[test]
 fn unproven_folding_unknown_shapes_and_bound_sort_values_are_barriers() {
     for sql in [
-        "SELECT * FROM dbo.order_heap ORDER BY a",
         "SELECT a FROM missing_source ORDER BY a",
-        "SELECT 1 AS k FROM dbo.order_heap ORDER BY k",
         "SELECT a FROM dbo.order_heap ORDER BY 0",
         "SELECT a FROM dbo.order_heap ORDER BY @b",
-        "SELECT a FROM dbo.order_heap ORDER BY a+2",
         "SELECT a FROM dbo.order_heap ORDER BY COALESCE(a,1)",
     ] {
         assert!(matches!(plan(sql), Plan::Unknown(_)), "{sql}");
@@ -344,5 +341,99 @@ fn expanded_reference_replays_known_plans_and_identifies_remaining_profiles() {
         resolved += 1;
     }
     eprintln!("expanded resolved {resolved}, unknown {unknown:?}");
-    assert!(resolved > 0);
+    assert_eq!(resolved, 86);
+    assert_eq!(
+        unknown
+            .iter()
+            .map(|(name, mode, _)| (*name, *mode))
+            .collect::<Vec<_>>(),
+        vec![
+            ("duplicate bare", "batch"),
+            ("duplicate bare", "rpc"),
+            ("literal key", "batch"),
+            ("literal key", "rpc"),
+            ("parameter key", "batch"),
+            ("parameter key", "rpc"),
+        ]
+    );
+}
+
+#[test]
+fn prepared_arithmetic_has_one_declaration_plan_for_all_captured_phases() {
+    let reference: Value =
+        serde_json::from_str(include_str!("../../../reference/order-token-expanded.json")).unwrap();
+    let catalog = catalog();
+    let mut scope = Scope::default();
+    scope
+        .parameters
+        .insert("@b".into(), catalog.types["int"].clone());
+    for (name, sql) in [
+        (
+            "prepared projected expression",
+            "SELECT a+@b AS k,b FROM dbo.order_heap WHERE a>@b ORDER BY k",
+        ),
+        (
+            "prepared hidden expression",
+            "SELECT b FROM dbo.order_heap WHERE a>@b ORDER BY a+@b",
+        ),
+    ] {
+        for parsed in [
+            queries(sql).remove(0),
+            match msduck_sql::batch::parse(sql).unwrap().remove(0) {
+                Statement::Query(query) => *query,
+                _ => panic!("query"),
+            },
+        ] {
+            let original = parsed.clone();
+            let Plan::Token(ordinals) = infer(&catalog, &parsed, &scope) else {
+                panic!("declared arithmetic must resolve");
+            };
+            assert_eq!(parsed, original);
+            for run in reference["runs"].as_array().unwrap() {
+                for record in run
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter(|record| record["name"] == name)
+                {
+                    let observed: Vec<Vec<u16>> = record["result"]["events"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter(|event| event["kind"] == "ORDER")
+                        .map(|event| {
+                            event["ordinals"]
+                                .as_array()
+                                .unwrap()
+                                .iter()
+                                .map(|value| value.as_u64().unwrap() as u16)
+                                .collect()
+                        })
+                        .collect();
+                    assert_eq!(
+                        observed,
+                        vec![ordinals.clone(); 4],
+                        "{name} {}",
+                        record["mode"]
+                    );
+                    assert_eq!(
+                        record["result"]["sets"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .map(|set| set["rows"].as_array().unwrap().len())
+                            .collect::<Vec<_>>(),
+                        [0, 4, 0, 3]
+                    );
+                }
+            }
+            assert!(
+                matches!(
+                    infer(&catalog, &parsed, &Scope::default()),
+                    Plan::Unknown(_)
+                ),
+                "missing declaration cannot be inferred from rows"
+            );
+        }
+    }
 }
