@@ -73,8 +73,12 @@ retain preparation fComputed even though execution inference omits it.
 DATETIME2 conditionals use explicit contributing declarations: ISNULL retains
 the first argument scale, while CASE/COALESCE use the largest known DATETIME2
 scale. Any unresolved or mixed-family contributing branch remains a barrier.
-The retained ISNULL scale-2/scale-7 response is compared verbatim. This does not
-add temporal derived-table/set type inference.
+The retained ISNULL scale-2/scale-7 response is compared verbatim. For a VALUES
+source whose every column has proven DATETIME2 contributing declarations, the
+metadata-only clone represents the common scale with a typed NULL declaration.
+The original row source and execution AST are unchanged. Unknown/mixed-family
+columns prevent this representation; wider set and mixed-column inference remain
+unresolved. The complete captured derived VALUES response is also asserted.
 
 A bare projected NULL is declared INT, while NULL function operands retain their
 original declaration barriers. VARBINARY(MAX) uses the existing PLP binary codec.
@@ -113,3 +117,8 @@ normalized away. Surrounding ordered row snapshots also retain the existing
 missing ORDER / ROW instead of NBCROW gaps. The public comparison remains
 failing on those exact surrounding responses, so this checkpoint is not merge
 ready and does not establish complete CTE or transaction compatibility.
+
+The `--declarations PATH` mode captures preparation-only variant property calls,
+conditional/extrema variants, grouped cast ordering and temporal VALUES/conditional
+shapes in two fresh pinned containers. It retains complete responses and verifies
+that preparation leaves rows, random state and transaction depth unchanged.

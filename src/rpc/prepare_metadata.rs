@@ -45,6 +45,47 @@ fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter
     struct Declare<'a>(&'a HashMap<String, Parameter>);
     impl VisitorMut for Declare<'_> {
         type Break = ();
+        fn post_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
+            let sqlparser::ast::SetExpr::Values(values) = query.body.as_mut() else {
+                return ControlFlow::Continue(());
+            };
+            let Some(first) = values.rows.first() else {
+                return ControlFlow::Continue(());
+            };
+            if first.is_empty() || values.rows.iter().any(|row| row.len() != first.len()) {
+                return ControlFlow::Continue(());
+            }
+            // The pure numeric set merger cannot merge DATETIME2 declarations.
+            // This metadata-only clone represents a proven temporal VALUES
+            // column by its common declaration, never its runtime row values.
+            // Collapse only when every column has a known DATETIME2 family.
+            let declarations = (0..first.len())
+                .map(|index| {
+                    let scales = values
+                        .rows
+                        .iter()
+                        .map(|row| &row[index])
+                        .filter(|expr| {
+                            !msduck_sql::expression_metadata::conditional::literal_null(expr)
+                        })
+                        .map(|expr| datetime2_declaration(expr, self.0))
+                        .collect::<Option<Vec<_>>>()?;
+                    let scale = msduck_core::types::Scale::new(scales.into_iter().max()?).ok()?;
+                    Some(Expr::Convert {
+                        is_try: false,
+                        expr: Box::new(Expr::Value(sqlparser::ast::Value::Null.into())),
+                        data_type: Some(msduck_sql::sql_type::ast(SqlType::DateTime2(scale))),
+                        charset: None,
+                        target_before_value: true,
+                        styles: vec![],
+                    })
+                })
+                .collect::<Option<Vec<_>>>();
+            if let Some(declarations) = declarations {
+                values.rows = vec![declarations];
+            }
+            ControlFlow::Continue(())
+        }
         fn pre_visit_expr(&mut self, expression: &mut Expr) -> ControlFlow<()> {
             // COUNT's name alone cannot prove operand acceptance. Preserve its
             // declaration barriers even when enclosed in CASE/arithmetic. The
@@ -725,6 +766,42 @@ mod tests {
             "SELECT COALESCE(CAST(NULL AS DATETIME2(2)),a)",
         ] {
             assert_eq!(declaration(sql), None, "{sql}");
+        }
+    }
+
+    #[test]
+    fn temporal_values_enrichment_preserves_unknown_and_mixed_family_barriers() {
+        fn enrich(sql: &str) -> (Query, Query) {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            let declared = expression_declarations(&query, &HashMap::new());
+            (*query, declared)
+        }
+        let (original, declared) =
+            enrich("VALUES (CAST(NULL AS DATETIME2(2))), (CAST(NULL AS DATETIME2(7)))");
+        let sqlparser::ast::SetExpr::Values(original_values) = original.body.as_ref() else {
+            panic!("values")
+        };
+        let sqlparser::ast::SetExpr::Values(declared_values) = declared.body.as_ref() else {
+            panic!("values")
+        };
+        assert_eq!(original_values.rows.len(), 2);
+        assert_eq!(declared_values.rows.len(), 1);
+        assert_eq!(
+            datetime2_declaration(&declared_values.rows[0][0], &HashMap::new()),
+            Some(7)
+        );
+        for sql in [
+            "VALUES (CAST(NULL AS DATETIME2(2))), (@unknown)",
+            "VALUES (CAST(NULL AS DATETIME2(2))), (CAST(NULL AS DATETIMEOFFSET(7)))",
+            "VALUES (CAST(NULL AS DATETIME2(2)),1), (CAST(NULL AS DATETIME2(7)),2)",
+        ] {
+            let (_, declared) = enrich(sql);
+            let sqlparser::ast::SetExpr::Values(values) = declared.body.as_ref() else {
+                panic!("values")
+            };
+            assert_eq!(values.rows.len(), 2, "{sql}");
         }
     }
 
