@@ -7233,6 +7233,25 @@
         "Meaningful retained-source/endpoint/diagnostic tests; same worker integrates with root adapter671 under original separate claim. Combined exact-head full checks/CI/review or owner-authorized fallback, merge and prompt both registry/project completion; do not mark this supplement Done as a substitute for unfinished adapter."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZJaa"
+    },
+    {
+      "id": "rand-session-reference-v1",
+      "title": "Capture SQL Server RAND session seeding and advancement",
+      "state": "ready",
+      "authorization": "Owner continuing goal; issue673 created under mirek for missing seeded RAND reference behavior.",
+      "issue": 673,
+      "scope": [
+        "scripts/capture-rand-session.mjs",
+        "reference/rand-session.json",
+        "docs/rand-session.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Capture two independent pinned SQL Server runs over multiple seeds, long streams, reseeding, session isolation, NULL/type conversions and lazy/multiple evaluations. Retain exact FLOAT bits, descriptors, errors and request phases; document raw differences without normalizing them.",
+        "Use isolated worktree and own claim receipt. Reuse trusted capture helpers and shared Linux builder lock without local native builds or duplicate caches.",
+        "Own focused PR through source review, required CI, verified Codex review or authorized availability fallback, merge and prompt registry/project completion. Reference evidence alone does not claim an implemented compatible RNG."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZKwJ"
     }
   ]
 }
