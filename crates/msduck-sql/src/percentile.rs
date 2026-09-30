@@ -288,7 +288,9 @@ pub fn literal_diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlE
     } else {
         return None;
     };
-    if !numeric_spelling(text) || numeric_literal(text).as_deref() != Err(message) {
+    if !numeric_spelling(text)
+        || numeric_literal(text).as_ref().map_err(String::as_str) != Err(message)
+    {
         return None;
     }
     Some(msduck_core::diagnostic::SqlError::syntax(
@@ -331,7 +333,13 @@ fn numeric_constant(expr: &Expr) -> Option<Result<Option<f64>, String>> {
                 DataType::Real | DataType::Float(ExactNumberInfo::Precision(1..=24)) => {
                     f64::from(value as f32)
                 }
-                DataType::Bit(_) | DataType::Boolean => f64::from(value != 0.0),
+                DataType::Bit(_) | DataType::Boolean => {
+                    if value != 0.0 {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                }
                 DataType::Int(_) | DataType::Integer(_)
                     if value >= f64::from(i32::MIN) && value <= f64::from(i32::MAX) =>
                 {
