@@ -7193,7 +7193,7 @@
     {
       "id": "percentile-runtime-adapter-v1",
       "title": "Execute statement-wide percentile fractions with captured preparation and error phases",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing goal and reference PR664. Begin only after deterministic plan task669 is Done; this task is implementation, not another reference-only report.",
       "issue": 671,
       "scope": [
@@ -7217,7 +7217,7 @@
     {
       "id": "percentile-runtime-conversion-v1",
       "title": "Convert runtime percentile values using explicit source declarations",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing goal and merged source/runtime captures; supplement same root adapter worker with deterministic conversion over explicit values/types.",
       "issue": 672,
       "scope": [
@@ -7256,7 +7256,7 @@
     {
       "id": "percentile-result-declarations-v1",
       "title": "Infer percentile results independently of bound fraction values",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing goal and failed exact-head client preparation/error tests; same root adapter worker owns this nonconflicting supplement.",
       "issue": 676,
       "scope": [
@@ -7275,7 +7275,7 @@
     {
       "id": "percentile-runtime-client-expectations-v1",
       "title": "Align percentile client checks with captured ordering diagnostics and supported bindings",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing compatibility goal; same root adapter worker verified fourteen exact ordering/reference records twice. Existing tests need source-backed expectations without hiding the discovered ordering bug.",
       "issue": 677,
       "scope": [
@@ -7293,7 +7293,7 @@
     {
       "id": "rand-session-runtime-v1",
       "title": "Execute seeded RAND with bounded session state and lazy statement call sites",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing compatibility goal; same root worker integrates merged RAND reference with percentile PR674. Existing engine.rs claim671 owns session wiring; supplement reserves native/session component and explicit registry factory.",
       "scope": [
         "src/statement_diagnostics.rs",
@@ -7315,7 +7315,7 @@
     {
       "id": "rand-character-conversion-reuse-v1",
       "title": "Expose exact UTF16 integer conversion for session RAND seed adapter",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing goal and raw RAND source245 differences in task678; same root worker owns this helper visibility supplement in combined PR674.",
       "scope": [
         "src/integer_conversion.rs"
