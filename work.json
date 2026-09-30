@@ -7352,7 +7352,7 @@
     {
       "id": "alter-database-sessions-v1",
       "title": "Execute ALTER DATABASE READ_COMMITTED_SNAPSHOT/user access with ROLLBACK IMMEDIATE, sys.dm_exec_sessions and @@SPID",
-      "state": "backlog",
+      "state": "blocked",
       "authorization": "Direct owner instruction from mirek in this session (2026-09-30), issue #680; owner approved local implementation before src/engine.rs is released by percentile-runtime-adapter-v1. No external submission is input.",
       "scope": [
         "src/engine.rs",
@@ -7451,6 +7451,44 @@
         "Meaningful deterministic tests and appropriate exact-head required workspace/client checks, independent review or recorded authorized fallback, required CI, merge and registry/project completion by claimant. Root emission remains separate unfinished work; engine.rs is excluded."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZjrf"
+    },
+    {
+      "id": "alter-database-sessions-v2",
+      "title": "Execute ALTER DATABASE READ_COMMITTED_SNAPSHOT/user access with ROLLBACK IMMEDIATE, sys.dm_exec_sessions and @@SPID",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-09-30), issue #680; owner approved local implementation while src/engine.rs was held. Successor of unclaimed backlog task alter-database-sessions-v1, adding src/engine/joined_output.rs (Translator construction) and tests/sys_databases_descriptors.rs (sys.databases SELECT * gains is_read_committed_snapshot_on). No external submission is input.",
+      "scope": [
+        "src/engine.rs",
+        "src/server.rs",
+        "src/database_catalog.rs",
+        "src/query_catalog.rs",
+        "src/lib.rs",
+        "src/sessions.rs",
+        "crates/msduck-tds/src/lib.rs",
+        "crates/msduck-sql/src/dialect.rs",
+        "crates/msduck-sql/src/dialect/alter_database.rs",
+        "crates/msduck-sql/src/session_function.rs",
+        "tests/alter_database_sessions.rs",
+        "tests/alter_database_sessions.test.mjs",
+        ".github/workflows/ci.yml",
+        "docs/alter-database-sessions.md",
+        "docs/databases.md",
+        "README.md",
+        "ROADMAP.md",
+        "src/engine/joined_output.rs",
+        "tests/sys_databases_descriptors.rs"
+      ],
+      "acceptance": [
+        "Parse ALTER DATABASE {name|CURRENT} SET READ_COMMITTED_SNAPSHOT ON|OFF and SINGLE_USER|RESTRICTED_USER|MULTI_USER with optional WITH ROLLBACK IMMEDIATE or NO_WAIT; persist the options per database, expose them in sys.databases, and reject other options explicitly. Match captured tokens and errors for unknown databases, master and user transactions.",
+        "Keep a server session registry with SPIDs, login time, LOGIN7 host/program/client interface names, login and current database. Expose sys.dm_exec_sessions with captured declarations and @@SPID as captured.",
+        "ROLLBACK IMMEDIATE terminates other sessions using the database and waits until they release it, so a following DROP DATABASE succeeds; NO_WAIT and SINGLE_USER admission errors follow the capture. Unsupported termination forms fail explicitly instead of blocking.",
+        "Add root Rust and tedious coverage (registered in CI) for the owner's sequence, run the AGENTS.md checks, and update README, ROADMAP and docs with verified behavior and gaps."
+      ],
+      "dependencies": [
+        "alter-database-sessions-reference-v1"
+      ],
+      "issue": 680,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZegD"
     }
   ]
 }
