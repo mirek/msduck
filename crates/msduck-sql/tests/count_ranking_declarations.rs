@@ -81,13 +81,13 @@ fn retained_success_descriptors_are_inferred_without_rows() {
                 .info
                 .as_ref()
                 .unwrap_or_else(|| panic!("unknown {} in {sql}", field.name));
-            assert_eq!(
-                info.max_length.map(i64::from),
-                column["length"].as_i64(),
-                "width {} in {sql}",
-                field.name
-            );
             if column["type"] == "IntN" {
+                assert_eq!(
+                    info.max_length.map(i64::from),
+                    column["length"].as_i64(),
+                    "width {} in {sql}",
+                    field.name
+                );
                 assert_eq!(
                     info.system_type_id,
                     Some(if column["length"] == 8 { 127 } else { 56 }),

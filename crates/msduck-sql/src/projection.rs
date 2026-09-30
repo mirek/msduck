@@ -1060,7 +1060,7 @@ fn count_ranking_info(
         [FunctionArg::Unnamed(FunctionArgExpr::Wildcard)] if args.duplicate_treatment.is_none() => {
         }
         [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] => {
-            if !declared(value) {
+            if conditional::literal_null(value) || !declared(value) {
                 return None;
             }
             let input = member_expression(catalog, value, sources, scope)?;
