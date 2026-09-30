@@ -7641,7 +7641,7 @@
     {
       "id": "tedious-compat-gaps-v1",
       "title": "Support current-time functions, sys.server_principals/SUSER_SNAME, computed columns, CLUSTERED/NONCLUSTERED keys, table hints and unchanged ALTER DATABASE options",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner instruction from mirek in this session (2026-09-30), issue #697. No external submission is input.",
       "scope": [
         "src/engine.rs",
@@ -7672,6 +7672,57 @@
         "crates/msduck-sql/src/dialect/computed_column.rs",
         "crates/msduck-sql/src/dialect/key_index_type.rs",
         "crates/msduck-sql/src/dialect/alter_database.rs"
+      ],
+      "acceptance": [
+        "SYSDATETIMEOFFSET, GETUTCDATE, SYSUTCDATETIME, GETDATE, SYSDATETIME and CURRENT_TIMESTAMP return the captured types from a clock read in the root crate and passed explicitly; DATEDIFF_BIG over GETUTCDATE works.",
+        "sys.server_principals exposes captured declarations with a row for the session login, and SUSER_SNAME() returns the login name with the captured type.",
+        "CREATE TABLE accepts computed columns (col AS expr [PERSISTED]); inserts skip them, reads evaluate them, and an index on a persisted computed column can be created, or captured differences are explicit.",
+        "PRIMARY KEY/UNIQUE constraints accept CLUSTERED/NONCLUSTERED at column and table level; captured table hints are accepted and ignored, unknown hints fail explicitly.",
+        "ALTER DATABASE SET READ_COMMITTED_SNAPSHOT to the current value follows the capture when other sessions use the database.",
+        "Add Rust and tedious coverage (registered in CI) including the issue's repro, run the AGENTS.md checks, and update README, ROADMAP and docs."
+      ],
+      "dependencies": [
+        "tedious-compat-gaps-reference-v1"
+      ],
+      "issue": 697,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZ76f"
+    },
+    {
+      "id": "tedious-compat-gaps-v2",
+      "title": "Support current-time functions, sys.server_principals/SUSER_SNAME, computed columns, CLUSTERED/NONCLUSTERED keys, table hints and unchanged ALTER DATABASE options",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-09-30), issue #697. Successor of unclaimed tedious-compat-gaps-v1 (left blocked as superseded): adds crates/msduck-sql/src/result_properties.rs and result_types.rs (non-null current-time declarations), src/object_catalog.rs and src/output_update.rs (computed-column catalog and write checks), and drops unused new-file paths. No external submission is input.",
+      "scope": [
+        "src/engine.rs",
+        "src/server.rs",
+        "src/database_catalog.rs",
+        "src/query_catalog.rs",
+        "src/lib.rs",
+        "src/sessions.rs",
+        "src/current_time.rs",
+        "src/computed_columns.rs",
+        "src/columns.sql",
+        "src/table_catalog.sql",
+        "src/object_catalog.rs",
+        "src/output_update.rs",
+        "src/column_catalog/system_columns.json",
+        "crates/msduck-sql/src/dialect.rs",
+        "crates/msduck-sql/src/dialect/alter_database.rs",
+        "crates/msduck-sql/src/dialect/table_hints.rs",
+        "crates/msduck-sql/src/dialect/computed_column.rs",
+        "crates/msduck-sql/src/dialect/key_index_type.rs",
+        "crates/msduck-sql/src/session_function.rs",
+        "crates/msduck-sql/src/result_properties.rs",
+        "crates/msduck-sql/src/result_types.rs",
+        "crates/msduck-sql/tests/tedious_compat_gaps.rs",
+        "tests/tedious_compat_gaps.rs",
+        "tests/tedious_compat_gaps.test.mjs",
+        ".github/workflows/ci.yml",
+        "docs/tedious-compat-gaps.md",
+        "docs/databases.md",
+        "docs/alter-database-sessions.md",
+        "README.md",
+        "ROADMAP.md"
       ],
       "acceptance": [
         "SYSDATETIMEOFFSET, GETUTCDATE, SYSUTCDATETIME, GETDATE, SYSDATETIME and CURRENT_TIMESTAMP return the captured types from a clock read in the root crate and passed explicitly; DATEDIFF_BIG over GETUTCDATE works.",
