@@ -6944,7 +6944,7 @@
     {
       "id": "percentile-numeric-rounding-v1",
       "title": "Align percentile numeric literal conversion with captured binary64 endpoints",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing SQL Server compatibility goal; task649 two pinned captures prove numeric literal 1.00000000000000000001 rounds to one in SQL Server while current exact-range policy rejects it.",
       "scope": [
         "crates/msduck-sql/src/percentile.rs",
@@ -7114,7 +7114,7 @@
     {
       "id": "percentile-numeric-client-expectations-v1",
       "title": "Integrate captured percentile numeric literal diagnostics and client expectations",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing SQL Server compatibility goal; same root worker claim652 owns numeric lowerer and needs separately claimed engine/default client integration after retained SQL Server probes.",
       "scope": [
         "src/engine.rs",
@@ -7137,7 +7137,7 @@
     {
       "id": "percentile-numeric-existing-pure-replay-v1",
       "title": "Include captured numeric endpoints in existing pure percentile replay",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing goal and first-party two identical numeric/reference captures; supplement same root PR665 after prior character task is Done.",
       "scope": [
         "crates/msduck-sql/tests/percentile_character_fraction.rs"
@@ -7155,7 +7155,7 @@
     {
       "id": "percentile-numeric-signed-zero-fixture-v1",
       "title": "Preserve signed FLOAT zero in successor numeric percentile capture",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing goal and first-party final replay failure on source -0e0; retain original fixture and add signed-zero-aware successor for same root PR665.",
       "scope": [
         "reference/percentile-numeric-rounding-v2.json"
