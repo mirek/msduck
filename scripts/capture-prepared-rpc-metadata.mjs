@@ -30,13 +30,38 @@ export const profiles=[
  ['volatile seed','SELECT RAND(777) AS v'],
 ]
 export const variants=['api-default','named-default','named-zero','named-one','named-two','named-null']
+export const regressionProfiles=[
+ ['numeric conditional','SELECT CASE WHEN @p=1 THEN CAST(a AS BIGINT) ELSE b END AS n FROM dbo.prepare_heap'],
+ ['sum CTE','WITH q AS (SELECT CAST(@p AS BIGINT) AS n FROM dbo.prepare_heap) SELECT SUM(n) AS s FROM q'],
+ ['statistical','SELECT STDEV(a) AS s,VAR(a) AS v,AVG(a) AS n FROM dbo.prepare_heap'],
+ ['GUID','SELECT NEWID() AS g'],
+ ['calendar','SELECT EOMONTH(\'2024-01-15\',@p) AS d,DATEFROMPARTS(2024,1,@p) AS f'],
+ ['bitwise','SELECT CAST(@p AS BIT)&CAST(1 AS SMALLINT) AS b'],
+ ['datetime conditional','SELECT ISNULL(CAST(NULL AS DATETIME2(2)),CAST(\'2024-01-01\' AS DATETIME2(7))) AS d'],
+ ['datetime values','SELECT d FROM (VALUES(CAST(\'2024-01-01\' AS DATETIME2(2))),(CAST(NULL AS DATETIME2(7)))) q(d)'],
+ ['catalog functions',"SELECT OBJECT_ID(N'dbo.prepare_heap') AS o,SCHEMA_NAME(@p) AS s,TYPE_NAME(@p) AS t,COL_NAME(OBJECT_ID(N'dbo.prepare_heap'),@p) AS c"],
+ ['identity functions',"SELECT IDENT_CURRENT(N'dbo.prepare_heap') AS c,IDENT_SEED(N'dbo.prepare_heap') AS s,IDENT_INCR(N'dbo.prepare_heap') AS i"],
+ ['JSON presence',"SELECT JSON_PATH_EXISTS(N'{\"a\":1}',N'$.a') AS p"],
+ ['NTILE order','SELECT NTILE(@p) OVER(ORDER BY a) AS r FROM dbo.prepare_heap ORDER BY a'],
+ ['frame order','SELECT SUM(a) OVER(ORDER BY b ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS s FROM dbo.prepare_heap ORDER BY a'],
+ ['named window order','SELECT SUM(a) OVER w AS s FROM dbo.prepare_heap WINDOW w AS (ORDER BY a ROWS UNBOUNDED PRECEDING) ORDER BY s DESC'],
+ ['variant order','SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap ORDER BY v'],
+ ['variant distinct','SELECT DISTINCT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap ORDER BY v'],
+ ['group order','SELECT a,SUM(b) AS s FROM dbo.prepare_heap GROUP BY a ORDER BY s'],
+ ['recursive order',"WITH q AS (SELECT 1 AS n UNION ALL SELECT n+1 FROM q WHERE n<3) SELECT n FROM q ORDER BY n"],
+ ['CTE delete','WITH q AS (SELECT * FROM dbo.prepare_heap WHERE a>@p) DELETE FROM q'],
+ ['insert OUTPUT INTO',"INSERT INTO dbo.prepare_heap(a,b,label) OUTPUT inserted.a,inserted.b,inserted.label INTO dbo.prepare_heap(a,b,label) VALUES(@p,3,N'x')"],
+ ['insert OUTPUT',"INSERT INTO dbo.prepare_heap(a,b,label) OUTPUT inserted.a,inserted.label VALUES(@p,3,N'x')"],
+ ['bare NULL','SELECT NULL AS n'],
+ ['count NULL','SELECT COUNT(NULL) AS n'],
+]
 export const values=[null,0,9,1]
-export async function observe(connection,{verifyVersion=true}={}){
+export async function observe(connection,{verifyVersion=true,profilePlan=profiles,variantPlan=variants,execute=true}={}){
  const records=[]
  for(const [name,sql] of [['version',version],['setup',setup]]){
   const result=canonical(await captureBatch(connection,sql));if(name!=='version'||verifyVersion)assert.deepEqual(result.errors,[]);records.push({name,sql,result})
  }
- for(const [name,sql] of profiles)for(const variant of variants){
+ for(const [name,sql] of profilePlan)for(const variant of variantPlan){
   const resetResult=canonical(await captureBatch(connection,reset));assert.deepEqual(resetResult.errors,[])
   const seeded=canonical(await captureBatch(connection,seed));assert.deepEqual(seeded.errors,[])
   let complete=()=>{}
@@ -57,7 +82,7 @@ export async function observe(connection,{verifyVersion=true}={}){
   }
   const executions=[];let unpreparation=null
   if(!preparation.errors.length&&Number.isInteger(executionRequest.handle)&&executionRequest.handle>0)try{
-   for(const value of values)executions.push({value,result:canonical(await capturePreparedPhase(connection,executionRequest,()=>connection.execute(executionRequest,{p:value}),callback=>{complete=callback}))})
+   if(execute)for(const value of values)executions.push({value,result:canonical(await capturePreparedPhase(connection,executionRequest,()=>connection.execute(executionRequest,{p:value}),callback=>{complete=callback}))})
   }finally{
    unpreparation=canonical(await capturePreparedPhase(connection,executionRequest,()=>connection.unprepare(executionRequest),callback=>{complete=callback}))
   }
@@ -96,12 +121,21 @@ export async function retained(){
 }
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined
- if(![undefined,'--check','--write-fixture'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture] [output]')
+ if(![undefined,'--check','--write-fixture','--regressions'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions] [output]')
  if(mode==='--check'){const r=await retained();console.log('Checked prepared RPC records',r.runs[0].length);return}
  if(mode==='--write-fixture')await refuseExistingFixture(fixture)
  const output=resolve(args[0]??'artifacts/prepared-rpc-metadata/capture.json');assert.notEqual(output,fileURLToPath(fixture))
- const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,observe)))
- runs.forEach(validate);assertSameCapture(runs[0],runs[1],'prepared RPC independent captures')
+ const regression=mode==='--regressions'
+ const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,connection=>observe(connection,regression?{profilePlan:regressionProfiles,variantPlan:['api-default','named-one'],execute:false}:{}))))
+ if(!regression)runs.forEach(validate)
+ else for(const run of runs){
+  assertSameCapture(run.slice(2).map(({name,sql,variant})=>({name,sql,variant})),regressionProfiles.flatMap(([name,sql])=>['api-default','named-one'].map(variant=>({name,sql,variant}))),'regression preparation plan')
+  for(const record of run.slice(2)){
+   phase(record.preparation);assert.deepEqual(record.executions,[])
+   assertSameCapture(record.afterPreparation.result.sets.map(s=>s.rows),[[[4]],[[0.041009986028273604]],[[0]]],'regression preparation does not execute')
+  }
+ }
+ assertSameCapture(runs[0],runs[1],'prepared RPC independent captures')
  const result={image:referenceImage,runs};await mkdir(dirname(output),{recursive:true});await writeNewFixture(output,result)
  if(mode==='--write-fixture')await writeNewFixture(fixture,result)
  console.log('Captured prepared RPC records',runs[0].length)
