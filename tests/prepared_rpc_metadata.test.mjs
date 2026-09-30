@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import {test} from 'node:test'
 import {mkdir,writeFile} from 'node:fs/promises'
 import {start} from './support/client.mjs'
-import {observe,retained,retainedCteDelete,cteDeleteOptions} from '../scripts/capture-prepared-rpc-metadata.mjs'
+import {observe,retained,retainedCteDelete,cteDeleteOptions,retainedTemporalSets,temporalSetProfiles} from '../scripts/capture-prepared-rpc-metadata.mjs'
 
 test('prepared RPC responses match SQL Server and never execute during preparation',async t=>{
  const connection=await start(t)
@@ -80,5 +80,22 @@ test('prepared CTE DELETE matches SQL Server through reuse and rollback',async t
    }
   }
   assert.deepEqual(a.unpreparation,e.unpreparation,name+' unprepare')
+ }
+})
+
+
+test('prepared temporal sets preserve complete SQL Server responses',async t=>{
+ const connection=await start(t)
+ const expected=(await retainedTemporalSets()).runs[0]
+ const actual=await observe(connection,{verifyVersion:false,profilePlan:temporalSetProfiles,variantPlan:['api-default','named-one'],execute:false})
+ await mkdir('artifacts/prepared-rpc-metadata',{recursive:true})
+ await writeFile('artifacts/prepared-rpc-metadata/temporal-set-runtime.json',JSON.stringify({expected,actual},null,2)+'\n')
+ assert.equal(actual.length,expected.length)
+ for(let i=2;i<expected.length;i++){
+  const name=expected[i].name+' '+expected[i].variant
+  assert.deepEqual(actual[i].preparation,expected[i].preparation,name)
+  assert.deepEqual(actual[i].afterPreparation.result.sets,expected[i].afterPreparation.result.sets,name+' nonexecution')
+  assert.deepEqual(actual[i].afterExecution.result.sets,expected[i].afterExecution.result.sets,name+' final state')
+  assert.deepEqual(actual[i].unpreparation,expected[i].unpreparation,name+' unprepare')
  }
 })

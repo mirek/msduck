@@ -1,4 +1,4 @@
-//! Numeric arithmetic result types; no value evaluation or database access.
+//! Numeric arithmetic and common set declarations; no value evaluation or database access.
 //! Decimal formulas adapted from mssqlite's transpile/src/decimal.ts and
 //! Microsoft's precision/scale rules (see docs/reference-review.md).
 use crate::catalog_snapshot::CatalogSnapshot;
@@ -95,9 +95,36 @@ fn decimal_kind(
     })
 }
 
-/// Common numeric type for UNION/INTERSECT/EXCEPT, without the carry digit
+/// Common numeric/temporal type for UNION/INTERSECT/EXCEPT, without the carry digit
 /// introduced by arithmetic addition. Unknown or alias types stay unresolved.
 fn set_kind(left: &TypeMetadata, right: &TypeMetadata) -> Option<DataType> {
+    // Prepared SQL Server captures in reference/prepared-temporal-sets.json:
+    // DATETIMEOFFSET wins over DATETIME2; both contribute fractional scale.
+    // This is a common declaration, not support for temporal arithmetic.
+    if matches!(left.system_type_id, Some(42 | 43)) && matches!(right.system_type_id, Some(42 | 43))
+    {
+        for info in [left, right] {
+            if info
+                .user_type_id
+                .is_some_and(|user| Some(user) != info.system_type_id.map(i32::from))
+            {
+                return None;
+            }
+        }
+        let scale = left.scale?.max(right.scale?);
+        if scale > 7 {
+            return None;
+        }
+        let name = if left.system_type_id == Some(43) || right.system_type_id == Some(43) {
+            "datetimeoffset"
+        } else {
+            "datetime2"
+        };
+        return Some(DataType::Custom(
+            sqlparser::ast::ObjectName::from(vec![sqlparser::ast::Ident::new(name)]),
+            vec![scale.to_string()],
+        ));
+    }
     let (a, b) = (rank(left)?, rank(right)?);
     let winner = if a >= b { left } else { right };
     let id = winner.system_type_id?;
@@ -149,6 +176,8 @@ fn declared_info(kind: &DataType) -> Option<TypeMetadata> {
         "numeric" => (108, 18, 0),
         "real" => (59, 24, 0),
         "float" => (62, 53, 0),
+        "datetime2" => (42, 27, 7),
+        "datetimeoffset" => (43, 34, 7),
         _ => return None,
     };
     Some(TypeMetadata {

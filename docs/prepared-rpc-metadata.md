@@ -138,3 +138,21 @@ or other families and COUNT-containing trees remain barriers. Known original
 properties survive enrichment, including captured aggregate flags. Grouped cast
 ORDER and wider set/window variant shapes remain in the raw capture for further
 integration.
+
+Temporal set declarations are retained in `reference/prepared-temporal-sets.json`
+(SHA-256 `9b000b8cc9402b1ca396bf8b5cc4c830b15bba6ba562bb71f7d510cee43fd1c1`).
+The `--temporal-sets PATH` generator captures 22 complete records per run in two
+fresh pinned SQL Server containers. Same-family DATETIME2/DATETIMEOFFSET sets
+choose the larger fractional scale; the mixed captured UNION ALL chooses
+DATETIMEOFFSET with both operands contributing scale. Shared deterministic set
+inference now derives these declarations from explicit types and catalog inputs,
+including VALUES columns, without the former root clone that collapsed VALUES
+rows. Unknown types, aliases and invalid/missing scales remain unresolved;
+temporal arithmetic remains unsupported by the numeric arithmetic rule.
+
+Pure tests check captured declarations, all scale pairs and both operand orders,
+including mixed temporal/numeric VALUES columns. Reference integrity tests check
+the complete plan, independent agreement, nonexecution and raw completion tokens.
+A separate public test compares every preparation field verbatim: SQL Server's
+captured INTERSECT/EXCEPT flags are 33 versus UNION's 1, so declaration inference
+alone is not evidence of complete wire parity.

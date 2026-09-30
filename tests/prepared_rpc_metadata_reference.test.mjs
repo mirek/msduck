@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import {test} from 'node:test'
-import {retained,validate,retainedCteDelete} from '../scripts/capture-prepared-rpc-metadata.mjs'
+import {retained,validate,retainedCteDelete,retainedTemporalSets,validateTemporalSets} from '../scripts/capture-prepared-rpc-metadata.mjs'
 
 test('preparation preserves declarations, option errors and handle allocation',async()=>{
  const {runs}=await retained()
@@ -70,4 +70,21 @@ test('CTE DELETE captures preserve reuse counts, exact preparation and rollback'
    assert.deepEqual(record.afterExecution.result.sets.map(s=>s.rows),[[[rollback?4:0]],[[42]]])
   }
  }
+})
+
+
+test('temporal set captures preserve both runs, complete plan and raw descriptors',async()=>{
+ const {runs}=await retainedTemporalSets()
+ for(const run of runs)for(const record of run.slice(2)){
+  const column=record.preparation.sets[0].columns[0]
+  assert.equal(column.type,record.name.startsWith('DATETIME2')?'DateTime2':'DateTimeOffset')
+  assert.equal(column.scale,7)
+  assert.equal(column.flags,/INTERSECT|EXCEPT/.test(record.name)?33:1)
+  assert.deepEqual(record.preparation.events.map(e=>e.kind),['COLMETADATA','DONEINPROC','RETURNSTATUS','RETURNVALUE','DONEPROC'])
+ }
+ assert.throws(()=>validateTemporalSets(runs[0].slice(0,-1)))
+ const reordered=structuredClone(runs[0]);[reordered[2],reordered[4]]=[reordered[4],reordered[2]]
+ assert.throws(()=>validateTemporalSets(reordered))
+ const damaged=structuredClone(runs[0]);damaged[2].preparation.doneTokens[0].status^=16
+ assert.throws(()=>validateTemporalSets(damaged))
 })
