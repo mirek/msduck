@@ -210,7 +210,7 @@ fn character_literal(expr: &Expr) -> Option<(String, bool)> {
 fn normalized_fraction(fraction: &Expr) -> Result<(bool, Expr), String> {
     if let Some((text, unicode)) = character_literal(fraction) {
         let number = character_fraction(&text, unicode)?;
-        return Ok((number == 0.0, crate::expr::number(number)));
+        return Ok((number == 0.0, crate::expr::number(format!("{number:e}"))));
     }
     let Some(number) = numeric_constant(fraction) else {
         return Err(LITERAL.into());

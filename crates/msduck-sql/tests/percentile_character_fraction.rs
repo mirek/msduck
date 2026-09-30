@@ -58,12 +58,12 @@ fn retained_character_fraction_matrix_lowers_or_preserves_captured_error_text() 
 #[test]
 fn captured_whitespace_exponents_and_nul_termination_are_source_sensitive() {
     for (fraction, expected) in [
-        ("N'\u{180e}0.5'", "0.5"),
-        ("N'1D-1'", "0.1"),
-        ("N'0.5\0junk'", "0.5"),
-        ("N'\0junk'", "0"),
-        ("'1.00000000000000000001'", "1"),
-        ("'1e-400'", "0"),
+        ("N'\u{180e}0.5'", "5e-1"),
+        ("N'1D-1'", "1e-1"),
+        ("N'0.5\0junk'", "5e-1"),
+        ("N'\0junk'", "0e0"),
+        ("'1.00000000000000000001'", "1e0"),
+        ("'1e-400'", "0e0"),
     ] {
         let mut expr = expression(&format!(
             "SELECT PERCENTILE_CONT({fraction}) WITHIN GROUP (ORDER BY n) OVER ()"
