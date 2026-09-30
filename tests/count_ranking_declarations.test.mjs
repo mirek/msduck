@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict'
+import {test} from 'node:test'
+import {start} from './support/client.mjs'
+import {captureBatch,captureRpc} from '../scripts/capture-order-token.mjs'
+import {canonical} from '../scripts/lib/compatibility.mjs'
+import {retained} from '../scripts/capture-count-ranking-declarations.mjs'
+
+test('successful COUNT/ranking rows and complete descriptors match retained SQL Server',async t=>{
+ const connection=await start(t)
+ const {runs}=await retained()
+ const setup=await captureBatch(connection,runs[0][1].sql)
+ assert.deepEqual(setup.errors,[])
+ let checked=0
+ for(const record of runs[0].slice(2)){
+  // Binding-error profiles remain in the fixture and pure barrier tests. Their
+  // root diagnostic fidelity is evaluated separately, never relabelled a pass.
+  if(record.name.startsWith('prepared ')||record.result.errors.length)continue
+  const actual=canonical(await(record.mode==='batch'?captureBatch(connection,record.sql):captureRpc(connection,record.sql)))
+  assert.deepEqual(actual.errors,[],record.name+' '+record.mode)
+  assert.deepEqual(actual.sets,record.result.sets,record.name+' '+record.mode)
+  checked++
+ }
+ assert.equal(checked,44)
+})
+
+test('prepared COUNT/ranking descriptors match preparation and each reference execution',async t=>{
+ const {Request,TYPES}=await import('tedious')
+ const connection=await start(t);const {runs}=await retained()
+ assert.deepEqual((await captureBatch(connection,runs[0][1].sql)).errors,[])
+ const columns=metadata=>metadata.map(column=>({name:column.colName,userType:column.userType,type:column.type.name,length:column.dataLength??null,precision:column.precision??null,scale:column.scale??null,flags:column.flags,collation:canonical(column.collation??null)}))
+ for(const [name,sql] of [
+  ['prepared count','SELECT COUNT(@p) AS c,COUNT_BIG(@p) AS d FROM dbo.order_heap WHERE a>@p'],
+  ['prepared row number','SELECT ROW_NUMBER() OVER(ORDER BY a) AS r FROM dbo.order_heap WHERE a>@p ORDER BY r'],
+ ]){
+  const expected=runs[0].find(record=>record.name===name&&record.mode==='batch').result.sets
+  let complete=()=>{};let sets=[]
+  const request=new Request(sql,error=>complete(error));request.addParameter('p',TYPES.Int,undefined)
+  request.on('columnMetadata',metadata=>sets.push({columns:columns(metadata),rows:[]}))
+  request.on('row',row=>sets.at(-1).rows.push(row.map(cell=>cell.value)))
+  await new Promise((resolve,reject)=>{request.once('prepared',resolve);request.once('error',reject);connection.prepare(request)})
+  assert.deepEqual(canonical(sets),[expected[0]],name+' preparation')
+  for(const [index,value] of [0,9,1].entries()){
+   sets=[];request.error=undefined
+   await new Promise((resolve,reject)=>{complete=error=>error?reject(error):resolve();connection.execute(request,{p:value})})
+   assert.deepEqual(canonical(sets),[expected[index+1]],name+' execution '+index)
+  }
+  request.error=undefined
+  await new Promise((resolve,reject)=>{complete=error=>error?reject(error):resolve();connection.unprepare(request)})
+ }
+})
