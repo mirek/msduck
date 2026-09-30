@@ -7489,6 +7489,29 @@
       ],
       "issue": 680,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PZegD"
+    },
+    {
+      "id": "order-token-expanded-reference-v1",
+      "title": "Capture expanded SQL Server ORDER profiles and retain optimizer probes",
+      "state": "ready",
+      "authorization": "Owner continuing compatibility goal and first-party ORDER evidence; no external content intake.",
+      "issue": 689,
+      "scope": [
+        "scripts/capture-order-token.mjs",
+        "scripts/capture-order-token-expanded.mjs",
+        "reference/order-token-expanded.json",
+        "tests/order_token_expanded_reference.test.mjs",
+        "docs/order-token-expanded.md"
+      ],
+      "dependencies": [
+        "order-token-reference-v1"
+      ],
+      "acceptance": [
+        "Retain all18 supplemental optimizer probe SQL and exact observations in a reproducible committed fixture, not only ignored artifacts. Expand SELECT star/qualified and joined/derived outputs, arithmetic/cast/aggregate sort keys, multiple constant/NULL keys and prepared expression keys with exact raw ORDER/rows/descriptors/errors/DONE/event sequence in two fresh pinned SQL Server containers. Never guess optimizer or emission rules.",
+        "Reuse trusted capture helpers with capture-order-token.mjs scope limited to exports of captureBatch/captureRpc. Preserve helper behavior and original fixture. Bound decoder buffers and restore shared parser hooks in finally. Validate completeness and fresh-run agreement; explicit differing/error results remain evidence, not rewritten passes.",
+        "Add source/fixture integrity and meaningful retained wire invariants tests, exact-head required CI and independent review or authorized fallback. Claiming worker merges and promptly completes registry/project. This is reference acquisition only; no engine.rs/server/SQL planner edits or compatibility completion claim."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PZrKA"
     }
   ]
 }
