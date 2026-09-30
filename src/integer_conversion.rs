@@ -265,7 +265,7 @@ impl VScalar for UnicodeInteger {
     }
 }
 
-fn unicode_integer(
+pub(crate) fn unicode_integer(
     units: &[u16],
     target: &str,
 ) -> Result<String, msduck_core::diagnostic::SqlError> {

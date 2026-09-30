@@ -157,6 +157,78 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
         duckdb_destroy_scalar_function(&mut function);
         duckdb_destroy_logical_type(&mut any);
         duckdb_destroy_logical_type(&mut double);
+        result?;
+        register_fault(db)
+    }
+}
+
+const FAULT: &str = "__msduck_percentile_fault:";
+
+/// Only the adapter's own bounded ticket can select a retained diagnostic.
+pub(crate) fn fault_ticket(message: &str) -> Option<usize> {
+    message
+        .strip_prefix("Invalid Input Error: ")?
+        .strip_prefix(FAULT)?
+        .parse()
+        .ok()
+}
+
+// Volatile and special NULL handling prevent constant folding and ensure an
+// all-NULL ordering relation still validates, while an empty relation does not.
+// The callback always raises on nonempty input. Its enclosing CASE never
+// reaches the value branch, so an ordering operand cannot be evaluated twice.
+unsafe extern "C" fn invoke_fault(
+    info: duckdb_function_info,
+    input: duckdb_data_chunk,
+    _output: duckdb_vector,
+) {
+    let result = catch_unwind(AssertUnwindSafe(|| unsafe {
+        if duckdb_data_chunk_get_size(input) == 0 {
+            return Ok(None);
+        }
+        let source = duckdb_data_chunk_get_vector(input, 1);
+        let mut logical = duckdb_vector_get_column_type(source);
+        let valid_type = duckdb_get_type_id(logical) == Id::Bigint as u32;
+        duckdb_destroy_logical_type(&mut logical);
+        let validity = duckdb_vector_get_validity(source);
+        if !valid_type || (!validity.is_null() && !duckdb_validity_row_is_valid(validity, 0)) {
+            return Err(());
+        }
+        let ticket = *duckdb_vector_get_data(source).cast::<i64>();
+        if ticket < 0 {
+            return Err(());
+        }
+        Ok(Some(
+            std::ffi::CString::new(format!("{FAULT}{ticket}")).map_err(|_| ())?,
+        ))
+    }));
+    match result {
+        Ok(Ok(None)) => {}
+        Ok(Ok(Some(message))) => unsafe {
+            duckdb_scalar_function_set_error(info, message.as_ptr());
+        },
+        _ => unsafe { duckdb_scalar_function_set_error(info, INTERNAL.as_ptr()) },
+    }
+}
+
+unsafe fn register_fault(db: &Connection) -> duckdb::Result<()> {
+    unsafe {
+        let mut function = duckdb_create_scalar_function();
+        let mut any = duckdb_create_logical_type(Id::Any as u32);
+        let mut boolean = duckdb_create_logical_type(Id::Boolean as u32);
+        let mut ticket = duckdb_create_logical_type(Id::Bigint as u32);
+        duckdb_scalar_function_set_name(function, c"__msduck_percentile_invalid_input".as_ptr());
+        duckdb_scalar_function_add_parameter(function, any);
+        duckdb_scalar_function_add_parameter(function, ticket);
+        duckdb_scalar_function_set_return_type(function, boolean);
+        duckdb_scalar_function_set_special_handling(function);
+        duckdb_scalar_function_set_volatile(function);
+        duckdb_scalar_function_set_function(function, Some(invoke_fault));
+        let result = db.register_scalar_function_raw(function);
+        duckdb_destroy_scalar_function(&mut function);
+        duckdb_destroy_logical_type(&mut any);
+        duckdb_destroy_logical_type(&mut ticket);
+        duckdb_destroy_logical_type(&mut boolean);
         result
     }
 }
@@ -164,6 +236,37 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn deferred_fault_preserves_binding_and_validates_null_but_not_empty_input() {
+        let db = Connection::open_in_memory().unwrap();
+        register(&db).unwrap();
+        for kind in ["INTEGER", "VARCHAR", "DECIMAL(8,4)"] {
+            for empty in [false, true] {
+                let sql = format!(
+                    "SELECT quantile_disc(CASE WHEN __msduck_percentile_invalid_input(CAST(NULL AS {kind}), CAST(7 AS BIGINT)) THEN NULL ELSE CAST(NULL AS {kind}) END, 0.5) OVER() FROM range({})",
+                    if empty { 0 } else { 1 }
+                );
+                let mut prepared = db.prepare(&sql).unwrap();
+                match prepared.query_arrow([]) {
+                    Ok(mut batches) => {
+                        assert!(empty, "all-NULL input did not validate {kind}");
+                        assert_eq!(batches.by_ref().map(|b| b.num_rows()).sum::<usize>(), 0);
+                    }
+                    Err(error) => {
+                        assert!(!empty, "empty input validated {kind}");
+                        assert_eq!(fault_ticket(&error.to_string()), Some(7));
+                    }
+                }
+            }
+        }
+        for message in [
+            "__msduck_percentile_fault:7",
+            "Invalid Input Error: __msduck_percentile_fault:-1",
+            "Invalid Input Error: __msduck_percentile_fault:7 trailing",
+        ] {
+            assert_eq!(fault_ticket(message), None);
+        }
+    }
     #[test]
     fn numeric_layouts_nulls_and_binding_are_checked_across_chunks() {
         let db = Connection::open_in_memory().unwrap();

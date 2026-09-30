@@ -3327,16 +3327,24 @@ test('percentile windows validate ordered-set signatures and window restrictions
     assert.deepEqual(roundedEndpoint.rows, [[4],[4],[4],[4]])
     await assert.rejects(query(c, `SELECT ${fn}(.5) WITHIN GROUP (ORDER BY 1,2) OVER ()`))
     await assert.rejects(query(c, `SELECT ${fn}(.5) WITHIN GROUP (ORDER BY 1) OVER (ORDER BY 1)`))
-    await assert.rejects(prepare(c, `SELECT ${fn}(@p) WITHIN GROUP (ORDER BY 1) OVER ()`, [['p',TYPES.Float]]))
+    await assert.rejects(prepare(c, `SELECT ${fn}(@p) WITHIN GROUP (ORDER BY 1) OVER ()`, [['p',TYPES.Float]]), error=>error.number===5308)
+    const runtime=await prepare(c,`SELECT ${fn}(@p) WITHIN GROUP(ORDER BY n) OVER() FROM(VALUES(1),(2),(3),(4))s(n)`,[['p',TYPES.Float]])
+    assert.deepEqual(await runtime.run({p:.5}),[[expected],[expected],[expected],[expected]])
+    await assert.rejects(runtime.run({p:null}),error=>error.number===8727)
+    assert.deepEqual(await runtime.run({p:.5}),[[expected],[expected],[expected],[expected]])
+    await runtime.release()
   }
 })
 
 test('PERCENTILE_CONT rejects nonnumeric inputs during binding and accepts numeric families', { timeout: 20000 }, async t => {
   const c = await start(t)
   const invalid = /PERCENTILE_CONT requires a numeric ORDER BY expression/
-  for (const value of ["'12.5'","CAST(NULL AS VARCHAR(10))","CAST('2026-01-01' AS DATE)","CAST(NULL AS DATETIME)","CAST(NULL AS DATETIME2)",'CAST(0x01 AS VARBINARY(1))']) {
+  for (const value of ["'12.5'","CAST('2026-01-01' AS DATE)",'CAST(0x01 AS VARBINARY(1))']) {
     await assert.rejects(query(c, `SELECT PERCENTILE_CONT(.5) WITHIN GROUP (ORDER BY ${value}) OVER ()`), invalid)
     await assert.rejects(query(c, `SELECT PERCENTILE_CONT(.5) WITHIN GROUP (ORDER BY ${value}) OVER () WHERE 1=0`), invalid)
+  }
+  for(const [value,type] of [["CAST(NULL AS VARCHAR(10))",'varchar'],["CAST(NULL AS DATETIME)",'datetime'],["CAST(NULL AS DATETIME2)",'datetime2']]) {
+    for(const filter of ['', ' WHERE 1=0']) await assert.rejects(query(c, `SELECT PERCENTILE_CONT(.5) WITHIN GROUP (ORDER BY ${value}) OVER ()${filter}`),error=>error.number===402 && error.state===1 && error.message===`The data types numeric and ${type} are incompatible in the percentile_cont operator.`)
   }
   await query(c, 'CREATE TABLE dbo.percentile_strings (n VARCHAR(20))')
   await assert.rejects(query(c, 'SELECT PERCENTILE_CONT(.5) WITHIN GROUP (ORDER BY n) OVER () FROM dbo.percentile_strings'), invalid)

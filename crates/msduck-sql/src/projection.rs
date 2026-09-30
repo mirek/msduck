@@ -419,6 +419,15 @@ fn expression_collation(
             let FunctionArguments::List(args) = &function.args else {
                 return None;
             };
+            if function
+                .name
+                .to_string()
+                .eq_ignore_ascii_case("percentile_disc")
+                && function.over.is_some()
+                && let [ordering] = function.within_group.as_slice()
+            {
+                return recurse(&ordering.expr);
+            }
             if matches!(
                 function.name.to_string().to_ascii_uppercase().as_str(),
                 "MIN" | "MAX"
@@ -949,6 +958,28 @@ fn expression(
         return (fields.len() == 1)
             .then(|| fields[0].info.clone())
             .flatten();
+    }
+    if let Expr::Function(function) = e {
+        let name = function.name.to_string().to_ascii_lowercase();
+        if matches!(name.as_str(), "percentile_cont" | "percentile_disc") {
+            // The fraction never supplies result metadata. Invalid/NULL and
+            // declaration-only bindings retain the ordering-source descriptor.
+            let [ordering] = function.within_group.as_slice() else {
+                return None;
+            };
+            function.over.as_ref()?;
+            let source = expression(catalog, &ordering.expr, sources, scope)?;
+            if name == "percentile_disc" {
+                return Some(source);
+            }
+            if matches!(
+                source.system_type_id,
+                Some(48 | 52 | 56 | 127 | 104 | 59 | 62 | 106 | 108 | 60 | 122)
+            ) {
+                return catalog.cast_info(&DataType::Double(ExactNumberInfo::None));
+            }
+            return None;
+        }
     }
     if conditional::candidate(e)
         || matches!(
