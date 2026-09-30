@@ -12,11 +12,25 @@ use std::ops::ControlFlow;
 
 // This clone is used only for declaration inference, never execution. Native
 // validation has already checked the original seed expression and function.
-fn rand_declarations(query: &Query) -> Query {
-    struct Declare;
-    impl VisitorMut for Declare {
+fn expression_declarations(query: &Query, parameters: &HashMap<String, Parameter>) -> Query {
+    struct Declare<'a>(&'a HashMap<String, Parameter>);
+    impl VisitorMut for Declare<'_> {
         type Break = ();
         fn post_visit_expr(&mut self, expression: &mut Expr) -> ControlFlow<()> {
+            if let Expr::Identifier(id) = expression
+                && let Some(parameter) = self.0.get(&id.value.to_lowercase())
+            {
+                // Shared expression helpers accept explicit syntax types. This
+                // non-literal declaration surrogate supplies no bound value.
+                *expression = Expr::Convert {
+                    is_try: false,
+                    expr: Box::new(Expr::Value(sqlparser::ast::Value::Null.into())),
+                    data_type: Some(parameter.ast_type()),
+                    charset: None,
+                    target_before_value: true,
+                    styles: vec![],
+                };
+            }
             if let Expr::Function(f) = expression
                 && f.name.to_string().eq_ignore_ascii_case("rand")
                 && matches!(&f.args, FunctionArguments::List(a) if matches!(a.args.as_slice(), [] | [FunctionArg::Unnamed(FunctionArgExpr::Expr(_))]) && a.clauses.is_empty() && a.duplicate_treatment.is_none())
@@ -40,7 +54,7 @@ fn rand_declarations(query: &Query) -> Query {
         }
     }
     let mut declared = query.clone();
-    let _ = declared.visit(&mut Declare);
+    let _ = declared.visit(&mut Declare(parameters));
     declared
 }
 
@@ -106,7 +120,11 @@ fn query_description(
     }
     let mut fields = projection::query_fields(&catalog, query, &scope)
         .ok_or_else(|| anyhow::anyhow!("unsupported prepared result declarations"))?;
-    if let Some(declared) = projection::query_fields(&catalog, &rand_declarations(query), &scope) {
+    if let Some(declared) = projection::query_fields(
+        &catalog,
+        &expression_declarations(query, parameters),
+        &scope,
+    ) {
         ensure!(
             declared.len() == fields.len(),
             "prepared declaration alignment changed"

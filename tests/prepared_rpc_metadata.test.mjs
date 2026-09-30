@@ -22,7 +22,12 @@ test('prepared RPC responses match SQL Server and never execute during preparati
    const response=a.executions[j].result,reference=e.executions[j].result
    for(const key of Object.keys(reference).filter(key=>key!=='events'))assert.deepEqual(response[key],reference[key],name+' execution '+j+' '+key)
    if(reference.events.some(event=>event.kind==='ORDER')){
-    if(JSON.stringify(response.events)!==JSON.stringify(reference.events))t.diagnostic(name+' execution '+j+': ORDER event gap retained in raw capture')
+    if(JSON.stringify(response.events)!==JSON.stringify(reference.events)){
+     // Only the separately tracked omission is permitted. Raw evidence above
+     // keeps ORDER intact; all other event bytes/order must match exactly.
+     assert.deepEqual(response.events,reference.events.filter(event=>event.kind!=='ORDER'),name+' execution '+j+' events with known ORDER omission')
+     t.diagnostic(name+' execution '+j+': missing ORDER event retained in raw capture')
+    }
    }else assert.deepEqual(response.events,reference.events,name+' execution '+j+' events')
   }
   assert.deepEqual(a.unpreparation,e.unpreparation,name+' unprepare')
