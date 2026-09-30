@@ -575,6 +575,9 @@ pub(super) fn lower<T: VisitMut>(
             if !function.name.to_string().eq_ignore_ascii_case("rand") {
                 return ControlFlow::Continue(());
             }
+            if !supported_shape(function) {
+                return ControlFlow::Break(anyhow::anyhow!("unsupported RAND shape"));
+            }
             let FunctionArguments::List(arguments) = &mut function.args else {
                 return ControlFlow::Break(anyhow::anyhow!("unsupported RAND arguments"));
             };
@@ -621,29 +624,116 @@ pub(super) fn lower<T: VisitMut>(
 }
 
 /// Fraction declaration acquisition uses FLOAT syntax without running RAND.
-pub(super) fn declarations<T: VisitMut>(node: &mut T) {
-    struct Declare;
+fn supported_shape(function: &Function) -> bool {
+    let FunctionArguments::List(arguments) = &function.args else {
+        return false;
+    };
+    matches!(
+        arguments.args.as_slice(),
+        [] | [FunctionArg::Unnamed(FunctionArgExpr::Expr(_))]
+    ) && arguments.clauses.is_empty()
+        && arguments.duplicate_treatment.is_none()
+        && function.over.is_none()
+        && function.filter.is_none()
+        && function.within_group.is_empty()
+        && function.null_treatment.is_none()
+        && matches!(function.parameters, FunctionArguments::None)
+        && !function.uses_odbc_syntax
+}
+
+pub(super) fn declarations<T: VisitMut>(node: &mut T) -> bool {
+    struct Declare(bool);
     impl VisitorMut for Declare {
         type Break = ();
         fn post_visit_expr(&mut self, expression: &mut Expr) -> ControlFlow<()> {
-            if matches!(expression, Expr::Function(f) if f.name.to_string().eq_ignore_ascii_case("rand"))
+            if matches!(expression, Expr::Function(f) if f.name.to_string().eq_ignore_ascii_case("rand") && supported_shape(f))
             {
-                *expression = Expr::Cast {
-                    kind: CastKind::Cast,
+                // As in result_types::bound_statement, CONVERT is a declaration
+                // surrogate, not a literal-NULL proof for COALESCE/CASE. This
+                // profile never reaches the executor or inspects RNG/seed values.
+                *expression = Expr::Convert {
+                    is_try: false,
                     expr: Box::new(Expr::Value(sqlparser::ast::Value::Null.into())),
-                    data_type: DataType::Double(ExactNumberInfo::None),
-                    format: None,
+                    data_type: Some(DataType::Double(ExactNumberInfo::None)),
+                    charset: None,
+                    target_before_value: true,
+                    styles: vec![],
                 };
+                self.0 = true;
             }
             ControlFlow::Continue(())
         }
     }
-    let _ = node.visit(&mut Declare);
+    let mut declare = Declare(false);
+    let _ = node.visit(&mut declare);
+    declare.0
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn declaration_profiles_preserve_unknown_values_and_supported_shapes() {
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let session = super::super::Session::new(server.connection().unwrap()).unwrap();
+        let state = {
+            let state = session.rand.lock().unwrap();
+            (state.x, state.y)
+        };
+        for (expression, nullable) in [
+            ("RAND(42)", true),
+            ("RAND(NULL)", true),
+            ("COALESCE(RAND(),1)", true),
+            ("ISNULL(RAND(),1)", false),
+            ("CASE WHEN 1=1 THEN .5 ELSE RAND() END", true),
+        ] {
+            let mut statement = sqlparser::parser::Parser::parse_sql(
+                &crate::dialect::ServerDialect,
+                &format!("SELECT {expression} AS r"),
+            )
+            .unwrap()
+            .remove(0);
+            let original = statement.clone();
+            assert!(declarations(&mut statement));
+            assert!(original.to_string().contains("RAND"));
+            assert!(!statement.to_string().contains("RAND"));
+            let Statement::Query(query) = statement else {
+                panic!("query");
+            };
+            let fields = crate::query_catalog::projection_with_parameters(
+                &session.db,
+                &query,
+                &HashMap::new(),
+            )
+            .unwrap()
+            .unwrap();
+            assert_eq!(
+                fields[0].info.as_ref().unwrap().system_type_id,
+                Some(62),
+                "{expression}"
+            );
+            assert_eq!(
+                fields[0].properties.nullable,
+                Some(nullable),
+                "{expression}"
+            );
+            assert_eq!(
+                fields[0].properties.origin,
+                msduck_core::result::Origin::Derived
+            );
+        }
+        for sql in ["SELECT RAND(1,2)", "SELECT RAND() OVER()"] {
+            let mut statement =
+                sqlparser::parser::Parser::parse_sql(&crate::dialect::ServerDialect, sql)
+                    .unwrap()
+                    .remove(0);
+            let original = statement.clone();
+            assert!(!declarations(&mut statement));
+            assert_eq!(statement, original);
+        }
+        let after = session.rand.lock().unwrap();
+        assert_eq!((after.x, after.y), state);
+    }
     #[test]
     fn character_seed_preserves_source_and_raw_unicode_diagnostics() {
         let db = Connection::open_in_memory().unwrap();

@@ -2495,9 +2495,29 @@ impl Session {
             .map_err(crate::query_error::compilation)?
             .unwrap_or_default()
         } else if let Statement::Query(query) = &mut statement {
-            crate::query_catalog::bind_query_with_parameters(&self.db, query, parameters)
-                .map_err(crate::query_error::compilation)?
-                .unwrap_or_default()
+            let mut fields =
+                crate::query_catalog::bind_query_with_parameters(&self.db, query, parameters)
+                    .map_err(crate::query_error::compilation)?
+                    .unwrap_or_default();
+            // Bind the actual query first. Known RAND declarations enrich only
+            // a metadata clone; effects and argument validation stay in the
+            // untouched execution tree, and unknown projection shapes stay unknown.
+            let mut declared = query.clone();
+            if rand::declarations(&mut declared)
+                && let Some(profiles) = crate::query_catalog::projection_with_parameters(
+                    &self.db, &declared, parameters,
+                )?
+                && profiles.len() == fields.len()
+            {
+                for (field, profile) in fields.iter_mut().zip(profiles) {
+                    if field.info.is_none() && profile.info.is_some() {
+                        field.info = profile.info;
+                        field.properties = profile.properties;
+                        field.collation = profile.collation;
+                    }
+                }
+            }
+            fields
         } else {
             Vec::new()
         };

@@ -112,3 +112,16 @@ test('RAND source character and BIGINT diagnostics recover without advancing',as
  request.error=undefined
  await new Promise((resolve,reject)=>{callback=error=>error?reject(error):resolve();c.unprepare(request)})
 })
+test('RAND declarations preserve nullable computed FLOAT including nested and empty results',async t=>{
+ const c=await start(t)
+ for(const expression of ['RAND(42)','RAND(NULL)','COALESCE(RAND(),1)','COALESCE(RAND(NULL),1)','ISNULL(RAND(),1)','ISNULL(RAND(NULL),1)','CASE WHEN 1=1 THEN .5 ELSE RAND() END','RAND()']) {
+  await query(c,'SELECT RAND(42) AS seed')
+  const result=await query(c,`SELECT ${expression} AS r${expression==='RAND()'?' FROM(VALUES(1))s(n) WHERE 1=0':''}`)
+  const nonnull=expression.startsWith('ISNULL(')
+  const column=result.columns[0][0]
+  assert.deepEqual({name:column.colName,type:column.type.name,length:column.dataLength??null,flags:column.flags},
+   {name:'r',type:nonnull?'Float':'FloatN',length:nonnull?null:8,flags:nonnull?32:33},expression)
+ }
+ const combined=await query(c,"SELECT RAND() AS r,UPPER(CAST(N'x' AS NVARCHAR(7))) AS label")
+ assert.equal(combined.columns[0][1].dataLength,14,'RAND enrichment must preserve another resolved declaration')
+})
