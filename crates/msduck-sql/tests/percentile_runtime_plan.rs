@@ -31,6 +31,10 @@ fn retained_runtime_requests_keep_syntax_and_defer_execution_diagnostics() {
     for record in fixture["runs"][0].as_array().unwrap() {
         let name = record["name"].as_str().unwrap();
         let sql = record["sql"].as_str().unwrap();
+        // This suite plans percentile requests, not fixture setup/control SQL.
+        if !sql.contains("PERCENTILE_") {
+            continue;
+        }
         if name.contains("sequence side effect") {
             // ServerDialect lacks this node. Preserve that limitation rather
             // than rewriting the query to a backend sequence call.
