@@ -7856,6 +7856,25 @@
         "Exact-headrequiredformat/strictClippy/workspace/build/default/dedicatedclienttests/audit/revieworownerfallback/CI/merge/completion. CoordinatewithstrictpreparedCTErollbackcomparison inPR703; noengineeditswhiletask697active."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Paat6"
+    },
+    {
+      "id": "temporal-set-declarations-v1",
+      "title": "Preserve temporal set declarations in deterministic SQL inference",
+      "state": "ready",
+      "authorization": "Owner continuing implementation goal; first-party missing temporal metadata in shared numeric-only set merger, exposed by prepared-rpc-metadata-v1. Companion delivered by the same worker/worktree/PR703; capture wiring remains in that worker already-owned scope. Engine.rs is excluded.",
+      "issue": 706,
+      "dependencies": [],
+      "scope": [
+        "crates/msduck-sql/src/expression_metadata/arithmetic.rs",
+        "crates/msduck-sql/tests/temporal_set_metadata.rs",
+        "reference/prepared-temporal-sets.json"
+      ],
+      "acceptance": [
+        "Capture complete preparation metadata, flags, ORDER/DONE/status/handle and nonexecution state for same-family DATETIME2/DATETIMEOFFSET UNION/UNION ALL/INTERSECT/EXCEPT and mixed-family set declarations in two fresh pinned SQL Server containers. Preserve an immutable fixture with integrity and complete-plan checks. Existing parent-owned capture script supplies the reproducible --temporal-sets mode; no external content or runtime values establish declarations.",
+        "Implement only captured deterministic common temporal declaration rules using explicit TypeMetadata and catalog snapshots. Preserve scale validity, alias/unknown/mixed-unproven-family barriers, numeric arithmetic and numeric set behavior. No backend, sessions, clocks, environment or row values enter msduck-sql. Wire-completion/properties remain separately asserted by the parent RPC task.",
+        "Fixture-backed pure tests and meaningful all-scale/boundary/alias/unknown checks; integrate with the parent captured public preparation test and remove the temporary root VALUES declaration clone workaround when shared inference replaces it. Exact-head formatting/strict workspace Clippy/workspace/build/default+dedicated clients/diagnostic audit, independent review or authorized availability fallback/required CI. Same claiming worker owns final merge and prompt completion of all companion tasks/projects/issues."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PaoT2"
     }
   ]
 }
