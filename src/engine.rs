@@ -104,11 +104,21 @@ fn lower_runtime_percentiles<T: VisitMut>(
             let descending = order.options.sort == Some(OrderBySort::Desc);
             let mut input = order.expr.clone();
             if let Some(ticket) = fault {
-                input = binary_function(
+                let guard = binary_function(
                     "__msduck_percentile_invalid_input",
-                    input,
+                    input.clone(),
                     Expr::Identifier(Ident::new(ticket)),
                 );
+                input = Expr::Case {
+                    case_token: sqlparser::ast::helpers::attached_token::AttachedToken::empty(),
+                    end_token: sqlparser::ast::helpers::attached_token::AttachedToken::empty(),
+                    operand: None,
+                    conditions: vec![sqlparser::ast::CaseWhen {
+                        condition: guard,
+                        result: Expr::Value(sqlparser::ast::Value::Null.into()),
+                    }],
+                    else_result: Some(Box::new(input)),
+                };
             }
             if name == "percentile_cont" {
                 input = unary_function("__msduck_percentile_input", input);
