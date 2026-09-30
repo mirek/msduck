@@ -53,3 +53,21 @@ test('prepared COUNT/ranking descriptors match preparation and each reference ex
   await new Promise((resolve,reject)=>{complete=error=>error?reject(error):resolve();connection.unprepare(request)})
  }
 })
+
+// Diagnostic capture: mismatches are retained as open compatibility work.
+// This is evidence collection, not a claim that error/token behavior matches.
+test('retain COUNT/ranking binding-error differences for root follow-up',async t=>{
+ const {mkdir,writeFile}=await import('node:fs/promises')
+ const connection=await start(t);const {runs}=await retained()
+ assert.deepEqual((await captureBatch(connection,heapSetup)).errors,[])
+ const records=[]
+ for(const record of runs[0].slice(2).filter(record=>record.result.errors.length)){
+  const actual=canonical(await(record.mode==='batch'?captureBatch(connection,record.sql):captureRpc(connection,record.sql)))
+  const matches=JSON.stringify(actual)===JSON.stringify(record.result)
+  records.push({name:record.name,mode:record.mode,sql:record.sql,expected:record.result,actual,matches})
+  if(!matches)t.diagnostic(record.name+' '+record.mode+': reference errors '+record.result.errors.map(e=>e.number)+'; server errors '+actual.errors.map(e=>e.number))
+ }
+ assert.equal(records.length,12,'all retained error profiles captured')
+ await mkdir('artifacts/count-ranking-declarations',{recursive:true})
+ await writeFile('artifacts/count-ranking-declarations/root-errors.json',JSON.stringify({kind:'diagnostic-not-compatibility-pass',records},null,2)+'\n')
+})
