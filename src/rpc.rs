@@ -12,6 +12,8 @@ use msduck_core::{
 };
 use std::collections::HashMap;
 
+mod prepare_metadata;
+
 struct RpcParameter {
     name: String,
     status: u8,
@@ -84,11 +86,24 @@ impl State {
                         (3..=4).contains(&parameters.len()),
                         "invalid sp_prepare parameter count"
                     );
-                    if parameters.len() == 4 {
-                        ensure!(
-                            input_int(&parameters[3])? == 0,
-                            "unsupported sp_prepare metadata option"
+                    if parameters.len() == 4
+                        && (parameters[3].parameter.data_type != DataType::Int
+                            || !matches!(parameters[3].parameter.value, Value::Int(1)))
+                    {
+                        let mut out = Vec::new();
+                        tds::sql_error(
+                            &mut out,
+                            &msduck_core::diagnostic::SqlError::new(
+                                214,
+                                3,
+                                "Procedure expects parameter '@options' of type 'int'.",
+                            ),
                         );
+                        out.push(0x79);
+                        out.extend(214i32.to_le_bytes());
+                        prepare_metadata::handle(&mut out, &output.name, None)?;
+                        tds::done(&mut out, 0xfe, 2, 0xe0, 0);
+                        return Ok(out);
                     }
                     HashMap::new()
                 } else {
@@ -96,6 +111,11 @@ impl State {
                 };
                 // Validate both syntax and database binding without executing the statement.
                 session.validate_prepared_sql(sql, &declarations)?;
+                let description = if procedure == "sp_prepare" {
+                    Some(prepare_metadata::describe(session, sql, &declarations)?)
+                } else {
+                    None
+                };
                 let bytes = sql.len()
                     + declarations
                         .iter()
@@ -110,12 +130,16 @@ impl State {
                     .checked_add(1)
                     .ok_or_else(|| anyhow::anyhow!("prepared statement handle space exhausted"))?;
                 self.next_handle = handle;
-                let (response, success) = session.batch_response(
-                    if procedure == "sp_prepare" { "" } else { sql },
-                    &bindings,
-                    true,
-                    Some((&output.name, handle)),
-                );
+                let (response, success) = if let Some(description) = description {
+                    let mut response = description.prefix;
+                    response.push(0x79);
+                    response.extend(description.status.to_le_bytes());
+                    prepare_metadata::handle(&mut response, &output.name, Some(handle))?;
+                    tds::done(&mut response, 0xfe, 0, 0xe0, 0);
+                    (response, true)
+                } else {
+                    session.batch_response(sql, &bindings, true, Some((&output.name, handle)))
+                };
                 if success {
                     self.bytes += bytes;
                     self.prepared.insert(

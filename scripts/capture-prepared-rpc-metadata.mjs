@@ -11,7 +11,7 @@ import {withReferenceContainer,referenceImage} from './lib/reference-container.m
 import {isolatedReference,assertSameCapture,refuseExistingFixture,writeNewFixture} from './lib/reference.mjs'
 import {canonical} from './lib/compatibility.mjs'
 const fixture=new URL('../reference/prepared-rpc-metadata.json',import.meta.url)
-export const fixtureSha256='PENDING'
+export const fixtureSha256='3018bee5ac4d4bf2019c4238e174d1f83e60842bbcb986682722961be098d2d0'
 const version="SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)) AS v"
 const rows="INSERT INTO dbo.prepare_heap VALUES(3,1,N'c'),(1,2,N'a'),(2,1,NULL),(4,2,N'd')"
 const setup='CREATE TABLE dbo.prepare_heap(a INT,b INT,label NVARCHAR(8)); '+rows
