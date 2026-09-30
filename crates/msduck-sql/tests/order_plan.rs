@@ -111,6 +111,7 @@ fn retained_order_presence_and_ordinals_match_for_every_resolved_query() {
             ));
         } else {
             let actual: Vec<_> = plans
+                .clone()
                 .into_iter()
                 .filter_map(|p| {
                     if let Plan::Token(values) = p {
@@ -121,6 +122,36 @@ fn retained_order_presence_and_ordinals_match_for_every_resolved_query() {
                 })
                 .collect();
             assert_eq!(actual, expected, "{} {}", record["name"], record["mode"]);
+            if record["mode"] == "prepared" {
+                for execution in record["executions"].as_array().unwrap() {
+                    let actual_orders: Vec<Vec<u16>> = execution["events"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter(|event| event["kind"] == "ORDER")
+                        .map(|event| {
+                            event["ordinals"]
+                                .as_array()
+                                .unwrap()
+                                .iter()
+                                .map(|value| value.as_u64().unwrap() as u16)
+                                .collect()
+                        })
+                        .collect();
+                    assert_eq!(
+                        actual, actual_orders,
+                        "prepared execution {}",
+                        record["name"]
+                    );
+                }
+                assert!(
+                    !record["unpreparation"]["events"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|event| event["kind"] == "ORDER")
+                );
+            }
             resolved += 1;
         }
     }
@@ -190,5 +221,75 @@ fn unproven_folding_unknown_shapes_and_bound_sort_values_are_barriers() {
     assert_eq!(
         plan("SELECT ROW_NUMBER() OVER(ORDER BY a) AS k FROM dbo.order_heap"),
         Plan::NoToken
+    );
+}
+
+#[test]
+fn supplemental_fresh_sql_server_optimizer_cases() {
+    for (sql, expected) in [
+        ("SELECT 1 AS a UNION ALL SELECT 1 ORDER BY a", vec![1]),
+        ("SELECT 1 AS a UNION SELECT 1 ORDER BY a", vec![1]),
+        (
+            "SELECT CAST(NULL AS INT) AS a UNION ALL SELECT CAST(NULL AS INT) ORDER BY a",
+            vec![1],
+        ),
+        (
+            "SELECT CAST(NULL AS INT) AS a UNION ALL SELECT 1 ORDER BY a",
+            vec![1],
+        ),
+        (
+            "SELECT h.a FROM dbo.order_heap h JOIN dbo.order_clustered c ON h.a=c.a ORDER BY c.a",
+            vec![0],
+        ),
+        (
+            "SELECT h.a FROM dbo.order_heap h JOIN dbo.order_clustered c ON h.a=c.a ORDER BY h.a",
+            vec![1],
+        ),
+        (
+            "SELECT h.a,c.a FROM dbo.order_heap h JOIN dbo.order_clustered c ON h.a=c.a ORDER BY c.a",
+            vec![2],
+        ),
+        (
+            "SELECT h.a FROM dbo.order_heap h JOIN dbo.order_clustered c ON h.a<c.a ORDER BY c.a",
+            vec![0],
+        ),
+        (
+            "SELECT h.a FROM dbo.order_heap h LEFT JOIN dbo.order_clustered c ON h.a=c.a ORDER BY c.a",
+            vec![0],
+        ),
+        ("SELECT a FROM dbo.order_heap WHERE a=1 ORDER BY a", vec![1]),
+        ("SELECT TOP(1) a FROM dbo.order_heap ORDER BY a", vec![1]),
+        (
+            "SELECT a,ROW_NUMBER() OVER(PARTITION BY b ORDER BY a) AS n FROM dbo.order_heap ORDER BY n",
+            vec![2],
+        ),
+        (
+            "SELECT a,ROW_NUMBER() OVER(PARTITION BY b ORDER BY b,a) AS n FROM dbo.order_heap WHERE 1=0 ORDER BY n",
+            vec![2],
+        ),
+    ] {
+        assert_eq!(plan(sql), Plan::Token(expected), "{sql}");
+    }
+    for sql in [
+        "SELECT CAST(NULL AS INT) AS k FROM dbo.order_heap WHERE 1=0 ORDER BY k",
+        "SELECT TOP(0) CAST(NULL AS INT) AS k FROM dbo.order_heap ORDER BY k",
+        "SELECT CAST(NULL AS INT) AS k ORDER BY k",
+        "SELECT a,CAST(NULL AS INT) AS k FROM dbo.order_heap ORDER BY k",
+    ] {
+        assert_eq!(plan(sql), Plan::NoToken, "{sql}");
+        let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+            panic!("query");
+        };
+        let original = query.clone();
+        assert_eq!(
+            infer(&catalog(), &query, &Scope::default()),
+            Plan::NoToken,
+            "normalized {sql}"
+        );
+        assert_eq!(query, original, "planner must not mutate the source AST");
+    }
+    assert_eq!(
+        plan("SELECT a,a FROM dbo.order_heap ORDER BY a"),
+        Plan::Unknown(Barrier::AmbiguousName)
     );
 }

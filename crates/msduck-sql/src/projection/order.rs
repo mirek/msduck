@@ -93,7 +93,7 @@ fn null_subquery(expr: &Expr) -> bool {
 }
 fn typed_null(expr: &Expr) -> bool {
     matches!(inner(expr),Expr::Cast {expr,data_type:DataType::Int(None),kind:CastKind::Cast,format:None}
-        if matches!(inner(expr),Expr::Value(v) if v.value == Value::Null))
+        if matches!(inner(crate::variant_cast::source(expr).unwrap_or(expr)),Expr::Value(v) if v.value == Value::Null))
 }
 fn ordinal(expr: &Expr, width: usize) -> Option<usize> {
     let Expr::Value(value) = expr else {
@@ -268,8 +268,7 @@ pub fn infer(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -> Plan {
         if let Some(index) = target {
             if select.is_some() {
                 let expression = expressions[index];
-                if expressions.len() == 1
-                    && keys.len() == 1
+                if keys.len() == 1
                     && typed_null(expression)
                     && matches!(inner(&key.expr), Expr::Identifier(_))
                 {
