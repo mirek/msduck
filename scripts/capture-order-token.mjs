@@ -154,12 +154,12 @@ async function capturePreparedPhase(connection, request, issue, setComplete, pre
 }
 
 
-async function captureBatch(connection, sql) {
+export async function captureBatch(connection, sql) {
   let complete = () => {}
   const request = new Request(sql, (error,rowCount) => complete(error,rowCount))
   return capturePreparedPhase(connection,request,()=>connection.execSqlBatch(request),callback=>{complete=callback})
 }
-async function captureRpc(connection,sql) {
+export async function captureRpc(connection,sql) {
  let complete=()=>{}
  const request=new Request(sql,(error,rowCount)=>complete(error,rowCount))
  return capturePreparedPhase(connection,request,()=>connection.execSql(request),callback=>{complete=callback})
