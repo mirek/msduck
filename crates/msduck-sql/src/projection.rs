@@ -88,14 +88,14 @@ fn declaration_scopes(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -
 }
 
 pub fn query_fields(catalog: &CatalogSnapshot, query: &Query, outer: &Scope) -> Option<Vec<Field>> {
-    query_fields_in(catalog, query, outer, false)
+    query_fields_in(catalog, query, outer, OutputContext::Query)
 }
 
 /// View outputs retain computed and identity provenance. Aggregate/relational
 /// outputs become view columns; ordinary derived row sources still erase
 /// computed provenance before reaching this boundary.
 pub fn view_fields(catalog: &CatalogSnapshot, query: &Query) -> Option<Vec<Field>> {
-    let mut fields = query_fields_in(catalog, query, &Scope::default(), true)?;
+    let mut fields = query_fields_in(catalog, query, &Scope::default(), OutputContext::View)?;
     for field in &mut fields {
         if field.properties.origin == msduck_core::result::Origin::Derived {
             field.properties.origin = msduck_core::result::Origin::Stored;
@@ -128,11 +128,18 @@ fn division_operands(
     Some((left, right))
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OutputContext {
+    Query,
+    View,
+    SetOperand,
+}
+
 fn query_fields_in(
     catalog: &CatalogSnapshot,
     query: &Query,
     outer: &Scope,
-    view_definition: bool,
+    context: OutputContext,
 ) -> Option<Vec<Field>> {
     if matches!(query.for_clause, Some(ForClause::Json { .. })) {
         return Some(vec![Field {
@@ -159,7 +166,7 @@ fn query_fields_in(
     }) {
         return None;
     }
-    body_fields(catalog, &query.body, &scope, view_definition)
+    body_fields(catalog, &query.body, &scope, context)
 }
 /// Anchor/member inference adds literal types to the ordinary projection rules
 /// without executing expressions or inferring a recursive fixed point.
@@ -540,17 +547,28 @@ fn body_fields(
     catalog: &CatalogSnapshot,
     body: &SetExpr,
     scope: &Scope,
-    view_definition: bool,
+    context: OutputContext,
 ) -> Option<Vec<Field>> {
     let select = match body {
         SetExpr::Select(s) => s,
-        SetExpr::Query(q) => return query_fields_in(catalog, q, scope, view_definition),
+        SetExpr::Query(q) => return query_fields_in(catalog, q, scope, context),
         SetExpr::SetOperation {
             left, right, op, ..
         } => {
             let (Some(left), Some(right)) = (
-                body_fields(catalog, left, scope, view_definition),
-                body_fields(catalog, right, scope, view_definition),
+                body_fields(
+                    catalog,
+                    left,
+                    scope,
+                    if context != OutputContext::View
+                        && matches!(op, SetOperator::Intersect | SetOperator::Except)
+                    {
+                        OutputContext::SetOperand
+                    } else {
+                        context
+                    },
+                ),
+                body_fields(catalog, right, scope, context),
             ) else {
                 return None;
             };
@@ -715,8 +733,11 @@ fn body_fields(
                         properties.null_extend();
                     }
                 }
-                // SQL Server omits fComputed for these result type families.
-                if !view_definition
+                // Ordinary query outputs omit fComputed for these families.
+                // The left INTERSECT/EXCEPT operand retains expression origin
+                // (see reference/prepared-set-properties.json), like a view
+                // definition. Aggregate/source-cast rules below remain separate.
+                if context == OutputContext::Query
                     && expression_name(e).is_none()
                     && properties.origin == msduck_core::result::Origin::Expression
                     // SQL Server retains fComputed for the three FROMPARTS
@@ -752,7 +773,7 @@ fn body_fields(
                             &|value| grouping.properties(value, &sources, &scope.rows),
                         );
                         let aggregate = matches!(input, Expr::Function(f) if source_properties.origin == msduck_core::result::Origin::Derived || matches!(f.name.to_string().to_ascii_uppercase().as_str(), "GROUPING" | "GROUPING_ID"));
-                        if !view_definition
+                        if context != OutputContext::View
                             && (aggregate
                                 || source_info
                                     .as_ref()
