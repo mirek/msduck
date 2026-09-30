@@ -117,7 +117,15 @@ impl State {
                     None
                 };
                 let execution_sql = lowered.as_deref().unwrap_or(sql);
-                session.validate_prepared_sql(execution_sql, &declarations)?;
+                let binding_probe = if procedure == "sp_prepare" {
+                    prepare_metadata::nested_count_binding_sql(execution_sql)?
+                } else {
+                    None
+                };
+                session.validate_prepared_sql(
+                    binding_probe.as_deref().unwrap_or(execution_sql),
+                    &declarations,
+                )?;
                 let description = if procedure == "sp_prepare" {
                     Some(prepare_metadata::describe(session, sql, &declarations)?)
                 } else {
@@ -132,6 +140,11 @@ impl State {
                     prepare_metadata::handle(&mut response, &output.name, None)?;
                     tds::done(&mut response, 0xfe, 2, 0xe0, 0);
                     return Ok(response);
+                }
+                if binding_probe.is_some() {
+                    // An accepted description must still validate/cache the
+                    // actual execution SQL, never the diagnostic probe.
+                    session.validate_prepared_sql(execution_sql, &declarations)?;
                 }
                 let bytes = execution_sql.len()
                     + declarations
@@ -779,6 +792,42 @@ mod tests {
         assert_eq!(state.bytes, 0);
         assert_eq!(state.next_handle, 0);
     }
+    #[test]
+    fn nested_count_null_keeps_binding_precedence_and_no_handles() {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        session
+            .db
+            .execute_batch("CREATE TABLE dbo.count_binding(a INT)")
+            .unwrap();
+        let mut state = State::default();
+        for sql in [
+            "SELECT SUM(COUNT(NULL)) FROM dbo.count_binding",
+            "SELECT SUM(COUNT_BIG(NULL)) FROM dbo.count_binding",
+        ] {
+            let response = state
+                .execute(&mut session, &prepare_request(sql, ""))
+                .unwrap();
+            assert_eq!(response[0], 0xaa);
+            assert_eq!(i32::from_le_bytes(response[3..7].try_into().unwrap()), 8117);
+            assert!(state.prepared.is_empty());
+            assert_eq!(state.next_handle, 0);
+            assert_eq!(state.bytes, 0);
+        }
+        for sql in [
+            "SELECT SUM(COUNT(NULL)) FROM dbo.missing_count_binding",
+            "SELECT SUM(COUNT(NULL)) FROM dbo.count_binding WHERE missing=1",
+        ] {
+            assert!(
+                state
+                    .execute(&mut session, &prepare_request(sql, ""))
+                    .is_err(),
+                "binding must precede NULL diagnostic: {sql}"
+            );
+            assert!(state.prepared.is_empty());
+        }
+    }
+
     #[test]
     fn failed_prepexec_does_not_leak_a_handle() {
         let server = Server::open(":memory:").unwrap();

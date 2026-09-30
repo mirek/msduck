@@ -829,6 +829,111 @@ fn query_description(
     Ok(out)
 }
 
+fn typeless_count(expr: &Expr) -> Option<String> {
+    fn null(expr: &Expr) -> bool {
+        match expr {
+            Expr::Nested(expr)
+            | Expr::UnaryOp {
+                op: sqlparser::ast::UnaryOperator::Plus,
+                expr,
+            } => null(expr),
+            _ => msduck_sql::expression_metadata::conditional::literal_null(expr),
+        }
+    }
+    let Expr::Function(function) = expr else {
+        return None;
+    };
+    let name = function.name.to_string().to_ascii_lowercase();
+    if !matches!(name.as_str(), "count" | "count_big")
+        || msduck_sql::aggregate::validate(function).is_err()
+    {
+        return None;
+    }
+    let FunctionArguments::List(args) = &function.args else {
+        return None;
+    };
+    let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] = args.args.as_slice() else {
+        return None;
+    };
+    null(value).then_some(name)
+}
+
+// Binding-only probe for the captured SUM(COUNT(NULL)) precedence. Keep the
+// outer aggregation and every source/column reference, replacing only its
+// direct non-window typeless COUNT input. Never execute or cache this clone.
+pub(super) fn nested_count_binding_sql(sql: &str) -> Result<Option<String>> {
+    let mut statements = msduck_sql::batch::parse(sql)?;
+    let mut changed = false;
+    let _ = sqlparser::ast::visit_expressions_mut(&mut statements, |expr| {
+        let Expr::Function(outer) = expr else {
+            return ControlFlow::<()>::Continue(());
+        };
+        if !matches!(
+            outer.name.to_string().to_ascii_lowercase().as_str(),
+            "sum"
+                | "avg"
+                | "min"
+                | "max"
+                | "count"
+                | "count_big"
+                | "stdev"
+                | "stdevp"
+                | "var"
+                | "varp"
+        ) || outer.over.is_some()
+            || outer.parameters != FunctionArguments::None
+            || outer.filter.is_some()
+            || outer.null_treatment.is_some()
+            || !outer.within_group.is_empty()
+            || outer.uses_odbc_syntax
+        {
+            return ControlFlow::Continue(());
+        }
+        let FunctionArguments::List(args) = &mut outer.args else {
+            return ControlFlow::Continue(());
+        };
+        if args.duplicate_treatment.is_some() || !args.clauses.is_empty() {
+            return ControlFlow::Continue(());
+        }
+        let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] = args.args.as_mut_slice() else {
+            return ControlFlow::Continue(());
+        };
+        let Some(name) = typeless_count(value) else {
+            return ControlFlow::Continue(());
+        };
+        if !matches!(value, Expr::Function(inner) if inner.over.is_none()) {
+            return ControlFlow::Continue(());
+        }
+        *value = Expr::Convert {
+            is_try: false,
+            expr: Box::new(Expr::Value(sqlparser::ast::Value::Null.into())),
+            data_type: Some(if name == "count_big" {
+                DataType::BigInt(None)
+            } else {
+                DataType::Int(None)
+            }),
+            charset: None,
+            target_before_value: true,
+            styles: vec![],
+        };
+        changed = true;
+        ControlFlow::Continue(())
+    });
+    if !changed {
+        return Ok(None);
+    }
+    let probe = statements
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("; ");
+    ensure!(
+        probe.len() <= tds::MAX_MESSAGE,
+        "prepared binding probe exceeds message bound"
+    );
+    Ok(Some(probe))
+}
+
 pub(super) fn describe(
     session: &Session,
     sql: &str,
@@ -850,36 +955,7 @@ pub(super) fn describe(
     // Native source/column binding has already succeeded. Detect typeless
     // COUNT operands only afterwards, preserving captured binding precedence.
     if let ControlFlow::Break(name) = sqlparser::ast::visit_expressions(&statements, |expr| {
-        let Expr::Function(function) = expr else {
-            return ControlFlow::Continue(());
-        };
-        let name = function.name.to_string().to_ascii_lowercase();
-        if !matches!(name.as_str(), "count" | "count_big")
-            || msduck_sql::aggregate::validate(function).is_err()
-        {
-            return ControlFlow::Continue(());
-        }
-        let FunctionArguments::List(args) = &function.args else {
-            return ControlFlow::Continue(());
-        };
-        let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] = args.args.as_slice() else {
-            return ControlFlow::Continue(());
-        };
-        fn typeless_null(expr: &Expr) -> bool {
-            match expr {
-                Expr::Nested(expr)
-                | Expr::UnaryOp {
-                    op: sqlparser::ast::UnaryOperator::Plus,
-                    expr,
-                } => typeless_null(expr),
-                _ => msduck_sql::expression_metadata::conditional::literal_null(expr),
-            }
-        }
-        if typeless_null(value) {
-            ControlFlow::Break(name)
-        } else {
-            ControlFlow::Continue(())
-        }
+        typeless_count(expr).map_or(ControlFlow::Continue(()), ControlFlow::Break)
     }) {
         let mut prefix = Vec::new();
         tds::sql_error(
