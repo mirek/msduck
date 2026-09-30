@@ -58,8 +58,11 @@ preparation responses for calendar, mixed BIT/integer bitwise, catalog, identity
 NULL projections from that capture. Its smaller plan asserts consecutive handles
 starting at 1; every other preparation response field is compared verbatim.
 Both plans verify preparation leaves table rows, seeded RAND and transaction
-depth unchanged. CTE DELETE and INSERT OUTPUT INTO retain their captured no-result completion
-commands without performing either write. Other captured regression shapes remain
+depth unchanged. INSERT OUTPUT INTO retains its captured no-result completion
+command without performing either write. The CTE DELETE capture proves command
+196, but the direct CTE target still fails original native validation with
+`Binder Error: Can only delete from base table` (error 50000) instead of preparing.
+The expanded public test retains this failing regression and full raw comparison.
 INSERT OUTPUT uses the existing pure logical projection over target catalog
 declarations and retains the INSERT completion command. Other captured regression
 shapes remain implementation work, including window/variant ORDER and temporal
