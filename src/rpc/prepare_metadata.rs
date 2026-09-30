@@ -196,7 +196,9 @@ fn query_description(
         for (field, declaration) in fields.iter_mut().zip(declared) {
             if field.info.is_none() && declaration.info.is_some() {
                 field.info = declaration.info;
-                field.properties = declaration.properties;
+                if field.properties.origin == msduck_core::result::Origin::Unknown {
+                    field.properties = declaration.properties;
+                }
                 field.collation = declaration.collation;
             }
         }
