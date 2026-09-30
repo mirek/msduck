@@ -50,13 +50,13 @@ fn catalog() -> CatalogSnapshot {
     );
     catalog
 }
-fn queries(sql: &str) -> Vec<Box<Query>> {
+fn queries(sql: &str) -> Vec<Query> {
     Parser::parse_sql(&msduck_sql::dialect::ServerDialect, sql)
         .unwrap()
         .into_iter()
         .filter_map(|statement| {
             if let Statement::Query(query) = statement {
-                Some(query)
+                Some(*query)
             } else {
                 None
             }
