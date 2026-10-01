@@ -267,10 +267,31 @@ in fresh SQL Server containers. Full raw SHA256 is
 Both eighteen-record runs agree completely. The empty `sys.columns` projection
 has 43 fields, while `sys.identity_columns` has 44; their schemas and flags
 cannot be treated as a simple concatenation. Direct catalog integer fields
-retain fixed wire types and read-only flags8, and `name` retains sysname user
+retain fixed wire types and stored projection flags8, and `name` retains sysname user
 id256 and flags9. Identity variant fields have flags33 in the unsorted profile,
 while a qualified variant projection with a hidden sort has flags9. Captured
 TYPE_NAME is NVarChar(256 bytes), flags33; explicit/TRY integer conversions have
 nullable integer declarations and flags33. These captures establish reference
 requirements, not a current implementation pass. The complete raw artifact is
 retained separately; no catalog fixture or descriptor is normalized.
+
+Canonical root catalog snapshots now retain the captured declarations for both
+column views. The backend identity view explicitly projects the same 44-column
+order instead of concatenating 43 sys.columns fields and four extra fields.
+The immutable preparation fixture is `reference/column-catalog-declarations.json`;
+all sixteen complete preparation/unprepare responses pass at Rust head
+`1b9f87188c1a549317c03200fe0f11aa52b408a2`, alongside nine catalog and 34 RPC
+Rust tests, formatting, strict Clippy and the all-target build. These results do
+not cover subsequent client expectation changes or establish execution parity.
+
+The separate `--catalog-batches` mode captures three ordinary empty catalog
+queries twice in fresh SQL Server containers. Complete raw SHA256 is
+`9311f87f5f59c91dd508590807eeaf8b304799a4f2cda3abff1da65f796cc930`.
+Both four-record runs agree. The exact eight-scalar query used by the legacy
+sys.columns client retains fixed Int, TinyInt, SmallInt and Bit metadata,
+without nullable-type length fields. Its dedicated test compares the whole
+response, including flags and DONE. Full-view batch responses are retained in
+the same diagnostic artifact; their alias metadata is separate execution work,
+and no complete batch-view comparison pass is claimed. The default client now
+asserts those captured scalar type/length distinctions while keeping its
+allocator, DDL and rollback behavior assertions.
