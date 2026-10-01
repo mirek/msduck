@@ -8852,6 +8852,27 @@
       "dependencies": [],
       "issue": 755,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PeOco"
+    },
+    {
+      "id": "catalog-key-identities-v1",
+      "title": "Persist key constraint identities through keys lifecycle",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal in this session (2026-10-01): implement a fully functional SQL Server-compatible Rust server backed by DuckDB, plus the existing owner catalog workload authorization in gaps-catalog-v1 (#728). First-party code at76033e3 and approved gaps-keys-v1 done snapshot show the keys lifecycle needs a disjoint catalog integration companion. No external content is input.",
+      "scope": [
+        "src/engine/ext/keys/catalog.rs",
+        "src/engine/ext/keys/create_table.rs"
+      ],
+      "acceptance": [
+        "Coordinate with the claimed gaps-catalog-v1 root catalog callback/store/views/tests; change only these two keys lifecycle files, excluding keys.rs/predicates/engine.rs.",
+        "Call root identity bookkeeping in the existing keys transaction for PK/UQ creation/removal; retain explicit versus generated name provenance from the original creation plan. IDs are allocated from the shared object sequence, never during reads.",
+        "Idempotent bootstrap/backfill and rollback/drop/recreate/restart preserve existing table/index IDs and original known constraint identities. Unknown legacy name provenance or mappings remain explicit rather than fabricated. Keep all values bound.",
+        "Validate PK/UQ object/catalog relationships with the retained owner-controlled pinned SQL Server fixture and Rust/tedious lifecycle tests in #728 scope. Complete exact-head AGENTS.md gates, review or recorded owner-authorized fallback, merge associated PR and publish completion."
+      ],
+      "dependencies": [
+        "gaps-keys-v1"
+      ],
+      "issue": 756,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PeQ1k"
     }
   ]
 }
