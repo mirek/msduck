@@ -7,7 +7,7 @@
 //!   where `<id>` is 12 hexadecimal digits unique to the creation;
 //! - `##t` becomes `__msduck_global_t` (lower case), which every session
 //!   derives the same way.
-use super::{super::reenter, Backend, NAME};
+use super::Backend;
 use crate::engine::Session;
 use anyhow::Result;
 use duckdb::arrow::record_batch::RecordBatch;
@@ -99,9 +99,7 @@ pub(super) fn drop_table(session: &mut Session, backend: &Backend) -> Result<()>
         quote(&backend.physical)
     ))?;
     let mut parameters = std::collections::HashMap::new();
-    reenter(session, NAME, |session| {
-        session.execute(statement, &mut parameters)
-    })?;
+    session.execute(statement, &mut parameters)?;
     Ok(())
 }
 
@@ -136,9 +134,7 @@ pub(super) fn restore(
             &sqlparser::ast::Ident::with_quote('"', &backend.physical),
         )?;
         let mut parameters = std::collections::HashMap::new();
-        reenter(session, NAME, |session| {
-            session.execute(create, &mut parameters)
-        })?;
+        session.execute(create, &mut parameters)?;
     }
     session
         .db

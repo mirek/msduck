@@ -142,6 +142,11 @@ reference captures of the same behavior.
   reports them when it compiles the batch.
 - The table variable restore after a rollback appends the saved rows, so
   computed columns in table variables are not restored.
+- Every write to a table variable inside an open transaction copies the
+  variable's rows, so writing a large table variable row by row inside a
+  transaction is slow.
+- `CREATE VIEW` over a temporary object is refused by the view checks, but
+  with a generic error instead of SQL Server's 4508.
 - Nested bodies get their own scope only when they run through the
   engine's batch loop, as procedures, triggers and dynamic SQL are expected
   to (see the stored procedure feature).

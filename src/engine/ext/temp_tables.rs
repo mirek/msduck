@@ -238,10 +238,11 @@ impl Feature for Hooks {
         if !changed {
             return Ok(None);
         }
-        let result = reenter(session, NAME, |session| {
-            session.execute(rewritten, parameters)
-        })
-        .map_err(|error| localize(&session.ext.temp_tables, error))?;
+        // The rewritten statement names only backend tables, so this hook
+        // passes it through. Other features (and nested bodies) still apply.
+        let result = session
+            .execute(rewritten, parameters)
+            .map_err(|error| localize(&session.ext.temp_tables, error))?;
         if session.transactions > 0 {
             for name in written.iter().filter(|name| name.kind == Kind::Variable) {
                 save(session, &name.key());
@@ -294,7 +295,8 @@ impl Feature for Hooks {
                     variable.saved = None;
                 }
             }
-            state.graveyard.clear();
+            // Committed drops are final; retry those that failed.
+            bury(session);
         } else {
             bury(session);
             restore(session);
@@ -515,10 +517,9 @@ fn declare(session: &mut Session, variable: &syntax::TableVariable) -> Result<()
         &Ident::with_quote('"', &backend.physical),
     )?;
     let mut parameters = HashMap::new();
-    reenter(session, NAME, |session| {
-        session.execute(create, &mut parameters)
-    })
-    .map_err(|error| rename_error(error, &backend.physical, &variable.name.value))?;
+    session
+        .execute(create, &mut parameters)
+        .map_err(|error| rename_error(error, &backend.physical, &variable.name.value))?;
     let saved = (session.transactions > 0).then(Vec::new);
     if let Some(frame) = session.ext.temp_tables.frames.last_mut() {
         frame.variables.push(Variable {
@@ -602,11 +603,10 @@ fn create(
     syntax::rewrite(&mut statement, &mut |other| {
         resolve(session, other).map(Some)
     })?;
-    let execution = reenter(session, NAME, |session| {
-        session.execute(statement, parameters)
-    })
-    .map_err(|error| localize(&session.ext.temp_tables, error))
-    .map_err(|error| rename_error(error, &physical, &name.name))?;
+    let execution = session
+        .execute(statement, parameters)
+        .map_err(|error| localize(&session.ext.temp_tables, error))
+        .map_err(|error| rename_error(error, &physical, &name.name))?;
     let backend = Backend { alias, physical };
     match name.kind {
         Kind::Local => session.ext.temp_tables.locals.push(Local {
@@ -681,41 +681,45 @@ fn drop_tables(
         // Only missing temporary tables with IF EXISTS.
         return Ok(Execution::statement(Vec::new(), None, 199));
     }
-    // The backend drops one table per statement.
+    // The backend drops one table per statement. Each temporary table
+    // leaves the registry as soon as its own drop succeeds, so a later
+    // failure (such as a missing permanent table) keeps the registry right.
     let mut execution = None;
     for object in kept {
         let mut single = statement.clone();
         if let Statement::Drop { names, .. } = &mut single {
-            *names = vec![object];
+            *names = vec![object.clone()];
         }
         execution = Some(
-            reenter(session, NAME, |session| session.execute(single, parameters))
+            session
+                .execute(single, parameters)
                 .map_err(|error| localize(&session.ext.temp_tables, error))?,
         );
-    }
-    let execution = execution.expect("at least one table");
-    let in_transaction = session.transactions > 0;
-    let state = &mut session.ext.temp_tables;
-    for (name, physical) in dropped {
+        let Some((name, physical)) = dropped
+            .iter()
+            .find(|(_, physical)| syntax::backend_name(physical) == object)
+        else {
+            continue;
+        };
+        let in_transaction = session.transactions > 0;
+        let state = &mut session.ext.temp_tables;
         match name.kind {
-            Kind::Local => {
-                if in_transaction {
-                    for local in &mut state.locals {
-                        if local.backend.physical == physical {
-                            local.dropped = true;
-                        }
+            Kind::Local if in_transaction => {
+                for local in &mut state.locals {
+                    if &local.backend.physical == physical {
+                        local.dropped = true;
                     }
-                } else {
-                    state
-                        .locals
-                        .retain(|local| local.backend.physical != physical);
                 }
             }
+            Kind::Local => state
+                .locals
+                .retain(|local| &local.backend.physical != physical),
             _ => state
                 .globals
-                .retain(|global| global.backend.physical != physical || in_transaction),
+                .retain(|global| &global.backend.physical != physical || in_transaction),
         }
     }
+    let execution = execution.expect("at least one table");
     Ok(execution)
 }
 
@@ -729,10 +733,13 @@ fn discard(session: &mut Session, backend: Backend) {
 }
 
 /// Drop tables whose scope ended inside a transaction that is now over.
+/// A drop that fails stays queued for the next attempt (or session end).
 fn bury(session: &mut Session) {
     let graveyard = std::mem::take(&mut session.ext.temp_tables.graveyard);
     for backend in graveyard {
-        let _ = storage::drop_table(session, &backend);
+        if storage::drop_table(session, &backend).is_err() {
+            session.ext.temp_tables.graveyard.push(backend);
+        }
     }
 }
 
@@ -779,12 +786,11 @@ fn restore(session: &mut Session) {
     for (backend, definition, rows) in restores {
         let _ = storage::restore(session, &backend, &definition, rows);
     }
+    // Check each table in its own database: a rollback after USE affects
+    // tables of the database that was current when they were created.
     let db = &session.db;
     let state = &mut session.ext.temp_tables;
-    let current = session.database.alias();
-    let live = |backend: &Backend| {
-        backend.alias != current || storage::exists(db, &backend.physical).unwrap_or(true)
-    };
+    let live = |backend: &Backend| storage::oid(db, backend).map_or(true, |oid| oid.is_some());
     state.locals.retain(|local| live(&local.backend));
     for local in &mut state.locals {
         local.dropped = false;
@@ -1026,5 +1032,20 @@ mod tests {
         assert_eq!(backends(&other), 0);
         assert!(!run(&mut other, "SELECT * FROM ##g"));
         assert_eq!(other.last_error, 208);
+    }
+
+    /// A later name failing in DROP TABLE must not leave a dropped
+    /// temporary table registered.
+    #[test]
+    fn partially_failed_drop_forgets_the_tables_it_dropped() {
+        let (_server, mut session) = session();
+        assert!(run(&mut session, "CREATE TABLE #t(id INT)"));
+        assert!(!run(&mut session, "DROP TABLE #t, dbo.missing"));
+        assert!(lookup(&session, &name(Kind::Local, "#t")).is_err());
+        assert!(run(
+            &mut session,
+            "CREATE TABLE #t(id INT); INSERT INTO #t VALUES (1); SELECT * FROM #t"
+        ));
+        assert_eq!(backends(&session), 1);
     }
 }
