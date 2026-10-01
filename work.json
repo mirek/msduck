@@ -8512,7 +8512,7 @@
     {
       "id": "gaps-bulk-v1",
       "title": "Bulk load (INSERT BULK) from tedious/mssql",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
       "scope": [
         "src/engine/ext/bulk.rs",
