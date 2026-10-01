@@ -7934,6 +7934,38 @@
         "Meaningful snapshot/native width/order tests in claimed module, complete prepared catalog response comparisons in parent scope and default catalog clients; final exact-head workspace formatting/strictClippy/tests/alltargets build/clients/audit, independent review or owner-authorized availability fallback and required CI. Same worker owns PR703 merge and prompt completion of every companion issue/project/task."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdIaH"
+    },
+    {
+      "id": "gaps-ext-hooks-v1",
+      "title": "Extension hooks and module store for parallel SQL Server gap work",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01), umbrella issue #710; enabling infrastructure so feature tasks own disjoint files.",
+      "scope": [
+        "src/engine.rs",
+        "src/engine/ext.rs",
+        "src/engine/ext/",
+        "src/server.rs",
+        "src/database_catalog.rs",
+        "src/lib.rs",
+        "crates/msduck-sql/src/dialect.rs",
+        "crates/msduck-sql/src/dialect/ext.rs",
+        "crates/msduck-sql/src/dialect/ext/",
+        "crates/msduck-sql/src/preflight.rs",
+        "crates/msduck-sql/src/batch.rs",
+        ".github/workflows/ci.yml",
+        "tests/extension_hooks.rs",
+        "tests/compat/",
+        "docs/extension-hooks.md"
+      ],
+      "acceptance": [
+        "Engine exposes batch, statement, EXEC (with RETURNSTATUS/DONEPROC handling), expression lowering, transaction isolation, native function registration and per-database catalog bootstrap hooks that dispatch to per-feature modules under src/engine/ext/, each a no-op stub, with existing behavior unchanged.",
+        "msduck-sql dialect exposes a statement parse hook dispatching to per-feature modules under crates/msduck-sql/src/dialect/ext/ plus a generic carrier for custom statements; EXEC named arguments are not treated as undeclared variables by preflight.",
+        "A module definition store (procedures, functions, triggers) with stable object ids, per database, is available to feature modules.",
+        "CI runs tests/compat/*.test.mjs; cargo fmt, clippy (1.95), workspace tests and npm test pass; docs/extension-hooks.md describes the hooks."
+      ],
+      "dependencies": [],
+      "issue": 711,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdJmK"
     }
   ]
 }
