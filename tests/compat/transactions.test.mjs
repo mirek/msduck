@@ -163,12 +163,9 @@ test('replays the captured isolation and WAITFOR reference', { timeout: 120000 }
   c.on('error', () => {})
   await new Promise((resolve, reject) => c.connect(error => error ? reject(error) : resolve()))
   // Differences owned by other features, retained exactly so that a change
-  // is noticed: EXEC sp_executesql inside a SQL batch, the engine's message
-  // for an undeclared variable and SQL_VARIANT variables.
-  const unsupportedExec = { rows: [], errors: [[40515, 1, 16, 'unsupported T-SQL statement']] }
+  // is noticed: the engine's message for an undeclared variable and
+  // SQL_VARIANT variables.
   const known = {
-    'sp_executesql scope': unsupportedExec,
-    'waitfor delay through sp_executesql': { ...unsupportedExec, waited: { atLeast: false, under: true } },
     'waitfor undeclared variable': { rows: [], errors: [[137, 1, 16, 'Must declare the scalar variable @undeclared']] },
     'waitfor type SQL_VARIANT': { rows: [], errors: [[50000, 1, 16, 'SQL_VARIANT variables are not yet supported']] }
   }

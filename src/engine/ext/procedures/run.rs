@@ -61,6 +61,7 @@ struct Saved {
     xact_abort: bool,
     ansi_warnings: bool,
     datefirst: i32,
+    isolation: u8,
     caught_error: Option<SqlError>,
     base: usize,
 }
@@ -78,6 +79,7 @@ pub(super) fn frame(
         xact_abort: session.xact_abort,
         ansi_warnings: session.ansi_warnings,
         datefirst: session.datefirst,
+        isolation: super::super::transactions::isolation(session),
         caught_error: session.caught_error.clone(),
         base: session.ext.procedures.base,
     };
@@ -93,6 +95,7 @@ pub(super) fn frame(
     session.xact_abort = saved.xact_abort;
     session.ansi_warnings = saved.ansi_warnings;
     session.datefirst = saved.datefirst;
+    super::super::transactions::restore_isolation(session, saved.isolation);
     session.caught_error = saved.caught_error;
     session.ext.procedures.base = saved.base;
     (out, result)

@@ -42,6 +42,18 @@ impl Default for State {
     }
 }
 
+/// The session's isolation level (TDS numbering), for frames that restore
+/// it when they return, such as procedure bodies and dynamic SQL.
+pub(super) fn isolation(session: &Session) -> u8 {
+    session.ext.transactions.isolation
+}
+
+pub(super) fn restore_isolation(session: &mut Session, isolation: u8) {
+    if session.ext.transactions.isolation != isolation {
+        options::set(session, isolation);
+    }
+}
+
 pub(super) struct Hooks;
 
 impl Feature for Hooks {

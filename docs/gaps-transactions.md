@@ -29,8 +29,8 @@ Issue #727 (task `gaps-transactions-v1`). The feature lives in the
 - `tests/compat/transactions.test.mjs` replays that fixture through tedious
   and compares rows, errors (number, state, class and message) and the wait
   booleans. Differences owned by other features are listed there exactly:
-  `EXEC sp_executesql` inside a SQL batch, the engine's wording of 137 for an
-  undeclared variable, and `SQL_VARIANT` variables.
+  the engine's wording of 137 for an undeclared variable, and `SQL_VARIANT`
+  variables.
 - `tests/gaps_transactions.rs` covers the same rules in process, plus
   savepoint restores, cancellation and termination.
 
@@ -44,8 +44,9 @@ and 1-5. As captured:
 - The level is a session setting. It persists after the transaction ends, a
   transaction-manager begin changes it too (also for a nested begin), and a
   level set inside a transaction stays after COMMIT.
-- A level set inside an RPC (`sp_executesql`, prepared execution) reverts
-  when the RPC returns.
+- A level set inside an RPC (`sp_executesql`, prepared execution), a
+  procedure or dynamic SQL (`EXEC`, `EXEC sp_executesql`) reverts when it
+  returns.
 - `sys.dm_exec_sessions.transaction_isolation_level` reports 1-5 (2 for a
   new session) as a non-nullable `smallint`, in SQL Server's column position
   (after `is_user_process`).
