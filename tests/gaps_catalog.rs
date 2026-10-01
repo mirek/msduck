@@ -95,16 +95,22 @@ fn definitions_identities_and_layouts_survive_restart() {
             "SELECT name,index_id,type_desc FROM sys.indexes WHERE object_id=__msduck_object_id('dbo.parent','U') ORDER BY index_id",
         );
     }
-    // An unnamed DEFAULT has no object yet (docs/gaps-catalog.md).
-    assert!(!objects.iter().any(|row| row.starts_with("DF__")));
+    // The generated DEFAULT name ends with its object ID.
+    let generated = objects
+        .iter()
+        .find(|row| row.starts_with("DF__parent__qty__"))
+        .unwrap();
+    let id: i32 = generated.rsplit('|').next().unwrap().parse().unwrap();
+    assert!(generated.starts_with(&format!("DF__parent__qty__{:08X}|D|", id as u32)));
     assert_eq!(
         definitions,
         [
-            "ck_qty|([qty]=(1) OR [qty]=(0))",
-            "df_label|(CONVERT([varchar],(1)))",
-            "doubled|([qty]*(2))",
-            "parent_proc|CREATE PROCEDURE dbo.parent_proc @id INT AS SELECT @id",
-            "parent_view|CREATE VIEW dbo.parent_view AS SELECT id, code FROM dbo.parent",
+            format!("{}|((0))", generated.split('|').next().unwrap()),
+            "ck_qty|([qty]=(1) OR [qty]=(0))".into(),
+            "df_label|(CONVERT([varchar],(1)))".into(),
+            "doubled|([qty]*(2))".into(),
+            "parent_proc|CREATE PROCEDURE dbo.parent_proc @id INT AS SELECT @id".into(),
+            "parent_view|CREATE VIEW dbo.parent_view AS SELECT id, code FROM dbo.parent".into(),
         ]
     );
     assert_eq!(
@@ -304,5 +310,50 @@ fn view_and_default_text_follows_only_committed_statements() {
             "SELECT main.__msduck_object_definition(__msduck_object_id('dbo.v','V'))"
         ),
         ["CREATE VIEW dbo.v AS SELECT v FROM dbo.t"]
+    );
+}
+
+#[test]
+fn bound_defaults_and_checks_follow_sql_server_alter_column_rules() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    run(
+        &mut session,
+        "CREATE TABLE dbo.a(id INT, t TIME(3) DEFAULT '12:00:00.1249', v INT DEFAULT 1,
+           s VARCHAR(10) CONSTRAINT ck_s CHECK (s <> ''), n INT CONSTRAINT ck_n CHECK (n > 0))",
+    );
+    // A DEFAULT allows another precision of the same type, not another type.
+    run(&mut session, "ALTER TABLE dbo.a ALTER COLUMN t TIME(2)");
+    assert!(fails(
+        &mut session,
+        "ALTER TABLE dbo.a ALTER COLUMN v BIGINT"
+    ));
+    // A CHECK allows another length of a variable-length type only.
+    run(&mut session, "ALTER TABLE dbo.a ALTER COLUMN s VARCHAR(20)");
+    assert!(fails(
+        &mut session,
+        "ALTER TABLE dbo.a ALTER COLUMN n BIGINT"
+    ));
+    // Dropping a column with a DEFAULT fails until the DEFAULT is dropped by
+    // its generated name.
+    assert!(fails(&mut session, "ALTER TABLE dbo.a DROP COLUMN v"));
+    let name = rows(
+        &session,
+        "SELECT d.name FROM sys.default_constraints d JOIN sys.columns c ON c.object_id=d.parent_object_id AND c.column_id=d.parent_column_id WHERE c.name='v'",
+    )
+    .remove(0);
+    assert!(name.starts_with("DF__a__v__"));
+    run(
+        &mut session,
+        &format!("ALTER TABLE dbo.a DROP CONSTRAINT {name}; ALTER TABLE dbo.a DROP COLUMN v"),
+    );
+    // ALTER TABLE ... ADD gives unnamed DEFAULTs objects too.
+    run(&mut session, "ALTER TABLE dbo.a ADD w INT DEFAULT 5");
+    assert_eq!(
+        rows(
+            &session,
+            "SELECT left(name,10),definition,is_system_named FROM sys.default_constraints WHERE parent_column_id=(SELECT column_id FROM sys.columns WHERE object_id=__msduck_object_id('dbo.a','U') AND name='w')"
+        ),
+        ["DF__a__w__|((5))|1"]
     );
 }

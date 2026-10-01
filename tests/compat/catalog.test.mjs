@@ -57,16 +57,6 @@ const unsupportedSetup = new Map([
   ['computed text definitions', 'table not created'],
 ])
 
-// Unnamed DEFAULTs of CREATE TABLE and ALTER TABLE ... ADD have no object
-// yet (docs/gaps-catalog.md); the rows of named ones, and of unnamed ones
-// that ALTER TABLE ... ADD DEFAULT ... FOR creates, are SQL Server's.
-const namedDefaults = new Map([
-  ['default definitions', rows => rows.filter(row => row[3] === false)],
-  ['default naming', rows => rows.filter(row => !row[2].startsWith('DF__'))],
-  ['default column links', () => [[1]]],
-  ['alter defaults', rows => rows.filter(row => row[0] !== 'w')],
-])
-
 // Binding errors of a system procedure call end with RETURNSTATUS 1, as for
 // every procedure hook; SQL Server sends no return status.
 const bindingStatus = new Set(['pkeys bogus parameter', 'pkeys too many', 'rename bogus parameter', 'rename missing newname'])
@@ -79,7 +69,6 @@ test('the gaps-catalog-v2 profile matches SQL Server', { timeout: 300000 }, asyn
     const actual = summary(canonical(await captureBatch(connection, record.sql)))
     const expected = summary(record.result)
     if (unsupportedSetup.has(record.name)) continue
-    if (namedDefaults.has(record.name)) expected.rows = expected.rows.map(namedDefaults.get(record.name))
     if (bindingStatus.has(record.name)) {
       assert.equal(actual.status, 1, record.name)
       delete expected.status

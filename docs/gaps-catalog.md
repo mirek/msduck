@@ -82,22 +82,24 @@ a column declared NOT NULL is not nullable.
 
 ### DEFAULT constraints
 
-Named DEFAULTs are objects with their declared text, from CREATE TABLE,
-`ALTER TABLE ... ADD` and `ALTER TABLE ... ADD [CONSTRAINT] ... DEFAULT ...
-FOR`; an unnamed one of the last form has the constraints feature's
-generated name and `is_system_named` 1.
+Every DEFAULT is an object, as in SQL Server. An unnamed one gets SQL
+Server's generated name, `DF__table__column__XXXXXXXX`, ending in its object
+ID in hexadecimal; the table and column parts share 14 characters, the table
+keeping at least nine and the column at least five
+(`declarations::constraint_name`; unnamed CHECK and FOREIGN KEY constraints
+use the same rule, and a table-level CHECK keeps 16 characters of the table).
+CREATE TABLE and `ALTER TABLE ... ADD` record them in their DDL transaction;
+for the latter the constraints feature runs the new columns without their
+DEFAULT names and then gives the generated objects their declared names.
+DEFAULTs that the identity and rowversion features add as backend
+allocators are not objects.
 
-SQL Server also makes every unnamed DEFAULT of CREATE TABLE and
-`ALTER TABLE ... ADD` an object, `DF__table__column__XXXXXXXX`, ending in its
-object ID in hexadecimal; the table and column parts share 14 characters,
-the table keeping at least nine and the column at least five
-(`declarations::default_name`, checked against the capture). msduck does not
-create those objects yet: the constraints feature's column checks would then
-refuse the `ALTER COLUMN` changes of length, precision or scale that SQL
-Server allows on a column with a DEFAULT bound (they already do for named
-ones), and its `DROP CONSTRAINT` must find them. Both live in
-`src/engine/ext/constraints`, which another task holds; recording them is a
-small follow-up once that is free.
+`sys.columns.default_object_id` therefore names the DEFAULT of every column
+that has one, and the DEFAULT can be dropped by its generated name. As in
+SQL Server, a column with a DEFAULT cannot be dropped (5074, 4922), and
+ALTER COLUMN keeps a DEFAULT only when the type stays the same (another
+length, precision or scale is allowed) and a CHECK only when a
+variable-length type changes its length.
 
 ### Modules and views
 
@@ -204,8 +206,8 @@ transaction rolls back with it.
   5e7f21e through fc6221f. Removing `catalogV2Profile` reproduces their
   aggregate SHA-256
   `bd024b56b37216c580e4c4bc6e755aa1ac9f1b1b577d310537ebdca54ab9ae9c`.
-- `catalogV2Profile` (126 responses from each of two fresh pinned
-  containers, which agree completely): definitions, DEFAULT naming, key
+- `catalogV2Profile` (128 responses from each of two fresh pinned
+  containers, which agree completely): definitions, constraint naming, key
   layout, modules and parameters, `OBJECT_DEFINITION`, `sp_pkeys`,
   `sp_fkeys`, the `sp_rename` matrix with return statuses and TRY,
   INFORMATION_SCHEMA and temporary objects. Its queries select no IDs or
@@ -237,12 +239,8 @@ renames and definitions, and key identities through the keys lifecycle.
   features cannot yet execute (varchar concatenation, CHARINDEX,
   `CONVERT(FLOAT(53), ...)`) cannot be created; their catalog text is still
   covered by the formatter tests.
-- Unnamed DEFAULTs of CREATE TABLE and `ALTER TABLE ... ADD` have no object
-  (see above), so they are missing from `sys.default_constraints`,
-  `sys.objects` and `sys.columns.default_object_id`.
 - Unnamed CHECK constraints keep the constraints store's text, in which
-  `CAST(x AS VARCHAR)` has the length 30. Generated CHECK names use 9 and 5
-  characters rather than SQL Server's shared 14 (constraints feature).
+  `CAST(x AS VARCHAR)` has the length 30.
 - A PRIMARY KEY that is clustered by default does not reject a later
   `CREATE CLUSTERED INDEX` with 1902 (keys feature).
 - `sys.schemas`, and so `INFORMATION_SCHEMA.SCHEMATA`, lacks the fixed role

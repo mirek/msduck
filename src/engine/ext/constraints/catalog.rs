@@ -616,23 +616,68 @@ pub(crate) fn defaults_of(db: &Connection, table: &Table) -> Result<Vec<(i32, St
     Ok(rows.collect::<duckdb::Result<_>>()?)
 }
 
+/// Record a named column DEFAULT of ALTER TABLE ... ADD. The statement that
+/// added the column has already given its DEFAULT an object under SQL
+/// Server's generated name (object_catalog), which takes the declared name.
 pub(crate) fn record_default(
     db: &Connection,
     table: &Table,
     column: &str,
     name: &str,
+    value: &sqlparser::ast::Expr,
 ) -> Result<i32> {
     let column_id: i32 = db.query_row(
         "SELECT column_id FROM main.__msduck_column_info WHERE object_id=? AND lower(name)=lower(?)",
         duckdb::params![table.id, column],
         |row| row.get(0),
     )?;
-    let id = next_object_id(db)?;
-    db.execute(
-        "INSERT INTO main.__msduck_default_constraints VALUES(?,?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP))",
-        duckdb::params![id, table.id, column_id, name],
+    let existing: Option<i32> = db.query_row(
+        "SELECT max(object_id) FROM main.__msduck_default_constraints WHERE parent_object_id=? AND column_id=?",
+        duckdb::params![table.id, column_id],
+        |row| row.get(0),
     )?;
+    let id = match existing {
+        Some(id) => {
+            db.execute(
+                "UPDATE main.__msduck_default_constraints SET name=? WHERE object_id=?",
+                duckdb::params![name, id],
+            )?;
+            db.execute(
+                "DELETE FROM main.__msduck_default_sources WHERE object_id=?",
+                [id],
+            )?;
+            id
+        }
+        None => {
+            let id = next_object_id(db)?;
+            db.execute(
+                "INSERT INTO main.__msduck_default_constraints VALUES(?,?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP))",
+                duckdb::params![id, table.id, column_id, name],
+            )?;
+            id
+        }
+    };
+    record_default_source(db, id, value, false)?;
     Ok(id)
+}
+
+/// The declared text of a DEFAULT and whether SQL Server generated its
+/// name, for the catalog views (src/engine/ext/catalog).
+pub(crate) fn record_default_source(
+    db: &Connection,
+    id: i32,
+    value: &sqlparser::ast::Expr,
+    system_named: bool,
+) -> Result<()> {
+    db.execute(
+        "INSERT INTO main.__msduck_default_sources VALUES(?,?,?)",
+        duckdb::params![
+            id,
+            msduck_sql::dialect::ext::catalog::declarations::declared_source(value),
+            system_named
+        ],
+    )?;
+    Ok(())
 }
 
 pub(crate) fn delete_default(db: &Connection, id: i32) -> Result<()> {

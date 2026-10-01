@@ -80,7 +80,7 @@ pub fn is_ddl(statement: &Statement) -> bool {
 }
 
 pub fn touch(db: &Connection, statement: &Statement) -> Result<()> {
-    record_named_defaults(db, statement)?;
+    record_defaults(db, statement)?;
     record_computed(db, statement)?;
     let name = match statement {
         Statement::AlterTable(table) => &table.name,
@@ -104,15 +104,16 @@ pub fn touch(db: &Connection, statement: &Statement) -> Result<()> {
     Ok(())
 }
 
-/// A named DEFAULT has a separate SQL Server object identity. Keep its row,
-/// column link and declared text in the caller's DDL transaction, after
-/// column IDs are synced.
-///
-/// SQL Server also gives an unnamed DEFAULT an object (`DF__table__col__ID`).
-/// msduck does not yet: the constraints feature's column checks would then
-/// refuse the changes of length or precision that SQL Server allows on a
-/// column with a DEFAULT bound (see docs/gaps-catalog.md).
-fn record_named_defaults(db: &Connection, statement: &Statement) -> Result<()> {
+/// Every DEFAULT has a separate SQL Server object identity: a named one
+/// keeps its name, an unnamed one gets SQL Server's generated name
+/// (`DF__table__column__XXXXXXXX`, from its object ID). Keep the rows,
+/// column links and declared text in the caller's DDL transaction, after
+/// column IDs are synced. For ALTER TABLE ... ADD the constraints feature
+/// runs the columns without their DEFAULT names and then gives the
+/// generated objects their declared names. DEFAULTs that other features add
+/// as identity and rowversion allocators are not SQL Server objects.
+fn record_defaults(db: &Connection, statement: &Statement) -> Result<()> {
+    use msduck_sql::dialect::ext::catalog::declarations;
     let (table, columns): (&ObjectName, Vec<&ColumnDef>) = match statement {
         Statement::CreateTable(table) => (&table.name, table.columns.iter().collect()),
         Statement::AlterTable(table) => (
@@ -139,14 +140,19 @@ fn record_named_defaults(db: &Connection, statement: &Statement) -> Result<()> {
     let Some(object_id) = object_id else {
         return Ok(());
     };
+    let table_name: String = db.query_row(
+        "SELECT name FROM main.__msduck_objects WHERE object_id=?",
+        [object_id],
+        |row| row.get(0),
+    )?;
     for column in columns {
         for option in &column.options {
             let ColumnOption::Default(expression) = &option.option else {
                 continue;
             };
-            let Some(name) = &option.name else {
+            if option.name.is_none() && declarations::allocator(expression) {
                 continue;
-            };
+            }
             let column_id: Option<i32> = db.query_row(
                 "SELECT column_id FROM main.__msduck_column_info WHERE object_id=? AND lower(name)=lower(?)",
                 duckdb::params![object_id, column.name.value],
@@ -161,35 +167,44 @@ fn record_named_defaults(db: &Connection, statement: &Statement) -> Result<()> {
                 |row| row.get(0),
             )?;
             if let Some(existing) = existing {
-                anyhow::ensure!(
-                    existing.to_lowercase() == name.value.to_lowercase(),
-                    "column already has a differently named DEFAULT constraint"
-                );
+                if let Some(name) = &option.name {
+                    anyhow::ensure!(
+                        existing.to_lowercase() == name.value.to_lowercase(),
+                        "column already has a differently named DEFAULT constraint"
+                    );
+                }
                 continue;
             }
-            let conflict: i64 = db.query_row(
-                "SELECT count(*) FROM sys.all_objects WHERE schema_id=(SELECT schema_id FROM main.__msduck_objects WHERE object_id=?) AND lower(name)=lower(?)",
-                duckdb::params![object_id, name.value],
-                |row| row.get(0),
-            )?;
-            anyhow::ensure!(
-                conflict == 0,
-                "DEFAULT constraint name already exists in schema"
-            );
+            if let Some(name) = &option.name {
+                let conflict: i64 = db.query_row(
+                    "SELECT count(*) FROM sys.all_objects WHERE schema_id=(SELECT schema_id FROM main.__msduck_objects WHERE object_id=?) AND lower(name)=lower(?)",
+                    duckdb::params![object_id, name.value],
+                    |row| row.get(0),
+                )?;
+                anyhow::ensure!(
+                    conflict == 0,
+                    "DEFAULT constraint name already exists in schema"
+                );
+            }
             let id: i32 = db.query_row(
                 "SELECT CAST(nextval('main.__msduck_object_ids') AS INTEGER)",
                 [],
                 |row| row.get(0),
             )?;
+            let name = match &option.name {
+                Some(name) => name.value.clone(),
+                None => declarations::default_name(&table_name, &column.name.value, id),
+            };
             db.execute(
                 "INSERT INTO main.__msduck_default_constraints(object_id,parent_object_id,column_id,name,create_date,modify_date) VALUES(?,?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP))",
-                duckdb::params![id, object_id, column_id, name.value],
+                duckdb::params![id, object_id, column_id, name],
             )?;
             db.execute(
-                "INSERT INTO main.__msduck_default_sources VALUES(?,?,false)",
+                "INSERT INTO main.__msduck_default_sources VALUES(?,?,?)",
                 duckdb::params![
                     id,
-                    msduck_sql::dialect::ext::catalog::declarations::declared_source(expression)
+                    declarations::declared_source(expression),
+                    option.name.is_none()
                 ],
             )?;
         }

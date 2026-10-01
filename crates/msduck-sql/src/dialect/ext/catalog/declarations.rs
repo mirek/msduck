@@ -650,12 +650,39 @@ pub fn declared_source(expr: &Expr) -> Option<String> {
     (!generated(expr)).then(|| source(expr))
 }
 
-/// SQL Server's generated name of an unnamed DEFAULT constraint:
-/// `DF__table__column__XXXXXXXX`, with the object ID in hexadecimal. The
-/// table and column parts share 14 characters; when both are longer, the
-/// table keeps at least nine and the column at least five.
-pub fn default_name(table: &str, column: &str, id: i32) -> String {
+/// Whether a DEFAULT is a backend allocator another feature added for an
+/// identity or rowversion column (it calls `nextval`, which T-SQL lacks).
+pub fn allocator(expr: &Expr) -> bool {
+    struct Find(bool);
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            if let Expr::Function(function) = expr
+                && function.name.to_string().eq_ignore_ascii_case("nextval")
+            {
+                self.0 = true;
+                return ControlFlow::Break(());
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut find = Find(false);
+    let _ = expr.visit(&mut find);
+    find.0
+}
+
+/// SQL Server's generated name of an unnamed DEFAULT, CHECK or FOREIGN KEY
+/// constraint: `DF__table__column__XXXXXXXX`, with the object ID in
+/// hexadecimal (generated names have at most 30 characters). The table and
+/// column parts share 14 characters; when both are longer, the table keeps
+/// at least nine and the column at least five. Without a column the table
+/// keeps 16.
+pub fn constraint_name(prefix: &str, table: &str, column: Option<&str>, id: i32) -> String {
     let table: Vec<char> = table.chars().collect();
+    let Some(column) = column else {
+        let table: String = table.iter().take(16).collect();
+        return format!("{prefix}__{table}__{:08X}", id as u32);
+    };
     let column: Vec<char> = column.chars().collect();
     let (mut kept_table, mut kept_column) = (table.len(), column.len());
     if kept_table + kept_column > 14 {
@@ -664,7 +691,12 @@ pub fn default_name(table: &str, column: &str, id: i32) -> String {
     }
     let table: String = table[..kept_table].iter().collect();
     let column: String = column[..kept_column].iter().collect();
-    format!("DF__{table}__{column}__{:08X}", id as u32)
+    format!("{prefix}__{table}__{column}__{:08X}", id as u32)
+}
+
+/// The generated name of an unnamed DEFAULT constraint.
+pub fn default_name(table: &str, column: &str, id: i32) -> String {
+    constraint_name("DF", table, Some(column), id)
 }
 
 /// Whether a computed column over `expr` is nullable, as SQL Server infers
@@ -909,6 +941,15 @@ mod tests {
         ] {
             assert_eq!(default_name(table, column, 42), expected);
         }
+        assert_eq!(
+            constraint_name("CK", "abcdefghijklmnopqrstuvwxyz", None, 42),
+            "CK__abcdefghijklmnop__0000002A"
+        );
+        assert_eq!(
+            constraint_name("CK", "abcdefghijklmnopqrstuvwxyz", Some("yyyyyyyyy"), 42),
+            "CK__abcdefghi__yyyyy__0000002A"
+        );
+        assert_eq!(constraint_name("CK", "t", None, 42), "CK__t__0000002A");
     }
 
     #[test]
@@ -945,5 +986,7 @@ mod tests {
         assert!(generated(&expr("getvariable('__msduck_session_login')")));
         assert!(!generated(&expr("CAST(1 AS BIGINT)")));
         assert!(!generated(&expr("SUSER_SNAME()")));
+        assert!(allocator(&expr("nextval('main.__msduck_identity_1')")));
+        assert!(!allocator(&expr("getvariable('__msduck_session_login')")));
     }
 }
