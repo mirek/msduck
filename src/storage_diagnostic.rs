@@ -9,10 +9,19 @@ use msduck_core::character::{CharacterType, ConvertedUnicode, Error, Family, Len
 use sqlparser::ast::*;
 
 /// Decorate the target conversion only; unrelated source expressions keep their
-/// own context. The logical database is supplied by the caller.
+/// own context.
+///
+/// The target table always belongs to the session's current database:
+/// statements naming another database are refused before lowering, and the
+/// target's columns are read from `current_database()`. The diagnostic's
+/// database qualifier is therefore resolved by the executing connection
+/// (`__msduck_current_db_name()`, which reports the primary catalog as
+/// `master`), so a statement in a user database reports
+/// `'<database>.dbo.items'` as SQL Server does. Callers' `_database` argument
+/// is not consulted.
 pub fn contextualize(
     mut value: Expr,
-    database: &str,
+    _database: &str,
     schema: &str,
     table: &str,
     column: &str,
@@ -27,15 +36,31 @@ pub fn contextualize(
         };
         if let FunctionArguments::List(args) = &mut f.args {
             f.name = ObjectName::from(vec![Ident::new(name)]);
-            for text in [format!("{database}.{schema}.{table}"), column.to_owned()] {
+            let text = |text: String| Expr::Value(Value::SingleQuotedString(text).into());
+            let qualified = Expr::BinaryOp {
+                left: Box::new(current_database_name()),
+                op: BinaryOperator::StringConcat,
+                right: Box::new(text(format!(".{schema}.{table}"))),
+            };
+            for argument in [qualified, text(column.to_owned())] {
                 args.args
-                    .push(FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(
-                        Value::SingleQuotedString(text).into(),
-                    ))));
+                    .push(FunctionArg::Unnamed(FunctionArgExpr::Expr(argument)));
             }
         }
     }
     value
+}
+/// `__msduck_current_db_name()`: the SQL Server name of the executing
+/// connection's current database.
+fn current_database_name() -> Expr {
+    let mut call =
+        msduck_sql::expr::unary_function("__msduck_current_db_name", Expr::value(Value::Null));
+    if let Expr::Function(f) = &mut call
+        && let FunctionArguments::List(args) = &mut f.args
+    {
+        args.args.clear();
+    }
+    call
 }
 const PREFIX: &str = "__msduck_truncated_utf16:";
 fn encoded_error(

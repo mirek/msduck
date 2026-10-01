@@ -48,6 +48,7 @@ pub fn tokenize(sql: &str) -> Result<Vec<TokenWithSpan>, ParserError> {
             result.push(token);
         }
     }
+    ext::identifiers::tokens(&mut result);
     crate::openjson_path::path_tokens(&mut result);
     key_index_type::strip(&mut result);
     computed_column::mark(&mut result);
@@ -203,14 +204,22 @@ impl Dialect for ServerDialect {
         supports_start_transaction_modifier,
         supports_end_transaction_modifier,
         supports_set_stmt_without_operator,
-        supports_table_versioning,
         supports_nested_comments,
         supports_object_name_double_dot_notation
     );
+    // Temporal FOR SYSTEM_TIME tables are unsupported, and the other
+    // versioning forms (AT(...), BEFORE(...), CHANGES) are not T-SQL; they
+    // would capture a table alias named `at`.
+    fn supports_table_versioning(&self) -> bool {
+        false
+    }
     fn get_reserved_grantees_types(&self) -> &[GranteesType] {
         MsSqlDialect {}.get_reserved_grantees_types()
     }
     fn is_select_item_alias(&self, explicit: bool, keyword: &Keyword, parser: &mut Parser) -> bool {
+        if let Some(alias) = ext::identifiers::select_item_alias(explicit, keyword, parser) {
+            return alias;
+        }
         if !explicit && matches!(keyword, Keyword::FOR | Keyword::OPTION) {
             return false;
         }
@@ -236,6 +245,9 @@ impl Dialect for ServerDialect {
         keyword: &Keyword,
         parser: &mut Parser,
     ) -> bool {
+        if let Some(alias) = ext::identifiers::table_factor_alias(explicit, keyword, parser) {
+            return alias;
+        }
         if !explicit && matches!(keyword, Keyword::FOR | Keyword::OPTION) {
             return false;
         }
