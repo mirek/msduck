@@ -113,10 +113,6 @@ fn atomically<T>(session: &mut Session, work: impl FnOnce(&mut Session) -> Resul
     }
 }
 
-/// Tags start far above ordinary key values, so a tag in a duplicate-key
-/// message is not mistaken for a native key value.
-const TAG_BASE: i64 = 9_000_000_000_000_000_000;
-
 /// Create the DuckDB index enforcing (or serving) a keys-managed key.
 fn build_index(
     db: &duckdb::Connection,
@@ -130,7 +126,7 @@ fn build_index(
     use msduck_sql::dialect::ext::keys::value;
     let mut expressions = vec![];
     if unique {
-        expressions.push(value::guard(TAG_BASE + tag, filter));
+        expressions.push(value::guard(tag, filter));
         for column in columns {
             expressions.extend(column.components().map_err(anyhow::Error::msg)?);
         }

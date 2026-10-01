@@ -324,10 +324,18 @@ pub fn unicode_key_of(text: &str) -> String {
         .collect()
 }
 
+/// Tags start far above ordinary key values, so a tag in a duplicate-key
+/// message is not mistaken for a native key value.
+pub const TAG_BASE: i64 = 9_000_000_000_000_000_000;
+
 /// The tag expression of a managed index; rows where `filter` is not true
 /// get a NULL tag and are not checked.
 pub fn guard(tag: i64, filter: Option<&str>) -> String {
-    format!("(CASE WHEN {} THEN {tag} END)", filter.unwrap_or("true"))
+    format!(
+        "(CASE WHEN {} THEN {} END)",
+        filter.unwrap_or("true"),
+        TAG_BASE + tag
+    )
 }
 
 /// The number of index expressions of `columns` after the tag.
@@ -421,7 +429,10 @@ mod tests {
         );
         assert!(!column("m", 231, -1, 0, false, "STRUCT(__msduck_utf16le BLOB)").keyable());
         assert!(column("m", 231, 900, 0, false, "STRUCT(__msduck_utf16le BLOB)").keyable());
-        assert_eq!(guard(17, None), "(CASE WHEN true THEN 17 END)");
+        assert_eq!(
+            guard(17, None),
+            "(CASE WHEN true THEN 9000000000000000017 END)"
+        );
     }
 
     #[test]

@@ -17,7 +17,8 @@ pub(super) fn bootstrap(db: &Connection) -> Result<()> {
           tag BIGINT PRIMARY KEY,object_id INTEGER NOT NULL,name VARCHAR NOT NULL,
           kind VARCHAR NOT NULL,is_unique BOOLEAN NOT NULL,is_clustered BOOLEAN NOT NULL,
           is_native BOOLEAN NOT NULL,backend_name VARCHAR,incarnation BIGINT,key_columns VARCHAR NOT NULL,
-          included_columns VARCHAR NOT NULL,filter_definition VARCHAR)",
+          included_columns VARCHAR NOT NULL,filter_definition VARCHAR,
+          filter_columns VARCHAR NOT NULL)",
     )?;
     Ok(())
 }
@@ -37,6 +38,8 @@ pub(super) struct Key {
     pub columns: Vec<String>,
     pub include: Vec<String>,
     pub filter: Option<String>,
+    /// Columns the filter references.
+    pub filter_columns: Vec<String>,
 }
 
 impl Key {
@@ -67,7 +70,7 @@ fn parse_list(text: &str) -> Vec<String> {
 
 pub(super) fn insert(db: &Connection, key: &Key) -> Result<()> {
     db.execute(
-        "INSERT INTO main.__msduck_keys VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO main.__msduck_keys VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
         params![
             key.tag,
             key.object_id,
@@ -81,6 +84,7 @@ pub(super) fn insert(db: &Connection, key: &Key) -> Result<()> {
             list(&key.columns),
             list(&key.include),
             key.filter,
+            list(&key.filter_columns),
         ],
     )?;
     Ok(())
@@ -91,7 +95,7 @@ pub(super) fn remove(db: &Connection, tag: i64) -> Result<()> {
     Ok(())
 }
 
-const COLUMNS: &str = "tag,object_id,name,kind,is_unique,is_clustered,is_native,backend_name,incarnation,key_columns,included_columns,filter_definition";
+const COLUMNS: &str = "tag,object_id,name,kind,is_unique,is_clustered,is_native,backend_name,incarnation,key_columns,included_columns,filter_definition,filter_columns";
 
 fn read(row: &duckdb::Row<'_>) -> duckdb::Result<Key> {
     Ok(Key {
@@ -107,6 +111,7 @@ fn read(row: &duckdb::Row<'_>) -> duckdb::Result<Key> {
         columns: parse_list(&row.get::<_, String>(9)?),
         include: parse_list(&row.get::<_, String>(10)?),
         filter: row.get(11)?,
+        filter_columns: parse_list(&row.get::<_, String>(12)?),
     })
 }
 
@@ -139,15 +144,13 @@ pub(super) fn all(db: &Connection) -> Result<Vec<Key>> {
         .collect::<duckdb::Result<Vec<_>>>()?)
 }
 
-/// Forget keys of dropped tables and managed keys whose backend index is
-/// gone. Object IDs are never reused, so a recreated table cannot inherit
-/// an old row.
+/// Forget keys of dropped tables. Object IDs are never reused, so a
+/// recreated table cannot inherit an old row. A live table's rows stay even
+/// while its indexes are briefly dropped around an ALTER TABLE.
 pub(super) fn prune(db: &Connection) -> Result<()> {
     db.execute_batch(
         "DELETE FROM main.__msduck_keys k WHERE NOT EXISTS(
-           SELECT 1 FROM sys.objects o WHERE o.object_id=k.object_id AND rtrim(o.type)='U')
-         OR (k.backend_name IS NOT NULL AND NOT EXISTS(
-           SELECT 1 FROM duckdb_indexes() i WHERE i.database_name=current_database() AND i.index_name=k.backend_name))",
+           SELECT 1 FROM sys.objects o WHERE o.object_id=k.object_id AND rtrim(o.type)='U')",
     )?;
     Ok(())
 }

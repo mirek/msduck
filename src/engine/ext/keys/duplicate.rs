@@ -3,7 +3,7 @@
 //! DuckDB reports which key values collided but not which index or
 //! constraint. Keys-managed indexes carry a tag that names them; native
 //! DuckDB constraints are matched on the target table by kind and columns.
-use super::{TAG_BASE, catalog, tables};
+use super::{catalog, tables};
 use crate::engine::{Execution, Parameter, Session, ext};
 use anyhow::Result;
 use duckdb::Connection;
@@ -147,10 +147,10 @@ fn managed(
     table: Option<&tables::Table>,
     duplicate: &Duplicate,
 ) -> Result<Option<Diagnostic>> {
-    let Some(tag) = duplicate.tag().filter(|tag| *tag > TAG_BASE) else {
+    let Some(tag) = duplicate.tag() else {
         return Ok(None);
     };
-    let Some(key) = catalog::by_tag(db, tag - TAG_BASE)? else {
+    let Some(key) = catalog::by_tag(db, tag)? else {
         return Ok(None);
     };
     if key.backend_name.is_none() || table.is_some_and(|t| t.object_id != key.object_id) {

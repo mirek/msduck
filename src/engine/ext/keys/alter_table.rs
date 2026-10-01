@@ -5,11 +5,12 @@
 //!   Server. Widening a variable-length character or binary key column is
 //!   allowed.
 //! - DuckDB refuses most ALTER TABLE forms while the table has an index
-//!   (even ADD COLUMN, when the column gets a default or NOT NULL), so the table's indexes are dropped before the
-//!   change and recreated from their definitions after it. Outside a user
-//!   transaction the drop commits first, and the indexes return even when
-//!   the change fails. Inside one, everything shares the transaction (see
-//!   [`within_transaction`]).
+//!   (even ADD COLUMN, when the column gets a default or NOT NULL). For
+//!   column changes the table's indexes are dropped before the change and
+//!   recreated from their definitions after it, in one transaction
+//!   ([`within_transaction`]). Outside a user transaction, when DuckDB still
+//!   refuses because of the dropped indexes, the drop commits first
+//!   ([`two_phase`]).
 use super::{atomically, catalog, tables};
 use crate::engine::{Execution, Parameter, Session, StatementErrors, ext};
 use anyhow::Result;
@@ -31,7 +32,13 @@ fn dependents(db: &duckdb::Connection, object_id: i32) -> Result<Vec<Dependent>>
         .into_iter()
         .map(|key| Dependent {
             index: !key.constraint(),
-            columns: key.columns.iter().chain(&key.include).cloned().collect(),
+            columns: key
+                .columns
+                .iter()
+                .chain(&key.include)
+                .chain(&key.filter_columns)
+                .cloned()
+                .collect(),
             name: key.name,
         })
         .collect();
@@ -154,6 +161,19 @@ pub(super) fn run(
             .into());
         }
     }
+    // Only column changes are rebuilt around; DuckDB keeps refusing other
+    // forms (such as renames, after which the saved definitions would no
+    // longer bind) while the table has indexes.
+    if !alter.operations.iter().all(|operation| {
+        matches!(
+            operation,
+            AlterTableOperation::AddColumn { .. }
+                | AlterTableOperation::DropColumn { .. }
+                | AlterTableOperation::AlterColumn { .. }
+        )
+    }) {
+        return Ok(None);
+    }
     let indexes: Vec<(String, String)> = session
         .db
         .prepare(
@@ -182,28 +202,35 @@ pub(super) fn run(
     }
     let statement = statement.clone();
     if session.transactions > 0 {
-        return within_transaction(session, &table, &indexes, statement, parameters).map(Some);
+        return within_transaction(session, &table, &indexes, statement, parameters, true)
+            .map(Some);
     }
-    // Outside a user transaction the indexes are dropped and committed
-    // first: DuckDB still sees an index dropped in the open transaction
-    // when it checks DROP COLUMN and ALTER COLUMN.
-    atomically(session, |session| {
-        save(&session.db, &table)?;
-        drop_indexes(&session.db, &table, &indexes)
-    })?;
-    let result = ext::reenter(session, "keys", |session| {
-        session.execute(statement, parameters)
-    });
-    // Restore the indexes whether or not the change succeeded.
-    let restored = atomically(session, |session| {
-        for (_, sql) in &indexes {
-            session.db.execute_batch(sql)?;
+    // Rebuild atomically in an owned transaction when DuckDB allows it.
+    match atomically(session, |session| {
+        within_transaction(
+            session,
+            &table,
+            &indexes,
+            statement.clone(),
+            parameters,
+            false,
+        )
+    }) {
+        Ok(execution) => Ok(Some(execution)),
+        Err(error) if depends_on_dropped_index(&error) => {
+            two_phase(session, &table, &indexes, statement, parameters).map(Some)
         }
-        restore(&session.db, &table)
-    });
-    let execution = result?;
-    restored?;
-    Ok(Some(execution))
+        Err(error) => Err(error),
+    }
+}
+
+/// DuckDB still sees an index dropped in the open transaction when it
+/// checks DROP COLUMN and ALTER COLUMN.
+fn depends_on_dropped_index(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| {
+        let text = cause.to_string();
+        text.contains("an index depends on") || text.contains("Dependency Error")
+    })
 }
 
 /// Keep the table's rows of the table-owned index catalog: the engine prunes
@@ -250,49 +277,112 @@ fn restore(db: &duckdb::Connection, table: &tables::Table) -> Result<()> {
          DELETE FROM main.__msduck_index_catalog
            WHERE incarnation IN (SELECT incarnation FROM __msduck_keys_saved_indexes);
          INSERT INTO main.__msduck_index_catalog SELECT * FROM __msduck_keys_saved_indexes;
-         INSERT INTO main.__msduck_index_keys SELECT * FROM __msduck_keys_saved_columns;
-         DROP TABLE __msduck_keys_saved_indexes;
-         DROP TABLE __msduck_keys_saved_columns",
+         INSERT INTO main.__msduck_index_keys SELECT * FROM __msduck_keys_saved_columns",
     )?;
+    forget_saved(db);
     Ok(())
 }
 
-/// Inside a user transaction everything shares it. DuckDB cannot create an
-/// index under a name dropped in the same transaction, so each index
-/// returns under a new backend name, and the catalogs follow. DuckDB can
-/// still refuse a change that depends on a dropped index's columns.
+fn forget_saved(db: &duckdb::Connection) {
+    let _ = db.execute_batch(
+        "DROP TABLE IF EXISTS __msduck_keys_saved_indexes;
+         DROP TABLE IF EXISTS __msduck_keys_saved_columns",
+    );
+}
+
+/// Recreate the dropped indexes under new backend names (DuckDB cannot
+/// reuse a name dropped in the same transaction); the catalogs follow.
+fn recreate_renamed(
+    db: &duckdb::Connection,
+    table: &tables::Table,
+    indexes: &[(String, String)],
+) -> Result<()> {
+    for (name, sql) in indexes {
+        let base = match name.rsplit_once("_r") {
+            Some((base, suffix)) if suffix.bytes().all(|b| b.is_ascii_digit()) => base,
+            _ => name.as_str(),
+        };
+        let renamed = format!("{base}_r{}", catalog::next_tag(db)?);
+        let marker = format!("INDEX {name} ON ");
+        anyhow::ensure!(sql.contains(&marker), "unexpected index definition {sql}");
+        db.execute_batch(&sql.replacen(&marker, &format!("INDEX {renamed} ON "), 1))?;
+        db.execute(
+            "UPDATE main.__msduck_keys SET backend_name=? WHERE backend_name=?",
+            [&renamed, name],
+        )?;
+        db.execute(
+            "UPDATE __msduck_keys_saved_indexes SET backend_name=? WHERE backend_schema=? AND backend_name=?",
+            [&renamed, &table.schema, name],
+        )?;
+    }
+    restore(db, table)
+}
+
+/// Drop, change and recreate in the current transaction. Inside a user
+/// transaction a failed change must not leave the indexes dropped: they
+/// are recreated before the error is returned, and if even that fails the
+/// transaction can only roll back.
 fn within_transaction(
     session: &mut Session,
     table: &tables::Table,
     indexes: &[(String, String)],
     statement: Statement,
     parameters: &mut HashMap<String, Parameter>,
+    user: bool,
 ) -> Result<Execution> {
     save(&session.db, table)?;
     drop_indexes(&session.db, table, indexes)?;
-    let execution = ext::reenter(session, "keys", |session| {
+    let result = ext::reenter(session, "keys", |session| {
         session.execute(statement, parameters)
-    })?;
-    for (name, sql) in indexes {
-        let base = match name.rsplit_once("_r") {
-            Some((base, suffix)) if suffix.bytes().all(|b| b.is_ascii_digit()) => base,
-            _ => name.as_str(),
-        };
-        let renamed = format!("{base}_r{}", catalog::next_tag(&session.db)?);
-        let marker = format!("INDEX {name} ON ");
-        anyhow::ensure!(sql.contains(&marker), "unexpected index definition {sql}");
-        session
-            .db
-            .execute_batch(&sql.replacen(&marker, &format!("INDEX {renamed} ON "), 1))?;
-        session.db.execute(
-            "UPDATE main.__msduck_keys SET backend_name=? WHERE backend_name=?",
-            [&renamed, name],
-        )?;
-        session.db.execute(
-            "UPDATE __msduck_keys_saved_indexes SET backend_name=? WHERE backend_schema=? AND backend_name=?",
-            [&renamed, &table.schema, name],
-        )?;
+    });
+    match result {
+        Ok(execution) => {
+            recreate_renamed(&session.db, table, indexes)?;
+            Ok(execution)
+        }
+        Err(error) => {
+            if user && recreate_renamed(&session.db, table, indexes).is_err() {
+                session.transaction_doomed = true;
+            }
+            forget_saved(&session.db);
+            Err(error)
+        }
     }
-    restore(&session.db, table)?;
-    Ok(execution)
+}
+
+/// Outside a user transaction, when DuckDB needs the drop committed first:
+/// commit the drop, run the change, then recreate each index and restore
+/// the catalog rows, whether or not the change succeeded. Writers in other
+/// sessions can act between the commits.
+fn two_phase(
+    session: &mut Session,
+    table: &tables::Table,
+    indexes: &[(String, String)],
+    statement: Statement,
+    parameters: &mut HashMap<String, Parameter>,
+) -> Result<Execution> {
+    atomically(session, |session| {
+        save(&session.db, table)?;
+        drop_indexes(&session.db, table, indexes)
+    })?;
+    let result = ext::reenter(session, "keys", |session| {
+        session.execute(statement, parameters)
+    });
+    // One index failing to return (another session's duplicate, say) does
+    // not keep the others away.
+    let mut failure = None;
+    for (_, sql) in indexes {
+        if let Err(error) = atomically(session, |session| Ok(session.db.execute_batch(sql)?)) {
+            failure.get_or_insert(error);
+        }
+    }
+    if let Err(error) = atomically(session, |session| restore(&session.db, table)) {
+        failure.get_or_insert(error);
+    }
+    forget_saved(&session.db);
+    let execution = result?;
+    match failure {
+        Some(error) => Err(error.context("an index could not be recreated after ALTER TABLE")),
+        None => Ok(execution),
+    }
 }

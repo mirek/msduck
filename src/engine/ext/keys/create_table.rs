@@ -157,6 +157,7 @@ fn create(
                 columns: columns.iter().map(|c| c.name.clone()).collect(),
                 include: vec![],
                 filter: None,
+                filter_columns: vec![],
             },
         )?;
     }

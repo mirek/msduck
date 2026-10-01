@@ -310,6 +310,11 @@ pub(super) fn run(session: &mut Session, statement: &Statement) -> Result<Option
                 columns: columns.iter().map(|c| c.name.clone()).collect(),
                 include,
                 filter: index.predicate.as_ref().map(|p| p.to_string()),
+                filter_columns: index
+                    .predicate
+                    .as_ref()
+                    .map(|p| filter::columns(p, &table.columns))
+                    .unwrap_or_default(),
             },
         )?;
         Ok(Some(Execution::statement(vec![], None, 200)))

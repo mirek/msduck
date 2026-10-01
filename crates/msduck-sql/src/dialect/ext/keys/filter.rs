@@ -158,6 +158,20 @@ fn comparison(column: &Column, op: &str, value: Constant) -> Result<String, Erro
     })
 }
 
+/// The table columns a filter predicate references, by their declared names.
+pub fn columns(predicate: &Expr, table: &[Column]) -> Vec<String> {
+    let mut found: Vec<String> = vec![];
+    let _ = visit_expressions(predicate, |expr| {
+        if let Some(Ok(column)) = column(expr, table)
+            && !found.contains(&column.name)
+        {
+            found.push(column.name.clone());
+        }
+        std::ops::ControlFlow::<()>::Continue(())
+    });
+    found
+}
+
 /// Lower a filter predicate; the result is true exactly for rows the index
 /// covers.
 pub fn lower(predicate: &Expr, columns: &[Column]) -> Result<String, Error> {

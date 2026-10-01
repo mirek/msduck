@@ -26,19 +26,28 @@ pub struct Duplicate {
 }
 
 impl Duplicate {
-    /// The tag of a keys-managed index: the value of its first expression,
-    /// `CASE WHEN ... END`. The filter inside that expression can contain
-    /// any text, so the tag is read after the expression's closing `END`.
+    /// The tag of a keys-managed index (without [`TAG_BASE`]): the value of
+    /// its first expression, `CASE WHEN ... END`. The filter inside that
+    /// expression can contain any text, so the tag is the first value after
+    /// an `END` that is a tag.
+    ///
+    /// [`TAG_BASE`]: super::value::TAG_BASE
     pub fn tag(&self) -> Option<i64> {
-        let text = match self.expressions {
-            None => self.values.first()?.as_str(),
-            Some(_) => {
-                let start = self.body.find(" END: ")? + " END: ".len();
-                let rest = &self.body[start..];
-                &rest[..rest.find(", ").unwrap_or(rest.len())]
-            }
+        let tag = |text: &str| {
+            text.parse::<i64>()
+                .ok()
+                .filter(|v| *v > super::value::TAG_BASE)
+                .map(|v| v - super::value::TAG_BASE)
         };
-        text.parse().ok()
+        if self.expressions.is_none() {
+            return tag(self.values.first()?);
+        }
+        self.body
+            .match_indices(" END: ")
+            .find_map(|(start, marker)| {
+                let rest = &self.body[start + marker.len()..];
+                tag(&rest[..rest.find(", ").unwrap_or(rest.len())])
+            })
     }
 
     /// The `count` values after the tag of a keys-managed index. Read from
@@ -189,14 +198,14 @@ mod tests {
 
     #[test]
     fn managed_tags_and_values_survive_filter_text() {
-        let d = duplicate("Constraint Error: Duplicate key \"CASE  WHEN ((status = 'a: b, c: d') AND (n > 0)) THEN (CAST(9000000000000000003 AS BIGINT)) ELSE CAST(NULL AS BIGINT) END: 9000000000000000003, (code IS NULL): false, COALESCE(code, CAST(0 AS INTEGER)): 5, hex(rtrim(v, ' ')): 61\" violates unique constraint.").unwrap();
-        assert_eq!(d.tag(), Some(9_000_000_000_000_000_003));
+        let d = duplicate("Constraint Error: Duplicate key \"CASE  WHEN ((status = 'x END: 1, y') AND (n > 0)) THEN (CAST(9000000000000000003 AS BIGINT)) ELSE CAST(NULL AS BIGINT) END: 9000000000000000003, (code IS NULL): false, COALESCE(code, CAST(0 AS INTEGER)): 5, hex(rtrim(v, ' ')): 61\" violates unique constraint.").unwrap();
+        assert_eq!(d.tag(), Some(3));
         assert_eq!(d.managed_values(3).unwrap(), ["false", "5", "61"]);
         let d = duplicate(
             "Constraint Error: PRIMARY KEY or UNIQUE constraint violation: duplicate key \"9000000000000000001, 7\"",
         )
         .unwrap();
-        assert_eq!(d.tag(), Some(9_000_000_000_000_000_001));
+        assert_eq!(d.tag(), Some(1));
         assert_eq!(d.managed_values(1).unwrap(), ["7"]);
         assert!(d.managed_values(2).is_none());
     }

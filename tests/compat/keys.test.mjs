@@ -339,10 +339,25 @@ test('ALTER TABLE keeps keys and indexes and refuses to drop their columns', asy
   await ok(c, 'DROP INDEX ux_items_w ON items')
   await ok(c, "INSERT items VALUES (N'd', 7, 11)")
   assert.deepEqual(await ok(c, 'SELECT id, code, w FROM items ORDER BY id'), [['a', null, 11], ['d', 7, 11]])
-  // A failed ALTER inside a transaction leaves the keys in place.
+  // ALTER inside a transaction: rolled back, failed or committed, the keys
+  // stay in place.
   await ok(c, 'ALTER TABLE items ADD y int NULL')
   await ok(c, 'BEGIN TRANSACTION; ALTER TABLE items DROP COLUMN y; ROLLBACK')
   await fails(c, "INSERT items VALUES (N'e', 7, 1, 1)", uq('uq_items_code', 'dbo.items', '7'))
+  const failed = await run(c, 'BEGIN TRANSACTION; ALTER TABLE items ADD t time(8) NULL')
+  assert.equal(failed.errors.length, 1)
+  await ok(c, 'COMMIT')
+  await fails(c, "INSERT items VALUES (N'e', 7, 1, 1)", uq('uq_items_code', 'dbo.items', '7'))
+  await ok(c, 'BEGIN TRANSACTION; ALTER TABLE items ADD z int NULL; COMMIT')
+  await fails(c, "INSERT items VALUES (N'e', 7, 1, 1, 1)", uq('uq_items_code', 'dbo.items', '7'))
+  await ok(c, "INSERT items VALUES (N'e', 8, 1, 1, 1)")
+  // A column a filter references is a dependency too.
+  await ok(c, 'CREATE TABLE filtered(id int NOT NULL, code int NULL, status int NULL)')
+  await ok(c, 'CREATE UNIQUE INDEX ux_filtered ON filtered(code) WHERE status > 0')
+  await fails(c, 'ALTER TABLE filtered DROP COLUMN status', ...dependent('index', 'ux_filtered', 'status'))
+  await ok(c, 'ALTER TABLE filtered DROP COLUMN id')
+  await ok(c, 'INSERT filtered VALUES (1, 1), (1, 0)')
+  await fails(c, 'INSERT filtered VALUES (1, 2)', ux('ux_filtered', 'dbo.filtered', '1'))
 })
 
 test('nullable unique keys stay foreign key targets; ambiguous duplicates keep DuckDB text', async t => {

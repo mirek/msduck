@@ -158,19 +158,27 @@ kept in `main.__msduck_keys`.
 
 ## ALTER TABLE
 
-- DROP COLUMN of a column that a key constraint or index uses (as a key or
-  INCLUDE column) fails with SQL Server's 5074 and 4922:
+- DROP COLUMN of a column that a key constraint or index uses (as a key,
+  INCLUDE or filter column) fails with SQL Server's 5074 and 4922:
   - `The object 'uq' is dependent on column 'code'.` for a constraint;
   - `The index 'ix' is dependent on column 'v'.` for an index;
   - `ALTER TABLE DROP COLUMN code failed because one or more objects access this column.`
 - ALTER COLUMN of such a column fails the same way, unless it widens a
   varchar, nvarchar or varbinary column, which SQL Server allows.
 - DuckDB refuses most ALTER TABLE forms while a table has an index, even
-  ADD COLUMN with a default or NOT NULL. The feature therefore drops the table's indexes (its own and the
-  table-owned index catalog's), runs the change, and recreates them from
-  their definitions. The catalogs keep the same index IDs and names. Keys
-  are enforced again afterwards; the tests check duplicates and DROP INDEX
-  after each rebuild.
+  ADD COLUMN with a default or NOT NULL. For ADD, DROP and ALTER COLUMN the
+  feature therefore drops the table's indexes (its own and the table-owned
+  index catalog's), runs the change, and recreates them from their
+  definitions in the same transaction. The catalogs keep the same index IDs
+  and names. Keys are enforced again afterwards; the tests check duplicates
+  and DROP INDEX after each rebuild.
+- Inside a user transaction, an ALTER that fails still gets its indexes
+  back. If they cannot return, the transaction can only roll back.
+- DuckDB still sees an index dropped in the open transaction when it checks
+  DROP COLUMN before an indexed column, or ALTER COLUMN of an indexed
+  column. Outside a user transaction such a change commits the drop first,
+  runs, and then recreates each index, whether or not the change succeeded.
+- Other ALTER TABLE forms keep DuckDB's refusal while the table has indexes.
 
 ## DROP INDEX
 
@@ -251,13 +259,12 @@ through a separate connection.
   constraint on the referenced columns. A foreign key cannot reference a key
   over STRUCT storage, such as an NVARCHAR or DATETIMEOFFSET primary key.
 - **ALTER TABLE.**
-  - Outside a user transaction, the index rebuild commits the drop first
-    and recreates the indexes afterwards. Another session's writes in
-    between can make recreating a unique index fail; the ALTER's result and
-    that failure are both reported.
-  - Inside a user transaction, DuckDB still sees the dropped indexes. It
-    then refuses DROP COLUMN before an indexed column, and ALTER COLUMN of
-    an indexed column, with its own message.
+  - When DuckDB needs the drop committed first (see ALTER TABLE above),
+    another session's writes can act between the commits. A duplicate
+    inserted then makes recreating that unique index fail. The other
+    indexes still return, and the failure is reported.
+  - Inside a user transaction, those changes fail with DuckDB's message,
+    and the transaction can only roll back.
   - A legacy index that neither catalog records keeps DuckDB's refusal.
   - ADD CONSTRAINT PRIMARY KEY/UNIQUE is the ALTER TABLE constraint work.
 - **Other paths.**
