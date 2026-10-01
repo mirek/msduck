@@ -9149,6 +9149,21 @@
       "dependencies": [],
       "issue": 728,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQvA"
+    },
+    {
+      "id": "gaps-identifiers-v1-keys-ratchet",
+      "title": "Retire the keys reference differences fixed by contextual identifiers",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-identifiers-v1",
+      "scope": [
+        "tests/compat/keys.test.mjs"
+      ],
+      "acceptance": [
+        "Remove the datetimeoffset-keys documented differences that existed only because a column named at was a DuckDB keyword, now that gaps-identifiers-v1 makes it a regular identifier; the ratchet test then asserts those steps match the SQL Server capture. Lands in the gaps-identifiers-v1 PR."
+      ],
+      "dependencies": [],
+      "issue": 729,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQvb"
     }
   ]
 }
