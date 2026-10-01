@@ -451,3 +451,30 @@ fn arguments_are_evaluated_once_and_nesting_stays_linear() {
     );
     fails(&mut s, "SELECT * FROM dbo.rt(2)", 40515);
 }
+
+#[test]
+fn procedures_call_functions() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    ok(
+        &mut s,
+        "CREATE FUNCTION dbo.inc(@x int) RETURNS int AS BEGIN RETURN @x + 1 END",
+    );
+    ok(
+        &mut s,
+        "CREATE FUNCTION dbo.it(@n int) RETURNS TABLE AS RETURN SELECT @n AS n UNION ALL SELECT @n * 2",
+    );
+    ok(&mut s, "CREATE TABLE dbo.r(w int, n int)");
+    ok(
+        &mut s,
+        "CREATE PROCEDURE dbo.p @v int AS BEGIN DECLARE @w int = dbo.inc(@v); INSERT dbo.r SELECT @w, n FROM dbo.it(@w) END",
+    );
+    ok(&mut s, "EXEC dbo.p 4");
+    assert_eq!(
+        rows(
+            &s,
+            "SELECT CAST(w AS VARCHAR), CAST(n AS VARCHAR) FROM dbo.r ORDER BY n"
+        ),
+        text(&[&[Some("5"), Some("5")], &[Some("5"), Some("10")]])
+    );
+}

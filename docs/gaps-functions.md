@@ -76,7 +76,8 @@ Scalar functions are called with a schema-qualified name anywhere an
 expression is allowed: select lists, WHERE, ORDER BY, GROUP BY, SET, DECLARE,
 IF and WHILE conditions, RETURN, DML values, DEFAULT and computed column
 definitions, other functions and any statement the engine executes for
-another feature (procedure and trigger bodies run through the same path). Table-valued functions (one- or two-part names) work in
+another feature (procedure and trigger bodies run through the same path;
+`tests/gaps_functions.rs` calls functions from a procedure). Table-valued functions (one- or two-part names) work in
 FROM, joins, subqueries, and CROSS and OUTER APPLY. Arguments bind by
 position and convert to the parameter types; `DEFAULT` selects the
 parameter's default, or NULL when it has none. Too many arguments fail with
