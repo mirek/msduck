@@ -66,7 +66,8 @@ export async function observeCatalog(connection){
 }
 
 async function referenceRun(){
- return withReferenceContainer(async config=>{
+ return withReferenceContainer(async(config,metadata)=>{
+  assertSameCapture(metadata.image,referenceImage,'pinned reference image')
   const admin=await connect(config)
   try {
    const result=await captureBatch(admin,'CREATE DATABASE msduck_catalog_reference')
@@ -74,7 +75,7 @@ async function referenceRun(){
   }finally{admin.close()}
   const connection=await connect({...config,options:{...config.options,database:'msduck_catalog_reference'}})
   try{return await observeCatalog(connection)}finally{connection.close()}
- })
+ },{image:referenceImage})
 }
 
 async function main(args){
