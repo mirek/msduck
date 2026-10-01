@@ -642,11 +642,12 @@ fn every_write_form_is_restored() {
         "DELETE t FROM dbo.k t WHERE t.id = 3",
         "INSERT INTO k (id, v) VALUES (4, 4)",
         "UPDATE dbo.k SET v = v + 1 OUTPUT inserted.id, inserted.v INTO dbo.audit(id, v) WHERE id = 4",
+        "MERGE dbo.k AS t USING (VALUES (5, 5), (1, 99)) AS src(id, v) ON t.id = src.id WHEN MATCHED THEN UPDATE SET v = src.v WHEN NOT MATCHED THEN INSERT (id, v) VALUES (src.id, src.v);",
         "TRUNCATE TABLE dbo.other",
     ] {
         run(&mut s, sql).unwrap_or_else(|number| panic!("{sql}: {number}"));
     }
-    assert_eq!(ints(&s, "SELECT id FROM dbo.k ORDER BY id"), [1, 2, 4]);
+    assert_eq!(ints(&s, "SELECT id FROM dbo.k ORDER BY id"), [1, 2, 4, 5]);
     run(&mut s, "ROLLBACK TRAN s").unwrap();
     assert_eq!(
         pairs(&s, "SELECT id, CAST(v AS VARCHAR) FROM dbo.k ORDER BY id"),

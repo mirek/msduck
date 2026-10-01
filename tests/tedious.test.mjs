@@ -49,7 +49,7 @@ test('driver transactions share state with SQL batches and restore descriptors',
     await assert.rejects(query(c, 'INSERT INTO dbo.transactions VALUES (99)'), e => /transaction descriptor/.test(e.message))
   } finally { c.transactionDescriptors[index] = descriptor }
   await assert.rejects(transaction(c, 'rollbackTransaction', 'missing'), e => e.number === 6401)
-  await assert.rejects(transaction(c, 'saveTransaction', 'point'), e => e.number === 40515)
+  await transaction(c, 'saveTransaction', 'point')
   assert.deepEqual((await query(c, 'SELECT @@TRANCOUNT, XACT_STATE()')).rows, [[1, 1]])
   await query(c, 'INSERT INTO dbo.transactions VALUES (1)')
   await query(c, 'BEGIN TRANSACTION')
