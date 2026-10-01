@@ -349,41 +349,44 @@ fn time_round_scale(expr: &Expr) -> Option<i64> {
         .map(i64::from)
 }
 
-/// Route the built-in character conversions through variants that write
-/// SQL Server's default text for bit and date/time values.
-fn default_text(expr: &mut Expr) {
-    if let Expr::Function(function) = expr {
-        let name = function.name.to_string();
-        if matches!(
-            name.as_str(),
-            "__msduck_cast_varchar"
-                | "__msduck_try_varchar"
-                | "__msduck_cast_char"
-                | "__msduck_try_char"
-                | "__msduck_cast_nvarchar"
-                | "__msduck_try_nvarchar"
-        ) {
-            function.name = sqlparser::ast::ObjectName::from(vec![sqlparser::ast::Ident::new(
-                name.replacen("__msduck_", "__msduck_conversion_", 1),
-            )]);
-            if let sqlparser::ast::FunctionArguments::List(list) = &mut function.args {
-                let scale = match list.args.first() {
-                    Some(sqlparser::ast::FunctionArg::Unnamed(
-                        sqlparser::ast::FunctionArgExpr::Expr(value),
-                    )) => time_round_scale(value).unwrap_or(-1),
-                    _ => -1,
-                };
-                list.args.push(sqlparser::ast::FunctionArg::Unnamed(
-                    sqlparser::ast::FunctionArgExpr::Expr(number(scale)),
-                ));
-            }
-        }
+/// A built-in character conversion of a value lowered from time(p): format
+/// it with style 121 and the declared scale, which the macros cannot see.
+fn time_text(expr: &mut Expr) {
+    let Expr::Function(function) = expr else {
+        return;
+    };
+    let code = match function.name.to_string().as_str() {
+        "__msduck_cast_varchar" | "__msduck_try_varchar" => 0,
+        "__msduck_cast_char" | "__msduck_try_char" => 1,
+        "__msduck_cast_nvarchar" | "__msduck_try_nvarchar" => 2,
+        _ => return,
+    };
+    let sqlparser::ast::FunctionArguments::List(list) = &mut function.args else {
+        return;
+    };
+    let Some(sqlparser::ast::FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(value))) =
+        list.args.first_mut()
+    else {
+        return;
+    };
+    if let Some(scale) = time_round_scale(value) {
+        *value = call(
+            "__msduck_conversion_text",
+            vec![
+                value.clone(),
+                number(121),
+                number(code),
+                boolean(false),
+                number(-1),
+                number(scale),
+            ],
+        );
     }
 }
 
 /// Lower a styled conversion the built-in rules left in place.
 pub(super) fn lower(expr: &mut Expr) -> Result<(), String> {
-    default_text(expr);
+    time_text(expr);
     let Expr::Convert {
         is_try,
         expr: value,

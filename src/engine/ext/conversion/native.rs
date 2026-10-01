@@ -797,15 +797,17 @@ pub(super) fn register(db: &duckdb::Connection) -> anyhow::Result<()> {
     db.register_scalar_function::<Collation<1>>("__msduck_collation_key")?;
     db.register_scalar_function::<Collation<2>>("__msduck_collation_upper")?;
     db.register_scalar_function::<Format>("__msduck_format")?;
-    // The built-in character conversions, with SQL Server's default text
+    // Redefine the built-in character conversion macros (src/varchar.rs and
+    // src/nvarchar.rs register them first) with SQL Server's default text
     // for bit values (1 and 0; DuckDB writes true and false), datetime and
     // smalldatetime (style 0) and datetime2, datetimeoffset and time (style
-    // 121; `scale` is the time's declared scale or -1). typeof() is resolved
-    // when the macro binds, and CASE evaluates the value once per row.
+    // 121). The names stay, so later rules that recognize these calls still
+    // apply. typeof() is resolved when the macro binds, and CASE evaluates
+    // the value once per row.
     let text = "CASE WHEN typeof(value) = 'BOOLEAN' THEN CASE {cast}(value AS VARCHAR) WHEN 'true' THEN '1' WHEN 'false' THEN '0' END \
         WHEN typeof(value) = 'TIMESTAMP' THEN __msduck_conversion_text(value, 0, {code}, false, -1, -1) \
         WHEN starts_with(typeof(value), 'STRUCT(__msduck_datetime2_') OR starts_with(typeof(value), 'STRUCT(__msduck_datetimeoffset_') OR typeof(value) IN ('TIME', 'TIME_NS') \
-        THEN __msduck_conversion_text(value, 121, {code}, false, -1, scale) \
+        THEN __msduck_conversion_text(value, 121, {code}, false, -1, -1) \
         ELSE {cast}(value AS VARCHAR) END";
     for (family, code, flags) in [
         (
@@ -829,7 +831,7 @@ pub(super) fn register(db: &duckdb::Connection) -> anyhow::Result<()> {
                 .replace("{cast}", cast)
                 .replace("{code}", &code.to_string());
             db.execute_batch(&format!(
-                "CREATE OR REPLACE MACRO main.__msduck_conversion_{mode}_{family}(value, width, scale) AS __msduck_{family}_{limit}limit({text}, width, {flags})"
+                "CREATE OR REPLACE MACRO main.__msduck_{mode}_{family}(value, width) AS __msduck_{family}_{limit}limit({text}, width, {flags})"
             ))?;
         }
     }
