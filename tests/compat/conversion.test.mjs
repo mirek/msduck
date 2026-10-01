@@ -150,3 +150,9 @@ test('bit converts to 1 and 0 text', async t => {
   const { rows } = await query(connection, 'SELECT CONVERT(nvarchar, CAST(1 AS bit)), CAST(CAST(0 AS bit) AS varchar), CONVERT(varchar(1), @b)', [['b', TYPES.Bit, true]])
   assert.deepEqual(rows, [['1', '0', '1']])
 })
+
+test('date and time cast to text with SQL Server default styles', async t => {
+  const connection = await start(t)
+  const { rows } = await query(connection, "SELECT CAST(CAST('2024-01-02 03:04:05.1234567' AS datetime2) AS varchar(40)), CAST(CAST('2024-01-02 03:04:05.1234567 +05:30' AS datetimeoffset) AS nvarchar(40)), CAST(CAST('2024-01-02 03:04:05.123' AS datetime) AS varchar(30)), CONVERT(varchar(30), @d)", [['d', TYPES.DateTime2, new Date('2024-01-02T03:04:05.120Z'), { scale: 3 }]])
+  assert.deepEqual(rows, [['2024-01-02 03:04:05.1234567', '2024-01-02 03:04:05.1234567 +05:30', 'Jan  2 2024  3:04AM', '2024-01-02 03:04:05.120']])
+})

@@ -322,9 +322,36 @@ fn style_argument(style: &Expr) -> Expr {
     }
 }
 
+/// The declared scale of a lowered time value: `__msduck_time_round(value,
+/// 10^(9 - scale))`.
+fn time_round_scale(expr: &Expr) -> Option<i64> {
+    let Expr::Function(function) = expr else {
+        return None;
+    };
+    if function.name.to_string() != "__msduck_time_round" {
+        return None;
+    }
+    let sqlparser::ast::FunctionArguments::List(list) = &function.args else {
+        return None;
+    };
+    let Some(sqlparser::ast::FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(
+        Expr::Value(value),
+    ))) = list.args.get(1)
+    else {
+        return None;
+    };
+    let Literal::Number(text, _) = &value.value else {
+        return None;
+    };
+    let factor: u64 = text.parse().ok()?;
+    (0..=7)
+        .find(|scale| 10u64.pow(9 - scale) == factor)
+        .map(i64::from)
+}
+
 /// Route the built-in character conversions through variants that write
-/// bit values as 1 and 0.
-fn bit_text(expr: &mut Expr) {
+/// SQL Server's default text for bit and date/time values.
+fn default_text(expr: &mut Expr) {
     if let Expr::Function(function) = expr {
         let name = function.name.to_string();
         if matches!(
@@ -339,13 +366,24 @@ fn bit_text(expr: &mut Expr) {
             function.name = sqlparser::ast::ObjectName::from(vec![sqlparser::ast::Ident::new(
                 name.replacen("__msduck_", "__msduck_conversion_", 1),
             )]);
+            if let sqlparser::ast::FunctionArguments::List(list) = &mut function.args {
+                let scale = match list.args.first() {
+                    Some(sqlparser::ast::FunctionArg::Unnamed(
+                        sqlparser::ast::FunctionArgExpr::Expr(value),
+                    )) => time_round_scale(value).unwrap_or(-1),
+                    _ => -1,
+                };
+                list.args.push(sqlparser::ast::FunctionArg::Unnamed(
+                    sqlparser::ast::FunctionArgExpr::Expr(number(scale)),
+                ));
+            }
         }
     }
 }
 
 /// Lower a styled conversion the built-in rules left in place.
 pub(super) fn lower(expr: &mut Expr) -> Result<(), String> {
-    bit_text(expr);
+    default_text(expr);
     let Expr::Convert {
         is_try,
         expr: value,

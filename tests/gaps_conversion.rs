@@ -467,3 +467,44 @@ async fn bit_converts_to_one_and_zero_text() {
         .collect();
     assert_eq!(got, [("1", "1"), ("0", "0")]);
 }
+
+#[tokio::test]
+async fn date_and_time_cast_to_text_without_a_style() {
+    let server = Server::open(":memory:").unwrap();
+    let mut client = connect(&server).await;
+    // SQL Server's defaults: style 0 for datetime and smalldatetime, style
+    // 121 for date, time, datetime2 and datetimeoffset.
+    assert_eq!(
+        texts(
+            &mut client,
+            "SELECT CAST(CAST('2024-01-02 03:04:05.1234567' AS datetime2) AS varchar(40)), CAST(CAST('2024-01-02 03:04:05.12' AS datetime2(3)) AS varchar(40)), CONVERT(varchar, CAST('2024-01-02 03:04:05' AS datetime2(0))), CAST(CAST('2024-01-02 03:04:05.1234567 +05:30' AS datetimeoffset) AS nvarchar(40)), CAST(CAST('2024-01-02 03:04:05.123' AS datetime) AS varchar(40)), CAST(CAST('2024-01-02 15:04:05' AS smalldatetime) AS nvarchar(30)), CAST(CAST('2024-01-02' AS date) AS varchar(40)), CAST(CAST('03:04:05.12' AS time(3)) AS varchar(40)), TRY_CAST(CAST('03:04:05' AS time(0)) AS nvarchar(20))"
+        )
+        .await,
+        some(&[
+            "2024-01-02 03:04:05.1234567",
+            "2024-01-02 03:04:05.120",
+            "2024-01-02 03:04:05",
+            "2024-01-02 03:04:05.1234567 +05:30",
+            "Jan  2 2024  3:04AM",
+            "Jan  2 2024  3:04PM",
+            "2024-01-02",
+            "03:04:05.120",
+            "03:04:05"
+        ])
+    );
+    client
+        .simple_query("CREATE TABLE dbo.moments (d2 datetime2(2), o datetimeoffset(0), d datetime); INSERT dbo.moments VALUES ('2024-01-02 03:04:05.12', '2024-01-02 03:04:05 -08:00', '2024-12-31 23:59:59.997')")
+        .await
+        .unwrap()
+        .into_results()
+        .await
+        .unwrap();
+    assert_eq!(
+        texts(
+            &mut client,
+            "SELECT CAST(d2 AS varchar(30)), CONVERT(nvarchar(40), o), CAST(d AS varchar(30)) FROM dbo.moments"
+        )
+        .await,
+        some(&["2024-01-02 03:04:05.12", "2024-01-02 03:04:05 -08:00", "Dec 31 2024 11:59PM"])
+    );
+}

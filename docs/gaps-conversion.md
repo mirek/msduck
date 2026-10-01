@@ -101,8 +101,11 @@ binary styles, 241 (295 for smalldatetime) for text that does not parse, 242
 for an out-of-range field and 8114 for invalid hexadecimal. TRY_CONVERT
 returns NULL instead.
 
-Unstyled CAST and CONVERT of bit values to character types give `1` and
-`0` (DuckDB writes BOOLEAN as `true` and `false`).
+Unstyled CAST and CONVERT to character types use SQL Server's default text:
+`1` and `0` for bit (DuckDB writes BOOLEAN as `true` and `false`), style 0
+for datetime and smalldatetime, and style 121 for date, time, datetime2 and
+datetimeoffset, with the declared fraction digits. A time column's scale is
+not known after translation, so it shows 7 digits; a CAST to time(p) keeps p.
 
 ## FORMAT
 
