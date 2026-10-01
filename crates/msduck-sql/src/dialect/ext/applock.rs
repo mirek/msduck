@@ -131,7 +131,11 @@ mod tests {
 
     #[test]
     fn other_procedures_decline() {
-        assert!(crate::batch::parse("EXEC @rc = dbo.other_proc 1").is_err());
+        // Other procedures are parsed by the procedures feature; the applock
+        // parser leaves them without an applock status variable.
+        let other = parse_one("EXEC @rc = dbo.other_proc 1");
+        assert!(status_variable(&other).is_none());
+        assert!(procedure("dbo.other_proc").is_none());
         assert_eq!(procedure("master..sp_getapplock"), Some("sp_getapplock"));
         assert_eq!(
             procedure("[sys].[sp_releaseapplock]"),
