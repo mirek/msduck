@@ -8977,6 +8977,28 @@
       "dependencies": [],
       "issue": 727,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQur"
+    },
+    {
+      "id": "gaps-rpc-procedures-v1-runtime",
+      "title": "Procedure runtime entry for RPC calls; RPC duplicate keys end only the statement",
+      "state": "ready",
+      "authorization": "Owner-approved successor (2026-10-01) of stalled prepared-rpc-metadata-v1 for src/rpc.rs, umbrella #710. companion of gaps-rpc-procedures-v1",
+      "scope": [
+        "src/engine/ext/procedures.rs",
+        "src/engine/ext/procedures/rpc.rs",
+        "src/engine/ext/keys/duplicate.rs",
+        "tests/compat/procedures.test.mjs",
+        "docs/gaps-procedures.md",
+        "docs/gaps-keys.md"
+      ],
+      "acceptance": [
+        "A crate-visible Session entry in the procedures feature runs an RPC request that names a procedure (or sp_executesql with OUTPUT parameters) through the same exec hooks as SQL EXEC, binding named/positional/DEFAULT/OUTPUT arguments, and returns the call's tokens, outcome and final OUTPUT values for src/rpc.rs to complete with RETURNSTATUS, RETURNVALUE and DONEPROC as SQL Server does.",
+        "A duplicate key inside an RPC request ends only that statement (2627/2601, 3621, DONEINPROC with the error flag) as in SQL batches, matching the captured sp_prepexec and sp_executesql streams.",
+        "The procedures replay test and gaps docs reflect the closed RPC gaps; delivered in the same PR as gaps-rpc-procedures-v1 with the AGENTS.md checks."
+      ],
+      "dependencies": [],
+      "issue": 753,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PeNMc"
     }
   ]
 }
