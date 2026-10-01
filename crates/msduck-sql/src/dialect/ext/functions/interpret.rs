@@ -191,13 +191,17 @@ impl Run<'_> {
     }
 }
 
-/// Literal argument values bound to parameters.
+/// Literal argument values bound to parameters, and every local variable
+/// declared up front as NULL (its scope is the whole body).
 fn parameters(
     definition: &Definition,
+    body: &[Statement],
     arguments: Vec<Expr>,
     evaluator: &mut dyn Evaluator,
 ) -> Result<Env> {
+    fold::check_table_variables(body)?;
     let mut env = Env::default();
+    fold::predeclare(body, &mut env)?;
     for (parameter, argument) in definition.parameters.iter().zip(arguments) {
         let value = evaluator.value(argument, &parameter.data_type)?;
         env.declare(&parameter.name, parameter.data_type.clone(), value);
@@ -228,7 +232,7 @@ pub fn scalar(
     else {
         bail!("not a scalar function");
     };
-    let mut env = parameters(definition, arguments, evaluator)?;
+    let mut env = parameters(definition, body, arguments, evaluator)?;
     if definition.options.returns_null_on_null_input && any_null(definition, &env) {
         return evaluator.value(fold::null(), returns);
     }
@@ -263,7 +267,7 @@ pub fn table(
     else {
         bail!("not a multi-statement table-valued function");
     };
-    let mut env = parameters(definition, arguments, evaluator)?;
+    let mut env = parameters(definition, body, arguments, evaluator)?;
     let mut run = Run {
         evaluator,
         steps: 0,

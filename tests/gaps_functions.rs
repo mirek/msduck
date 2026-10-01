@@ -355,3 +355,99 @@ fn errors_match_sql_server_numbers() {
     ok(&mut s, "DROP TABLE dbo.g");
     ok(&mut s, "DROP FUNCTION dbo.f");
 }
+
+#[test]
+fn dependencies_follow_what_actually_exists() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    ok(
+        &mut s,
+        "CREATE FUNCTION dbo.ff(@x int) RETURNS int AS BEGIN RETURN @x END",
+    );
+    // A dropped computed column and a failed CREATE TABLE leave no reference.
+    ok(&mut s, "CREATE TABLE dbo.c(a int, c AS dbo.ff(a))");
+    ok(&mut s, "ALTER TABLE dbo.c DROP COLUMN c");
+    ok(&mut s, "ALTER TABLE dbo.c ADD c int");
+    ok(
+        &mut s,
+        "ALTER FUNCTION dbo.ff(@x int) RETURNS int AS BEGIN RETURN @x + 1 END",
+    );
+    let (_, created) = run(
+        &mut s,
+        "CREATE TABLE dbo.u(a int, c AS dbo.ff(a), d nosuchtype)",
+    );
+    assert!(!created);
+    ok(&mut s, "CREATE TABLE dbo.u(a int, c int)");
+    ok(
+        &mut s,
+        "ALTER FUNCTION dbo.ff(@x int) RETURNS int AS BEGIN RETURN @x + 2 END",
+    );
+    // A view that cannot take the new definition undoes the ALTER.
+    ok(
+        &mut s,
+        "CREATE FUNCTION dbo.h(@x int) RETURNS int AS BEGIN RETURN @x END",
+    );
+    ok(&mut s, "CREATE VIEW dbo.vh AS SELECT dbo.h(1) AS x");
+    fails(
+        &mut s,
+        "ALTER FUNCTION dbo.h(@x int, @y int) RETURNS int AS BEGIN RETURN @x + @y END",
+        313,
+    );
+    ok(&mut s, "SELECT dbo.h(7) AS x INTO dbo.r");
+    assert_eq!(
+        rows(&s, "SELECT CAST(x AS VARCHAR) FROM dbo.r"),
+        text(&[&[Some("7")]])
+    );
+    // Views reach functions through other functions.
+    ok(
+        &mut s,
+        "CREATE FUNCTION dbo.f(@x int) RETURNS int AS BEGIN RETURN @x * 10 END",
+    );
+    ok(
+        &mut s,
+        "CREATE FUNCTION dbo.g(@x int) RETURNS int AS BEGIN RETURN dbo.f(@x) * 2 END",
+    );
+    ok(&mut s, "CREATE VIEW dbo.v AS SELECT dbo.g(1) AS x");
+    ok(
+        &mut s,
+        "ALTER FUNCTION dbo.f(@x int) RETURNS int AS BEGIN RETURN @x * 505 END",
+    );
+    ok(&mut s, "SELECT x INTO dbo.rv FROM dbo.v");
+    assert_eq!(
+        rows(&s, "SELECT CAST(x AS VARCHAR) FROM dbo.rv"),
+        text(&[&[Some("1010")]])
+    );
+}
+
+#[test]
+fn arguments_are_evaluated_once_and_nesting_stays_linear() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    ok(
+        &mut s,
+        "CREATE FUNCTION dbo.sq(@x float) RETURNS float AS BEGIN RETURN @x * @x / @x END",
+    );
+    ok(
+        &mut s,
+        "CREATE FUNCTION dbo.same(@x float) RETURNS float AS BEGIN DECLARE @y float = @x; RETURN @y - @y END",
+    );
+    let nested = (0..16).fold("2.0".to_string(), |inner, _| format!("dbo.sq({inner})"));
+    let started = std::time::Instant::now();
+    ok(
+        &mut s,
+        &format!("SELECT {nested} AS a, dbo.same(RAND()) AS b INTO dbo.r"),
+    );
+    assert!(started.elapsed() < std::time::Duration::from_secs(20));
+    assert_eq!(
+        rows(
+            &s,
+            "SELECT CAST(a AS VARCHAR), CAST(b AS VARCHAR) FROM dbo.r"
+        ),
+        text(&[&[Some("2.0"), Some("0.0")]])
+    );
+    ok(
+        &mut s,
+        "CREATE FUNCTION dbo.rt(@n int) RETURNS @r TABLE (i int) AS BEGIN INSERT @r VALUES (@n); INSERT @r SELECT i * 10 FROM @r; RETURN END",
+    );
+    fails(&mut s, "SELECT * FROM dbo.rt(2)", 40515);
+}

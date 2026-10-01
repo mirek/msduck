@@ -91,19 +91,25 @@ typing, checked arithmetic, conversion errors and result metadata:
 
 - A scalar body runs symbolically: each variable is bound to the expression
   that computes its current value, `IF`/`ELSE` becomes `CASE`, and `RETURN`
-  converts to the declared type. `SELECT @v = expr FROM ...` takes the value
-  of the last row in the query's order and leaves the variable unchanged when
-  there are no rows. `RETURNS NULL ON NULL INPUT` returns NULL when any
+  converts to the declared type. A variable's scope is the whole body, so a
+  DECLARE in one branch is visible after it, and a DECLARE without a value
+  does not reset the variable in a loop. `SELECT @v = expr FROM ...` takes
+  the value of the last row in the query's ORDER BY (without ORDER BY, the
+  first row, as the capture shows for a heap) and leaves the variable
+  unchanged when there are no rows. `RETURNS NULL ON NULL INPUT` returns NULL when any
   argument is NULL.
 - An inline function becomes a derived table of its query; a multi-statement
   function becomes the `UNION ALL` of the rows its `INSERT` statements add,
   each guarded by the conditions of the branches it is in, with omitted
   columns taking their DEFAULT or NULL.
-- Arguments are substituted directly when that cannot change their meaning
-  (no column references, or a body that reads no tables). Otherwise they are
-  evaluated once in a derived table the body reads, so the body's own tables
-  can never capture a caller's column name (`CROSS APPLY dbo.f(id)` where the
-  function also reads a table with an `id` column).
+- Arguments are substituted directly when that cannot change their meaning.
+  An argument is evaluated once in a derived table the body reads when it
+  references columns and the body reads tables (so the body's own tables can
+  never capture a caller's column name, as in `CROSS APPLY dbo.f(id)` where
+  the function also reads a table with an `id` column), or when the folded
+  body uses it more than once and it is volatile (`RAND()`) or not a simple
+  value (nested calls stay linear in size). Aggregate and window arguments
+  belong to the calling query and are always substituted.
 - Nested calls are folded in turn. Without recursion the nesting limit of 32
   applies to the folded calls too.
 
@@ -126,9 +132,14 @@ do schema-bound functions. SQL Server refuses to ALTER or DROP a function
 that such an object references (3729, naming the table or constraint), which
 also keeps those stored expressions current. Schema-bound functions require
 two-part table names (4512) and schema-bound callees (4513), and block DROP
-TABLE or DROP VIEW of what they read (3729). Views that call a function are
-recreated from their source when the function is altered, so they use the new
-body as on SQL Server.
+TABLE or DROP VIEW of what they read (3729). References recorded for a
+CREATE or ALTER TABLE that failed, and for dropped columns, are discarded.
+Views that call a function, directly or through other functions, are
+recreated from their source when the function is altered, so they use the
+new body as on SQL Server. If a view cannot accept the new definition (for
+example a changed parameter list), the ALTER is undone and the view's error
+is reported; SQL Server would accept the ALTER and fail when the view is
+queried.
 
 ## Remaining limits
 
@@ -142,9 +153,14 @@ body as on SQL Server.
 - NOT NULL columns of a multi-statement function's return table are reported
   nullable, and the computed/updateable COLMETADATA flag bits of function
   results are not modeled.
-- Table variables other than the return table, cursors, `EXEC` and
-  `UPDATE`/`DELETE` of the return table inside bodies are refused with 40515
-  when the function is called.
+- Table variables (including reads of the return table), cursors, `EXEC`,
+  `UPDATE`/`DELETE` of the return table and accumulating assignments such as
+  `SELECT @s = @s + col FROM t` are refused with 40515 when the function is
+  called.
+- Computed columns, DEFAULT and CHECK expressions that reach a function only
+  through another function keep the body they were created with when that
+  inner function is altered (SQL Server records only direct references, so
+  it allows that ALTER).
 - A one-part scalar call reports the backend's missing-function error instead
   of 195; calls to functions in another database are not resolved.
 - A misplaced definition reports 111 only, with line 1; error line numbers

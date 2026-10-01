@@ -131,9 +131,17 @@ const AGGREGATES: &[&str] = &[
     "approx_count_distinct",
 ];
 
+fn is_aggregate(function: &Function) -> bool {
+    function.over.is_some()
+        || (function.name.0.len() == 1
+            && AGGREGATES
+                .iter()
+                .any(|name| function.name.to_string().eq_ignore_ascii_case(name)))
+}
+
 /// Whether the expression references a column (an identifier that is not a
-/// variable).
-pub fn references_columns(expr: &Expr) -> bool {
+/// variable) or a subquery.
+fn has_columns(expr: &Expr) -> bool {
     struct Find;
     impl Visitor for Find {
         type Break = ();
@@ -142,26 +150,48 @@ pub fn references_columns(expr: &Expr) -> bool {
                 Expr::Identifier(id) if !id.value.starts_with('@') && !is_default_keyword(expr) => {
                     ControlFlow::Break(())
                 }
-                Expr::CompoundIdentifier(_) | Expr::CompoundFieldAccess { .. } => {
-                    ControlFlow::Break(())
-                }
-                Expr::Subquery(_) | Expr::Exists { .. } | Expr::InSubquery { .. } => {
-                    ControlFlow::Break(())
-                }
-                Expr::Function(function)
-                    if function.over.is_some()
-                        || (function.name.0.len() == 1
-                            && AGGREGATES.iter().any(|name| {
-                                function.name.to_string().eq_ignore_ascii_case(name)
-                            })) =>
-                {
-                    ControlFlow::Break(())
-                }
+                Expr::CompoundIdentifier(_)
+                | Expr::CompoundFieldAccess { .. }
+                | Expr::Subquery(_)
+                | Expr::Exists { .. }
+                | Expr::InSubquery { .. } => ControlFlow::Break(()),
                 _ => ControlFlow::Continue(()),
             }
         }
     }
     expr.visit(&mut Find).is_break()
+}
+
+/// Whether the expression aggregates rows or is a window function.
+fn has_aggregate(expr: &Expr) -> bool {
+    struct Find;
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            match expr {
+                Expr::Function(function) if is_aggregate(function) => ControlFlow::Break(()),
+                _ => ControlFlow::Continue(()),
+            }
+        }
+    }
+    expr.visit(&mut Find).is_break()
+}
+
+/// Whether the expression depends on the rows of the calling query:
+/// columns, subqueries, aggregates or window functions.
+pub fn references_columns(expr: &Expr) -> bool {
+    has_columns(expr) || has_aggregate(expr)
+}
+
+/// Literals, variables, columns and conversions of them: cheap to repeat.
+fn trivial(expr: &Expr) -> bool {
+    match expr {
+        Expr::Value(_) | Expr::Identifier(_) | Expr::CompoundIdentifier(_) => true,
+        Expr::Nested(inner)
+        | Expr::Cast { expr: inner, .. }
+        | Expr::UnaryOp { expr: inner, .. } => trivial(inner),
+        _ => false,
+    }
 }
 
 /// Whether the tree reads tables or runs queries.
@@ -176,8 +206,7 @@ fn has_query<T: Visit>(node: &T) -> bool {
     node.visit(&mut Find).is_break()
 }
 
-/// Functions whose repeated evaluation would change results, and schema-
-/// qualified calls, whose repetition would multiply work.
+/// Functions whose repeated evaluation would change results.
 fn volatile(expr: &Expr) -> bool {
     struct Find;
     impl Visitor for Find {
@@ -188,8 +217,7 @@ fn volatile(expr: &Expr) -> bool {
                 if matches!(
                     name.as_str(),
                     "newid" | "rand" | "newsequentialid" | "crypt_gen_random"
-                ) || name.contains('.')
-                {
+                ) {
                     return ControlFlow::Break(());
                 }
             }
@@ -308,54 +336,145 @@ impl Env {
     }
 }
 
-/// How arguments reach the body.
-pub(super) struct Binding {
-    pub(super) env: Env,
-    /// `(SELECT CAST(arg AS type) AS p, ...)`, when arguments are evaluated in
-    /// a derived table named `alias`.
-    derived: Option<(String, Vec<(String, Expr)>)>,
-    /// The parameters' values, for RETURNS NULL ON NULL INPUT.
-    values: Vec<Expr>,
+fn placeholder(index: usize) -> String {
+    format!("__msduck_parameter_{index}")
 }
 
-pub(super) fn bind(
+/// Parameters bound to placeholders, and every local variable of the body
+/// declared up front: a variable's scope is the whole body, whichever branch
+/// declares it.
+pub(super) fn parameter_env(parameters: &[Parameter], body: &[Statement]) -> Result<Env> {
+    let mut env = Env::default();
+    predeclare(body, &mut env)?;
+    for (index, parameter) in parameters.iter().enumerate() {
+        env.declare(
+            &parameter.name,
+            parameter.data_type.clone(),
+            Expr::Identifier(ident(&placeholder(index))),
+        );
+    }
+    Ok(env)
+}
+
+/// Declare every DECLAREd variable of `statements` (at any depth) as NULL.
+pub(super) fn predeclare(statements: &[Statement], env: &mut Env) -> Result<()> {
+    struct Find<'a> {
+        env: &'a mut Env,
+        error: Option<anyhow::Error>,
+    }
+    impl Visitor for Find<'_> {
+        type Break = ();
+        fn pre_visit_statement(&mut self, statement: &Statement) -> ControlFlow<()> {
+            if let Statement::Declare { stmts } = statement {
+                for declaration in stmts {
+                    if declaration.declare_type.is_some() {
+                        self.error = Some(unsupported("table variable or cursor declaration"));
+                        return ControlFlow::Break(());
+                    }
+                    let Some(data_type) = declaration.data_type.clone() else {
+                        continue;
+                    };
+                    let data_type = super::definition::declared_type(data_type);
+                    for name in &declaration.names {
+                        self.env
+                            .declare(&name.value, data_type.clone(), cast(null(), &data_type));
+                    }
+                }
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut find = Find { env, error: None };
+    for statement in statements {
+        let _ = statement.visit(&mut find);
+    }
+    match find.error {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
+}
+
+/// Table variables other than an INSERT target are not supported.
+pub(super) fn check_table_variables(statements: &[Statement]) -> Result<()> {
+    struct Find;
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
+            match factor {
+                TableFactor::Table { name, .. } if name.to_string().starts_with('@') => {
+                    ControlFlow::Break(())
+                }
+                _ => ControlFlow::Continue(()),
+            }
+        }
+    }
+    for statement in statements {
+        if statement.visit(&mut Find).is_break() {
+            return Err(unsupported("reading a table variable"));
+        }
+    }
+    Ok(())
+}
+
+/// Replace parameter placeholders with arguments. An argument is evaluated
+/// once in a derived table named `alias` when substitution could change it:
+/// a column the body's own tables could capture, or a volatile or costly
+/// expression the folded body uses more than once. Aggregates and window
+/// functions belong to the calling query and are always substituted.
+/// Returns the derived table's columns, if any.
+fn finish<T: VisitMut + Visit>(
+    node: &mut T,
     parameters: &[Parameter],
     arguments: Vec<Expr>,
-    body_reads_tables: bool,
-    uses: &HashMap<String, usize>,
+    reads_tables: bool,
     alias: &str,
-) -> Binding {
-    let derive = arguments
-        .iter()
-        .zip(parameters)
-        .any(|(argument, parameter)| {
-            let repeated = uses
-                .get(&parameter.name.to_lowercase())
-                .copied()
-                .unwrap_or(0)
-                > 1;
-            (body_reads_tables && references_columns(argument)) || (repeated && volatile(argument))
-        });
-    let mut env = Env::default();
-    let mut values = Vec::new();
+) -> Vec<(String, Expr)> {
+    struct Count(HashMap<String, usize>);
+    impl Visitor for Count {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            if let Expr::Identifier(id) = expr
+                && id.value.starts_with("__msduck_parameter_")
+            {
+                *self.0.entry(id.value.clone()).or_default() += 1;
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut count = Count(HashMap::new());
+    let _ = Visit::visit(node, &mut count);
+    let mut values = HashMap::new();
     let mut columns = Vec::new();
     for (index, (parameter, argument)) in parameters.iter().zip(arguments).enumerate() {
+        let name = placeholder(index);
+        let uses = count.0.get(&name).copied().unwrap_or(0);
+        let derive = !has_aggregate(&argument)
+            && ((reads_tables && has_columns(&argument))
+                || (uses > 1 && (volatile(&argument) || !trivial(&argument))));
         let value = cast(argument, &parameter.data_type);
         let value = if derive {
             let column = format!("p{}", index + 1);
             columns.push((column.clone(), value));
             Expr::CompoundIdentifier(vec![ident(alias), ident(&column)])
         } else {
-            value
+            nested(value)
         };
-        values.push(value.clone());
-        env.declare(&parameter.name, parameter.data_type.clone(), value);
+        values.insert(name, value);
     }
-    Binding {
-        env,
-        derived: derive.then(|| (alias.to_string(), columns)),
-        values,
+    struct Replace(HashMap<String, Expr>);
+    impl VisitorMut for Replace {
+        type Break = ();
+        fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
+            if let Expr::Identifier(id) = expr
+                && let Some(value) = self.0.get(&id.value)
+            {
+                *expr = value.clone();
+            }
+            ControlFlow::Continue(())
+        }
     }
+    let _ = VisitMut::visit(node, &mut Replace(values));
+    columns
 }
 
 /// How often each variable is referenced.
@@ -401,54 +520,38 @@ pub fn scalar(definition: &Definition, arguments: Vec<Expr>, alias: &str) -> Res
     else {
         bail!("not a scalar function");
     };
-    let uses = variable_uses(body);
-    let binding = bind(
-        &definition.parameters,
-        arguments,
-        has_query(body),
-        &uses,
-        alias,
-    );
+    check_table_variables(body)?;
+    let env = parameter_env(&definition.parameters, body)?;
     let mut paths = 0;
     let work: Vec<&Statement> = body.iter().collect();
-    let mut result = scalar_paths(&work, binding.env.clone(), returns, &mut paths)?;
-    if definition.options.returns_null_on_null_input && !binding.values.is_empty() {
-        let condition = binding
-            .values
-            .iter()
-            .map(|value| Expr::IsNull(Box::new(value.clone())))
+    let mut result = scalar_paths(&work, env, returns, &mut paths)?;
+    if definition.options.returns_null_on_null_input && !definition.parameters.is_empty() {
+        let condition = (0..definition.parameters.len())
+            .map(|index| Expr::IsNull(Box::new(Expr::Identifier(ident(&placeholder(index))))))
             .reduce(|left, right| Expr::BinaryOp {
                 left: Box::new(left),
                 op: BinaryOperator::Or,
                 right: Box::new(right),
             })
             .expect("parameters");
-        result = cast(
-            Expr::Case {
-                case_token: AttachedToken::empty(),
-                end_token: AttachedToken::empty(),
-                operand: None,
-                conditions: vec![CaseWhen {
-                    condition,
-                    result: cast(null(), returns),
-                }],
-                else_result: Some(Box::new(result)),
-            },
-            returns,
-        );
+        result = cast(case(condition, cast(null(), returns), result), returns);
     }
-    match binding.derived {
-        None => Ok(result),
-        Some((alias, columns)) => {
-            let arguments = arguments_query(&columns)?;
-            let query = template(
-                &format!("SELECT __msduck_result FROM __msduck_arguments AS {alias}"),
-                HashMap::from([("__msduck_result".to_string(), result)]),
-                HashMap::from([("__msduck_arguments".to_string(), arguments)]),
-            )?;
-            Ok(Expr::Subquery(Box::new(query)))
-        }
+    let columns = finish(
+        &mut result,
+        &definition.parameters,
+        arguments,
+        has_query(body),
+        alias,
+    );
+    if columns.is_empty() {
+        return Ok(result);
     }
+    let query = template(
+        &format!("SELECT __msduck_result FROM __msduck_arguments AS {alias}"),
+        HashMap::from([("__msduck_result".to_string(), result)]),
+        HashMap::from([("__msduck_arguments".to_string(), arguments_query(&columns)?)]),
+    )?;
+    Ok(Expr::Subquery(Box::new(query)))
 }
 
 use sqlparser::ast::helpers::attached_token::AttachedToken;
@@ -517,7 +620,19 @@ pub(super) fn assign(statement: &Statement, env: &mut Env) -> Result<bool> {
                         .ok_or_else(|| anyhow!("missing variable type"))?,
                 );
                 let value = match &declaration.assignment {
-                    None => cast(null(), &data_type),
+                    // Not executable: the variable keeps its value.
+                    None => {
+                        for name in &declaration.names {
+                            if !env.vars.contains_key(&name.value.to_lowercase()) {
+                                env.declare(
+                                    &name.value,
+                                    data_type.clone(),
+                                    cast(null(), &data_type),
+                                );
+                            }
+                        }
+                        continue;
+                    }
                     Some(
                         DeclareAssignment::Expr(value)
                         | DeclareAssignment::Default(value)
@@ -620,6 +735,9 @@ fn select_assignment(query: &Query, env: &mut Env) -> Result<()> {
             subquery: Box::new(row.clone()),
             negated: false,
         };
+        // TOP 1 of the reversed order is the last row in the requested
+        // order. Without ORDER BY the row is unspecified; the capture shows
+        // SQL Server keeping the first row of a heap scan here.
         let SetExpr::Select(row_select) = row.body.as_mut() else {
             unreachable!()
         };
@@ -705,51 +823,51 @@ pub(super) fn statement_name(statement: &Statement) -> String {
 
 /// Fold a table-valued function call into the query its rows come from.
 pub fn table(definition: &Definition, arguments: Vec<Expr>, alias: &str) -> Result<Query> {
-    match (&definition.returns, &definition.body) {
+    let mut query = match (&definition.returns, &definition.body) {
         (Returns::Inline, Body::Query(query)) => {
-            let uses = variable_uses(query.as_ref());
-            let binding = bind(&definition.parameters, arguments, true, &uses, alias);
+            let env = parameter_env(&definition.parameters, &[])?;
             let mut query = query.as_ref().clone();
-            binding.env.substitute_in(&mut query)?;
-            wrap_table(query, binding)
+            env.substitute_in(&mut query)?;
+            query
         }
         (Returns::Table { variable, columns }, Body::Statements(body)) => {
-            let uses = variable_uses(body);
-            let binding = bind(&definition.parameters, arguments, true, &uses, alias);
+            check_table_variables(body)?;
+            let env = parameter_env(&definition.parameters, body)?;
             let mut sources = Vec::new();
             let mut paths = 0;
             let work: Vec<&Statement> = body.iter().collect();
             table_paths(
                 &work,
-                binding.env.clone(),
+                env,
                 None,
                 variable,
                 columns,
                 &mut sources,
                 &mut paths,
             )?;
-            let query = union(sources, columns)?;
-            wrap_table(query, binding)
+            union(sources, columns)?
         }
         _ => bail!("not a table-valued function"),
-    }
+    };
+    let columns = finish(&mut query, &definition.parameters, arguments, true, alias);
+    wrap_table(query, alias, &columns)
 }
 
 /// With derived arguments, read the body through APPLY from the arguments.
-pub(super) fn wrap_table(query: Query, binding: Binding) -> Result<Query> {
-    match binding.derived {
-        None => Ok(query),
-        Some((alias, columns)) => template(
-            &format!(
-                "SELECT __msduck_rows.* FROM __msduck_arguments AS {alias} CROSS APPLY __msduck_body AS __msduck_rows"
-            ),
-            HashMap::new(),
-            HashMap::from([
-                ("__msduck_arguments".to_string(), arguments_query(&columns)?),
-                ("__msduck_body".to_string(), query),
-            ]),
-        ),
+pub(super) fn wrap_table(query: Query, alias: &str, columns: &[(String, Expr)]) -> Result<Query> {
+    if columns.is_empty() {
+        return Ok(query);
     }
+    template(
+        &format!(
+            "SELECT __msduck_rows.* FROM __msduck_arguments AS {alias} CROSS APPLY __msduck_body AS __msduck_rows"
+        ),
+        HashMap::new(),
+        HashMap::from([
+            ("__msduck_arguments".to_string(), arguments_query(columns)?),
+            ("__msduck_body".to_string(), query),
+        ]),
+    )
 }
 
 /// UNION ALL of the guarded row sources, or no rows of the declared shape.

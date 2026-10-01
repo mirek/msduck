@@ -28,6 +28,8 @@ pub(crate) struct State {
     depth: std::cell::Cell<usize>,
     /// The source of the current batch when it defines a view.
     view_source: std::cell::RefCell<Option<String>>,
+    /// Tables whose recorded references wait for their statement to finish.
+    pending: std::cell::RefCell<Vec<(String, String)>>,
 }
 
 impl State {
@@ -83,6 +85,8 @@ impl Feature for Hooks {
         statement: &mut Statement,
         _parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Option<Execution>> {
+        dependencies::settle(session)?;
+        dependencies::drop_columns(session, statement)?;
         if matches!(statement, Statement::Drop { .. }) {
             dependencies::drop_objects(session, statement)?;
             return Ok(None);
@@ -297,8 +301,19 @@ fn define(session: &mut Session, sql: &str, action: Action) -> Result<()> {
             )?;
             expand::forget(&module.definition);
             modules::alter(&session.db, module.object_id, text, &properties)?;
-            dependencies::record_function(session, &schema_name, &definition.name, &references)?;
-            return dependencies::rebind_views(session, module.object_id);
+            // Views must accept the new definition; otherwise the ALTER is
+            // undone and its error reported.
+            if let Err(error) = dependencies::rebind_views(session, module.object_id) {
+                modules::alter(
+                    &session.db,
+                    module.object_id,
+                    &module.definition,
+                    &module.properties,
+                )?;
+                expand::forget(text);
+                let _ = dependencies::rebind_views(session, module.object_id);
+                return Err(error);
+            }
         }
     }
     dependencies::record_function(session, &schema_name, &definition.name, &references)?;

@@ -111,6 +111,52 @@ fn insert(
     Ok(())
 }
 
+/// Drop recorded references of tables whose CREATE or ALTER did not take
+/// effect: references are recorded while the statement is rewritten, before
+/// it runs, and checked here once a later statement starts.
+pub(super) fn settle(session: &Session) -> Result<()> {
+    let pending = std::mem::take(&mut *session.ext.functions.pending.borrow_mut());
+    for (schema, table) in pending {
+        let rows: Vec<String> = session
+            .db
+            .prepare(
+                "SELECT DISTINCT column_name FROM main.__msduck_function_references WHERE kind IN ('computed', 'default', 'check') AND lower(schema_name) = lower(?) AND lower(object_name) = lower(?)",
+            )?
+            .query_map(params![schema, table], |row| row.get(0))?
+            .collect::<duckdb::Result<_>>()?;
+        for column in rows {
+            if live_column(session, &schema, &table, &column)?.is_none() {
+                session.db.execute(
+                    "DELETE FROM main.__msduck_function_references WHERE kind IN ('computed', 'default', 'check') AND lower(schema_name) = lower(?) AND lower(object_name) = lower(?) AND lower(column_name) = lower(?)",
+                    params![schema, table, column],
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Forget the references of columns an ALTER TABLE drops.
+pub(super) fn drop_columns(session: &Session, statement: &Statement) -> Result<()> {
+    let Statement::AlterTable(alter) = statement else {
+        return Ok(());
+    };
+    let Some((schema, table)) = split(&alter.name) else {
+        return Ok(());
+    };
+    for operation in &alter.operations {
+        if let AlterTableOperation::DropColumn { column_names, .. } = operation {
+            for column in column_names {
+                session.db.execute(
+                    "DELETE FROM main.__msduck_function_references WHERE kind IN ('computed', 'default', 'check') AND lower(schema_name) = lower(?) AND lower(object_name) = lower(?) AND lower(column_name) = lower(?)",
+                    params![schema, table, column.value],
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Record the functions that computed columns, DEFAULT and CHECK
 /// expressions of CREATE TABLE or ALTER TABLE ... ADD call.
 pub(super) fn record_table(session: &Session, statement: &Statement) -> Result<()> {
@@ -145,6 +191,12 @@ pub(super) fn record_table(session: &Session, statement: &Statement) -> Result<(
     if table.starts_with('#') {
         return Ok(());
     }
+    session
+        .ext
+        .functions
+        .pending
+        .borrow_mut()
+        .push((schema.clone(), table.clone()));
     // A CREATE TABLE of an existing name fails; keep the old table's rows.
     if matches!(statement, Statement::CreateTable(_))
         && object_id(&session.db, &schema, &table, "")?.is_some()
@@ -270,6 +322,7 @@ pub(super) fn check_function(
     display: &str,
     change: Change,
 ) -> Result<()> {
+    settle(session)?;
     let rows: Vec<(String, String, String, String, String)> = session
         .db
         .prepare(
@@ -507,8 +560,8 @@ pub(super) fn record_function(
     Ok(())
 }
 
-/// Functions (scalar and table-valued) a view definition calls directly.
-fn view_functions(session: &Session, query: &Query) -> Result<Vec<i32>> {
+/// Functions (scalar and table-valued) a tree calls directly.
+fn direct_calls<T: Visit>(session: &Session, node: &T) -> Result<Vec<modules::Module>> {
     struct Find(Vec<(ObjectName, bool)>);
     impl Visitor for Find {
         type Break = ();
@@ -533,8 +586,8 @@ fn view_functions(session: &Session, query: &Query) -> Result<Vec<i32>> {
         }
     }
     let mut find = Find(Vec::new());
-    let _ = query.visit(&mut find);
-    let mut ids = Vec::new();
+    let _ = node.visit(&mut find);
+    let mut modules_found: Vec<modules::Module> = Vec::new();
     for (name, table) in find.0 {
         let Some((schema, name)) = split(&name) else {
             continue;
@@ -545,9 +598,40 @@ fn view_functions(session: &Session, query: &Query) -> Result<Vec<i32>> {
         if let Some(module) = modules::find(&session.db, Some(&schema), &name)?
             && is_function(&module.type_code)
             && (module.type_code == "FN") != table
-            && !ids.contains(&module.object_id)
+            && !modules_found
+                .iter()
+                .any(|m| m.object_id == module.object_id)
         {
-            ids.push(module.object_id);
+            modules_found.push(module);
+        }
+    }
+    Ok(modules_found)
+}
+
+/// Functions a view calls, directly or through the functions it calls:
+/// the stored view keeps all of their folded bodies.
+fn view_functions(session: &Session, query: &Query) -> Result<Vec<i32>> {
+    let mut pending = direct_calls(session, query)?;
+    let mut ids: Vec<i32> = Vec::new();
+    while let Some(module) = pending.pop() {
+        if ids.contains(&module.object_id) {
+            continue;
+        }
+        ids.push(module.object_id);
+        let Ok(definition) =
+            msduck_sql::dialect::ext::functions::definition::parse(&module.definition)
+        else {
+            continue;
+        };
+        match &definition.body {
+            msduck_sql::dialect::ext::functions::Body::Statements(statements) => {
+                for statement in statements {
+                    pending.extend(direct_calls(session, statement)?);
+                }
+            }
+            msduck_sql::dialect::ext::functions::Body::Query(query) => {
+                pending.extend(direct_calls(session, query.as_ref())?);
+            }
         }
     }
     Ok(ids)
