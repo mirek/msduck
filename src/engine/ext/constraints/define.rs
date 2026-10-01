@@ -363,6 +363,7 @@ fn resolve_foreign(
     child: &Table,
     key: &ForeignKey,
     name: &str,
+    creating: Option<&[(bool, Vec<String>)]>,
 ) -> Result<Foreign> {
     let child_columns = catalog::columns(&session.db, child)?;
     let mut columns = Vec::new();
@@ -410,7 +411,12 @@ fn resolve_foreign(
     }
     let referenced = referenced_table(session, key, name)?;
     let parent_columns = catalog::columns(&session.db, &referenced)?;
-    let keys = catalog::native_keys(&session.db, &referenced)?;
+    let mut keys = catalog::native_keys(&session.db, &referenced)?;
+    // A CREATE TABLE can reference its own keys before they are recorded.
+    if let Some(own_keys) = creating.filter(|_| referenced.id == child.id) {
+        keys.extend(own_keys.iter().cloned());
+        keys.sort_by_key(|(primary, _)| !primary);
+    }
     let referred_names: Vec<String> = if key.referred.is_empty() {
         match keys.iter().find(|(primary, _)| *primary) {
             Some((_, columns)) => columns.clone(),
@@ -457,7 +463,13 @@ fn resolve_foreign(
     let matched = keys.iter().any(|(_, key)| {
         key.len() == wanted.len() && key.iter().all(|c| wanted.contains(&c.to_lowercase()))
     });
-    if !matched {
+    // The keys feature takes keys over STRUCT storage out of CREATE TABLE
+    // and records them after the table exists, so a self-reference to such
+    // columns cannot be matched yet.
+    let pending = creating.is_some()
+        && referenced.id == child.id
+        && structured(session, &referenced, &referred_names)?;
+    if !matched && !pending {
         return Err(errors::not_created(error(
             1776,
             0,
@@ -611,6 +623,22 @@ fn duplicate(session: &Session, table: &Table, columns: &[String]) -> Result<Opt
     Ok(rows.next().transpose()?)
 }
 
+/// Whether every one of `columns` has STRUCT storage (NVARCHAR, DATETIME2
+/// and similar), which only keys-managed indexes can key.
+fn structured(session: &Session, table: &Table, columns: &[String]) -> Result<bool> {
+    let mut statement = session.db.prepare(
+        "SELECT column_name FROM duckdb_columns() WHERE database_name=current_database()
+         AND schema_name=? AND table_name=? AND data_type LIKE 'STRUCT%'",
+    )?;
+    let names = statement
+        .query_map([&table.schema, &table.name], |row| row.get::<_, String>(0))?
+        .collect::<duckdb::Result<Vec<_>>>()?;
+    Ok(!columns.is_empty()
+        && columns
+            .iter()
+            .all(|c| names.iter().any(|n| n.eq_ignore_ascii_case(c))))
+}
+
 /// A key added by ALTER TABLE is a native DuckDB constraint, which cannot
 /// cover the STRUCT storage of NVARCHAR, DATETIME2 and similar columns.
 fn indexable(session: &Session, table: &Table, columns: &[String]) -> Result<()> {
@@ -714,7 +742,12 @@ impl Stored {
 }
 
 /// Resolve planned constraints against the (existing) table.
-fn resolve(session: &Session, table: &Table, planned: Vec<Planned>) -> Result<Vec<Stored>> {
+fn resolve(
+    session: &Session,
+    table: &Table,
+    planned: Vec<Planned>,
+    creating: Option<&[(bool, Vec<String>)]>,
+) -> Result<Vec<Stored>> {
     let columns = catalog::columns(&session.db, table)?;
     let names: Vec<String> = columns.iter().map(|c| c.name.clone()).collect();
     let mut stored = Vec::new();
@@ -746,7 +779,7 @@ fn resolve(session: &Session, table: &Table, planned: Vec<Planned>) -> Result<Ve
                 }
             }
             Kind::ForeignKey(key) => {
-                let foreign = resolve_foreign(session, table, key, &planned.name)?;
+                let foreign = resolve_foreign(session, table, key, &planned.name, creating)?;
                 Stored {
                     columns: foreign.columns.clone(),
                     column: None,
@@ -900,13 +933,25 @@ pub(crate) fn create_table(
             let table = catalog::table(&session.db, &schema, &name)?.ok_or_else(|| {
                 anyhow::anyhow!("created table {schema}.{name} is not in the catalog")
             })?;
-            // The keys feature records this statement's key constraints.
+            // The keys feature records this statement's key constraints,
+            // after this returns; self-references may use them already.
+            let own_keys: Vec<(bool, Vec<String>)> = items
+                .iter()
+                .filter_map(|item| match &item.kind {
+                    Kind::PrimaryKey(columns) => Some((true, columns)),
+                    Kind::Unique(columns) => Some((false, columns)),
+                    _ => None,
+                })
+                .map(|(primary, columns)| {
+                    (primary, columns.iter().map(|c| c.value.clone()).collect())
+                })
+                .collect();
             let items = items
                 .into_iter()
                 .filter(|item| matches!(item.kind, Kind::Check(_) | Kind::ForeignKey(_)))
                 .collect();
             let planned = plan(session, &table, items, true)?;
-            let stored = resolve(session, &table, planned)?;
+            let stored = resolve(session, &table, planned, Some(&own_keys))?;
             check_cascades(session, &table, &stored)?;
             for entry in &stored {
                 entry.save(session, &table, false)?;
@@ -1006,6 +1051,39 @@ pub(crate) fn alter(
     parameters: &mut HashMap<String, Parameter>,
 ) -> Result<Execution> {
     let table = resolve_table(session, &alter.table)?;
+    // DuckDB refuses DROP COLUMN on a table with indexes inside an open
+    // transaction; the keys feature works around that only outside one. In
+    // autocommit mode, drop the constraints first, then each column on its
+    // own.
+    if let Action::Drop(items) = &alter.action
+        && session.transactions == 0
+        && items
+            .iter()
+            .any(|item| matches!(item, DropItem::Column { .. }))
+        && items
+            .iter()
+            .any(|item| matches!(item, DropItem::Constraint { .. }))
+    {
+        let (columns, constraints): (Vec<DropItem>, Vec<DropItem>) = items
+            .iter()
+            .cloned()
+            .partition(|item| matches!(item, DropItem::Column { .. }));
+        self::alter(
+            session,
+            Alter {
+                table: alter.table.clone(),
+                with_check: alter.with_check,
+                action: Action::Drop(constraints),
+            },
+            parameters,
+        )?;
+        for item in columns {
+            if let DropItem::Column { name, if_exists } = item {
+                session.execute(drop_column(&alter.table, name, if_exists), parameters)?;
+            }
+        }
+        return Ok(Execution::statement(vec![], None, 216));
+    }
     let transaction = Transaction::begin(session)?;
     let mut wrote = false;
     let result = match alter.action {
@@ -1152,7 +1230,7 @@ fn add(
         }
     }
     let planned = plan(session, table, constraints, false)?;
-    let stored = resolve(session, table, planned)?;
+    let stored = resolve(session, table, planned, None)?;
     check_cascades(session, table, &stored)?;
     // Validate everything before changing anything.
     let database = session.database.name.clone();
@@ -1456,27 +1534,30 @@ fn drop(
                 catalog::delete_default(&session.db, id)?;
             }
             Target::Column(name, if_exists) => {
-                let statement = Statement::AlterTable(AlterTable {
-                    name: written.clone(),
-                    if_exists: false,
-                    only: false,
-                    operations: vec![AlterTableOperation::DropColumn {
-                        has_column_keyword: true,
-                        column_names: vec![name],
-                        if_exists,
-                        drop_behavior: None,
-                    }],
-                    location: None,
-                    on_cluster: None,
-                    table_type: None,
-                    end_token: helpers::attached_token::AttachedToken::empty(),
-                });
                 // The column guard checks dependencies on this statement too.
-                session.execute(statement, parameters)?;
+                session.execute(drop_column(written, name, if_exists), parameters)?;
             }
         }
     }
     Ok(())
+}
+
+fn drop_column(table: &ObjectName, name: Ident, if_exists: bool) -> Statement {
+    Statement::AlterTable(AlterTable {
+        name: table.clone(),
+        if_exists: false,
+        only: false,
+        operations: vec![AlterTableOperation::DropColumn {
+            has_column_keyword: true,
+            column_names: vec![name],
+            if_exists,
+            drop_behavior: None,
+        }],
+        location: None,
+        on_cluster: None,
+        table_type: None,
+        end_token: helpers::attached_token::AttachedToken::empty(),
+    })
 }
 
 fn toggle(

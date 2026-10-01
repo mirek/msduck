@@ -170,10 +170,9 @@ fn dependents(
     Ok(objects)
 }
 
-/// ALTER TABLE DROP COLUMN and ALTER COLUMN on columns that constraints or
-/// named defaults use fail with 5074 and 4922. Changing only nullability is
-/// allowed; for key columns, whose native type DuckDB cannot reassign, the
-/// unchanged type is dropped from the statement.
+/// ALTER TABLE DROP COLUMN and ALTER COLUMN on columns that CHECK or FOREIGN
+/// KEY constraints or named defaults use fail with 5074 and 4922. Changing
+/// only nullability is allowed. Key columns are the keys feature's.
 pub(crate) fn alter_table(session: &mut Session, statement: &mut Statement) -> Result<()> {
     let Statement::AlterTable(alter) = statement else {
         return Ok(());
@@ -182,8 +181,7 @@ pub(crate) fn alter_table(session: &mut Session, statement: &mut Statement) -> R
         return Ok(());
     };
     let constraints = catalog::load(&session.db)?;
-    let mut unchanged_keys = Vec::new();
-    for (index, operation) in alter.operations.iter().enumerate() {
+    for operation in &alter.operations {
         match operation {
             AlterTableOperation::DropColumn { column_names, .. } => {
                 for column in column_names {
@@ -225,21 +223,9 @@ pub(crate) fn alter_table(session: &mut Session, statement: &mut Statement) -> R
                         "ALTER COLUMN",
                     ));
                 }
-                let keyed = catalog::native_keys(&session.db, &table)?
-                    .iter()
-                    .any(|(_, key)| {
-                        key.iter()
-                            .any(|c| c.eq_ignore_ascii_case(&column_name.value))
-                    });
-                if keyed {
-                    unchanged_keys.push(index);
-                }
             }
             _ => {}
         }
-    }
-    for index in unchanged_keys.into_iter().rev() {
-        alter.operations.remove(index);
     }
     Ok(())
 }

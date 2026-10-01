@@ -97,7 +97,8 @@ level, including foreign keys with actions.
   with 4712, even when the key is disabled. DROP COLUMN, and ALTER COLUMN to
   a different type, of a column that a constraint or named default uses fails
   with 5074 per object, then 4922. ALTER COLUMN that keeps the type and only
-  changes nullability is allowed, including on key columns.
+  changes nullability is allowed. Key columns are checked by the keys
+  feature.
 - **Atomicity.** Each statement is atomic in autocommit mode. In an explicit
   transaction, a failed INSERT is undone (by row id) and the transaction
   stays usable, as in SQL Server. A failed UPDATE, DELETE or MERGE, an
@@ -110,11 +111,12 @@ level, including foreign keys with actions.
 - **Changed columns.** An UPDATE checks only the constraints over columns it
   assigns, or over computed columns, as SQL Server does; an INSERT checks
   only its new rows.
-- **Foreign keys reference any recorded key.** Candidate keys are the
-  table's native PRIMARY KEY and UNIQUE constraints, the keys recorded in
-  `main.__msduck_keys` (including keys-managed keys over NVARCHAR or
-  DATETIMEOFFSET storage, which DuckDB foreign keys could not reference) and
-  unfiltered unique indexes.
+- **Foreign keys reference any key constraint.** Candidate keys are the
+  table's native PRIMARY KEY and UNIQUE constraints and the keys recorded in
+  `main.__msduck_keys`, including keys-managed keys over NVARCHAR or
+  DATETIMEOFFSET storage, which DuckDB foreign keys could not reference. A
+  CREATE TABLE may reference its own such key, which the keys feature
+  records only after the table exists.
 - **Catalog.** `sys.objects` lists CHECK (`C`), FOREIGN KEY (`F`), PRIMARY KEY
   (`PK`) and UNIQUE (`UQ`) constraints, so `OBJECT_ID` finds them. Key
   constraints come from `main.__msduck_keys`; their object id is
@@ -207,6 +209,16 @@ The feature uses the extension hooks (docs/extension-hooks.md):
   this feature are not in the store: they are still enforced by DuckDB, but
   cannot be dropped, disabled or listed. A table that such a native foreign
   key references cannot be rebuilt.
+- A foreign key cannot reference a unique index, only a PRIMARY KEY or
+  UNIQUE constraint (1776), because DROP INDEX does not check foreign keys.
+  A CREATE TABLE self-reference to columns with STRUCT storage is accepted
+  without checking that they form a key, since the keys feature records the
+  key only afterwards; an implicit self-reference (`REFERENCES t`) to such a
+  key fails with 1773.
+- In autocommit mode, `ALTER TABLE t DROP CONSTRAINT c, COLUMN x` drops the
+  constraints first and then each column on its own (DuckDB refuses DROP
+  COLUMN on an indexed table inside a transaction), so a failing column drop
+  leaves the constraints dropped.
 - Renaming a column (sp_rename) does not update stored definitions.
 - Foreign keys on temporary tables are skipped with warning 1756; references
   to other databases are not supported.

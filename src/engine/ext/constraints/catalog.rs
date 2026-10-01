@@ -538,11 +538,12 @@ pub(crate) fn native_keys(db: &Connection, table: &Table) -> Result<Vec<(bool, V
         Ok((row.get::<_, bool>(0)?, strings(row.get(1)?)))
     })?;
     let mut keys = rows.collect::<duckdb::Result<Vec<_>>>()?;
-    // Keys the keys feature records, including those it enforces through
-    // its own indexes, and unfiltered unique indexes.
+    // Key constraints the keys feature records, including those it enforces
+    // through its own indexes. Unique indexes are not candidate keys here:
+    // DROP INDEX does not know about foreign keys.
     let mut statement = db.prepare(
         "SELECT kind='PK',key_columns FROM main.__msduck_keys
-         WHERE object_id=? AND is_unique AND filter_definition IS NULL ORDER BY kind='PK' DESC,tag",
+         WHERE object_id=? AND kind IN ('PK','UQ') ORDER BY kind='PK' DESC,tag",
     )?;
     let rows = statement.query_map([table.id], |row| {
         Ok((row.get::<_, bool>(0)?, row.get::<_, String>(1)?))
@@ -558,26 +559,6 @@ pub(crate) fn native_keys(db: &Connection, table: &Table) -> Result<Vec<(bool, V
         }
     }
     keys.sort_by_key(|(primary, _)| !primary);
-    // Unique indexes also qualify as candidate keys.
-    let mut statement = db.prepare(
-        "SELECT expressions FROM duckdb_indexes() WHERE database_name=current_database()
-         AND schema_name=? AND table_name=? AND is_unique",
-    )?;
-    let rows = statement.query_map([&table.schema, &table.name], |row| row.get::<_, String>(0))?;
-    for expressions in rows {
-        let expressions = expressions?;
-        let names = expressions
-            .trim_matches(|c| c == '[' || c == ']')
-            .split(',')
-            .map(|name| name.trim().trim_matches('\'').trim_matches('"').to_string())
-            .collect::<Vec<_>>();
-        if names
-            .iter()
-            .all(|name| !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_'))
-        {
-            keys.push((false, names));
-        }
-    }
     Ok(keys)
 }
 

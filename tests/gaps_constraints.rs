@@ -430,6 +430,40 @@ fn foreign_keys_reference_keys_of_every_storage() {
         ),
         ["pk_p"]
     );
+    // A self-reference to a key the keys feature records after CREATE TABLE.
+    ok(
+        &mut session,
+        "CREATE TABLE emp(id NVARCHAR(10) NOT NULL CONSTRAINT pk_emp PRIMARY KEY, boss NVARCHAR(10) CONSTRAINT fk_emp REFERENCES emp(id))",
+    );
+    ok(&mut session, "INSERT emp VALUES (N'a', NULL), (N'b', N'a')");
+    assert_eq!(
+        caught(&mut session, "INSERT emp VALUES (N'c', N'z')").0,
+        547
+    );
+    assert_eq!(caught(&mut session, "DELETE emp WHERE boss IS NULL").0, 547);
+    // A unique index is not a candidate key: DROP INDEX cannot see foreign keys.
+    ok(
+        &mut session,
+        "CREATE TABLE ux(code INT NOT NULL); CREATE UNIQUE INDEX ix_ux ON ux(code)",
+    );
+    assert_eq!(
+        caught(
+            &mut session,
+            "CREATE TABLE uxc(code INT REFERENCES ux(code))"
+        )
+        .0,
+        1750
+    );
+    // Dropping a constraint and a column of a table with indexes.
+    ok(
+        &mut session,
+        "CREATE TABLE mixed(id INT NOT NULL, x INT, v INT CONSTRAINT ck_mixed CHECK (v > 0), w INT); CREATE INDEX ix_mixed ON mixed(w)",
+    );
+    ok(
+        &mut session,
+        "ALTER TABLE mixed DROP CONSTRAINT ck_mixed, COLUMN x",
+    );
+    ok(&mut session, "INSERT mixed(id, v, w) VALUES (1, -1, 1)");
     // ALTER TABLE adds keys as native DuckDB constraints, which cannot cover
     // that storage: the statement fails explicitly and changes nothing.
     ok(
