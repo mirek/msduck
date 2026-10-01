@@ -67,6 +67,18 @@ export const declarationProfiles=[
  ['datetime COALESCE','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIME2(7))) AS d'],
  ['datetime mixed offset','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIMEOFFSET(7))) AS d'],
 ]
+export const groupingOrderProfiles=[
+ ['integral conditional alias','SELECT COALESCE(a,@p) AS k,COUNT(*) AS c FROM dbo.prepare_heap GROUP BY COALESCE(a,@p) ORDER BY k'],
+ ['integral conditional expression','SELECT COALESCE(a,@p) AS k,COUNT(*) AS c FROM dbo.prepare_heap GROUP BY COALESCE(a,@P) ORDER BY COALESCE(a,@p)'],
+ ['integral repeated parameter','SELECT COALESCE(a,@p) AS k,COUNT(*) AS c,@p AS other FROM dbo.prepare_heap GROUP BY COALESCE(a,@P) ORDER BY COALESCE(a,@p)'],
+ ['integral conditional ordinal','SELECT COALESCE(a,@p) AS k FROM dbo.prepare_heap ORDER BY 1 DESC'],
+ ['integral ISNULL order','SELECT ISNULL(a,@p) AS k,COUNT(*) AS c FROM dbo.prepare_heap GROUP BY ISNULL(a,@p) ORDER BY k'],
+ ['integral CASE order','SELECT CASE WHEN a>@p THEN b ELSE a END AS k,COUNT(*) AS c FROM dbo.prepare_heap GROUP BY CASE WHEN a>@p THEN b ELSE a END ORDER BY k'],
+ ['integral qualified CASE identity','SELECT CASE WHEN t.a>@p THEN t.b ELSE t.a END AS k,COUNT(*) AS c FROM dbo.prepare_heap t GROUP BY CASE WHEN a>@p THEN b ELSE a END ORDER BY CASE WHEN a>@p THEN b ELSE a END'],
+ ['integral legacy ROLLUP conditional','SELECT COALESCE(a,@p) AS k,COUNT(*) AS c,GROUPING(COALESCE(a,@p)) AS g FROM dbo.prepare_heap GROUP BY COALESCE(a,@p) WITH ROLLUP ORDER BY g,1'],
+ ['integral constant conditional','SELECT COALESCE(CAST(NULL AS INT),@p) AS k FROM dbo.prepare_heap ORDER BY k'],
+ ['integral folded CASE order','SELECT CASE WHEN a>@p THEN 1 ELSE 1 END AS k,COUNT(*) AS c FROM dbo.prepare_heap GROUP BY CASE WHEN a>@p THEN 1 ELSE 1 END ORDER BY k'],
+]
 export const rankingDeclarationProfiles=[
  ['floating ranks','SELECT a,PERCENT_RANK() OVER(ORDER BY b) AS p,CUME_DIST() OVER(ORDER BY b) AS c FROM dbo.prepare_heap ORDER BY a'],
  ['floating ranks partition','SELECT a,PERCENT_RANK() OVER(PARTITION BY b ORDER BY a DESC) AS p,CUME_DIST() OVER(PARTITION BY b ORDER BY a DESC) AS c FROM dbo.prepare_heap ORDER BY a'],
@@ -288,11 +300,11 @@ export async function retainedSetProperties(){
 }
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined
- if(![undefined,'--check','--write-fixture','--regressions','--declarations','--window-declarations','--order-declarations','--order-properties','--bitwise-declarations','--ranking-declarations','--temporal-sets','--set-properties','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --window-declarations | --order-declarations | --order-properties | --bitwise-declarations | --ranking-declarations | --temporal-sets | --set-properties | --cte-delete] [output]')
+ if(![undefined,'--check','--write-fixture','--regressions','--declarations','--window-declarations','--order-declarations','--order-properties','--bitwise-declarations','--ranking-declarations','--grouping-order','--temporal-sets','--set-properties','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --window-declarations | --order-declarations | --order-properties | --bitwise-declarations | --ranking-declarations | --grouping-order | --temporal-sets | --set-properties | --cte-delete] [output]')
  if(mode==='--check'){const r=await retained();console.log('Checked prepared RPC records',r.runs[0].length);return}
  if(mode==='--write-fixture')await refuseExistingFixture(fixture)
  const output=resolve(args[0]??'artifacts/prepared-rpc-metadata/capture.json');assert.notEqual(output,fileURLToPath(fixture))
- const regression=mode==='--ranking-declarations'||mode==='--bitwise-declarations'||mode==='--order-properties'||mode==='--order-declarations'||mode==='--window-declarations'||mode==='--regressions'||mode==='--declarations'||mode==='--temporal-sets'||mode==='--set-properties';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--ranking-declarations'?rankingDeclarationProfiles:mode==='--bitwise-declarations'?bitwiseDeclarationProfiles:mode==='--order-properties'?orderPropertyProfiles:mode==='--order-declarations'?orderDeclarationProfiles:mode==='--window-declarations'?windowDeclarationProfiles:mode==='--set-properties'?setPropertyProfiles:mode==='--temporal-sets'?temporalSetProfiles:mode==='--declarations'?declarationProfiles:regressionProfiles
+ const regression=mode==='--grouping-order'||mode==='--ranking-declarations'||mode==='--bitwise-declarations'||mode==='--order-properties'||mode==='--order-declarations'||mode==='--window-declarations'||mode==='--regressions'||mode==='--declarations'||mode==='--temporal-sets'||mode==='--set-properties';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--grouping-order'?groupingOrderProfiles:mode==='--ranking-declarations'?rankingDeclarationProfiles:mode==='--bitwise-declarations'?bitwiseDeclarationProfiles:mode==='--order-properties'?orderPropertyProfiles:mode==='--order-declarations'?orderDeclarationProfiles:mode==='--window-declarations'?windowDeclarationProfiles:mode==='--set-properties'?setPropertyProfiles:mode==='--temporal-sets'?temporalSetProfiles:mode==='--declarations'?declarationProfiles:regressionProfiles
  const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,connection=>observe(connection,cteDelete?cteDeleteOptions:regression?{profilePlan:preparationProfiles,variantPlan:['api-default','named-one'],execute:false,...(mode==='--set-properties'?{setupSql:setPropertySetup}:mode==='--bitwise-declarations'?{setupSql:bitwiseSetup}:{})}:{}))))
  if(cteDelete)for(const run of runs){
   assert.equal(run.length,10)
