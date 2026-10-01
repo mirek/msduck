@@ -388,3 +388,33 @@ pair is delivered by tedious as an AggregateError. Its exact two-error assertion
 correction and the stale JSON correction await additional owner authorization
 over the narrowly claimed default test file. Full verification of the updated
 main integration and the latest implementation remains required.
+
+
+At `395396376cb93b33b0c89e8e88e738797fc6f165`, formatting, strict workspace
+Clippy, all-target build and all 1,126 Rust tests passed (one pre-existing
+ignored, 152 suites). The dedicated replay completed with 22/24 passing,
+retaining only the strict #705 transaction-command and #735 joined OUTPUT
+Unicode binding differences. The diagnostic audit recorded 325 cases with zero
+transport errors; it does not compare against SQL Server. The raw dedicated log
+and actual audit JSON are retained separately. A final default-client run remains
+required after authorized corrections to its obsolete assertions.
+
+The `--grouping-errors PATH` mode covers parameter-only, constant-only and
+correlated scalar grouping errors, plus a valid local-column/parameter control.
+Two fresh pinned SQL Server captures of these profiles and additional missing
+column/table probes agree on all fourteen records/run (SHA-256 `e0716ea7e6e69657b13f817d55f8fdae7b2ff827836658d73e4e61b1e4740b8a`).
+The eight grouping controls are embedded verbatim in the dedicated replay.
+SQL Server emits canonical error164 followed by8180, RETURNSTATUS8180, a NULL
+handle and DONEPROC(command224/status2). The valid control allocates handles1/2,
+proving that prior failures do not consume handle numbers. The adapter extends
+only the already recognized canonical grouping diagnostic for single-query
+sp_prepare; unknown errors and other RPC procedures retain their existing path.
+All probes preserve table rows, transaction depth and seeded RAND state.
+Implementation replay remains pending until the exact new revision is tested.
+
+The additional probes retain unresolved ordinary missing-column and missing-table
+preparation differences: DuckDB diagnostic text and incomplete RPC error wrappers
+currently differ from SQL Server's207/208 plus8180 responses. They are not
+normalized or claimed fixed by the grouping change. Existing default prepared
+GROUP BY tests also expect a single error; those assertions require a separately
+authorized correction to the captured two-error contract.

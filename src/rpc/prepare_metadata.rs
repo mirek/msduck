@@ -1014,11 +1014,12 @@ fn missing_later_apply_column(query: &Query, qualifier: &str) -> Option<String> 
     (candidates.len() == 1).then(|| candidates.remove(0))
 }
 
-// Preserve the captured preparation-error wrapper for the bounded joined APPLY
-// family. Unknown diagnostics and ambiguous native qualifier reports stay with
-// the caller. A backend-reported missing qualifier must identify exactly one
-// original logical column; diagnostic text is never parsed as SQL or executed.
-pub(super) fn joined_apply_binding_error(
+// Preserve the captured preparation-error wrapper for the canonical grouping
+// diagnostic and bounded joined APPLY family. Unknown diagnostics and ambiguous
+// native qualifier reports stay with the caller. A backend-reported missing
+// qualifier must identify exactly one original logical column; diagnostic text
+// is never parsed as SQL or executed.
+pub(super) fn preparation_binding_error(
     sql: &str,
     error: &anyhow::Error,
     output_name: &str,
@@ -1029,11 +1030,15 @@ pub(super) fn joined_apply_binding_error(
     let [Statement::Query(query)] = statements.as_slice() else {
         return Ok(None);
     };
-    if joined_apply_declarations(query) == **query {
-        return Ok(None);
-    }
+    let joined_apply = joined_apply_declarations(query) != **query;
     let mut response = Vec::new();
     let number = crate::engine::emit_error(&mut response, error);
+    // Error 164 is emitted only for the canonical grouping diagnostic. Fresh
+    // captures prove the same wrapper for ordinary, parameter-only and scalar
+    // correlated grouping. Other errors retain the joined-family scope guard.
+    if number != 164 && !joined_apply {
+        return Ok(None);
+    }
     if number == 50000 {
         let message = error.to_string();
         let Some((qualifier, _)) = message
@@ -2415,13 +2420,13 @@ mod tests {
         }
         let error = anyhow::anyhow!("Binder Error: Referenced table \"a\" not found!");
         assert!(
-            joined_apply_binding_error(sql, &error, "handle")
+            preparation_binding_error(sql, &error, "handle")
                 .unwrap()
                 .is_none()
         );
         let error = anyhow::anyhow!("unrecognized native failure");
         assert!(
-            joined_apply_binding_error(sql, &error, "handle")
+            preparation_binding_error(sql, &error, "handle")
                 .unwrap()
                 .is_none()
         );

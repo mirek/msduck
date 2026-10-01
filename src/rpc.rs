@@ -128,7 +128,7 @@ impl State {
                 ) {
                     if procedure == "sp_prepare"
                         && let Some(response) =
-                            prepare_metadata::joined_apply_binding_error(sql, &error, &output.name)?
+                            prepare_metadata::preparation_binding_error(sql, &error, &output.name)?
                     {
                         return Ok(response);
                     }
