@@ -9014,6 +9014,24 @@
       "dependencies": [],
       "issue": 723,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQsr"
+    },
+    {
+      "id": "gaps-bulk-procedures-fix-v1",
+      "title": "Fix bulk-load statement error completion after the procedures merge",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01), issue #764, umbrella #710.",
+      "scope": [
+        "src/engine/ext/bulk.rs",
+        "src/engine/ext/bulk/",
+        "tests/gaps_bulk.rs"
+      ],
+      "acceptance": [
+        "tests/gaps_bulk.rs passes on main again with SQL Server's DONE command 253 for INSERT BULK statement errors (including WITH (KEEP_IDENTITY)), by fixing the interaction with the procedures hooks inside the bulk feature (procedures.rs is held by gaps-rpc-procedures-v1-runtime; coordinate through the orchestrator if a procedures change is unavoidable) rather than weakening the assertion; procedure tests keep passing.",
+        "cargo test --workspace, npm test and compat pass; PR, review or fallback, merge, completion."
+      ],
+      "dependencies": [],
+      "issue": 764,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PfD7I"
     }
   ]
 }
