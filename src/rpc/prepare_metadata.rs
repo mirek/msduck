@@ -943,12 +943,10 @@ fn source_declarations(
             ControlFlow::Continue(())
         }
     }
-    let mut declared = expression_declarations(
-        &series_declarations(query, parameters),
-        parameters,
-        catalog,
-        outer,
-    );
+    // Create the non-null series carrier after generic expression enrichment,
+    // which deliberately uses typed NULLs for ordinary numeric declarations.
+    let enriched = expression_declarations(query, parameters, catalog, outer);
+    let mut declared = series_declarations(&enriched, parameters);
     let _ = declared.visit(&mut Declare {
         catalog,
         outer,
@@ -2125,7 +2123,8 @@ mod tests {
                         data_type: SqlType::Int,
                     },
                 )]);
-                let described = series_declarations(&query, &parameters);
+                let described =
+                    source_declarations(&query, &parameters, &catalog, &Scope::default());
                 let fields =
                     projection::query_fields(&catalog, &described, &Scope::default()).unwrap();
                 assert_eq!(fields.len(), 1);
