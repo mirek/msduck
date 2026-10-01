@@ -159,6 +159,16 @@ pub(super) trait Feature: Sync {
         None
     }
 
+    /// A batch starts: a SQL batch, an RPC request or a nested body (for
+    /// example a procedure). Runs before the `batch` hook, for every
+    /// feature. `rpc` is true for RPC requests and RPC-style nested bodies.
+    fn batch_begin(&self, _session: &mut Session, _rpc: bool) {}
+
+    /// The batch begun by the matching `batch_begin` ended, however it ended
+    /// (including errors and batches claimed by a `batch` hook). Batches nest
+    /// strictly, so the calls pair up like brackets.
+    fn batch_end(&self, _session: &mut Session) {}
+
     /// The outermost transaction ended (`committed` false for rollback).
     fn transaction_end(&self, _session: &mut Session, _committed: bool) {}
 
@@ -317,6 +327,20 @@ pub(super) fn batch(
     features
         .into_iter()
         .find_map(|feature| feature.batch(session, sql, parameters, rpc))
+}
+
+pub(super) fn batch_begin(session: &mut Session, rpc: bool) {
+    for feature in FEATURES {
+        feature.batch_begin(session, rpc);
+    }
+}
+
+/// Features see the end of a batch in reverse order, so scopes unwind like
+/// brackets across features too.
+pub(super) fn batch_end(session: &mut Session) {
+    for feature in FEATURES.iter().rev() {
+        feature.batch_end(session);
+    }
 }
 
 pub(super) fn exec(
