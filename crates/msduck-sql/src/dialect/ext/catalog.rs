@@ -6,6 +6,7 @@ use sqlparser::{
     parser::{Parser, ParserError},
 };
 
+pub mod check_properties;
 pub mod computed_properties;
 pub mod definition;
 

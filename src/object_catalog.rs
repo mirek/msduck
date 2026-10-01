@@ -16,6 +16,7 @@ pub fn register(db: &Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS main.__msduck_table_types(user_type_id INTEGER PRIMARY KEY,name VARCHAR NOT NULL,schema_id INTEGER NOT NULL,type_table_object_id INTEGER NOT NULL UNIQUE,object_name VARCHAR NOT NULL UNIQUE,create_date TIMESTAMP NOT NULL,UNIQUE(schema_id,name));
         CREATE TABLE IF NOT EXISTS main.__msduck_table_properties(object_id INTEGER PRIMARY KEY,lob_data_space_id INTEGER NOT NULL DEFAULT 0 CHECK(lob_data_space_id IN (0,1)));
         CREATE TABLE IF NOT EXISTS main.__msduck_key_objects(key_tag BIGINT PRIMARY KEY,object_id INTEGER NOT NULL UNIQUE,parent_object_id INTEGER NOT NULL,name VARCHAR NOT NULL,kind VARCHAR NOT NULL CHECK(kind IN ('PK','UQ')),is_system_named BOOLEAN,create_date TIMESTAMP NOT NULL,modify_date TIMESTAMP NOT NULL);
+        CREATE TABLE IF NOT EXISTS main.__msduck_check_objects(object_id INTEGER PRIMARY KEY,parent_object_id INTEGER NOT NULL,name VARCHAR NOT NULL,parent_column_id INTEGER,definition VARCHAR,source_expression VARCHAR NOT NULL,create_date TIMESTAMP NOT NULL,modify_date TIMESTAMP NOT NULL);
         CREATE TABLE IF NOT EXISTS main.__msduck_hidden_column_owners(object_id INTEGER PRIMARY KEY,schema_name VARCHAR NOT NULL,name VARCHAR NOT NULL,UNIQUE(schema_name,name));
         CREATE TABLE IF NOT EXISTS main.__msduck_default_constraints(object_id INTEGER PRIMARY KEY,parent_object_id INTEGER NOT NULL,column_id INTEGER NOT NULL,name VARCHAR NOT NULL,create_date TIMESTAMP NOT NULL,modify_date TIMESTAMP NOT NULL,UNIQUE(parent_object_id,column_id));
         CREATE SEQUENCE IF NOT EXISTS main.__msduck_object_ids START 100000001 MAXVALUE 2147483647 NO CYCLE;
@@ -34,7 +35,10 @@ pub fn register(db: &Connection) -> Result<()> {
           FROM main.__msduck_default_constraints d JOIN main.__msduck_objects o ON o.object_id=d.parent_object_id
           UNION ALL
           SELECT k.name,k.object_id,CAST(NULL AS INTEGER),o.schema_id,k.parent_object_id,rpad(k.kind,2,' '),CASE k.kind WHEN 'PK' THEN 'PRIMARY_KEY_CONSTRAINT' ELSE 'UNIQUE_CONSTRAINT' END,k.create_date,k.modify_date,false,false,false
-          FROM main.__msduck_key_objects k JOIN main.__msduck_objects o ON o.object_id=k.parent_object_id;
+          FROM main.__msduck_key_objects k JOIN main.__msduck_objects o ON o.object_id=k.parent_object_id
+          UNION ALL
+          SELECT k.name,k.object_id,CAST(NULL AS INTEGER),o.schema_id,k.parent_object_id,'C ','CHECK_CONSTRAINT',k.create_date,k.modify_date,false,false,false
+          FROM main.__msduck_check_objects k JOIN main.__msduck_objects o ON o.object_id=k.parent_object_id;
         CREATE OR REPLACE VIEW sys.system_objects AS
           SELECT name,object_id,principal_id,schema_id,parent_object_id,type,type_desc,create_date,modify_date,is_ms_shipped,is_published,is_schema_published
           FROM main.__msduck_builtin_objects WHERE in_system_objects;
@@ -59,6 +63,7 @@ pub fn sync(db: &Connection) -> duckdb::Result<()> {
     crate::column_catalog::sync(db)?;
     db.execute("DELETE FROM main.__msduck_key_objects k WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_objects o WHERE o.object_id=k.parent_object_id AND o.type_code='U')", [])?;
     db.execute("DELETE FROM main.__msduck_computed_definitions d WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_column_info c WHERE c.object_id=d.object_id AND c.column_id=d.column_id)", [])?;
+    db.execute("DELETE FROM main.__msduck_check_objects k WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_objects o WHERE o.object_id=k.parent_object_id AND o.type_code='U')", [])?;
     sync_lob(db)
 }
 
@@ -155,6 +160,7 @@ pub fn is_ddl(statement: &Statement) -> bool {
 pub fn touch(db: &Connection, statement: &Statement) -> Result<()> {
     record_named_defaults(db, statement)?;
     record_computed_definitions(db, statement)?;
+    record_named_checks(db, statement)?;
     let name = match statement {
         Statement::AlterTable(table) => &table.name,
         Statement::AlterView { name, .. } => name,
@@ -247,6 +253,59 @@ fn record_named_defaults(db: &Connection, statement: &Statement) -> Result<()> {
                 msduck_sql::dialect::ext::catalog::definition::expression_definition(expression);
             db.execute("INSERT INTO main.__msduck_default_constraints(object_id,parent_object_id,column_id,name,create_date,modify_date,definition,source_expression) SELECT CAST(nextval('main.__msduck_object_ids') AS INTEGER),?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP),?,? WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_default_constraints WHERE parent_object_id=? AND column_id=?)",duckdb::params![object_id,column_id,name.value,definition,expression.to_string(),object_id,column_id])?;
         }
+    }
+    Ok(())
+}
+
+/// Named CHECKs have independent schema-scoped identities. Record source text
+/// in the existing DDL transaction; unknown formatter output remains NULL.
+fn record_named_checks(db: &Connection, statement: &Statement) -> Result<()> {
+    let Statement::CreateTable(table) = statement else {
+        return Ok(());
+    };
+    let object_id: Option<i32> = db.query_row(
+        "SELECT __msduck_object_id(?,'U')",
+        [table.name.to_string()],
+        |r| r.get(0),
+    )?;
+    let Some(object_id) = object_id else {
+        return Ok(());
+    };
+    let columns = db
+        .prepare("SELECT name,column_id FROM main.__msduck_column_info WHERE object_id=?")?
+        .query_map([object_id], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i32>(1)?))
+        })?
+        .collect::<duckdb::Result<Vec<_>>>()?;
+    let checks = table
+        .columns
+        .iter()
+        .flat_map(|column| &column.options)
+        .filter_map(|option| {
+            let ColumnOption::Check(check) = &option.option else {
+                return None;
+            };
+            Some((
+                option.name.as_ref().or(check.name.as_ref())?,
+                check.expr.as_ref(),
+            ))
+        })
+        .chain(table.constraints.iter().filter_map(|constraint| {
+            let TableConstraint::Check(check) = constraint else {
+                return None;
+            };
+            Some((check.name.as_ref()?, check.expr.as_ref()))
+        }));
+    for (name, expression) in checks {
+        let definition =
+            msduck_sql::dialect::ext::catalog::definition::expression_definition(expression);
+        let parent_column = msduck_sql::dialect::ext::catalog::check_properties::parent_column(
+            expression, &columns,
+        );
+        db.execute(
+            "INSERT INTO main.__msduck_check_objects(object_id,parent_object_id,name,parent_column_id,definition,source_expression,create_date,modify_date) VALUES(CAST(nextval('main.__msduck_object_ids') AS INTEGER),?,?,?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP))",
+            duckdb::params![object_id,name.value,parent_column,definition,expression.to_string()]
+        )?;
     }
     Ok(())
 }

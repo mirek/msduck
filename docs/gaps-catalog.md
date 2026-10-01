@@ -14,7 +14,7 @@ function and integer CAST/CONVERT controls, and is also used by
 `OBJECT_DEFINITION`. Source expressions are retained separately from SQL Server
 catalog text. Unsupported syntax and preexisting rows whose source was not
 stored remain NULL until serialization/backfill is implemented. Additive storage
-migration preserves existing constraint identities. View/check definitions,
+migration preserves existing constraint identities. View definitions,
 unnamed DEFAULT constraints and complete wire descriptor parity remain
 unimplemented. This checkpoint does not establish full catalog compatibility.
 
@@ -109,3 +109,12 @@ reference; logical nullability reuses deterministic expression properties over e
 source-column declarations, including the retained ISNULL/CASE controls.
 Legacy definition/property backfill and full wire descriptor parity remain
 outstanding. No stored operand is evaluated during inference.
+
+Named CHECKs now retain their own schema-scoped object identities and original
+source expressions in the DDL transaction. `sys.check_constraints` has the
+captured 19-column order; the controlled single-column table CHECK matches its
+retained parent column, definition and enforcement flags. `OBJECT_DEFINITION`
+reads the same stored text. Namespace conflicts are rejected before native DDL;
+drop/rollback follow table identity. Unnamed CHECK identities, legacy backfill,
+constraint alteration/trust controls, wider expression relationships and complete
+wire descriptors remain unfinished.

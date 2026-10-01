@@ -716,3 +716,89 @@ fn computed_property_storage_upgrades_and_survives_restart() {
     }
     std::fs::remove_dir_all(directory).unwrap();
 }
+
+#[test]
+fn named_check_catalog_matches_reference_and_rolls_back_with_table() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let reference: serde_json::Value =
+        serde_json::from_str(include_str!("../reference/gaps-catalog.json")).unwrap();
+    let records = reference["runs"][0].as_array().unwrap();
+    let shape = &records
+        .iter()
+        .find(|r| r["name"] == "empty schema check_constraints")
+        .unwrap()["result"]["sets"][0]["columns"];
+    let mut statement = session
+        .db
+        .prepare("SELECT * FROM sys.check_constraints LIMIT 0")
+        .unwrap();
+    {
+        assert!(statement.query([]).unwrap().next().unwrap().is_none());
+    }
+    assert_eq!(
+        statement.column_names(),
+        shape
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["name"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    );
+    drop(statement);
+    let run =
+        |s: &mut Session, sql: &str| s.batch_response(sql, &Default::default(), false, None).1;
+    assert!(run(
+        &mut session,
+        "CREATE TABLE dbo.catalog_child(a INT NOT NULL,b INT,CONSTRAINT CK_catalog_child_a CHECK(a>0))"
+    ));
+    let expected =
+        &records.iter().find(|r| r["name"] == "checks").unwrap()["result"]["sets"][0]["rows"];
+    let actual = session.db.prepare("SELECT name,main.__msduck_object_name(parent_object_id),parent_column_id,definition,is_disabled,is_not_for_replication,is_not_trusted,uses_database_collation,is_system_named FROM sys.check_constraints WHERE name='CK_catalog_child_a'").unwrap()
+        .query_map([], |r| Ok(serde_json::json!([
+            r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,Option<i32>>(2)?,r.get::<_,Option<String>>(3)?,
+            r.get::<_,bool>(4)?,r.get::<_,bool>(5)?,r.get::<_,bool>(6)?,r.get::<_,Option<bool>>(7)?,r.get::<_,bool>(8)?
+        ]))).unwrap().collect::<duckdb::Result<Vec<_>>>().unwrap();
+    assert_eq!(serde_json::Value::Array(actual), *expected);
+    let object = |s: &Session| {
+        s.db.query_row(
+            "SELECT main.__msduck_object_id('dbo.CK_catalog_child_a','C')",
+            [],
+            |r| r.get::<_, Option<i32>>(0),
+        )
+        .unwrap()
+    };
+    let original = object(&session).unwrap();
+    assert!(!run(&mut session, "INSERT dbo.catalog_child VALUES(0,1)"));
+    assert!(run(
+        &mut session,
+        "INSERT dbo.catalog_child VALUES(2,1); BEGIN TRANSACTION"
+    ));
+    assert!(!run(
+        &mut session,
+        "CREATE TABLE failed_check(a INT CONSTRAINT CK_catalog_child_a CHECK(a>0))"
+    ));
+    let failed: Option<i32> = session
+        .db
+        .query_row(
+            "SELECT main.__msduck_object_id('dbo.failed_check','U')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(failed, None);
+    assert_eq!(session.transactions, 1);
+    assert!(run(&mut session, "DROP TABLE dbo.catalog_child"));
+    assert_eq!(object(&session), None);
+    assert!(run(&mut session, "ROLLBACK"));
+    assert_eq!(object(&session), Some(original));
+    assert!(run(&mut session, "DROP TABLE dbo.catalog_child"));
+    let retained: i64 = session
+        .db
+        .query_row(
+            "SELECT count(*) FROM main.__msduck_check_objects",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(retained, 0);
+}

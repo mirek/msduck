@@ -72,3 +72,17 @@ test('computed expression types and nullability retain reference catalog rows',a
  const capture=records.find(r=>r.name==='computed definitions')
  assert.deepEqual((await query(connection,capture.sql)).rows,capture.result.sets[0].rows)
 })
+
+test('named CHECK identities and rows retain reference relationships',async t=>{
+ const connection=await start(t)
+ await query(connection,'CREATE TABLE dbo.catalog_child(a INT NOT NULL,b INT,CONSTRAINT CK_catalog_child_a CHECK(a>0))')
+ const capture=reference.runs[0].find(r=>r.name==='checks')
+ assert.deepEqual((await query(connection,capture.sql)).rows,capture.result.sets[0].rows)
+ assert.deepEqual((await query(connection,"SELECT OBJECT_DEFINITION(OBJECT_ID('dbo.CK_catalog_child_a','C')) AS definition")).rows,[[capture.result.sets[0].rows[0][3]]])
+ await query(connection,'BEGIN TRANSACTION; DROP TABLE dbo.catalog_child')
+ assert.deepEqual((await query(connection,capture.sql)).rows,[])
+ await query(connection,'ROLLBACK')
+ assert.deepEqual((await query(connection,capture.sql)).rows,capture.result.sets[0].rows)
+ await query(connection,'DROP TABLE dbo.catalog_child')
+ assert.deepEqual((await query(connection,capture.sql)).rows,[])
+})

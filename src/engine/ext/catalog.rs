@@ -51,13 +51,27 @@ impl Feature for Hooks {
                 .db
                 .query_row("SELECT lower(?)", [name], |r| r.get(0))?;
             declared.insert(normalized);
-            for option in table.columns.iter().flat_map(|column| &column.options) {
-                if !matches!(option.option, sqlparser::ast::ColumnOption::Default(_)) {
-                    continue;
-                }
-                let Some(constraint) = &option.name else {
-                    continue;
-                };
+            let constraints = table
+                .columns
+                .iter()
+                .flat_map(|column| &column.options)
+                .filter_map(|option| match &option.option {
+                    sqlparser::ast::ColumnOption::Default(_) => option.name.as_ref(),
+                    sqlparser::ast::ColumnOption::Check(check) => {
+                        option.name.as_ref().or(check.name.as_ref())
+                    }
+                    _ => None,
+                })
+                .chain(
+                    table
+                        .constraints
+                        .iter()
+                        .filter_map(|constraint| match constraint {
+                            sqlparser::ast::TableConstraint::Check(check) => check.name.as_ref(),
+                            _ => None,
+                        }),
+                );
+            for constraint in constraints {
                 let normalized: String =
                     session
                         .db
@@ -89,7 +103,7 @@ impl Feature for Hooks {
             }
         }
         let exists: bool = session.db.query_row(
-            "SELECT count(*)>0 FROM sys.objects o JOIN main.__msduck_schemas s USING(schema_id) WHERE lower(s.name)=lower(?) AND lower(o.name)=lower(?) AND rtrim(o.type) IN ('D','PK','UQ')",
+            "SELECT count(*)>0 FROM sys.objects o JOIN main.__msduck_schemas s USING(schema_id) WHERE lower(s.name)=lower(?) AND lower(o.name)=lower(?) AND rtrim(o.type) IN ('D','PK','UQ','C')",
             [schema,name], |r| r.get(0)
         )?;
         if exists {
@@ -122,6 +136,12 @@ impl Feature for Hooks {
                SELECT o.*, CAST(NULL AS INTEGER) AS unique_index_id,
                  k.is_system_named, true AS is_enforced
                FROM sys.objects o JOIN main.__msduck_key_objects k USING(object_id);
+             CREATE OR REPLACE VIEW sys.check_constraints AS
+               SELECT o.*,false AS is_disabled,false AS is_not_for_replication,
+                 false AS is_not_trusted,k.parent_column_id,k.definition,
+                 CASE WHEN k.definition IS NOT NULL THEN true ELSE CAST(NULL AS BOOLEAN) END AS uses_database_collation,
+                 false AS is_system_named
+               FROM sys.objects o JOIN main.__msduck_check_objects k USING(object_id);
              CREATE OR REPLACE VIEW sys.computed_columns AS
                SELECT c.object_id,c.name,c.column_id,c.system_type_id,c.user_type_id,c.max_length,
                  c.precision,c.scale,c.collation_name,d.is_nullable,c.is_ansi_padded,
@@ -144,7 +164,8 @@ impl Feature for Hooks {
                map_extract_value((SELECT map(list(object_id),list(definition))
                  FROM (SELECT object_id,definition FROM main.__msduck_modules
                    UNION ALL SELECT object_id,definition
-                   FROM main.__msduck_default_constraints)), value);",
+                   FROM main.__msduck_default_constraints
+                   UNION ALL SELECT object_id,definition FROM main.__msduck_check_objects)), value);",
         )?;
         Ok(())
     }
