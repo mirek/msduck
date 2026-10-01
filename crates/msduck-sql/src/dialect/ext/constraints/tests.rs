@@ -93,6 +93,7 @@ fn named_column_constraints_are_claimed() {
     claimed("ALTER TABLE items ADD n int NULL CONSTRAINT df_n DEFAULT 3 WITH VALUES");
     claimed("ALTER TABLE items ADD n int CHECK (n > 0)");
     claimed("ALTER TABLE items ADD n int REFERENCES parent(id) ON DELETE CASCADE");
+    claimed("ALTER TABLE items ADD n int CONSTRAINT uq_n UNIQUE");
 }
 
 #[test]
@@ -174,6 +175,8 @@ fn plain_column_changes_are_declined() {
     declined("ALTER TABLE items ADD n int NOT NULL DEFAULT 3 WITH VALUES");
     // Still refused by the built-in path (docs/gaps-constraints.md).
     declined("ALTER TABLE items ADD n int CONSTRAINT df_n DEFAULT 2");
+    declined("ALTER TABLE items ADD n int UNIQUE");
+    declined("ALTER TABLE items ADD n int NOT NULL PRIMARY KEY");
     declined("ALTER TABLE items DROP COLUMN n");
     declined("ALTER TABLE items DROP COLUMN n, m");
     declined("ALTER TABLE items ALTER COLUMN n bigint NULL");

@@ -134,11 +134,13 @@ The feature uses the extension hooks (docs/extension-hooks.md):
 
 ## Remaining limits
 
-- A pure `ALTER TABLE t ADD col type NULL CONSTRAINT df DEFAULT v`, without
-  `WITH VALUES` and without other constraints in the statement, is still
-  refused (40515) by the built-in path, because tests/tedious.test.mjs, owned
-  by another task, expects that refusal. The NOT NULL and WITH VALUES forms
-  work.
+- Two ADD COLUMN forms are still refused (40515) by the built-in path,
+  because tests owned by other tasks expect that refusal:
+  `ADD col type NULL CONSTRAINT df DEFAULT v` without `WITH VALUES`
+  (tests/tedious.test.mjs), and an unnamed column-level `PRIMARY KEY` or
+  `UNIQUE` (crates/msduck-sql/tests/character_declaration_metadata.rs), when
+  nothing else in the statement is a constraint. The NOT NULL and WITH
+  VALUES default forms, named column keys and table-level keys work.
 - UNIQUE constraints accept several NULLs, and 2627 duplicate-key messages
   are DuckDB's text rather than "Violation of UNIQUE KEY constraint ...".
   Key storage and UNIQUE NULL semantics belong to the keys task

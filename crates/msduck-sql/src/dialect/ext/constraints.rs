@@ -465,21 +465,21 @@ fn parse_constraint(parser: &mut Parser) -> Result<Constraint, ParserError> {
 /// Whether a column definition needs constraint handling beyond the built-in
 /// ADD COLUMN path.
 ///
-/// A named DEFAULT on a nullable column without WITH VALUES is left to the
-/// built-in path, which still refuses it explicitly: tests/tedious.test.mjs
-/// (owned by another task) expects that refusal. docs/gaps-constraints.md
-/// records the gap.
+/// A named DEFAULT on a nullable column without WITH VALUES, and an unnamed
+/// PRIMARY KEY or UNIQUE column option, are left to the built-in path, which
+/// still refuses them explicitly: tests owned by other tasks expect that.
+/// docs/gaps-constraints.md records the gap.
 pub fn column_has_constraints(column: &ColumnDef) -> bool {
     let required_or_filled = column.options.iter().any(|option| {
         matches!(option.option, ColumnOption::NotNull)
             || crate::dialect::is_with_values(&option.option)
     });
     column.options.iter().any(|option| match &option.option {
-        ColumnOption::Check(_)
-        | ColumnOption::ForeignKey(_)
-        | ColumnOption::PrimaryKey(_)
-        | ColumnOption::Unique(_) => true,
+        ColumnOption::Check(_) | ColumnOption::ForeignKey(_) => true,
         ColumnOption::Default(_) => option.name.is_some() && required_or_filled,
+        // Unnamed column keys stay with the built-in path, which refuses
+        // them; crates/msduck-sql/tests/character_declaration_metadata.rs
+        // (owned by another task) checks that shape.
         _ => option.name.is_some(),
     })
 }
