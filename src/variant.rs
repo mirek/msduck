@@ -126,6 +126,9 @@ pub fn read(array: &dyn Array, row: usize) -> Result<Value> {
         52 => Value::SmallInt(i16::try_from(value)?),
         56 => Value::Int(i32::try_from(value)?),
         127 => Value::BigInt(value),
+        // decimal/numeric identity catalog values (scale 0); the declared
+        // precision is not carried, so the payload is numeric(38,0).
+        106 | 108 => Value::Decimal(duckdb::types::Decimal::new(38, 0, i128::from(value))?),
         _ => bail!("unsupported sql_variant base type"),
     })
 }
@@ -154,6 +157,17 @@ pub fn encode(out: &mut Vec<u8>, value: &Value) -> Result<()> {
         Value::SmallInt(v) => (0x34, v.to_le_bytes().to_vec()),
         Value::Int(v) => (0x38, v.to_le_bytes().to_vec()),
         Value::BigInt(v) => (0x7f, v.to_le_bytes().to_vec()),
+        Value::Decimal(v) => {
+            // NUMERIC: precision and scale properties, then the sign byte and
+            // the 16-byte magnitude of a precision-38 value.
+            let magnitude = v.value().unsigned_abs();
+            let mut bytes = vec![v.width(), v.scale(), u8::from(v.value() >= 0)];
+            bytes.extend(magnitude.to_le_bytes());
+            out.extend((bytes.len() as u32 + 2).to_le_bytes());
+            out.extend([0x6c, 2]);
+            out.extend(bytes);
+            return Ok(());
+        }
         _ => bail!("unsupported sql_variant payload"),
     };
     out.extend((bytes.len() as u32 + 2).to_le_bytes());

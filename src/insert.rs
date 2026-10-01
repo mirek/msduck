@@ -44,6 +44,43 @@ pub fn money_columns(
     }
 }
 
+thread_local! {
+    /// The (schema, table) whose identity column may receive explicit values
+    /// while the current statement runs; see [`with_explicit_identity`].
+    static EXPLICIT_IDENTITY: std::cell::RefCell<Vec<(String, String)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Run `work` with explicit identity values permitted for one target table,
+/// as SET IDENTITY_INSERT ON does for the session that set it. The caller
+/// (the rowversion_identity feature) has already applied SQL Server's
+/// IDENTITY_INSERT rules to the statement; without a permit the identity
+/// column is omitted from positional inserts and explicit values fail 544.
+pub(crate) fn with_explicit_identity<T>(schema: &str, table: &str, work: impl FnOnce() -> T) -> T {
+    struct Pop;
+    impl Drop for Pop {
+        fn drop(&mut self) {
+            EXPLICIT_IDENTITY.with(|permits| permits.borrow_mut().pop());
+        }
+    }
+    EXPLICIT_IDENTITY.with(|permits| {
+        permits
+            .borrow_mut()
+            .push((schema.to_lowercase(), table.to_lowercase()))
+    });
+    let _pop = Pop;
+    work()
+}
+
+fn explicit_identity_permitted(schema: &str, table: &str) -> bool {
+    EXPLICIT_IDENTITY.with(|permits| {
+        permits
+            .borrow()
+            .iter()
+            .any(|(s, t)| s.eq_ignore_ascii_case(schema) && t.eq_ignore_ascii_case(table))
+    })
+}
+
 pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool]) -> Result<()> {
     let Statement::Insert(insert) = statement else {
         return Ok(());
@@ -81,7 +118,9 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
     columns.retain(|column| !computed.contains(&column.0.to_lowercase()));
     let utf16 = crate::assignment::utf16_targets(&columns);
     crate::assignment::declared_targets(db, schema, table, &mut columns)?;
-    if insert.columns.is_empty()
+    let explicit_identity = explicit_identity_permitted(schema, table);
+    if !explicit_identity
+        && insert.columns.is_empty()
         && insert.source.is_some()
         && columns
             .iter()
@@ -97,7 +136,7 @@ pub fn lower(db: &Connection, statement: &mut Statement, money_columns: &[bool])
             "identity-only tables require DEFAULT VALUES"
         );
     }
-    for name in &insert.columns {
+    for name in insert.columns.iter().filter(|_| !explicit_identity) {
         if let Some(id) = name.0.last().and_then(|p| p.as_ident()) {
             ensure!(
                 !columns.iter().any(|c| c.0.eq_ignore_ascii_case(&id.value)
