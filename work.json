@@ -8828,6 +8828,30 @@
       "dependencies": [],
       "issue": 754,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PeNM8"
+    },
+    {
+      "id": "gaps-unicode-predicates-v1",
+      "title": "Comparisons and LIKE over nvarchar/nchar columns",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01), umbrella #710; prerequisite for the workload's ordinary filtered queries.",
+      "scope": [
+        "src/engine/ext/keys.rs",
+        "src/engine/ext/keys/predicates.rs",
+        "src/engine/ext/keys/predicates/",
+        "tests/compat/unicode_predicates.test.mjs",
+        "tests/gaps_unicode_predicates.rs",
+        "docs/gaps-unicode-predicates.md",
+        "scripts/capture-gaps-unicode-predicates.mjs",
+        "reference/gaps-unicode-predicates.json"
+      ],
+      "acceptance": [
+        "Comparisons (=, <>, <, >, <=, >=), IN, BETWEEN, LIKE/NOT LIKE (with ESCAPE), IS [NOT] NULL, CASE, ORDER BY, GROUP BY, DISTINCT and joins involving nvarchar/nchar columns against N'' and '' literals, nvarchar/varchar variables and RPC parameters, other nvarchar or varchar columns and subqueries work in SELECT, UPDATE, DELETE and MERGE predicates, ignoring trailing spaces as SQL Server does and using msduck's current default (binary) comparison semantics unless an explicit COLLATE applies.",
+        "Surrogate pairs, isolated surrogates, NULLs and MAX columns compare correctly; results match a SQL Server capture for representative cases.",
+        "Implemented inside the merged keys feature module (src/engine/ext/keys.rs dispatches to keys/predicates); tedious and Rust tests; AGENTS.md checks; PR, review or fallback, merge, completion."
+      ],
+      "dependencies": [],
+      "issue": 755,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PeOco"
     }
   ]
 }
