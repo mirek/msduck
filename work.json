@@ -8891,6 +8891,22 @@
       "dependencies": [],
       "issue": 754,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PeNM8"
+    },
+    {
+      "id": "gaps-transactions-v1-tedious",
+      "title": "Update the driver transaction test for transaction-manager savepoints (gaps-transactions-v1)",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-transactions-v1",
+      "scope": [
+        "tests/tedious.test.mjs"
+      ],
+      "acceptance": [
+        "Replace the assertion that a transaction-manager save fails with 40515 by a successful save, keeping every other assertion of the driver transaction test.",
+        "Merged in the same PR as gaps-transactions-v1 with its verification."
+      ],
+      "dependencies": [],
+      "issue": 727,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQur"
     }
   ]
 }
