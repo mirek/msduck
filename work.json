@@ -9047,6 +9047,24 @@
       "dependencies": [],
       "issue": 725,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQtr"
+    },
+    {
+      "id": "gaps-functions-output-fix-v1",
+      "title": "Functions feature breaks UPDATE ... OUTPUT INTO (4121)",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01), issue #766, umbrella #710.",
+      "scope": [
+        "src/engine/ext/functions.rs",
+        "src/engine/ext/functions/",
+        "tests/gaps_functions.rs"
+      ],
+      "acceptance": [
+        "tests/gaps_transactions.rs every_write_form_is_restored passes again on main; OUTPUT inserted./deleted. references (and other multi-part column references) are never treated as user-defined function calls; regression test added in tests/gaps_functions.rs.",
+        "cargo test --workspace (no failures), npm test and compat pass; PR, review or fallback, merge, completion."
+      ],
+      "dependencies": [],
+      "issue": 766,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PfNsb"
     }
   ]
 }
