@@ -54,6 +54,26 @@ fn refuse(session: &mut Session, errors: &[SqlError]) -> (Vec<u8>, bool) {
     (out, false)
 }
 
+/// The message of one of the INSERT BULK parser's 102 errors, as the batch
+/// parser returns it: the raw parser error, or the 102 diagnostic the
+/// procedures syntax derives from any "Incorrect syntax near" parser error
+/// (`msduck_sql::dialect::ext::procedures::diagnostic`).
+fn syntax_message(error: &anyhow::Error) -> Option<String> {
+    use sqlparser::parser::ParserError;
+    if let Some(error) = error.downcast_ref::<SqlError>() {
+        let parsed = ParserError::ParserError(error.message.clone());
+        return (error.number == 102 && syntax::is_syntax_error(&parsed))
+            .then(|| error.message.clone());
+    }
+    error
+        .downcast_ref::<ParserError>()
+        .filter(|error| syntax::is_syntax_error(error))
+        .map(|error| match error {
+            ParserError::ParserError(message) => message.clone(),
+            other => other.to_string(),
+        })
+}
+
 fn multi_statement() -> SqlError {
     SqlError::new(
         428,
@@ -86,13 +106,7 @@ impl Feature for Hooks {
             Err(error) => {
                 // A syntax error inside INSERT BULK keeps SQL Server's 102.
                 let leading = msduck_sql::dialect::ext::leading_words(sql, 2);
-                let message = error
-                    .downcast_ref::<sqlparser::parser::ParserError>()
-                    .filter(|error| syntax::is_syntax_error(error))
-                    .map(|error| match error {
-                        sqlparser::parser::ParserError::ParserError(message) => message.clone(),
-                        other => other.to_string(),
-                    });
+                let message = syntax_message(&error);
                 return match message {
                     Some(message) if !rpc && leading == ["INSERT", "BULK"] => {
                         Some(refuse(session, &[SqlError::syntax(102, 1, message)]))
