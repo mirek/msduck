@@ -653,47 +653,49 @@ fn literal_json_error(statements: &[Statement]) -> Option<msduck_core::diagnosti
             _ => None,
         }
     }
-    let result = sqlparser::ast::visit_expressions(&statements, |expr| {
-        let Expr::Function(function) = expr else {
-            return ControlFlow::Continue(());
-        };
-        let name = function.name.to_string().to_ascii_lowercase();
-        if !matches!(name.as_str(), "json_query" | "json_value")
-            || function.parameters != FunctionArguments::None
-            || function.over.is_some()
-            || function.filter.is_some()
-            || function.null_treatment.is_some()
-            || !function.within_group.is_empty()
-            || function.uses_odbc_syntax
-        {
-            return ControlFlow::Continue(());
+    for statement in statements {
+        let result = sqlparser::ast::visit_expressions(statement, |expr| {
+            let Expr::Function(function) = expr else {
+                return ControlFlow::Continue(());
+            };
+            let name = function.name.to_string().to_ascii_lowercase();
+            if !matches!(name.as_str(), "json_query" | "json_value")
+                || function.parameters != FunctionArguments::None
+                || function.over.is_some()
+                || function.filter.is_some()
+                || function.null_treatment.is_some()
+                || !function.within_group.is_empty()
+                || function.uses_odbc_syntax
+            {
+                return ControlFlow::Continue(());
+            }
+            let FunctionArguments::List(args) = &function.args else {
+                return ControlFlow::Continue(());
+            };
+            if args.duplicate_treatment.is_some() || !args.clauses.is_empty() {
+                return ControlFlow::Continue(());
+            }
+            let (document, path) = match args.args.as_slice() {
+                [
+                    FunctionArg::Unnamed(FunctionArgExpr::Expr(document)),
+                    FunctionArg::Unnamed(FunctionArgExpr::Expr(path)),
+                ] => (text(document), text(path)),
+                _ => return ControlFlow::Continue(()),
+            };
+            if let (Some(document), Some(path)) = (document, path)
+                && let Err(error) =
+                    msduck_core::json_path::extract_detailed(document, path, name == "json_query")
+                && let Some(error) = msduck_core::json_path::diagnostic(&error.backend_message())
+            {
+                return ControlFlow::Break(error);
+            }
+            ControlFlow::Continue(())
+        });
+        if let ControlFlow::Break(error) = result {
+            return Some(error);
         }
-        let FunctionArguments::List(args) = &function.args else {
-            return ControlFlow::Continue(());
-        };
-        if args.duplicate_treatment.is_some() || !args.clauses.is_empty() {
-            return ControlFlow::Continue(());
-        }
-        let (document, path) = match args.args.as_slice() {
-            [
-                FunctionArg::Unnamed(FunctionArgExpr::Expr(document)),
-                FunctionArg::Unnamed(FunctionArgExpr::Expr(path)),
-            ] => (text(document), text(path)),
-            _ => return ControlFlow::Continue(()),
-        };
-        if let (Some(document), Some(path)) = (document, path)
-            && let Err(error) =
-                msduck_core::json_path::extract_detailed(document, path, name == "json_query")
-            && let Some(error) = msduck_core::json_path::diagnostic(&error.backend_message())
-        {
-            return ControlFlow::Break(error);
-        }
-        ControlFlow::Continue(())
-    });
-    match result {
-        ControlFlow::Break(error) => Some(error),
-        ControlFlow::Continue(()) => None,
     }
+    None
 }
 
 pub(super) struct Description {
@@ -1531,15 +1533,13 @@ pub(super) fn describe(
         });
     }
     if let [statement] = statements.as_slice() {
-        if let Some((update, with)) = msduck_sql::output::joined_update(statement) {
-            let Some(sqlparser::ast::OutputClause::Output {
+        if let Some((update, with)) = msduck_sql::output::joined_update(statement)
+            && let Some(sqlparser::ast::OutputClause::Output {
                 select_items,
                 into_table: None,
                 ..
             }) = &update.output
-            else {
-                bail!("unsupported prepared joined OUTPUT destination");
-            };
+        {
             // Native binding already validated the original statement. This
             // existing catalog adapter acquires explicit target/source fields;
             // it neither captures images nor executes assignments or OUTPUT.
@@ -1554,7 +1554,8 @@ pub(super) fn describe(
             });
         }
         let mut logical = statement.clone();
-        if let Some(plan) = msduck_sql::output::lower_native(&mut logical)?
+        if msduck_sql::output::joined_update(statement).is_none()
+            && let Some(plan) = msduck_sql::output::lower_native(&mut logical)?
             && plan.sink.is_none()
         {
             let command = match plan.operation {

@@ -693,6 +693,58 @@ mod tests {
         out
     }
     #[test]
+    fn joined_output_into_prepares_without_writes_and_keeps_handle_usable() {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        session.batch("CREATE TABLE joined_prepare_target(id INT,n INT); CREATE TABLE joined_prepare_sink(n INT); INSERT INTO joined_prepare_target VALUES(1,1)", &HashMap::new(), false);
+        let mut state = State::default();
+        let sql = "UPDATE t SET n=t.n+@step OUTPUT inserted.n INTO joined_prepare_sink(n) FROM joined_prepare_target t JOIN (VALUES(1)) s(id) ON t.id=s.id";
+        state
+            .execute(&mut session, &prepare_request(sql, "@step INT"))
+            .unwrap();
+        assert_eq!(state.prepared[&1].sql, sql);
+        assert_eq!(
+            session
+                .db
+                .query_row("SELECT n FROM dbo.joined_prepare_target", [], |r| r
+                    .get::<_, i32>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            session
+                .db
+                .query_row("SELECT COUNT(*) FROM dbo.joined_prepare_sink", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        let mut execute = handle_request(12, 1);
+        execute.extend([0, 0, 0x26, 4, 4]);
+        execute.extend(7i32.to_le_bytes());
+        state.execute(&mut session, &execute).unwrap();
+        assert_eq!(
+            session
+                .db
+                .query_row("SELECT n FROM dbo.joined_prepare_target", [], |r| r
+                    .get::<_, i32>(0))
+                .unwrap(),
+            8
+        );
+        assert_eq!(
+            session
+                .db
+                .query_row("SELECT n FROM dbo.joined_prepare_sink", [], |r| r
+                    .get::<_, i32>(0))
+                .unwrap(),
+            8
+        );
+        state.execute(&mut session, &handle_request(15, 1)).unwrap();
+        assert!(state.prepared.is_empty());
+        assert_eq!(state.bytes, 0);
+    }
+
+    #[test]
     fn preparation_validates_without_running_sql_and_release_reclaims_storage() {
         let server = Server::open(":memory:").unwrap();
         let mut session = Session::new(server.connection().unwrap()).unwrap();
