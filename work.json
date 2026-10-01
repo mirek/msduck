@@ -8338,7 +8338,7 @@
     {
       "id": "gaps-json-string-v1",
       "title": "FOR JSON AUTO, JSON_MODIFY, ordered STRING_AGG, STRING_SPLIT and HASHBYTES",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
       "scope": [
         "src/engine/ext/json_string.rs",
@@ -8642,7 +8642,7 @@
     {
       "id": "gaps-json-string-v1-hooks",
       "title": "Preflight and runtime diagnostic hooks for FOR JSON AUTO and json_string natives",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-json-string-v1",
       "scope": [
         "crates/msduck-sql/src/preflight.rs",
