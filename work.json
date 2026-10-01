@@ -7918,7 +7918,7 @@
     {
       "id": "column-catalog-declarations-v1",
       "title": "Align column catalog snapshots and identity view shape with SQL Server",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Owner continuing full SQL Server compatibility goal; first-party prepared catalog failures and two agreeing fresh SQL Server captures. Same worker/worktree/PR703; parent task remains unchanged. No engine.rs/root lib/result_metadata.rs edits or external input.",
       "issue": 709,
       "scope": [
