@@ -415,7 +415,6 @@ const differences = {
   },
   'datetimeoffset-keys': {
     2: 'the message shows the UTC instant, not the inserted offset',
-    5: 'CONVERT style 127 for datetimeoffset is unsupported',
     6: 'a column named at is a DuckDB keyword (identifiers)', 7: 'follows step 6', 8: 'follows step 6', 9: 'follows step 6', 10: 'follows step 6',
   },
   'column-level-list': { 11: 'sys.indexes does not yet model key constraints (index catalog)' },
