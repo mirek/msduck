@@ -27,9 +27,15 @@ impl Feature for Hooks {
                  false AS skips_repl_constraints
                FROM sys.objects o JOIN main.__msduck_modules m USING(object_id)
                WHERE m.type_code = 'P';
+             CREATE OR REPLACE VIEW sys.default_constraints AS
+               SELECT o.*, d.column_id AS parent_column_id,
+                 d.definition, false AS is_system_named
+               FROM sys.objects o JOIN main.__msduck_default_constraints d USING(object_id);
              CREATE OR REPLACE MACRO main.__msduck_object_definition(value) AS
                map_extract_value((SELECT map(list(object_id),list(definition))
-                 FROM main.__msduck_modules), value);",
+                 FROM (SELECT object_id,definition FROM main.__msduck_modules
+                   UNION ALL SELECT object_id,definition
+                   FROM main.__msduck_default_constraints)), value);",
         )?;
         Ok(())
     }

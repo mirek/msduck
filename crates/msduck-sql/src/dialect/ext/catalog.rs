@@ -6,6 +6,8 @@ use sqlparser::{
     parser::{Parser, ParserError},
 };
 
+pub mod definition;
+
 /// Parse a statement this feature owns, or decline without consuming tokens.
 pub fn parse(_parser: &mut Parser) -> Option<Result<Statement, ParserError>> {
     None

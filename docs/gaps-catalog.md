@@ -7,7 +7,14 @@ without a separate cache. Procedures are isolated by database and survive
 restart. Startup execution and replication are unsupported and their flags are
 false. Procedure creation/execution belongs to its separate extension, which
 is still a stub on this branch; tests exercise the shared store directly.
-View/default/check definitions and complete wire descriptor parity remain
+Named DEFAULT constraints now project their existing object/column IDs through
+`sys.default_constraints`. Integer literal definitions use the captured
+`((1))` form and are also returned by `OBJECT_DEFINITION`. Source expressions
+are retained separately from SQL Server catalog text. Definitions for other
+expression families and preexisting rows whose source was not stored remain
+NULL until verified serialization/backfill is implemented. Additive storage
+migration preserves existing constraint identities. View/check definitions,
+unnamed DEFAULT constraints and complete wire descriptor parity remain
 unimplemented. This checkpoint does not establish full catalog compatibility.
 
 `reference/gaps-catalog.json` retains all46 responses from each of two fresh

@@ -7,6 +7,11 @@ use sqlparser::ast::*;
 
 pub fn register(db: &Connection) -> Result<()> {
     system_objects::register(db)?;
+    // Additive migration for file-backed databases created before definitions
+    // were retained. Old rows have unknown text rather than fabricated SQL.
+    db.execute_batch("CREATE TABLE IF NOT EXISTS main.__msduck_default_constraints(object_id INTEGER PRIMARY KEY,parent_object_id INTEGER NOT NULL,column_id INTEGER NOT NULL,name VARCHAR NOT NULL,create_date TIMESTAMP NOT NULL,modify_date TIMESTAMP NOT NULL,UNIQUE(parent_object_id,column_id));
+        ALTER TABLE main.__msduck_default_constraints ADD COLUMN IF NOT EXISTS definition VARCHAR;
+        ALTER TABLE main.__msduck_default_constraints ADD COLUMN IF NOT EXISTS source_expression VARCHAR")?;
     db.execute_batch("CREATE TABLE IF NOT EXISTS main.__msduck_objects(object_id INTEGER PRIMARY KEY, schema_id INTEGER NOT NULL, name VARCHAR NOT NULL, type_code VARCHAR NOT NULL, create_date TIMESTAMP NOT NULL, modify_date TIMESTAMP NOT NULL, UNIQUE(schema_id,name));
         CREATE TABLE IF NOT EXISTS main.__msduck_table_types(user_type_id INTEGER PRIMARY KEY,name VARCHAR NOT NULL,schema_id INTEGER NOT NULL,type_table_object_id INTEGER NOT NULL UNIQUE,object_name VARCHAR NOT NULL UNIQUE,create_date TIMESTAMP NOT NULL,UNIQUE(schema_id,name));
         CREATE TABLE IF NOT EXISTS main.__msduck_table_properties(object_id INTEGER PRIMARY KEY,lob_data_space_id INTEGER NOT NULL DEFAULT 0 CHECK(lob_data_space_id IN (0,1)));
@@ -126,9 +131,9 @@ fn record_named_defaults(db: &Connection, statement: &Statement) -> Result<()> {
     };
     for column in columns {
         for option in &column.options {
-            if !matches!(option.option, ColumnOption::Default(_)) {
+            let ColumnOption::Default(expression) = &option.option else {
                 continue;
-            }
+            };
             let Some(name) = &option.name else {
                 continue;
             };
@@ -161,7 +166,11 @@ fn record_named_defaults(db: &Connection, statement: &Statement) -> Result<()> {
                 conflict == 0,
                 "DEFAULT constraint name already exists in schema"
             );
-            db.execute("INSERT INTO main.__msduck_default_constraints SELECT CAST(nextval('main.__msduck_object_ids') AS INTEGER),?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP) WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_default_constraints WHERE parent_object_id=? AND column_id=?)",duckdb::params![object_id,column_id,name.value,object_id,column_id])?;
+            let definition =
+                msduck_sql::dialect::ext::catalog::definition::literal_default_definition(
+                    expression,
+                );
+            db.execute("INSERT INTO main.__msduck_default_constraints(object_id,parent_object_id,column_id,name,create_date,modify_date,definition,source_expression) SELECT CAST(nextval('main.__msduck_object_ids') AS INTEGER),?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP),?,? WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_default_constraints WHERE parent_object_id=? AND column_id=?)",duckdb::params![object_id,column_id,name.value,definition,expression.to_string(),object_id,column_id])?;
         }
     }
     Ok(())
