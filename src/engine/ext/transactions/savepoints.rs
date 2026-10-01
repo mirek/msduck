@@ -16,7 +16,7 @@
 //! not affected by a rollback in SQL Server and are not copied.
 //!
 //! Statements that change the schema (CREATE, ALTER, DROP, SELECT INTO)
-//! and writes to temporary tables after a savepoint fail explicitly,
+//! after a savepoint fail explicitly,
 //! because their effects cannot be undone without rolling back the whole
 //! DuckDB transaction.
 //!
@@ -285,7 +285,7 @@ fn unsupported(what: &str) -> anyhow::Error {
         40515,
         1,
         format!(
-            "unsupported {what} after SAVE TRANSACTION: msduck can roll back only INSERT, UPDATE, DELETE, MERGE and TRUNCATE TABLE on permanent tables to a savepoint"
+            "unsupported {what} after SAVE TRANSACTION: msduck can roll back only INSERT, UPDATE, DELETE, MERGE and TRUNCATE TABLE to a savepoint"
         ),
     )
     .into()
@@ -409,9 +409,9 @@ fn targets(statement: &Statement) -> Vec<ObjectName> {
     names
 }
 
-/// The permanent table a name refers to. `None` for a table variable,
-/// which a rollback does not affect, and for a missing object, which the
-/// statement itself reports.
+/// The table a name refers to. `None` for a table variable, which a
+/// rollback does not affect, and for a missing object, which the statement
+/// itself reports.
 fn resolve(session: &Session, name: &ObjectName) -> Result<Option<Table>> {
     let last = name
         .0
@@ -419,11 +419,11 @@ fn resolve(session: &Session, name: &ObjectName) -> Result<Option<Table>> {
         .and_then(|part| part.as_ident())
         .map(|ident| ident.value.as_str())
         .unwrap_or_default();
-    if last.starts_with('@') {
+    // `#temp` tables and table variables are renamed to backend tables by
+    // the temp_tables feature, which executes the renamed statement; it is
+    // copied then.
+    if last.starts_with('@') || last.starts_with('#') {
         return Ok(None);
-    }
-    if last.starts_with('#') {
-        return Err(unsupported("write to a temporary table"));
     }
     let found = session
         .db
@@ -440,6 +440,9 @@ fn resolve(session: &Session, name: &ObjectName) -> Result<Option<Table>> {
             },
         );
     match found {
+        // A table variable's backend table (see the temp_tables feature)
+        // keeps its rows across a rollback, as in SQL Server.
+        Ok((_, _, name, _)) if name.starts_with("__msduck_tv_") => Ok(None),
         Ok((object_id, schema, name, kind)) if kind == "U" => Ok(Some(Table {
             object_id,
             schema,
