@@ -8574,6 +8574,21 @@
         "Fixture-backed pure core tests plus valid key/array and error-barrier regressions. Parent exact-head formatting/strictClippy/workspace/alltargets build/default/dedicated clients/audit/review or owner fallback/CI required. Same worker owns PR703 merge and prompt completion of all parent/companion issues/projects."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdTNJ"
+    },
+    {
+      "id": "gaps-outer-dml-v1-bind",
+      "title": "Nested joins in joined UPDATE assignment binding (companion of gaps-outer-dml-v1)",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-outer-dml-v1",
+      "scope": [
+        "crates/msduck-sql/src/output_bind.rs"
+      ],
+      "acceptance": [
+        "Joined UPDATE assignment and OUTPUT binding list the factors of unaliased parenthesized joins in the same order as output_target, so an UPDATE whose FROM tree joins the target to a nested join (for example items t LEFT JOIN (foo s JOIN bar b ON ...) ON ...) binds and updates the rows SQL Server does. Covered by the gaps-outer-dml-v1 tests and merged in the same PR."
+      ],
+      "dependencies": [],
+      "issue": 723,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQsr"
     }
   ]
 }
