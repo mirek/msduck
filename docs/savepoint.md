@@ -285,8 +285,9 @@ The capture task changed no Rust behavior. Task `gaps-transactions-v1`
 (issue #727) later implemented these rules for SQL batches, procedures, RPCs
 and transaction-manager requests, using before-image copies of written tables
 because DuckDB has no savepoints. [gaps-transactions.md](gaps-transactions.md)
-describes the implementation and its limits: schema changes, SELECT INTO and
-`#temp` writes after a savepoint fail explicitly, and a native error that
+describes the implementation and its limits: schema changes (including
+creating `#temp` tables) and SELECT INTO after a savepoint fail explicitly,
+and a native error that
 invalidates the DuckDB transaction still cannot be recovered
 ([transaction-recovery.md](transaction-recovery.md)). The fixture is not yet
 replayed whole; `tests/gaps_transactions.rs` and

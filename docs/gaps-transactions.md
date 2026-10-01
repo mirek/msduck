@@ -132,8 +132,9 @@ transaction ends.
   its cost grows with the table, not with the change.
 - Statements whose effects cannot be undone without rolling back the whole
   DuckDB transaction fail explicitly (40515, catchable) while a savepoint
-  exists: CREATE, ALTER and DROP of any object, SELECT INTO, and writes to
-  `#temp` tables or through views. Table variables keep their rows, as in
+  exists: CREATE, ALTER and DROP of any object (including `#temp` tables),
+  SELECT INTO, and writes through views. Writes to existing `#temp` tables
+  are restored like permanent tables; table variables keep their rows, as in
   SQL Server. SQL Server rolls these back to the
   savepoint. Without a savepoint they behave as before.
 - Tables that reference a written table through a foreign key with a

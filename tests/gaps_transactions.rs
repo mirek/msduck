@@ -694,3 +694,21 @@ fn triggers_and_cascades_after_a_savepoint_are_restored() {
     assert_eq!(ints(&s, "SELECT id FROM dbo.c"), [10]);
     assert_eq!(ints(&s, "SELECT n FROM dbo.log"), [1]);
 }
+
+#[test]
+fn temporary_tables_roll_back_and_table_variables_keep_their_rows() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    run(
+        &mut s,
+        "CREATE TABLE #t(n INT); INSERT #t VALUES (1);
+         DECLARE @v TABLE(n INT);
+         BEGIN TRAN; SAVE TRAN s;
+         INSERT #t VALUES (2); INSERT @v VALUES (1);
+         ROLLBACK TRAN s;
+         IF (SELECT count(*) FROM #t) <> 1 THROW 51000, 'temporary table not restored', 1;
+         IF (SELECT count(*) FROM @v) <> 1 THROW 51001, 'table variable rolled back', 1;
+         COMMIT",
+    )
+    .unwrap();
+}
