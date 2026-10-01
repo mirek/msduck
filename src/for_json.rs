@@ -45,6 +45,7 @@ pub enum Writer<'a> {
 /// (FOR JSON AUTO over no rows, as in SQL Server).
 pub struct Finished {
     units: Option<Vec<u16>>,
+    error: Option<anyhow::Error>,
 }
 
 impl Writer<'_> {
@@ -52,11 +53,14 @@ impl Writer<'_> {
         match self {
             Self::Path(writer) => Finished {
                 units: Some(writer.finish()),
+                error: None,
             },
             Self::Auto(writer) => match writer.finish() {
-                Ok(units) => Finished { units },
-                // Size errors surface from `row`; keep the bounded output.
-                Err(_) => Finished { units: None },
+                Ok(units) => Finished { units, error: None },
+                Err(error) => Finished {
+                    units: None,
+                    error: Some(error),
+                },
             },
         }
     }
@@ -219,7 +223,10 @@ impl Output {
         );
         Ok(())
     }
-    pub fn encode(finished: Finished) -> Result<Vec<u8>> {
+    pub fn encode(mut finished: Finished) -> Result<Vec<u8>> {
+        if let Some(error) = finished.error.take() {
+            return Err(error);
+        }
         let rows = finished.units.is_some();
         let text = finished.into_units();
         ensure!(

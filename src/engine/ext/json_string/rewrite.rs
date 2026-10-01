@@ -35,7 +35,7 @@ pub(super) fn lower<T: VisitMut>(
     }
 }
 
-/// A query's row sources and visible CTEs, for typing column operands.
+/// A SELECT's row sources and visible CTEs, for typing column operands.
 struct QueryScope {
     with: Vec<Cte>,
     from: Vec<TableWithJoins>,
@@ -72,18 +72,36 @@ impl VisitorMut for Lower<'_> {
             });
             with.extend(local.cte_tables.iter().cloned());
         }
-        let from = msduck_sql::dialect::ext::json_string::auto::first_select(&query.body)
-            .map(|select| select.from.clone())
-            .unwrap_or_default();
+        // The query level (its ORDER BY) has no row sources of its own;
+        // each SELECT, including every set-operation branch, pushes its own.
         self.scopes.push(QueryScope {
             with,
-            from,
+            from: Vec::new(),
             ordering: None,
         });
         ControlFlow::Continue(())
     }
 
     fn post_visit_query(&mut self, _query: &mut Query) -> ControlFlow<Self::Break> {
+        self.scopes.pop();
+        ControlFlow::Continue(())
+    }
+
+    fn pre_visit_select(&mut self, select: &mut Select) -> ControlFlow<Self::Break> {
+        let with = self
+            .scopes
+            .last()
+            .map(|scope| scope.with.clone())
+            .unwrap_or_default();
+        self.scopes.push(QueryScope {
+            with,
+            from: select.from.clone(),
+            ordering: None,
+        });
+        ControlFlow::Continue(())
+    }
+
+    fn post_visit_select(&mut self, _select: &mut Select) -> ControlFlow<Self::Break> {
         self.scopes.pop();
         ControlFlow::Continue(())
     }

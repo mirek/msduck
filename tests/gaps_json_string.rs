@@ -352,6 +352,11 @@ async fn string_agg_and_string_split() {
             [json!(2), json!("z"), json!("1")]
         ]
     );
+    // Orderings only need to agree within one SELECT, not across UNION branches.
+    assert_eq!(
+        rows(&mut client, "SELECT STRING_AGG(x, ',') WITHIN GROUP (ORDER BY x) FROM dbo.b UNION ALL SELECT STRING_AGG(x, ',') WITHIN GROUP (ORDER BY x DESC) FROM dbo.b ORDER BY 1").await,
+        [[json!("p,q,r")], [json!("r,q,p")]]
+    );
     for (sql, expected) in [
         (
             "SELECT STRING_AGG(name, CAST(',' AS varchar(5))) FROM dbo.a",
@@ -414,6 +419,17 @@ async fn hashbytes_algorithms_and_encodings() {
             scalar(&mut client, "SELECT HASHBYTES('SHA1', N'z')").await,
             scalar(&mut client, "SELECT HASHBYTES('SHA1', 'b')").await,
         ]]
+    );
+    // Each UNION branch types its operands against its own FROM clause.
+    run(
+        &mut client,
+        "CREATE TABLE dbo.t1(k int); CREATE TABLE dbo.t2(k varchar(10)); INSERT dbo.t2 VALUES ('ab')",
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        rows(&mut client, "SELECT CAST(NULL AS varbinary(10)) FROM dbo.t1 UNION ALL SELECT HASHBYTES('MD5', k) FROM dbo.t2").await,
+        [[json!("0x187ef4436122d1cc2f40dc2b92f0eba0")]]
     );
     let digest = scalar(&mut client, "SELECT HASHBYTES('SHA2_512', N'abc')").await;
     assert_eq!(digest.as_str().unwrap().len(), 2 + 128);
