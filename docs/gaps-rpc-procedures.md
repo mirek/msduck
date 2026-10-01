@@ -80,7 +80,8 @@ name or id) runs as the call `EXEC name arguments` would in a SQL batch.
   - then, as in a batch, the engine's statement path.
 - **Batch scope.** The request is its own batch: `batch_begin` and
   `batch_end` run around it. A transaction left doomed is rolled back with
-  3998, as at the end of any batch.
+  3998, as at the end of any batch. The features' `batch` hooks, which
+  inspect batch text, do not run: the request has no text.
 
 Binding, conversion, defaults, return status, frames and errors inside the
 procedure are those of the procedure runtime ([gaps-procedures.md](gaps-procedures.md)).
