@@ -361,15 +361,15 @@ fn transaction_manager_savepoints() {
         .unwrap();
     assert_eq!((error.number, error.state), (103, 30));
     // An empty name is 3977 and rolls back the whole transaction.
-    let tokens = s
+    let error = s
         .transaction_request(TransactionRequest::Save {
             name: String::new(),
         })
-        .unwrap();
-    assert!(contains_utf16(
-        &tokens,
+        .unwrap_err();
+    assert_eq!(
+        error.to_string(),
         "The savepoint name cannot be NULL. The batch has been aborted."
-    ));
+    );
     assert_eq!(s.transactions, 0);
     assert_eq!(ints(&s, "SELECT count(*) FROM dbo.t"), [0]);
 }
@@ -428,15 +428,30 @@ fn isolation_levels_are_accepted_and_reported() {
 fn transaction_manager_begin_accepts_every_level() {
     let server = Server::open(":memory:").unwrap();
     let mut s = session(&server);
-    for level in 0..=5 {
+    for level in [4, 0, 1, 3, 5, 2] {
         s.transaction_request(TransactionRequest::Begin(BeginTransaction {
             isolation: level,
             name: String::new(),
         }))
         .unwrap();
+        // The level chosen at begin is the session's (0 keeps it).
+        let expected = if level == 0 { 4 } else { level };
+        assert_eq!(isolation(&s), i16::from(expected));
         s.transaction_request(TransactionRequest::Commit { restart: None })
             .unwrap();
+        assert_eq!(isolation(&s), i16::from(expected));
     }
+    // A level set inside an RPC reverts when it returns; a SQL batch keeps it.
+    let (_, ok) = s.batch_response(
+        "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+        &Default::default(),
+        true,
+        None,
+    );
+    assert!(ok);
+    assert_eq!(isolation(&s), 2);
+    run(&mut s, "SET TRANSACTION ISOLATION LEVEL SNAPSHOT").unwrap();
+    assert_eq!(isolation(&s), 5);
     assert!(
         s.transaction_request(TransactionRequest::Begin(BeginTransaction {
             isolation: 6,

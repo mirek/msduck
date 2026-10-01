@@ -13,7 +13,7 @@ use sqlparser::ast::{TransactionIsolationLevel, TransactionMode};
 pub(super) const READ_COMMITTED: u8 = 2;
 
 /// Set the session's isolation level (TDS numbering, 1-5).
-pub(in crate::engine) fn set(session: &mut Session, isolation: u8) {
+pub(super) fn set(session: &mut Session, isolation: u8) {
     session.ext.transactions.isolation = isolation;
     publish(session);
 }
@@ -25,25 +25,24 @@ pub(super) fn publish(session: &Session) {
         .set_isolation(i16::from(session.ext.transactions.isolation));
 }
 
-/// A transaction-manager begin request: 0 keeps the current level.
-#[allow(dead_code)] // Wired by the engine once the isolation hook sees the session.
-pub(in crate::engine) fn begin_request(session: &mut Session, isolation: u8) {
+/// A transaction began: a transaction-manager request selects a level
+/// (1-5) that stays the session's level; 0 keeps the current one.
+pub(super) fn begin_request(session: &mut Session, isolation: u8) {
     if (1..=5).contains(&isolation) {
         set(session, isolation);
     }
 }
 
-/// An RPC (`sp_executesql`, prepared execution) starts: SQL Server restores
-/// the caller's level when it returns, as for a stored procedure.
-#[allow(dead_code)] // Wired by the engine's RPC scope.
-pub(in crate::engine) fn rpc_begin(session: &mut Session) {
-    let isolation = session.ext.transactions.isolation;
-    session.ext.transactions.rpc_isolation.push(isolation);
+/// A batch starts. SQL Server restores the caller's level when an RPC
+/// (`sp_executesql`, prepared execution) or a procedure body returns, so
+/// those batches remember it; an ordinary SQL batch keeps its changes.
+pub(super) fn batch_begin(session: &mut Session, rpc: bool) {
+    let saved = rpc.then_some(session.ext.transactions.isolation);
+    session.ext.transactions.batch_isolation.push(saved);
 }
 
-#[allow(dead_code)] // Wired by the engine's RPC scope.
-pub(in crate::engine) fn rpc_end(session: &mut Session) {
-    if let Some(isolation) = session.ext.transactions.rpc_isolation.pop()
+pub(super) fn batch_end(session: &mut Session) {
+    if let Some(Some(isolation)) = session.ext.transactions.batch_isolation.pop()
         && isolation != session.ext.transactions.isolation
     {
         set(session, isolation);

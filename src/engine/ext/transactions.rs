@@ -26,8 +26,9 @@ pub(crate) struct State {
     /// TDS numbering: 1 read uncommitted, 2 read committed, 3 repeatable
     /// read, 4 serializable, 5 snapshot.
     isolation: u8,
-    /// Isolation levels to restore when the RPCs running now return.
-    rpc_isolation: Vec<u8>,
+    /// One entry per running batch: the level to restore when it ends
+    /// (for RPCs and procedure bodies), or `None`.
+    batch_isolation: Vec<Option<u8>>,
     savepoints: savepoints::Stack,
 }
 
@@ -35,7 +36,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             isolation: options::READ_COMMITTED,
-            rpc_isolation: Vec::new(),
+            batch_isolation: Vec::new(),
             savepoints: Default::default(),
         }
     }
@@ -96,6 +97,18 @@ impl Feature for Hooks {
 
     fn rollback_to(&self, session: &mut Session, name: &str) -> Option<Result<Vec<u8>>> {
         savepoints::rollback_request(session, name)
+    }
+
+    fn batch_begin(&self, session: &mut Session, rpc: bool) {
+        options::batch_begin(session, rpc);
+    }
+
+    fn batch_end(&self, session: &mut Session) {
+        options::batch_end(session);
+    }
+
+    fn transaction_begin(&self, session: &mut Session, isolation: u8) {
+        options::begin_request(session, isolation);
     }
 
     fn transaction_end(&self, session: &mut Session, _committed: bool) {
