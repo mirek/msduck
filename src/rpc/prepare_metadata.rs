@@ -544,6 +544,7 @@ fn prepared_order(
             expr: &Expr,
             scope: &'a Scope,
         ) -> Option<&'a msduck_sql::binding_scope::Field> {
+            let expr = msduck_sql::variant_cast::source(expr).unwrap_or(expr);
             let ids = match expr {
                 Expr::Nested(expr) => return column(expr, scope),
                 Expr::Identifier(id) if !id.value.starts_with('@') => vec![id],
@@ -641,6 +642,25 @@ fn prepared_order(
                 }
                 ordinals.push(u16::try_from(index + 1).ok()?);
             } else {
+                // Captured hidden INT-column-plus-integer keys use ordinal
+                // zero. The original native binding validates arithmetic;
+                // this declaration check neither evaluates nor rewrites it.
+                if let Expr::BinaryOp {
+                    left,
+                    op: BinaryOperator::Plus,
+                    right,
+                } = &key.expr
+                    && column(left, &scope).is_some_and(|field| {
+                        field.info.as_ref().and_then(|info| info.system_type_id) == Some(56)
+                    })
+                    && matches!(right.as_ref(), Expr::Value(value)
+                        if matches!(&value.value, Value::Number(number, false)
+                            if number.parse::<i32>().is_ok()))
+                    && select.distinct.is_none()
+                {
+                    ordinals.push(0);
+                    continue;
+                }
                 let field = column(&key.expr, &scope)?;
                 let projected = expressions.iter().position(|expr| {
                     column(expr, &scope).is_some_and(|other| std::ptr::eq(field, other))
