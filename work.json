@@ -7983,6 +7983,30 @@
         "Focused catalog clients and final exact-head default clients plus workspace/audit/CI/review or authorized fallback under parent PR gates; same worker owns final merge and prompt registry/project/issue completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdJ3l"
+    },
+    {
+      "id": "catalog-alias-wire-v1",
+      "title": "Preserve sysname alias USERTYPE in ordinary execution metadata",
+      "state": "backlog",
+      "authorization": "Owner continuing full SQL Server compatibility goal; first-party exact-head complete raw batch comparison in PR703 and two independently agreeing fresh reference captures. Backlog only, no reservation or implementation authorization over active engine/result alignment work.",
+      "issue": 731,
+      "scope": [
+        "crates/msduck-tds/src/lib.rs",
+        "src/result_metadata.rs",
+        "src/engine.rs",
+        "tests/catalog_alias_wire.rs",
+        "tests/catalog_alias_wire.test.mjs",
+        "reference/catalog-alias-wire.json",
+        "scripts/capture-catalog-alias-wire.mjs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Backlog reserves no files. Owner must publish a non-overlapping ready task and explicitly hand off stopped claimed work where necessary before exclusive claim or implementation. Do not adopt older result-alignment receipts or edit owner separate engine.rs work.",
+        "Carry explicit resolved alias IDs through aligned logical result metadata into bounded wire columns. Unknown/misaligned fields and scalar conversions must not inherit guessed alias IDs; no row payloads or blanket NVARCHAR-to-sysname mapping. Pure codec supports caller-provided IDs; root adapters supply verified logical declarations.",
+        "Replay complete ordinary sys.columns/identity_columns batch captures from PR703 (two runs, SHA9311f87f5f59c91dd508590807eeaf8b304799a4f2cda3abff1da65f796cc930). At3944853 only four plus three alias descriptor IDs differ; preserve all raw responses. Capture further direct/empty/derived/prepared-execution boundaries before generalizing.",
+        "Final exact-head workspace formatting/strictClippy/tests/alltargets build, independent clients, semantic copied-corpus audit, required CI and verified review or authorized fallback; claiming worker merges and promptly completes task/project/issue."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdLTH"
     }
   ]
 }
