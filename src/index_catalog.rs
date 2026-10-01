@@ -77,6 +77,12 @@ pub fn register(db: &Connection) -> Result<()> {
           column_name VARCHAR NOT NULL,PRIMARY KEY(incarnation,ordinal));
         -- Descending key columns (1-based ordinals) of registered indexes.
         -- Storage ignores key order; sys.index_columns reports it.
+        -- The sys.indexes index_id of each constraint (tag) and registered
+        -- index (incarnation), once assigned. A PRIMARY KEY assumed
+        -- clustered also keeps the ID it takes if it turns out not to be.
+        -- txn is the transaction that assigned the ID.
+        CREATE TABLE IF NOT EXISTS main.__msduck_index_ids(
+          object_id INTEGER NOT NULL,tag BIGINT,incarnation BIGINT,index_id INTEGER NOT NULL,fallback INTEGER,txn BIGINT);
         CREATE TABLE IF NOT EXISTS main.__msduck_index_descending(
           incarnation BIGINT NOT NULL,ordinal INTEGER NOT NULL,PRIMARY KEY(incarnation,ordinal))")?;
     // Functions are instance-wide; every database of an instance shares one.
@@ -104,12 +110,48 @@ pub fn sync(db: &Connection) -> Result<()> {
         JOIN duckdb_indexes() i ON i.database_name=current_database() AND i.schema_name=c.backend_schema AND i.index_name=c.backend_name AND i.table_oid=t.table_oid
         WHERE o.object_id=c.object_id AND rtrim(o.type)='U');
         DELETE FROM main.__msduck_index_keys k WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_index_catalog c WHERE c.incarnation=k.incarnation)")?;
-    publish_key_indexes(db)?;
+    publish_key_indexes(db, false)?;
+    allocate(db)?;
     // The keys feature rebuilds an altered table's indexes under their old
     // incarnations, so its record keeps their key order.
     db.execute_batch("DELETE FROM main.__msduck_index_descending d
         WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_index_catalog c WHERE c.incarnation=d.incarnation)
           AND NOT EXISTS(SELECT 1 FROM main.__msduck_key_indexes k WHERE k.incarnation=d.incarnation)")?;
+    Ok(())
+}
+
+/// Persist the sys.indexes ID of every index that has none, and drop the IDs
+/// of indexes that are gone. A PRIMARY KEY that held ID 1 while the table had
+/// no clustered index gets a nonclustered ID once it has one. An index the
+/// keys feature is rebuilding around an ALTER TABLE keeps its ID.
+fn allocate(db: &Connection) -> Result<()> {
+    let published: bool = db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM duckdb_views() WHERE database_name=current_database()
+           AND schema_name='main' AND view_name='__msduck_index_entries')",
+        [],
+        |r| r.get(0),
+    )?;
+    if !published {
+        return Ok(());
+    }
+    // The assignments are computed from the stored ones, so they are
+    // materialized before the stored ones change.
+    db.execute_batch(
+        "DELETE FROM main.__msduck_index_ids p WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_key_indexes k
+           WHERE k.object_id=p.object_id AND (k.tag=p.tag OR k.incarnation=p.incarnation))
+         AND NOT EXISTS(SELECT 1 FROM main.__msduck_index_catalog c
+           WHERE c.object_id=p.object_id AND c.incarnation=p.incarnation);
+         CREATE OR REPLACE TEMP TABLE __msduck_index_ids_next AS
+           SELECT object_id,tag,incarnation,index_id,fallback,txid_current() AS txn FROM main.__msduck_index_entries;
+         DELETE FROM main.__msduck_index_ids p WHERE EXISTS(SELECT 1 FROM __msduck_index_ids_next n
+           WHERE n.object_id=p.object_id AND n.tag IS NOT DISTINCT FROM p.tag
+             AND n.incarnation IS NOT DISTINCT FROM p.incarnation
+             AND (n.index_id<>p.index_id OR n.fallback IS DISTINCT FROM p.fallback));
+         INSERT INTO main.__msduck_index_ids SELECT * FROM __msduck_index_ids_next n
+           WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_index_ids p WHERE n.object_id=p.object_id
+             AND n.tag IS NOT DISTINCT FROM p.tag AND n.incarnation IS NOT DISTINCT FROM p.incarnation);
+         DROP TABLE __msduck_index_ids_next",
+    )?;
     Ok(())
 }
 
@@ -415,33 +457,16 @@ fn key_indexes_state(db: &Connection) -> Result<(bool, Option<bool>)> {
     )?)
 }
 
-/// Point `main.__msduck_key_indexes` at the keys record once it exists. Only
-/// reads the catalog unless the view must change.
-///
-/// A missing view is created in the caller's transaction (bootstrap). An
-/// outdated one is replaced on a separate connection in a transaction of its
-/// own, so concurrent first DDL statements of a new database cannot fail on
-/// a write-write conflict over the view; a conflicting replacement is left
-/// to the session that made it, and a later call retries a failed one.
-fn publish_key_indexes(db: &Connection) -> Result<()> {
+/// Point `main.__msduck_key_indexes` at the keys record, or at the
+/// placeholder while the keys feature has not bootstrapped the database.
+/// `replace` is for bootstrap only: [`publish_views`] runs again after the
+/// feature bootstraps, so the placeholder never outlives bootstrap. Other
+/// callers only create a missing view, so they never write a catalog entry
+/// that concurrent transactions share.
+fn publish_key_indexes(db: &Connection, replace: bool) -> Result<()> {
     let (exists, view) = key_indexes_state(db)?;
-    let definition = |exists: bool| if exists { KEY_INDEXES } else { NO_KEY_INDEXES };
-    match view {
-        None => db.execute_batch(definition(exists))?,
-        Some(current) if current == exists => {}
-        Some(_) => {
-            let database: String = db.query_row("SELECT current_database()", [], |r| r.get(0))?;
-            let replace = || -> Result<()> {
-                let other = db.try_clone()?;
-                other.execute_batch(&format!("USE {}", quote(&database)))?;
-                let (exists, view) = key_indexes_state(&other)?;
-                if view != Some(exists) {
-                    other.execute_batch(definition(exists))?;
-                }
-                Ok(())
-            };
-            let _ = replace();
-        }
+    if view.is_none() || (replace && view != Some(exists)) {
+        db.execute_batch(if exists { KEY_INDEXES } else { NO_KEY_INDEXES })?;
     }
     Ok(())
 }
@@ -451,17 +476,19 @@ fn publish_key_indexes(db: &Connection) -> Result<()> {
 /// Rows come from the table-owned catalog (ordinary and keys-managed indexes)
 /// and from the keys feature's PRIMARY KEY and UNIQUE constraints. Index IDs
 /// follow SQL Server: 1 for the clustered index, 0 for the heap of a table
-/// without one, and 2 upwards for nonclustered indexes, constraints first.
-/// SQL Server creates the constraints of one statement in reverse
-/// declaration order; constraints recorded with consecutive tags count as one
-/// statement. The catalog's stored index IDs (2 upwards per table, gaps
-/// reused) order the registered indexes. A PRIMARY KEY is clustered unless the table has a
-/// clustered index; UNIQUE constraints are nonclustered. These are SQL
-/// Server's defaults: an explicit CLUSTERED or NONCLUSTERED on a constraint
-/// is not recorded. A physical index or native key constraint that neither
-/// catalog records fails explicitly rather than being omitted.
+/// without one, and the smallest free ID from 2 upwards for each other index
+/// in creation order. [`sync`] persists each index's ID in
+/// `main.__msduck_index_ids`; until then it is computed the same way. Every
+/// DDL statement synchronizes, so the indexes awaiting an ID come from the
+/// latest statement: its constraints first, in reverse declaration order as
+/// SQL Server creates them, then its indexes. A PRIMARY KEY is clustered
+/// unless the table has a clustered index, and stays nonclustered once it
+/// has had one; UNIQUE constraints are nonclustered. These are SQL Server's
+/// defaults: an explicit CLUSTERED or NONCLUSTERED on a constraint is not
+/// recorded. A physical index or native key constraint that neither catalog
+/// records fails explicitly rather than being omitted.
 pub fn publish_views(db: &Connection) -> Result<()> {
-    publish_key_indexes(db)?;
+    publish_key_indexes(db, true)?;
     db.execute_batch("CREATE OR REPLACE MACRO main.__msduck_index_catalog_ready() AS
         CASE WHEN EXISTS(SELECT 1 FROM duckdb_indexes() i
           JOIN sys.schemas s ON s.name=i.schema_name
@@ -491,27 +518,60 @@ pub fn publish_views(db: &Connection) -> Result<()> {
             coalesce(k.included_columns,CAST([] AS VARCHAR[])) AS included,k.filter_definition AS filter
           FROM main.__msduck_live_indexes l
           LEFT JOIN main.__msduck_key_indexes k ON k.kind='IX' AND k.incarnation=l.incarnation AND k.object_id=l.object_id),
-        cx AS (SELECT object_id,min(stored_id) AS stored_id FROM ix WHERE clustered GROUP BY object_id),
-        kc AS (
-          SELECT k.tag,k.object_id,k.name,k.kind,k.key_columns,
-            k.kind='PK' AND NOT EXISTS(SELECT 1 FROM cx WHERE cx.object_id=k.object_id) AS clustered,
-            k.tag-row_number() OVER (PARTITION BY k.object_id ORDER BY k.tag) AS run
-          FROM main.__msduck_key_indexes k JOIN sys.objects o ON o.object_id=k.object_id AND rtrim(o.type)='U'
-          WHERE k.kind IN ('PK','UQ')),
-        nc AS (SELECT object_id,count(*) AS n FROM kc WHERE NOT clustered GROUP BY object_id)
-        SELECT kc.object_id,
-          CAST(CASE WHEN kc.clustered THEN 1
-            ELSE 1+row_number() OVER (PARTITION BY kc.object_id,kc.clustered ORDER BY kc.run,kc.tag DESC) END AS INTEGER) AS index_id,
-          kc.name,kc.clustered,true AS is_unique,kc.kind='PK' AS is_primary_key,kc.kind='UQ' AS is_unique_constraint,
-          CAST(NULL AS VARCHAR) AS filter,kc.key_columns,CAST(NULL AS BIGINT) AS incarnation,
-          CAST([] AS VARCHAR[]) AS included
-        FROM kc
-        UNION ALL
-        SELECT ix.object_id,
-          CAST(CASE WHEN ix.clustered THEN 1
-            ELSE ix.stored_id+coalesce(nc.n,0)-CASE WHEN cx.stored_id<ix.stored_id THEN 1 ELSE 0 END END AS INTEGER),
-          ix.name,ix.clustered,ix.is_unique,false,false,ix.filter,CAST(NULL AS VARCHAR[]),ix.incarnation,ix.included
-        FROM ix LEFT JOIN nc ON nc.object_id=ix.object_id LEFT JOIN cx ON cx.object_id=ix.object_id;
+        cx AS (SELECT DISTINCT object_id FROM ix WHERE clustered),
+        e AS (
+          SELECT k.object_id,k.tag,CAST(NULL AS BIGINT) AS incarnation,CAST(NULL AS INTEGER) AS stored_id,
+            k.name,k.kind,true AS is_unique,k.key_columns,CAST(NULL AS VARCHAR) AS filter,
+            CAST([] AS VARCHAR[]) AS included,p.index_id AS persisted,p.fallback,
+            k.kind='PK' AND k.object_id NOT IN (SELECT object_id FROM cx) AND coalesce(p.index_id,1)=1 AS clustered
+          FROM main.__msduck_key_indexes k
+          JOIN sys.objects o ON o.object_id=k.object_id AND rtrim(o.type)='U'
+          -- Constraints given IDs by this transaction may belong to the same
+          -- statement as later ones (ALTER TABLE ADD of several constraints
+          -- synchronizes between them), so they are numbered again together.
+          LEFT JOIN main.__msduck_index_ids p ON p.object_id=k.object_id AND p.tag=k.tag
+            AND p.txn IS DISTINCT FROM txid_current()
+          WHERE k.kind IN ('PK','UQ')
+          UNION ALL
+          SELECT ix.object_id,NULL,ix.incarnation,ix.stored_id,ix.name,'IX',ix.is_unique,NULL,ix.filter,ix.included,
+            p.index_id,p.fallback,ix.clustered
+          FROM ix LEFT JOIN main.__msduck_index_ids p ON p.object_id=ix.object_id AND p.incarnation=ix.incarnation),
+        -- A PRIMARY KEY that held ID 1 on a table that now has a clustered
+        -- index was nonclustered: it takes its fallback ID, and the IDs
+        -- assigned after it move up by one, as SQL Server would have
+        -- assigned them.
+        demoted AS (SELECT object_id,fallback FROM e WHERE kind='PK' AND persisted=1 AND NOT clustered),
+        v AS (
+          SELECT e.*,CASE
+              WHEN e.kind='PK' AND e.persisted=1 AND NOT e.clustered THEN e.fallback
+              WHEN e.clustered THEN CASE WHEN e.persisted=1 THEN 1 END
+              WHEN e.persisted>=2 THEN e.persisted+CASE WHEN e.persisted>=d.fallback THEN 1 ELSE 0 END
+            END AS current
+          FROM e LEFT JOIN demoted d ON d.object_id=e.object_id),
+        -- Indexes without an ID come from the latest statement: constraints
+        -- in reverse declaration order, then indexes.
+        pending AS (
+          SELECT object_id,tag,incarnation,
+            CASE WHEN NOT clustered THEN row_number() OVER (PARTITION BY object_id,clustered
+              ORDER BY tag IS NULL,tag DESC,stored_id) END AS rank,
+            row_number() OVER (PARTITION BY object_id ORDER BY tag IS NULL,tag DESC,stored_id) AS rank_all
+          FROM v WHERE current IS NULL AND (NOT clustered OR kind='PK')),
+        free AS (
+          SELECT t.object_id,f.id,row_number() OVER (PARTITION BY t.object_id ORDER BY f.id) AS rank
+          FROM (SELECT object_id,coalesce(max(current),1)+count(*) FILTER (WHERE current IS NULL)+1 AS top
+                FROM v GROUP BY object_id) t
+          CROSS JOIN LATERAL (SELECT unnest(generate_series(2,t.top)) AS id) f
+          WHERE NOT EXISTS(SELECT 1 FROM v WHERE v.object_id=t.object_id AND v.current=f.id))
+        SELECT v.object_id,
+          CAST(CASE WHEN v.clustered THEN 1 ELSE coalesce(v.current,f.id) END AS INTEGER) AS index_id,
+          v.name,v.clustered,v.is_unique,v.kind='PK' AS is_primary_key,v.kind='UQ' AS is_unique_constraint,
+          v.filter,v.key_columns,v.incarnation,v.included,v.tag,v.persisted,
+          CAST(CASE WHEN v.kind='PK' AND v.clustered AND v.persisted IS NULL THEN a.id ELSE v.fallback END AS INTEGER) AS fallback
+        FROM v
+        LEFT JOIN pending p ON p.object_id=v.object_id AND p.tag IS NOT DISTINCT FROM v.tag
+          AND p.incarnation IS NOT DISTINCT FROM v.incarnation
+        LEFT JOIN free f ON f.object_id=p.object_id AND f.rank=p.rank
+        LEFT JOIN free a ON a.object_id=p.object_id AND a.rank=p.rank_all;
         CREATE OR REPLACE VIEW sys.indexes AS
         SELECT r.object_id,r.name,r.index_id,CAST(r.type AS UTINYINT) AS type,
           CAST(CASE r.type WHEN 0 THEN 'HEAP' WHEN 1 THEN 'CLUSTERED' ELSE 'NONCLUSTERED' END AS VARCHAR) AS type_desc,

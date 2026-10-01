@@ -414,3 +414,89 @@ fn rows_survive_alter_table_and_restart() {
     drop(server);
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+/// IDs are kept once assigned: constraints added or dropped later do not
+/// renumber other indexes, and a primary key that turns out nonclustered
+/// takes the ID SQL Server gave it.
+#[test]
+fn index_ids_are_kept_across_later_constraint_changes() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    for sql in [
+        "CREATE TABLE t (a int CONSTRAINT u1 UNIQUE, b int)",
+        "ALTER TABLE t ADD CONSTRAINT u2 UNIQUE(b)",
+        "CREATE TABLE t2 (id int NOT NULL, v int)",
+        "CREATE INDEX ix ON t2(v)",
+        "ALTER TABLE t2 ADD CONSTRAINT uq2 UNIQUE(id)",
+        "CREATE TABLE t3 (a int CONSTRAINT u31 UNIQUE, b int)",
+        "CREATE INDEX ix3 ON t3(b)",
+        "ALTER TABLE t3 DROP CONSTRAINT u31",
+        "CREATE TABLE t4 (id int NOT NULL CONSTRAINT pk_t4 PRIMARY KEY NONCLUSTERED, a int CONSTRAINT u41 UNIQUE, b int)",
+        "CREATE INDEX ix4 ON t4(b)",
+        "CREATE CLUSTERED INDEX cx4 ON t4(a)",
+    ] {
+        run(&mut s, sql);
+    }
+    // SQL Server: the same rows.
+    assert_eq!(
+        rows(
+            &s,
+            "SELECT o.name,i.name,i.index_id,i.type_desc FROM sys.indexes i JOIN sys.objects o ON o.object_id=i.object_id
+             WHERE rtrim(o.type)='U' ORDER BY o.name,i.index_id"
+        ),
+        [
+            "t|NULL|0|HEAP",
+            "t|u1|2|NONCLUSTERED",
+            "t|u2|3|NONCLUSTERED",
+            "t2|NULL|0|HEAP",
+            "t2|ix|2|NONCLUSTERED",
+            "t2|uq2|3|NONCLUSTERED",
+            "t3|NULL|0|HEAP",
+            "t3|ix3|3|NONCLUSTERED",
+            "t4|cx4|1|CLUSTERED",
+            "t4|u41|2|NONCLUSTERED",
+            "t4|pk_t4|3|NONCLUSTERED",
+            "t4|ix4|4|NONCLUSTERED",
+        ]
+    );
+}
+
+/// A new database's first transaction reads the constraint record; reading
+/// the views must not abort it.
+#[test]
+fn first_transaction_of_a_new_database_reads_constraints() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    run(&mut s, "CREATE DATABASE fresh");
+    for database in ["master", "fresh"] {
+        run(&mut s, &format!("USE {database}"));
+        run(
+            &mut s,
+            "BEGIN TRANSACTION;
+             CREATE TABLE p (id int NOT NULL CONSTRAINT pk_p PRIMARY KEY, v int, w int);
+             CREATE INDEX ixd ON p(v DESC, w) INCLUDE (id);
+             ALTER TABLE p ADD extra int NULL;
+             SELECT * FROM sys.indexes;
+             COMMIT",
+        );
+        assert_eq!(
+            rows(
+                &s,
+                "SELECT i.name,i.index_id,i.type_desc FROM sys.indexes i JOIN sys.objects o ON o.object_id=i.object_id
+                 WHERE o.name='p' ORDER BY i.index_id"
+            ),
+            ["pk_p|1|CLUSTERED", "ixd|2|NONCLUSTERED"],
+            "{database}"
+        );
+        assert_eq!(
+            rows(
+                &s,
+                "SELECT ic.index_id,ic.index_column_id,ic.column_id,ic.key_ordinal,ic.is_descending_key,ic.is_included_column
+                 FROM sys.index_columns ic JOIN sys.objects o ON o.object_id=ic.object_id
+                 WHERE o.name='p' ORDER BY ic.index_id,ic.index_column_id"
+            ),
+            ["1|1|1|1|0|0", "2|1|2|1|1|0", "2|2|3|2|0|0", "2|3|1|0|0|1"],
+            "{database}"
+        );
+    }
+}
