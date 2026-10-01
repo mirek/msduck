@@ -70,12 +70,19 @@ fn translate(
     let Some((schema, table, column)) = resolve(session, target.trim_end(), schema) else {
         return error;
     };
+    // Table variables are named bare; temporary tables live in tempdb.
+    let qualified = if table.starts_with('@') {
+        table
+    } else if table.starts_with('#') {
+        format!("tempdb.dbo.{table}")
+    } else {
+        format!("{}.{schema}.{table}", session.database.name)
+    };
     let diagnostic = SqlError::new(
         515,
         2,
         format!(
-            "Cannot insert the value NULL into column '{column}', table '{}.{schema}.{table}'; column does not allow nulls. {verb} fails.",
-            session.database.name
+            "Cannot insert the value NULL into column '{column}', table '{qualified}'; column does not allow nulls. {verb} fails."
         ),
     );
     // Keep every context the engine attached (failed-query metadata,

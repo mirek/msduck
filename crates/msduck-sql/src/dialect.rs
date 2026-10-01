@@ -115,6 +115,9 @@ impl Dialect for ServerDialect {
         true
     }
     fn parse_prefix(&self, parser: &mut Parser) -> Option<Result<Expr, ParserError>> {
+        if let Some(expr) = ext::identifiers::parse_prefix(parser) {
+            return Some(expr);
+        }
         // A scalar query can begin with a parenthesized set-operation branch.
         // The default prefix parser only recognizes an immediate SELECT.
         if parser.peek_token().token == Token::LParen

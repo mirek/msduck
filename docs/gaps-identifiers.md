@@ -43,7 +43,10 @@ Two layers make this work:
   syntax (`LIMIT`, `QUALIFY`, `LATERAL`, `INTERVAL`, `RETURNING`,
   `NATURAL`, `ILIKE` and so on), and of `CAST`, `TRY_CAST`, `TRIM`,
   `EXTRACT`, `SUBSTRING` and `OVERLAY` when they are not directly followed by
-  `(`. Words that are T-SQL syntax only in particular places are accepted
+  `(`. The dialect's prefix parser applies the same rule, so text that
+  sqlparser tokenizes itself (stored CHECK definitions, for example) also
+  reads `interval > 0` as a column reference. Words that are T-SQL syntax
+  only in particular places are accepted
   as bare aliases elsewhere: `OFFSET` (syntax only after ORDER BY), `AT`
   (`AT TIME ZONE` is kept), `WINDOW` (a `WINDOW name AS (...)` clause is
   kept) and `USING` (a following table source keeps `MERGE ... USING`).
@@ -77,7 +80,8 @@ Two layers make this work:
   column does not allow nulls. INSERT fails.` (`UPDATE fails.` for an
   UPDATE). DuckDB's constraint message names only `table.column`; the schema
   comes from the current database's catalog, preferring the statement's own
-  schema. The error number, batch continuation, TRY/CATCH and XACT_ABORT
+  schema. A table variable is named bare (`table '@t'`), as SQL Server does,
+  and a temporary table as `tempdb.dbo.#name`. The error number, batch continuation, TRY/CATCH and XACT_ABORT
   handling are unchanged. The backend text remains the error's display, so
   message-based classification still yields 515.
 - **2627** and **2601** name the object as `'dbo.items'` in SQL Server, with
@@ -91,7 +95,9 @@ Two layers make this work:
   CTEs, parameters, indexes and views in a user database; ORDER BY ...
   OFFSET and AT TIME ZONE beside columns named `offset` and `at`; 2628 and
   515 texts, numbers, states and classes in a user database and master,
-  including the materialized write path in a transaction and TRY/CATCH.
+  including the materialized write path in a transaction and TRY/CATCH;
+  CHECK constraints on columns named `interval`, `trim` and `cast`; 515 for
+  a table variable.
 - `tests/compat/identifiers.test.mjs`: the same through tedious, including
   `CREATE TABLE items(offset int NOT NULL)`, `sys.columns` names, typed
   `@word` parameters, scalar subqueries in DECLARE/IF/SET and the
@@ -106,6 +112,8 @@ Two layers make this work:
   `tablesample`, `values`) are not rejected with SQL Server's 156 "Incorrect
   syntax near the keyword" diagnostic: `values` is accepted, and the others
   fail with a different number.
+- For a temporary table, SQL Server's 515 text names the internal
+  `#name____...suffix`; msduck names `tempdb.dbo.#name`.
 - 515 from a statement nested in a trigger or procedure body reports the
   outer statement's verb (`INSERT fails.`/`UPDATE fails.`). MERGE, SELECT
   INTO and ALTER TABLE paths keep DuckDB's NOT NULL text.

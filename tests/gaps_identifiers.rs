@@ -244,3 +244,35 @@ fn not_null_violation_names_the_current_database() {
     );
     assert_eq!(values(&session, "SELECT n FROM log"), [515]);
 }
+
+#[test]
+fn check_constraints_on_contextual_columns_are_enforced() {
+    let (_server, mut session) = session();
+    ok(
+        &mut session,
+        "CREATE TABLE ck(id int NOT NULL, interval int NULL CHECK (interval > 0), trim int NULL, cast int NULL,
+                         CONSTRAINT ck_trim CHECK (trim > 0 AND cast > 0))",
+    );
+    ok(&mut session, "INSERT ck VALUES (1, 1, 1, 1)");
+    ok(&mut session, "UPDATE ck SET interval = 5 WHERE trim = 1");
+    assert_eq!(fails(&mut session, "UPDATE ck SET interval = -5").0, 547);
+    assert_eq!(fails(&mut session, "INSERT ck VALUES (2, 1, 0, 1)").0, 547);
+    ok(
+        &mut session,
+        "ALTER TABLE ck WITH CHECK ADD CONSTRAINT ck_more CHECK (interval < 100)",
+    );
+    assert_eq!(values(&session, "SELECT \"interval\" FROM ck"), [5]);
+}
+
+#[test]
+fn not_null_violation_in_table_variables_and_temporary_tables() {
+    let (_server, mut session) = session();
+    assert_eq!(
+        fails(
+            &mut session,
+            "DECLARE @t TABLE(offset int NOT NULL); INSERT @t VALUES (NULL)"
+        )
+        .3,
+        "Cannot insert the value NULL into column 'offset', table '@t'; column does not allow nulls. INSERT fails."
+    );
+}

@@ -17,7 +17,7 @@
 //! - [`reserved_by_backend`] tells the engine which names must be delimited
 //!   before the statement is rendered for DuckDB.
 use sqlparser::{
-    ast::Statement,
+    ast::{Expr, Statement},
     keywords::Keyword,
     parser::{Parser, ParserError},
     tokenizer::{Token, TokenWithSpan},
@@ -173,6 +173,41 @@ pub fn tokens(tokens: &mut [TokenWithSpan]) {
     }
 }
 
+/// A prefix expression that starts with a contextual word, read as a column
+/// reference. The tokenizer already handles batches; this covers text that
+/// sqlparser tokenizes itself, such as stored CHECK definitions parsed with
+/// `ServerDialect`. `None` defers to the dialect.
+pub fn parse_prefix(parser: &mut Parser) -> Option<Result<Expr, ParserError>> {
+    let Token::Word(word) = &parser.peek_token_ref().token else {
+        return None;
+    };
+    if word.quote_style.is_some()
+        || word.keyword == Keyword::NoKeyword
+        || matches!(parser.peek_nth_token_ref(1).token, Token::LParen)
+    {
+        return None;
+    }
+    let upper = word.value.to_ascii_uppercase();
+    if NEVER_SYNTAX.binary_search(&upper.as_str()).is_err()
+        && CALL_SYNTAX.binary_search(&upper.as_str()).is_err()
+    {
+        return None;
+    }
+    Some((|| {
+        let mut parts = vec![parser.parse_identifier()?];
+        while parser.peek_token_ref().token == Token::Period
+            && matches!(parser.peek_nth_token_ref(1).token, Token::Word(_))
+        {
+            parser.next_token();
+            parts.push(parser.parse_identifier()?);
+        }
+        Ok(match parts.len() {
+            1 => Expr::Identifier(parts.remove(0)),
+            _ => Expr::CompoundIdentifier(parts),
+        })
+    })())
+}
+
 /// The next significant token after `index`.
 fn next(tokens: &[TokenWithSpan], index: usize) -> Option<&Token> {
     tokens[index + 1..]
@@ -306,6 +341,22 @@ mod tests {
             parse("UPDATE limit SET interval = interval + 1 WHERE trim = 2").unwrap(),
             "UPDATE limit SET interval = interval + 1 WHERE trim = 2"
         );
+    }
+
+    #[test]
+    fn raw_sqlparser_tokens_read_contextual_words_as_names() {
+        for (sql, expected) in [
+            ("interval > 0", "interval > 0"),
+            ("trim > 0 AND cast < 2", "trim > 0 AND cast < 2"),
+            ("t.interval + lateral.limit", "t.interval + lateral.limit"),
+            ("TRIM(x) + CAST(y AS INT)", "TRIM(x) + CAST(y AS INT)"),
+        ] {
+            let expr = Parser::new(&crate::dialect::ServerDialect)
+                .try_with_sql(sql)
+                .and_then(|mut parser| parser.parse_expr())
+                .unwrap_or_else(|error| panic!("{sql}: {error}"));
+            assert_eq!(expr.to_string(), expected);
+        }
     }
 
     #[test]
