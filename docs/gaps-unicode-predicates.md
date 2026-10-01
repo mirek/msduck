@@ -165,6 +165,11 @@ LIKE case and the backend rewrites.
   comparison, IN or LIKE between a carrier and a VARCHAR expression other
   than a literal, and it does not apply to operands with subqueries. Those
   combinations still fail.
+- **Nested conversions.** A dispatch is not repeated over an operand that
+  already contains one, so that nesting does not copy expressions
+  exponentially. A comparison of a converted value that the first stage
+  does not mark, such as `CAST(n AS nvarchar(5)) = N'x '`, compares the
+  converted text as VARCHAR, where trailing spaces count.
 - **Carriers against numbers.** A marked comparison of an NVARCHAR column with
   a number fails ("Comparing nvarchar with a value of DuckDB type … is not
   supported"). SQL Server converts the NVARCHAR value to the number's type.

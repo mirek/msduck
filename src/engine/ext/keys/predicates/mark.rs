@@ -27,8 +27,9 @@ fn first_argument(function: &Function) -> Option<&Expr> {
     }
 }
 
-/// Whether `expr` is Unicode text: a carrier column, or a character
-/// function of one.
+/// Whether `expr` is Unicode text: a carrier column, a character function
+/// of one (ISNULL and COALESCE take the type of their first argument), or
+/// a scalar subquery selecting one.
 fn unicode(catalog: &Catalog, expr: &Expr) -> bool {
     match expr {
         Expr::Nested(inner) => unicode(catalog, inner),
@@ -56,6 +57,8 @@ fn unicode(catalog: &Catalog, expr: &Expr) -> bool {
                     | "SUBSTRING"
                     | "REPLACE"
                     | "REVERSE"
+                    | "ISNULL"
+                    | "COALESCE"
             ) && first_argument(f).is_some_and(|a| unicode(catalog, a))
         }
         _ => false,

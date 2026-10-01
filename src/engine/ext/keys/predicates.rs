@@ -82,14 +82,14 @@ fn rewrite<T: Visit + VisitMut + 'static>(
     if !ordered && !predicates(node) {
         return Ok(());
     }
-    let pinned = pin::sites(node);
-    let catalog = catalog::Catalog::load(db, node, pinned)?;
+    let mut catalog = catalog::Catalog::load(db, node)?;
     if !catalog.has_carriers() {
         return Ok(());
     }
     mark::rewrite(&catalog, node);
-    if pinned {
-        pin::rewrite(&catalog, node);
+    if pin::sites(node) && pin::rewrite(&catalog, node, false) {
+        catalog.declare(db, node)?;
+        pin::rewrite(&catalog, node, true);
     }
     if ordered && let Some(statement) = (node as &mut dyn std::any::Any).downcast_mut::<Statement>()
     {
