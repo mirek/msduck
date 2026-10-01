@@ -97,6 +97,7 @@ impl Server {
             BackendConnection::open(path)?
         };
         crate::scalar::register(&owner)?;
+        crate::engine::ext::register(&owner)?;
         let diagnostics = crate::statement_diagnostics::Registry::default();
         diagnostics.register(&owner)?;
         crate::database_catalog::bootstrap_objects(&owner)?;

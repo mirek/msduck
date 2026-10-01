@@ -29,11 +29,14 @@ pub fn parse(sql: &str) -> Result<Vec<Statement>> {
             .map_err(anyhow::Error::msg)?;
         canonicalize_insert(&mut statement)?;
         // Check supported target shapes now, retaining ON scopes for binding.
-        let mut checked = statement.clone();
-        if crate::output::joined_update(&checked).is_none() {
-            crate::update::canonicalize(&mut checked)?;
+        // Extension features validate the statements they own.
+        if !crate::dialect::ext::owns(&statement) {
+            let mut checked = statement.clone();
+            if crate::output::joined_update(&checked).is_none() {
+                crate::update::canonicalize(&mut checked)?;
+            }
+            crate::delete::canonicalize(&mut checked)?;
         }
-        crate::delete::canonicalize(&mut checked)?;
         statements.push(statement);
     }
 }

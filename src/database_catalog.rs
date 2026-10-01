@@ -205,6 +205,7 @@ pub struct Database {
 fn bootstrap_file(path: &Path) -> Result<()> {
     let db = Connection::open(path)?;
     crate::scalar::register(&db)?;
+    crate::engine::ext::register(&db)?;
     crate::statement_diagnostics::Registry::default().register(&db)?;
     bootstrap_objects(&db)
 }
@@ -221,6 +222,7 @@ pub fn bootstrap_objects(db: &Connection) -> Result<()> {
     crate::index_catalog::register(db)?;
     crate::index_catalog::sync(db)?;
     crate::index_catalog::publish_views(db)?;
+    crate::engine::ext::bootstrap_database(db)?;
     Ok(())
 }
 

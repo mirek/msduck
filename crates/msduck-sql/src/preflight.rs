@@ -140,6 +140,12 @@ pub fn variables(
 ) -> Result<HashMap<String, Parameter>> {
     struct Variables {
         values: HashMap<String, Parameter>,
+        /// `@name` targets of `EXEC proc @name = value` arguments: procedure
+        /// parameter names, not references to the caller's variables.
+        argument_names: Vec<*const Expr>,
+        /// Depth of extension-owned statements being visited; their DDL
+        /// shape checks belong to the owning feature.
+        owned: usize,
         loop_depth: usize,
         allow_view: bool,
         allow_schema: bool,
@@ -168,42 +174,61 @@ pub fn variables(
             ControlFlow::Continue(())
         }
         fn pre_visit_statement(&mut self, statement: &Statement) -> ControlFlow<String> {
-            if let Err(error) = crate::ddl_syntax::protect(statement) {
-                return ControlFlow::Break(error.to_string());
-            }
-            if let Statement::Truncate(truncate) = statement
-                && let Err(error) = crate::ddl_syntax::truncate(truncate)
-            {
-                return ControlFlow::Break(error.to_string());
-            }
-
-            if let Err(error) = validate_schema_statement(statement, self.allow_schema) {
-                return ControlFlow::Break(error.to_string());
-            }
-
-            if let Statement::AlterTable(table) = statement
-                && let Err(error) = crate::ddl_syntax::alter_table(table)
-            {
-                return ControlFlow::Break(error.to_string());
-            }
-            if matches!(statement, Statement::AlterView { .. }) {
-                if !self.allow_view {
-                    return ControlFlow::Break(
-                        "ALTER VIEW must be the only statement in a batch".into(),
-                    );
+            if let Statement::Execute { parameters, .. } = statement {
+                for parameter in parameters {
+                    if let Expr::BinaryOp {
+                        left,
+                        op: BinaryOperator::Eq,
+                        ..
+                    } = parameter
+                        && matches!(left.as_ref(), Expr::Identifier(id) if id.value.starts_with('@'))
+                    {
+                        self.argument_names.push(left.as_ref() as *const Expr);
+                    }
                 }
-                if let Err(error) = crate::view_definition::alter_definition(statement) {
+            }
+            if crate::dialect::ext::owns(statement) {
+                self.owned += 1;
+            }
+            // DDL shape checks belong to the feature owning the statement.
+            if self.owned == 0 {
+                if let Err(error) = crate::ddl_syntax::protect(statement) {
                     return ControlFlow::Break(error.to_string());
                 }
-            }
-            if let Statement::CreateView(view) = statement {
-                if !self.allow_view {
-                    return ControlFlow::Break(
-                        "CREATE VIEW must be the only statement in a batch".into(),
-                    );
-                }
-                if let Err(error) = crate::view_definition::validate(view) {
+                if let Statement::Truncate(truncate) = statement
+                    && let Err(error) = crate::ddl_syntax::truncate(truncate)
+                {
                     return ControlFlow::Break(error.to_string());
+                }
+
+                if let Err(error) = validate_schema_statement(statement, self.allow_schema) {
+                    return ControlFlow::Break(error.to_string());
+                }
+
+                if let Statement::AlterTable(table) = statement
+                    && let Err(error) = crate::ddl_syntax::alter_table(table)
+                {
+                    return ControlFlow::Break(error.to_string());
+                }
+                if matches!(statement, Statement::AlterView { .. }) {
+                    if !self.allow_view {
+                        return ControlFlow::Break(
+                            "ALTER VIEW must be the only statement in a batch".into(),
+                        );
+                    }
+                    if let Err(error) = crate::view_definition::alter_definition(statement) {
+                        return ControlFlow::Break(error.to_string());
+                    }
+                }
+                if let Statement::CreateView(view) = statement {
+                    if !self.allow_view {
+                        return ControlFlow::Break(
+                            "CREATE VIEW must be the only statement in a batch".into(),
+                        );
+                    }
+                    if let Err(error) = crate::view_definition::validate(view) {
+                        return ControlFlow::Break(error.to_string());
+                    }
                 }
             }
             if let Err(error) = validate_transaction_syntax(statement) {
@@ -256,12 +281,18 @@ pub fn variables(
             ControlFlow::Continue(())
         }
         fn post_visit_statement(&mut self, statement: &Statement) -> ControlFlow<String> {
+            if crate::dialect::ext::owns(statement) {
+                self.owned -= 1;
+            }
             if matches!(statement, Statement::While(_)) {
                 self.loop_depth -= 1;
             }
             ControlFlow::Continue(())
         }
         fn pre_visit_expr(&mut self, expression: &Expr) -> ControlFlow<String> {
+            if self.argument_names.contains(&(expression as *const Expr)) {
+                return ControlFlow::Continue(());
+            }
             if let Expr::Identifier(id) = expression {
                 let name = id.value.to_lowercase();
                 if name.starts_with('@')
@@ -292,6 +323,8 @@ pub fn variables(
     }
     let mut visitor = Variables {
         values: parameters.clone(),
+        argument_names: Vec::new(),
+        owned: 0,
         loop_depth: 0,
         allow_schema: matches!(statements, [Statement::CreateSchema { .. }]),
         allow_view: matches!(
@@ -300,11 +333,18 @@ pub fn variables(
         ),
     };
     for statement in statements {
-        crate::window_placement::validate(statement).map_err(anyhow::Error::msg)?;
-        crate::grouping_syntax::validate(statement).map_err(anyhow::Error::msg)?;
-        crate::predicate::validate(statement)?;
+        if !crate::dialect::ext::owns(statement) {
+            crate::window_placement::validate(statement).map_err(anyhow::Error::msg)?;
+            crate::grouping_syntax::validate(statement).map_err(anyhow::Error::msg)?;
+            crate::predicate::validate(statement)?;
+        }
         if let ControlFlow::Break(error) = Visit::visit(statement, &mut visitor) {
             bail!(error);
+        }
+        visitor.argument_names.clear();
+        // Extension features validate the statements they own.
+        if crate::dialect::ext::owns(statement) {
+            continue;
         }
         crate::output::validate(statement)?;
         crate::aggregate::validate_update(statement)?;
