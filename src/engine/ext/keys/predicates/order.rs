@@ -1,0 +1,153 @@
+//! ORDER BY over Unicode carrier columns.
+//!
+//! DuckDB orders the carrier STRUCT by its little-endian payload bytes, so
+//! U+0100 sorts before `a` and trailing spaces break ties. Each ORDER BY
+//! item naming a carrier column of a relation in the statement (directly,
+//! through a select-list alias or by ordinal) becomes two items: the
+//! carrier's sort key, then the value itself for other types. The items are
+//! markers here; [`super::lower`] turns them into `typeof` dispatches, so a
+//! same-named column of another type keeps its own order. DISTINCT and set
+//! operations, whose ORDER BY must name output columns, are left unchanged.
+use super::catalog::Catalog;
+use super::lower::{SORT, TIE};
+use sqlparser::ast::*;
+use std::collections::HashSet;
+use std::ops::ControlFlow;
+
+/// The column an ORDER BY item names, if it names one.
+fn column<'a>(item: &'a Expr, select: &'a Select) -> Option<&'a Expr> {
+    let named = |expr: &'a Expr| match expr {
+        Expr::Identifier(_) | Expr::CompoundIdentifier(_) => Some(expr),
+        _ => None,
+    };
+    match item {
+        Expr::Identifier(ident) => {
+            for projected in &select.projection {
+                if let SelectItem::ExprWithAlias { expr, alias } = projected
+                    && alias.value.eq_ignore_ascii_case(&ident.value)
+                {
+                    return named(expr);
+                }
+            }
+            Some(item)
+        }
+        Expr::CompoundIdentifier(_) => Some(item),
+        Expr::Value(value) => {
+            let Value::Number(ordinal, _) = &value.value else {
+                return None;
+            };
+            let index = ordinal.parse::<usize>().ok()?.checked_sub(1)?;
+            let prefix = select.projection.get(..=index)?;
+            if prefix.iter().any(|p| {
+                matches!(
+                    p,
+                    SelectItem::Wildcard(_) | SelectItem::QualifiedWildcard(..)
+                )
+            }) {
+                return None;
+            }
+            match &prefix[index] {
+                SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } => {
+                    named(expr)
+                }
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+fn last_name(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Identifier(ident) => Some(ident.value.to_lowercase()),
+        Expr::CompoundIdentifier(parts) => parts.last().map(|p| p.value.to_lowercase()),
+        _ => None,
+    }
+}
+
+/// Queries whose ORDER BY may be rewritten, with the column names they order by.
+fn candidates(statement: &Statement) -> HashSet<String> {
+    struct Find(HashSet<String>);
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
+            if let (Some(order), SetExpr::Select(select)) = (&query.order_by, query.body.as_ref())
+                && select.distinct.is_none()
+                && let OrderByKind::Expressions(items) = &order.kind
+            {
+                for item in items {
+                    if let Some(name) = column(&item.expr, select).and_then(last_name) {
+                        self.0.insert(name);
+                    }
+                }
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut find = Find(HashSet::new());
+    let _ = Visit::visit(statement, &mut find);
+    find.0
+}
+
+fn marker(name: &str, value: Expr) -> Expr {
+    let mut call = msduck_sql::expr::unary_function(name, value);
+    if let Expr::Function(f) = &mut call {
+        f.name = ObjectName::from(vec![Ident::new(name)]);
+    }
+    call
+}
+
+/// Whether `statement` has an ORDER BY this module may change.
+pub(super) fn sites(statement: &Statement) -> bool {
+    !candidates(statement).is_empty()
+}
+
+pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
+    let carriers: HashSet<String> = candidates(statement)
+        .into_iter()
+        .filter(|name| catalog.carrier_named(name))
+        .collect();
+    if carriers.is_empty() {
+        return;
+    }
+    struct Rewrite(HashSet<String>);
+    impl VisitorMut for Rewrite {
+        type Break = ();
+        fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
+            let (Some(order), SetExpr::Select(select)) = (&mut query.order_by, query.body.as_ref())
+            else {
+                return ControlFlow::Continue(());
+            };
+            if select.distinct.is_some() {
+                return ControlFlow::Continue(());
+            }
+            let OrderByKind::Expressions(items) = &mut order.kind else {
+                return ControlFlow::Continue(());
+            };
+            let mut rewritten = Vec::with_capacity(items.len());
+            for item in items.drain(..) {
+                let target = column(&item.expr, select)
+                    .filter(|c| last_name(c).is_some_and(|n| self.0.contains(&n)))
+                    .cloned();
+                match target {
+                    Some(target) => {
+                        rewritten.push(OrderByExpr {
+                            expr: marker(SORT, target.clone()),
+                            options: item.options.clone(),
+                            with_fill: None,
+                        });
+                        rewritten.push(OrderByExpr {
+                            expr: marker(TIE, target),
+                            options: item.options,
+                            with_fill: item.with_fill,
+                        });
+                    }
+                    None => rewritten.push(item),
+                }
+            }
+            *items = rewritten;
+            ControlFlow::Continue(())
+        }
+    }
+    let _ = VisitMut::visit(statement, &mut Rewrite(carriers));
+}
