@@ -9113,7 +9113,7 @@
     {
       "id": "gaps-inline-fk-v1",
       "title": "Column-level FOREIGN KEY REFERENCES syntax",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01), issue #768, umbrella #710.",
       "scope": [
         "src/engine/ext/constraints.rs",
