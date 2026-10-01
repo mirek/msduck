@@ -45,12 +45,17 @@ fn procedure_schema_and_database_isolation_survive_restart() {
         }
         for database in ["master", "catalog_isolated"] {
             session.use_database(database).unwrap();
-            let columns = session
+            let mut statement = session
                 .db
                 .prepare("SELECT * FROM sys.procedures LIMIT 0")
-                .unwrap()
-                .column_names();
+                .unwrap();
+            {
+                let mut rows = statement.query([]).unwrap();
+                assert!(rows.next().unwrap().is_none());
+            }
+            let columns = statement.column_names();
             assert_eq!(columns, expected, "{database}");
+            drop(statement);
             if restart == 0 && database == "catalog_isolated" {
                 session.db.execute(
                     "INSERT INTO main.__msduck_modules
