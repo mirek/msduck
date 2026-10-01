@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import {test} from 'node:test'
-import {mkdir,writeFile} from 'node:fs/promises'
+import {mkdir,writeFile,readFile} from 'node:fs/promises'
 import {start} from './support/client.mjs'
-import {observe,retained,retainedCteDelete,cteDeleteOptions,retainedTemporalSets,temporalSetProfiles,retainedSetProperties,setPropertyProfiles,setPropertySetup,windowDeclarationProfiles,orderDeclarationProfiles,orderPropertyProfiles,bitwiseDeclarationProfiles,bitwiseSetup,rankingDeclarationProfiles,groupingOrderProfiles} from '../scripts/capture-prepared-rpc-metadata.mjs'
+import {observe,retained,retainedCteDelete,cteDeleteOptions,retainedTemporalSets,temporalSetProfiles,retainedSetProperties,setPropertyProfiles,setPropertySetup,windowDeclarationProfiles,orderDeclarationProfiles,orderPropertyProfiles,bitwiseDeclarationProfiles,bitwiseSetup,rankingDeclarationProfiles,groupingOrderProfiles,catalogDeclarationProfiles,catalogDeclarationSetup} from '../scripts/capture-prepared-rpc-metadata.mjs'
 
 test('prepared RPC responses match SQL Server and never execute during preparation',async t=>{
  const connection=await start(t)
@@ -231,5 +231,25 @@ test('prepared integral grouping ORDER preserves expression identity and descrip
   assert.deepEqual(record.executions,[],name+' no execution')
   assert.deepEqual(record.afterPreparation.result.sets,expected.afterPreparation.result.sets,name+' nonexecution')
   assert.deepEqual(record.afterExecution.result.sets,expected.afterExecution.result.sets,name+' final state')
+ }
+})
+
+test('prepared system catalogs preserve complete SQL Server declarations',async t=>{
+ const connection=await start(t)
+ const reference=JSON.parse(await readFile(new URL('../reference/column-catalog-declarations.json',import.meta.url),'utf8'))
+ assert.deepEqual(reference.runs[0],reference.runs[1])
+ const expected=reference.runs[0]
+ const actual=await observe(connection,{verifyVersion:false,profilePlan:catalogDeclarationProfiles,variantPlan:['api-default','named-one'],execute:false,setupSql:catalogDeclarationSetup})
+ await mkdir('artifacts/prepared-rpc-metadata',{recursive:true})
+ await writeFile('artifacts/prepared-rpc-metadata/catalog-runtime.json',JSON.stringify({expected,actual},null,2)+'\n')
+ assert.equal(actual.length,expected.length)
+ for(let i=2;i<expected.length;i++){
+  const name=expected[i].name+' '+expected[i].variant
+  assert.deepEqual([actual[i].name,actual[i].sql,actual[i].variant],[expected[i].name,expected[i].sql,expected[i].variant],name+' request plan')
+  assert.deepEqual(actual[i].preparation,expected[i].preparation,name)
+  assert.deepEqual(actual[i].unpreparation,expected[i].unpreparation,name+' unprepare')
+  assert.deepEqual(actual[i].executions,[],name+' no execution')
+  assert.deepEqual(actual[i].afterPreparation.result.sets,expected[i].afterPreparation.result.sets,name+' nonexecution')
+  assert.deepEqual(actual[i].afterExecution.result.sets,expected[i].afterExecution.result.sets,name+' final state')
  }
 })

@@ -946,6 +946,24 @@ fn query_description(
                 | sqlparser::ast::SelectItem::ExprWithAlias { expr, .. } => expr,
                 _ => continue,
             };
+            // Captured hidden sorting exposes a direct identity variant as a
+            // stored catalog projection, unlike the unsorted computed profile.
+            if hidden_order
+                && field.info.as_ref().is_some_and(|info| {
+                    info.system_type_id == Some(98) && info.user_type_id == Some(98)
+                })
+                && select.from.len() == 1
+                && select.from[0].joins.is_empty()
+                && matches!(&select.from[0].relation, sqlparser::ast::TableFactor::Table {name,args:None,..}
+                    if name.to_string().eq_ignore_ascii_case("sys.identity_columns"))
+                && (matches!(expression, Expr::Identifier(id) if !id.value.starts_with('@'))
+                    || matches!(expression, Expr::CompoundIdentifier(_)))
+            {
+                field.properties = msduck_core::result::Properties {
+                    nullable: Some(true),
+                    origin: msduck_core::result::Origin::Stored,
+                };
+            }
             if field.info.is_none() && variant_row_number(expression, &source_scope, parameters) {
                 field.info = catalog.cast_info(&DataType::BigInt(None));
                 if field.info.is_some() {
@@ -1082,6 +1100,16 @@ fn query_description(
     for (column, field) in columns.iter().zip(&fields) {
         let mut encoded = Vec::new();
         tds::metadata(&mut encoded, std::slice::from_ref(column))?;
+        if field
+            .info
+            .as_ref()
+            .is_some_and(|info| info.system_type_id == Some(231) && info.user_type_id == Some(256))
+        {
+            // Built-in sysname retains its alias USERTYPE in captured catalog
+            // metadata. Scalar functions and conversions return base NVARCHAR.
+            ensure!(encoded.len() >= 9, "truncated sysname metadata codec");
+            encoded[3..7].copy_from_slice(&256u32.to_le_bytes());
+        }
         if field
             .info
             .as_ref()
