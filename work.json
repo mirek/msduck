@@ -8424,7 +8424,7 @@
     {
       "id": "gaps-transactions-v1",
       "title": "Isolation levels, SAVE TRANSACTION and WAITFOR",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
       "scope": [
         "src/engine/ext/transactions.rs",
@@ -8675,7 +8675,7 @@
     {
       "id": "gaps-transactions-v1-engine",
       "title": "Transaction begin, RPC scope and savepoint engine wiring for gaps-transactions-v1",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-transactions-v1",
       "scope": [
         "src/engine.rs",
@@ -8895,7 +8895,7 @@
     {
       "id": "gaps-transactions-v1-tedious",
       "title": "Update the driver transaction test for transaction-manager savepoints (gaps-transactions-v1)",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-transactions-v1",
       "scope": [
         "tests/tedious.test.mjs"
@@ -8927,7 +8927,7 @@
     {
       "id": "gaps-transactions-v1-catalog",
       "title": "Describe sys.dm_exec_sessions.transaction_isolation_level (gaps-transactions-v1)",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-transactions-v1",
       "scope": [
         "src/query_catalog.rs",
@@ -8965,7 +8965,7 @@
     {
       "id": "gaps-transactions-v1-procedures",
       "title": "Restore the isolation level when a procedure or dynamic SQL frame returns (gaps-transactions-v1)",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-transactions-v1",
       "scope": [
         "src/engine/ext/procedures/run.rs"
