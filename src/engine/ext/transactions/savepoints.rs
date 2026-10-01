@@ -231,10 +231,25 @@ pub(super) fn before_statement(session: &mut Session, statement: &Statement) -> 
             if session.qualify_databases(&mut qualified).is_err() {
                 return Ok(());
             }
+            let mut tables = Vec::new();
             for name in targets(&qualified) {
                 if let Some(table) = resolve(session, &name)? {
-                    copy_table(session, table)?;
+                    tables.push(table);
                 }
+            }
+            // Referential actions (CASCADE, SET NULL, SET DEFAULT) write the
+            // referencing tables too, so copy them first, transitively.
+            let mut index = 0;
+            while index < tables.len() {
+                for table in referencing(session, &tables[index])? {
+                    if !tables.contains(&table) {
+                        tables.push(table);
+                    }
+                }
+                index += 1;
+            }
+            for table in tables {
+                copy_table(session, table)?;
             }
             Ok(())
         }
@@ -436,6 +451,23 @@ fn resolve(session: &Session, name: &ObjectName) -> Result<Option<Table>> {
         Err(duckdb::Error::QueryReturnedNoRows) => Ok(None),
         Err(error) => Err(error.into()),
     }
+}
+
+/// Tables whose foreign keys to `table` have a delete or update action.
+fn referencing(session: &Session, table: &Table) -> Result<Vec<Table>> {
+    Ok(session
+        .db
+        .prepare(
+            "SELECT DISTINCT o.object_id, s.name, o.name FROM sys.foreign_keys f JOIN sys.objects o ON o.object_id = f.parent_object_id JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE f.referenced_object_id = ? AND (f.delete_referential_action <> 0 OR f.update_referential_action <> 0) ORDER BY o.object_id",
+        )?
+        .query_map([table.object_id], |row| {
+            Ok(Table {
+                object_id: row.get(0)?,
+                schema: row.get(1)?,
+                name: row.get(2)?,
+            })
+        })?
+        .collect::<duckdb::Result<Vec<_>>>()?)
 }
 
 /// Copy `table` for the newest savepoint unless it already has a copy.

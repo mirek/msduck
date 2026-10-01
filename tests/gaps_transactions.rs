@@ -660,3 +660,37 @@ fn every_write_form_is_restored() {
     assert_eq!(ints(&s, "SELECT id FROM dbo.other ORDER BY id"), [1, 2]);
     run(&mut s, "COMMIT").unwrap();
 }
+
+#[test]
+fn triggers_and_cascades_after_a_savepoint_are_restored() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    run(
+        &mut s,
+        "CREATE TABLE dbo.p(id INT PRIMARY KEY);
+         CREATE TABLE dbo.c(id INT PRIMARY KEY, pid INT REFERENCES dbo.p(id) ON DELETE CASCADE);
+         CREATE TABLE dbo.log(n INT)",
+    )
+    .unwrap();
+    run(
+        &mut s,
+        "CREATE TRIGGER dbo.tr ON dbo.p AFTER INSERT AS INSERT dbo.log SELECT id FROM inserted",
+    )
+    .unwrap();
+    run(
+        &mut s,
+        "INSERT dbo.p VALUES (1); INSERT dbo.c VALUES (10, 1)",
+    )
+    .unwrap();
+    run(
+        &mut s,
+        "BEGIN TRAN; SAVE TRAN s; INSERT dbo.p VALUES (2); DELETE dbo.p WHERE id = 1",
+    )
+    .unwrap();
+    assert_eq!(ints(&s, "SELECT count(*) FROM dbo.c"), [0]);
+    assert_eq!(ints(&s, "SELECT count(*) FROM dbo.log"), [2]);
+    run(&mut s, "ROLLBACK TRAN s; COMMIT").unwrap();
+    assert_eq!(ints(&s, "SELECT id FROM dbo.p"), [1]);
+    assert_eq!(ints(&s, "SELECT id FROM dbo.c"), [10]);
+    assert_eq!(ints(&s, "SELECT n FROM dbo.log"), [1]);
+}

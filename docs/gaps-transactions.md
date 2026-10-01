@@ -133,11 +133,14 @@ transaction ends.
 - Statements whose effects cannot be undone without rolling back the whole
   DuckDB transaction fail explicitly (40515, catchable) while a savepoint
   exists: CREATE, ALTER and DROP of any object, SELECT INTO, and writes to
-  temporary tables or through views. SQL Server rolls these back to the
+  `#temp` tables or through views. Table variables keep their rows, as in
+  SQL Server. SQL Server rolls these back to the
   savepoint. Without a savepoint they behave as before.
-- Writes that bypass the engine's statement path (native foreign-key
-  cascades, or writes a feature performs directly on DuckDB) are not copied
-  first. A table first written that way after a savepoint is not restored.
+- Tables that reference a written table through a foreign key with a
+  referential action (CASCADE, SET NULL, SET DEFAULT) are copied too,
+  transitively, and triggers' writes go through the statement path. Other
+  writes a feature performs directly on DuckDB are not copied first; a table
+  first written that way after a savepoint is not restored.
 - A native error that invalidates the DuckDB transaction (see
   [transaction-recovery.md](transaction-recovery.md)) cannot be recovered by
   rolling back to a savepoint. If a restore itself fails, the transaction is
