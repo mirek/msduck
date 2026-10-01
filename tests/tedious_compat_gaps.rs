@@ -176,11 +176,14 @@ fn stored_definitions_read_the_clock_when_used() {
     std::thread::sleep(std::time::Duration::from_millis(50));
     let second: Vec<String> = column(&session, "SELECT CAST(now AS VARCHAR) FROM clock");
     assert_ne!(first, second);
-    // A login name would be fixed to the creator; it fails explicitly.
-    assert!(!run(
+    // A login-name default reads the inserting session (docs/gaps-computed.md).
+    assert!(run(
         &mut session,
         "CREATE TABLE owned (id int, who nvarchar(128) DEFAULT SUSER_SNAME())"
     ));
+    assert!(run(&mut session, "INSERT INTO owned (id) VALUES (1)"));
+    let who: Vec<String> = column(&session, "SELECT __msduck_carrier_utf8(who) FROM owned");
+    assert_eq!(who, ["sa"]);
 }
 
 #[test]

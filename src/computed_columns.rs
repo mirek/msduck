@@ -40,6 +40,58 @@ fn nondeterministic(expr: &Expr) -> bool {
     .is_break()
 }
 
+/// Functions and names whose value depends on the session. SQL Server
+/// refuses them in a PERSISTED computed column (4936). Lowering would fix the
+/// creating session's value into the definition, so msduck also refuses them
+/// in non-persisted columns.
+const SESSION_FUNCTIONS: &[&str] = &[
+    "SUSER_SNAME",
+    "SUSER_NAME",
+    "ORIGINAL_LOGIN",
+    "HOST_NAME",
+    "APP_NAME",
+    "SESSION_CONTEXT",
+    "SESSIONPROPERTY",
+    "XACT_STATE",
+    "DB_NAME",
+    "DB_ID",
+    "USER_NAME",
+];
+const SESSION_NAMES: &[&str] = &[
+    "SYSTEM_USER",
+    "CURRENT_USER",
+    "SESSION_USER",
+    "@@SPID",
+    "@@ROWCOUNT",
+    "@@ERROR",
+    "@@TRANCOUNT",
+];
+
+fn session_dependent(expr: &Expr) -> bool {
+    visit_expressions(expr, |expr| match expr {
+        Expr::Function(function)
+            if SESSION_FUNCTIONS
+                .iter()
+                .any(|name| function.name.to_string().eq_ignore_ascii_case(name))
+                || SESSION_NAMES
+                    .iter()
+                    .any(|name| function.name.to_string().eq_ignore_ascii_case(name)) =>
+        {
+            ControlFlow::Break(())
+        }
+        Expr::Identifier(id)
+            if id.quote_style.is_none()
+                && SESSION_NAMES
+                    .iter()
+                    .any(|name| id.value.eq_ignore_ascii_case(name)) =>
+        {
+            ControlFlow::Break(())
+        }
+        _ => ControlFlow::Continue(()),
+    })
+    .is_break()
+}
+
 /// Declarations whose DuckDB storage is the value itself. Other types use
 /// carrier representations (UTF-16, offsets, variants, money) that a
 /// generated-column expression cannot yet bind.
@@ -209,7 +261,8 @@ pub fn validate(table: &CreateTable) -> Result<()> {
                 ));
             }
         }
-        if nondeterministic(expr) {
+        let session = session_dependent(expr);
+        if nondeterministic(expr) || session {
             if persisted {
                 bail!(SqlError::new(
                     4936,
@@ -221,9 +274,14 @@ pub fn validate(table: &CreateTable) -> Result<()> {
                 ));
             }
             // DuckDB evaluates generated columns when read, but msduck binds
-            // current-time functions to the statement's clock.
+            // current-time and session functions when it lowers them.
             bail!(
-                "unsupported non-deterministic computed column '{}'",
+                "unsupported {} computed column '{}'",
+                if session {
+                    "session-dependent"
+                } else {
+                    "non-deterministic"
+                },
                 column.name.value
             );
         }

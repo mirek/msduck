@@ -282,6 +282,20 @@ fn computed_column_errors_over_unicode_columns() {
             "Computed column 'b' in table 'items' cannot be persisted because the column is non-deterministic.".into()
         )
     );
+    // Session functions would be fixed to the creating session.
+    for (sql, number) in [
+        (
+            "CREATE TABLE items (a nvarchar(10) NULL, b AS a + HOST_NAME() PERSISTED)",
+            4936,
+        ),
+        (
+            "CREATE TABLE items (a nvarchar(10) NULL, b AS a + N'@' + SUSER_SNAME())",
+            40515,
+        ),
+        ("CREATE TABLE items (a int NULL, b AS a + @@SPID)", 40515),
+    ] {
+        assert_eq!(fails(&mut s, sql).0, number, "{sql}");
+    }
 }
 
 #[test]

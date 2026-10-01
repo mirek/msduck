@@ -171,11 +171,16 @@ that uses them sees the session that queries or inserts.
 **Not covered by this work:**
 
 - **SESSIONPROPERTY.** It is still refused in stored definitions.
-- **Session functions outside defaults.** Session functions in computed
-  columns and CHECK constraints are not supported, except `HOST_NAME()` and
-  `APP_NAME()`. Defaults with `USER_NAME()` and `DB_NAME()` are also not
-  supported. msduck does not implement `USER_NAME()` at all, and `DB_NAME()`
-  in a stored definition keeps the creating database.
+- **Session functions in computed columns.** A computed column that uses a
+  session function (`SUSER_SNAME()`, `SYSTEM_USER`, `HOST_NAME()`,
+  `APP_NAME()`, `SESSION_CONTEXT`, `DB_NAME()`, `@@SPID` and similar) fails
+  with 4936 when `PERSISTED`, as in SQL Server. A non-persisted one is refused
+  with 40515, because msduck would fix the creating session's value into the
+  definition. SQL Server accepts it.
+- **Other stored definitions.** Session functions in CHECK constraints are not
+  covered. Defaults with `USER_NAME()` and `DB_NAME()` are not supported either:
+  msduck does not implement `USER_NAME()`, and `DB_NAME()` in a stored
+  definition keeps the creating database.
 - **Metadata:**
   - `HOST_NAME()` and `APP_NAME()` descriptors lack the computed flag (TDS
     flags 1 instead of 33).
@@ -198,5 +203,7 @@ that uses them sees the session that queries or inserts.
   - `CONVERT(nvarchar(n), expr)` stringifies a carrier-valued operand. The
     operand can be a column, `JSON_VALUE`, `LEFT` or a `datetime2` value.
   - Styled `CONVERT` of `datetime2` and binary values is not supported.
+  - `CONVERT(nvarchar, bit)` returns `true`/`false` instead of `1`/`0`. This
+    also applies to a `bit` session context value in a converting DEFAULT.
 
   Computed columns avoid the first three through the layout described above.

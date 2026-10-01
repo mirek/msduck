@@ -76,7 +76,7 @@ pub(super) fn register(db: &duckdb::Connection) -> anyhow::Result<()> {
     db.register_scalar_function::<CarrierUtf8>(CARRIER_UTF8)?;
     // typeof is a bind-time property, so only the selected branch evaluates.
     db.execute_batch(&format!(
-        "CREATE OR REPLACE MACRO {COMPUTED_TEXT}(v) AS CASE WHEN typeof(v)='STRUCT(__msduck_utf16le BLOB)' THEN {CARRIER_UTF8}(CAST(v AS STRUCT(__msduck_utf16le BLOB))) ELSE CAST(v AS VARCHAR) END"
+        "CREATE OR REPLACE MACRO main.{COMPUTED_TEXT}(v) AS CASE WHEN typeof(v)='STRUCT(__msduck_utf16le BLOB)' THEN {CARRIER_UTF8}(CAST(v AS STRUCT(__msduck_utf16le BLOB))) ELSE CAST(v AS VARCHAR) END"
     ))?;
     Ok(())
 }
