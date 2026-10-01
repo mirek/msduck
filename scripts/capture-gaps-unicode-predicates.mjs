@@ -136,6 +136,7 @@ export const cases = [
     {sql: 'SELECT id FROM t WHERE n LIKE @p ORDER BY id', parameters: [['p', 'NVarChar', '\ud83d%', {length: 10}]]},
     {sql: 'SELECT id FROM t WHERE n > @p ORDER BY id', parameters: [['p', 'NVarChar', '\u{1F986}', {length: 10}]]},
     "IF EXISTS (SELECT 1 FROM t WHERE n = N'x ') SELECT 1 ELSE SELECT 0",
+    "EXEC sp_executesql N'SELECT id FROM t WHERE n <= @p AND n LIKE @l ORDER BY id', N'@p nvarchar(20), @l varchar(10)', @p = N'x ', @l = 'x%'",
     "DECLARE @n nvarchar(20); SELECT @n = n FROM t WHERE id = 7; SELECT id FROM t WHERE n = @n ORDER BY id",
   ]],
   ['case-and-joins', [
@@ -156,6 +157,8 @@ export const cases = [
     'SELECT id FROM t ORDER BY id',
     "UPDATE d SET v = s.v FROM t AS d JOIN (VALUES (N'X ', 'm'), (N'\u{1F986}', 'd')) AS s(n, v) ON d.n = s.n",
     "SELECT id, v FROM t WHERE v IN ('m', 'd') ORDER BY id",
+    "MERGE t AS d USING (VALUES (N'x  ', 'g'), (N'\u{1F986}', 'h'), (N'new', 'i')) AS s(n, v) ON d.n = s.n WHEN MATCHED AND d.n LIKE N'x%' THEN UPDATE SET v = s.v WHEN NOT MATCHED THEN INSERT (id, n, v) VALUES (20, s.n, s.v);",
+    "SELECT id, v FROM t WHERE v IN ('g', 'h', 'i') ORDER BY id",
     "UPDATE t SET n = n + N'!' WHERE c = N'x'",
     "SELECT id, n FROM t WHERE n LIKE N'%!' ORDER BY id",
   ]],

@@ -34,15 +34,15 @@ const outcome = result => ({
 //   column metadata ahead of error 506;
 // - result lengths of some character expressions are not inferred and
 //   fall back to nvarchar(max) (CONCAT over columns, COALESCE of nvarchar
-//   and varchar, set operations mixing them, REPLACE, SUBSTRING, REVERSE
-//   and STRING_AGG).
+//   and varchar, set operations mixing them, REPLACE, SUBSTRING and
+//   REVERSE).
 const noMetadata = new Set(['like#17'])
 const maxLength = {
   'concatenation-and-conversion#5': [null, 65535, 4, 4, 42, 6],
   'concatenation-and-conversion#8': [null, 40, 65535, 40, 40, 40, 40],
   'concatenation-and-conversion#9': [65535],
   'concatenation-and-conversion#10': [null, 65535],
-  'concatenation-and-conversion#11': [65535, 65535, 65535],
+  'concatenation-and-conversion#11': [65535, 65535, 8000],
 }
 
 for (const [id, statements] of cases) {
