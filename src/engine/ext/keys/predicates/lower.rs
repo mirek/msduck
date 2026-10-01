@@ -15,6 +15,10 @@ pub(super) const SORT: &str = "__msduck_unicode_sort";
 pub(super) const TIE: &str = "__msduck_unicode_tie";
 /// Unicode operand marker placed by [`super::mark`].
 pub(super) const MARK: &str = "__msduck_unicode_value";
+/// Marker of an operand of unknown type placed by [`super::mark`]: only
+/// these, and expressions that can produce carriers, get a `typeof`
+/// dispatch.
+pub(super) const MAYBE: &str = "__msduck_unicode_maybe";
 /// IN (subquery) marker placed by [`super::mark`].
 pub(super) const MEMBER: &str = "__msduck_unicode_in";
 pub(super) const INPUT: &str = "__msduck_unicode_input";
@@ -191,9 +195,66 @@ fn lowered(expr: &Expr) -> bool {
     expr.visit(&mut Find(0)).is_break()
 }
 
-/// Whether a conversion of `value` dispatches on its type.
+/// How far the value-path checks below look into nested CASE results and
+/// passed-through arguments. They run for every node the translator
+/// lowers, so they must not walk whole subtrees.
+const REACH: usize = 12;
+
+/// Whether a dispatch made here produces `expr`'s value, directly or as a
+/// CASE result or passed-through argument. Conditions do not count.
+fn lowered_value(expr: &Expr) -> bool {
+    fn at(expr: &Expr, reach: usize) -> bool {
+        if reach == 0 {
+            // Unknown that deep: assume so, which only skips a conversion.
+            return true;
+        }
+        match expr {
+            Expr::Nested(e) => at(e, reach - 1),
+            Expr::Case {
+                conditions,
+                else_result,
+                ..
+            } => {
+                own(expr)
+                    || conditions.iter().any(|c| at(&c.result, reach - 1))
+                    || else_result.as_deref().is_some_and(|e| at(e, reach - 1))
+            }
+            Expr::Function(_) if passes(expr) => {
+                arguments(expr).is_some_and(|args| args.iter().any(|a| at(a, reach - 1)))
+            }
+            _ => false,
+        }
+    }
+    at(expr, REACH)
+}
+
+/// Functions whose result may be one of their arguments.
+fn passes(expr: &Expr) -> bool {
+    function_name(expr).is_some_and(|name| {
+        matches!(
+            name.to_ascii_lowercase().as_str(),
+            "coalesce"
+                | "ifnull"
+                | "nullif"
+                | "greatest"
+                | "least"
+                | "min"
+                | "max"
+                | "first"
+                | "last"
+                | "any_value"
+                | "arg_min"
+                | "arg_max"
+                | "__msduck_isnull"
+        )
+    })
+}
+
+/// Whether a conversion of `value` dispatches on its type. A value that a
+/// dispatch here already produced is text; converting it again would copy
+/// it into every branch.
 fn converted(value: &Expr) -> bool {
-    carries(value) && !lowered(value)
+    carries(value) && !lowered_value(value)
 }
 
 fn has_subquery(expr: &Expr) -> bool {
@@ -207,28 +268,75 @@ fn has_subquery(expr: &Expr) -> bool {
     expr.visit(&mut Find).is_break()
 }
 
-/// Whether a backend operand may be a Unicode carrier: column references,
-/// function results, subqueries and conditional expressions may; literals,
-/// parameters, non-STRUCT casts and arithmetic may not.
+/// Whether a backend value may be a Unicode carrier, for conversions:
+/// column references, subqueries, marked operands, carrier-producing
+/// functions, and CASE results or passed-through arguments that may be.
 fn carries(expr: &Expr) -> bool {
+    may_be_carrier(expr, true)
+}
+
+/// Whether a predicate operand may be a carrier. Plain column references
+/// and subqueries are not: the first stage marks the columns whose type it
+/// cannot tell, and predicates over subqueries are not dispatched.
+fn narrow(expr: &Expr) -> bool {
+    may_be_carrier(expr, false)
+}
+
+fn may_be_carrier(expr: &Expr, columns: bool) -> bool {
+    fn at(expr: &Expr, columns: bool, reach: usize) -> bool {
+        if reach == 0 {
+            return false;
+        }
+        match expr {
+            Expr::Nested(e) => at(e, columns, reach - 1),
+            Expr::Identifier(_) | Expr::CompoundIdentifier(_) | Expr::Subquery(_) => columns,
+            // This module's dispatches give text, keys or booleans.
+            Expr::Case {
+                conditions,
+                else_result,
+                ..
+            } => {
+                !own(expr)
+                    && (conditions.iter().any(|c| at(&c.result, columns, reach - 1))
+                        || else_result
+                            .as_deref()
+                            .is_some_and(|e| at(e, columns, reach - 1)))
+            }
+            Expr::Cast { data_type, .. } => {
+                matches!(data_type, DataType::Struct(..))
+                    || data_type.to_string().eq_ignore_ascii_case(CARRIER)
+            }
+            Expr::Function(f) => {
+                let name = f.name.to_string().to_ascii_lowercase();
+                if name == MARK || name == MAYBE {
+                    return true;
+                }
+                if [ORDER_KEY, TEXT, LIKE, MEMBER, INPUT, OPERAND].contains(&name.as_str()) {
+                    return false;
+                }
+                if passes(expr) {
+                    return arguments(expr)
+                        .is_some_and(|args| args.iter().any(|a| at(a, columns, reach - 1)));
+                }
+                name.starts_with("__msduck_")
+                    && ["unicode", "carrier", "json"]
+                        .iter()
+                        .any(|k| name.contains(k))
+            }
+            _ => false,
+        }
+    }
+    at(expr, columns, REACH)
+}
+
+/// An operand without its marker.
+fn bare(expr: &Expr) -> Expr {
     match expr {
-        Expr::Nested(e) => carries(e),
-        Expr::Identifier(_) | Expr::CompoundIdentifier(_) | Expr::Subquery(_) => true,
-        // This module's dispatches give text, keys or booleans.
-        Expr::Case { .. } => !own(expr),
-        Expr::Cast { data_type, .. } => {
-            matches!(data_type, DataType::Struct(..))
-                || data_type.to_string().eq_ignore_ascii_case(CARRIER)
-        }
-        // Function results may be carriers, except this module's keys,
-        // text and tests.
-        Expr::Function(f) => {
-            let name = f.name.to_string();
-            ![ORDER_KEY, TEXT, LIKE, MEMBER, INPUT, OPERAND, "typeof"]
-                .iter()
-                .any(|own| name.eq_ignore_ascii_case(own))
-        }
-        _ => false,
+        Expr::Nested(inner) if function_name(inner).as_deref() == Some(MAYBE) => bare(inner),
+        Expr::Function(_) if function_name(expr).as_deref() == Some(MAYBE) => arguments(expr)
+            .and_then(|args| args.first().map(|v| (*v).clone()))
+            .unwrap_or_else(|| expr.clone()),
+        _ => expr.clone(),
     }
 }
 
@@ -256,7 +364,7 @@ fn marked(expr: &Expr) -> bool {
     function_name(expr).as_deref() == Some(MARK)
 }
 
-/// A marked operation's operand as a carrier.
+/// An operand as a carrier, failing for types that are not text.
 fn strip(expr: &Expr) -> Expr {
     if marked(expr)
         && let Some(args) = arguments(expr)
@@ -264,7 +372,7 @@ fn strip(expr: &Expr) -> Expr {
     {
         return call(OPERAND, vec![(*value).clone()]);
     }
-    call(OPERAND, vec![expr.clone()])
+    call(OPERAND, vec![bare(expr)])
 }
 
 fn strict_key(expr: &Expr) -> Expr {
@@ -278,7 +386,7 @@ fn strict_key(expr: &Expr) -> Expr {
 /// would run it once per branch ([`super::mark`] marks those that resolve
 /// to carrier columns instead). Conversions do dispatch them.
 fn dispatched(operands: &[&Expr]) -> bool {
-    operands.iter().any(|o| carries(o))
+    operands.iter().any(|o| narrow(o))
         && !operands
             .iter()
             .any(|o| has_subquery(o) || collated(o) || is_typeof(o) || lowered(o))
@@ -296,17 +404,18 @@ fn compare(left: &Expr, op: &BinaryOperator, right: &Expr) -> Option<Expr> {
     if !comparison(op) || !dispatched(&[left, right]) {
         return None;
     }
+    let (left, right) = (bare(left), bare(right));
     Some(case(
-        textual(&[left, right]),
+        textual(&[&left, &right]),
         Expr::BinaryOp {
-            left: Box::new(key(left.clone())),
+            left: Box::new(strict_key(&left)),
             op: op.clone(),
-            right: Box::new(key(right.clone())),
+            right: Box::new(strict_key(&right)),
         },
         Expr::BinaryOp {
-            left: Box::new(left.clone()),
+            left: Box::new(left),
             op: op.clone(),
-            right: Box::new(right.clone()),
+            right: Box::new(right),
         },
     ))
 }
@@ -348,11 +457,12 @@ fn rewrite(expr: &mut Expr) {
             pattern,
             escape_char,
         } if dispatched(&[value, pattern]) => {
-            let mut operands = vec![value.as_ref(), pattern.as_ref()];
-            let mut args = vec![input(*value.clone()), input(*pattern.clone())];
+            let (value, pattern) = (bare(value), bare(pattern));
+            let mut operands = vec![value.clone(), pattern.clone()];
+            let mut args = vec![strip(&value), strip(&pattern)];
             if let Some(escape) = escape_char {
-                operands.push(escape);
-                args.push(input(*escape.clone()));
+                operands.push(*escape.clone());
+                args.push(strip(escape));
             }
             // DuckDB binds LIKE only over VARCHAR, so the branch for other
             // types must bind for carriers too.
@@ -369,13 +479,13 @@ fn rewrite(expr: &mut Expr) {
                 }
             };
             Some(case(
-                textual(&operands),
+                textual(&operands.iter().collect::<Vec<_>>()),
                 not(call(LIKE, args), *negated),
                 Expr::Like {
                     negated: *negated,
                     any: false,
-                    expr: Box::new(varchar(value)),
-                    pattern: Box::new(varchar(pattern)),
+                    expr: Box::new(varchar(&value)),
+                    pattern: Box::new(varchar(&pattern)),
                     escape_char: escape_char.as_deref().map(|e| Box::new(varchar(e))),
                 },
             ))
@@ -393,15 +503,22 @@ fn rewrite(expr: &mut Expr) {
             expr: value,
             list,
             negated,
-        } if dispatched(&[value]) && !list.iter().any(has_subquery) => Some(case(
-            textual(&[value]),
-            Expr::InList {
-                expr: Box::new(key(*value.clone())),
-                list: list.iter().cloned().map(key).collect(),
-                negated: *negated,
-            },
-            expr.clone(),
-        )),
+        } if dispatched(&[value]) && !list.iter().any(has_subquery) => {
+            let value = bare(value);
+            Some(case(
+                textual(&[&value]),
+                Expr::InList {
+                    expr: Box::new(strict_key(&value)),
+                    list: list.iter().map(strict_key).collect(),
+                    negated: *negated,
+                },
+                Expr::InList {
+                    expr: Box::new(value.clone()),
+                    list: list.clone(),
+                    negated: *negated,
+                },
+            ))
+        }
         Expr::Between {
             expr: value,
             negated,
@@ -418,16 +535,24 @@ fn rewrite(expr: &mut Expr) {
             negated,
             low,
             high,
-        } if dispatched(&[value, low, high]) => Some(case(
-            textual(&[value, low, high]),
-            Expr::Between {
-                expr: Box::new(key(*value.clone())),
-                negated: *negated,
-                low: Box::new(key(*low.clone())),
-                high: Box::new(key(*high.clone())),
-            },
-            expr.clone(),
-        )),
+        } if dispatched(&[value, low, high]) => {
+            let (value, low, high) = (bare(value), bare(low), bare(high));
+            Some(case(
+                textual(&[&value, &low, &high]),
+                Expr::Between {
+                    expr: Box::new(strict_key(&value)),
+                    negated: *negated,
+                    low: Box::new(strict_key(&low)),
+                    high: Box::new(strict_key(&high)),
+                },
+                Expr::Between {
+                    expr: Box::new(value),
+                    negated: *negated,
+                    low: Box::new(low),
+                    high: Box::new(high),
+                },
+            ))
+        }
         Expr::InSubquery {
             expr: value,
             subquery,
@@ -609,21 +734,11 @@ fn as_text(value: &Expr) -> Expr {
 /// true when some row matches; otherwise false for an empty subquery, NULL
 /// when `value` is NULL or the subquery has a NULL, and false.
 fn membership(value: &Expr, subquery: &Query) -> Option<Expr> {
+    // The subquery becomes a one-column derived table, whatever its shape.
     const TEMPLATE: &str = "CASE WHEN EXISTS (SELECT 1 FROM (SELECT 1) AS __msduck_in(__msduck_v) WHERE __msduck_match) THEN true \
         WHEN NOT EXISTS (SELECT 1 FROM (SELECT 1) AS __msduck_in(__msduck_v)) THEN false \
         WHEN __msduck_value IS NULL OR EXISTS (SELECT 1 FROM (SELECT 1) AS __msduck_in(__msduck_v) WHERE __msduck_in.__msduck_v IS NULL) THEN NULL \
         ELSE false END";
-    let SetExpr::Select(select) = subquery.body.as_ref() else {
-        return None;
-    };
-    if select.projection.len() != 1
-        || matches!(
-            select.projection[0],
-            SelectItem::Wildcard(_) | SelectItem::QualifiedWildcard(..)
-        )
-    {
-        return None;
-    }
     let element =
         Expr::CompoundIdentifier(vec![Ident::new("__msduck_in"), Ident::new("__msduck_v")]);
     let matched = Expr::BinaryOp {
@@ -671,44 +786,105 @@ fn membership(value: &Expr, subquery: &Query) -> Option<Expr> {
     Some(Expr::Nested(Box::new(test)))
 }
 
-/// Lower every carrier operation in `expr`, outside nested queries (the
-/// translator lowers those separately) and outside earlier dispatches.
+/// How deep below the expression the translator hands over [`lower`] looks.
+/// The translator lowers every node bottom-up, so deeper nodes were lowered
+/// already; only what a built-in lowering of this node created (for example
+/// NULLIF's `CASE WHEN a = b`) is new, and that is shallow. Bounding the
+/// walk keeps lowering linear in the size of deeply nested expressions.
+const DEPTH: usize = 4;
+
+/// Lower the carrier operations in `expr` and the nodes just below it,
+/// outside nested queries (the translator lowers those separately) and
+/// outside earlier dispatches.
 pub(super) fn lower(expr: &mut Expr) {
-    struct Lower {
-        /// Per open expression: whether it is a dispatch to leave alone.
-        frozen: Vec<bool>,
-        queries: usize,
+    walk(expr, 1);
+}
+
+fn walk(expr: &mut Expr, depth: usize) {
+    if depth > DEPTH || dispatch(expr) {
+        return;
     }
-    impl VisitorMut for Lower {
-        type Break = ();
-        fn pre_visit_query(&mut self, _: &mut Query) -> ControlFlow<()> {
-            self.queries += 1;
-            ControlFlow::Continue(())
+    for child in children(expr) {
+        walk(child, depth + 1);
+    }
+    rewrite(expr);
+}
+
+/// The operands of the expressions the rewrites look at, and of those that
+/// built-in lowerings create around them. Nested queries are lowered by the
+/// translator separately.
+fn children(expr: &mut Expr) -> Vec<&mut Expr> {
+    match expr {
+        Expr::Nested(e)
+        | Expr::UnaryOp { expr: e, .. }
+        | Expr::Cast { expr: e, .. }
+        | Expr::IsNull(e)
+        | Expr::IsNotNull(e)
+        | Expr::IsTrue(e)
+        | Expr::IsFalse(e)
+        | Expr::Collate { expr: e, .. } => vec![e.as_mut()],
+        Expr::BinaryOp { left, right, .. } => vec![left.as_mut(), right.as_mut()],
+        Expr::Like {
+            expr,
+            pattern,
+            escape_char,
+            ..
+        } => {
+            let mut all = vec![expr.as_mut(), pattern.as_mut()];
+            all.extend(escape_char.as_deref_mut());
+            all
         }
-        fn post_visit_query(&mut self, _: &mut Query) -> ControlFlow<()> {
-            self.queries -= 1;
-            ControlFlow::Continue(())
+        Expr::Between {
+            expr, low, high, ..
+        } => vec![expr.as_mut(), low.as_mut(), high.as_mut()],
+        Expr::InList { expr, list, .. } => {
+            let mut all = vec![expr.as_mut()];
+            all.extend(list.iter_mut());
+            all
         }
-        fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
-            let frozen = self.frozen.last() == Some(&true) || dispatch(expr);
-            self.frozen.push(frozen);
-            ControlFlow::Continue(())
+        Expr::InSubquery { expr, .. } => vec![expr.as_mut()],
+        Expr::Substring {
+            expr,
+            substring_from,
+            substring_for,
+            ..
+        } => {
+            let mut all = vec![expr.as_mut()];
+            all.extend(substring_from.as_deref_mut());
+            all.extend(substring_for.as_deref_mut());
+            all
         }
-        fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
-            let frozen = self.frozen.pop().unwrap_or(false);
-            if !frozen && self.queries == 0 {
-                rewrite(expr);
+        Expr::Case {
+            operand,
+            conditions,
+            else_result,
+            ..
+        } => {
+            let mut all: Vec<&mut Expr> = operand.as_deref_mut().into_iter().collect();
+            for c in conditions.iter_mut() {
+                all.push(&mut c.condition);
+                all.push(&mut c.result);
             }
-            ControlFlow::Continue(())
+            all.extend(else_result.as_deref_mut());
+            all
         }
-    }
-    let _ = VisitMut::visit(
-        expr,
-        &mut Lower {
-            frozen: Vec::new(),
-            queries: 0,
+        Expr::Function(f) => match &mut f.args {
+            FunctionArguments::List(list) => list
+                .args
+                .iter_mut()
+                .filter_map(|arg| match arg {
+                    FunctionArg::Unnamed(FunctionArgExpr::Expr(e))
+                    | FunctionArg::Named {
+                        arg: FunctionArgExpr::Expr(e),
+                        ..
+                    } => Some(e),
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
         },
-    );
+        _ => Vec::new(),
+    }
 }
 
 #[cfg(test)]
@@ -723,10 +899,23 @@ mod tests {
             .unwrap()
     }
 
+    /// Lower like the translator: every node, bottom-up.
+    fn translate(value: &mut Expr) {
+        struct Translate;
+        impl VisitorMut for Translate {
+            type Break = ();
+            fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
+                lower(expr);
+                ControlFlow::Continue(())
+            }
+        }
+        let _ = VisitMut::visit(value, &mut Translate);
+    }
+
     fn lowered(sql: &str) -> String {
         let mut value = expr(sql);
-        lower(&mut value);
-        // Lowering is idempotent: ancestors lower their whole subtree again.
+        translate(&mut value);
+        // Lowering is idempotent: ancestors lower the nodes below them again.
         let once = value.to_string();
         lower(&mut value);
         assert_eq!(value.to_string(), once, "{sql}");
@@ -750,32 +939,51 @@ mod tests {
     }
 
     #[test]
+    fn plain_columns_are_left_alone() {
+        // Outer join conditions must stay comparisons for hash joins.
+        for sql in [
+            "a.id = b.id",
+            "n = 'x'",
+            "n LIKE 'a%'",
+            "n IN (1, 2)",
+            "n BETWEEN 1 AND 2",
+        ] {
+            assert_eq!(lowered(sql), expr(sql).to_string(), "{sql}");
+        }
+    }
+
+    #[test]
     fn possible_carriers_dispatch_on_type_and_keep_the_original() {
-        let comparison = lowered("n = 'x'");
+        let comparison = lowered("__msduck_unicode_maybe(n) = 'x'");
         assert_eq!(
             comparison,
             "CASE WHEN (typeof(n) IN ('STRUCT(__msduck_utf16le BLOB)') OR typeof('x') IN ('STRUCT(__msduck_utf16le BLOB)')) \
-             THEN __msduck_unicode_order_key(__msduck_unicode_input(n)) = __msduck_unicode_order_key(__msduck_unicode_input('x')) \
+             THEN __msduck_unicode_order_key(__msduck_unicode_operand(n)) = __msduck_unicode_order_key(__msduck_unicode_operand('x')) \
              ELSE n = 'x' END"
         );
-        let like = lowered("n NOT LIKE 'a!%' ESCAPE '!'");
-        assert!(like.contains("THEN NOT (__msduck_unicode_like(__msduck_unicode_input(n), __msduck_unicode_input('a!%'), __msduck_unicode_input('!')))"), "{like}");
+        assert!(lowered("__msduck_json_value(j, 'p') < x").starts_with("CASE WHEN"));
+        let like = lowered("__msduck_unicode_maybe(n) NOT LIKE 'a!%' ESCAPE '!'");
+        assert!(
+            like.contains("THEN NOT (__msduck_unicode_like(__msduck_unicode_operand(n), __msduck_unicode_operand('a!%'), __msduck_unicode_operand('!')))"),
+            "{like}"
+        );
         assert!(
             like.ends_with("ELSE CAST(n AS VARCHAR) NOT LIKE 'a!%' ESCAPE '!' END"),
             "{like}"
         );
-        let simple = lowered("CASE n WHEN 'a' THEN 1 END");
+        let simple = lowered("CASE __msduck_unicode_maybe(n) WHEN 'a' THEN 1 END");
         assert!(simple.starts_with("CASE WHEN CASE WHEN"), "{simple}");
-        let between = lowered("n BETWEEN 'a' AND 'b'");
+        let between = lowered("__msduck_unicode_maybe(n) BETWEEN 'a' AND 'b'");
         assert!(
             between.ends_with("ELSE n BETWEEN 'a' AND 'b' END"),
             "{between}"
         );
-        let list = lowered("n NOT IN ('a', 'b')");
+        let list = lowered("__msduck_unicode_maybe(n) NOT IN ('a', 'b')");
         assert!(
-            list.contains("NOT IN (__msduck_unicode_order_key(__msduck_unicode_input('a'))"),
+            list.contains("NOT IN (__msduck_unicode_order_key(__msduck_unicode_operand('a'))"),
             "{list}"
         );
+        assert!(list.ends_with("ELSE n NOT IN ('a', 'b') END"), "{list}");
     }
 
     #[test]
@@ -787,6 +995,11 @@ mod tests {
         assert_eq!(
             lowered("__msduck_unicode_value(n) LIKE __msduck_unicode_value(p)"),
             "__msduck_unicode_like(__msduck_unicode_operand(n), __msduck_unicode_operand(p))"
+        );
+        assert!(
+            lowered("__msduck_unicode_in(n) IN (SELECT v FROM t UNION SELECT w FROM u)").contains(
+                "FROM (SELECT v FROM t UNION SELECT w FROM u) AS __msduck_in (__msduck_v)"
+            )
         );
         let member = lowered("__msduck_unicode_in(n) NOT IN (SELECT v FROM t)");
         assert!(member.starts_with("NOT ((CASE WHEN EXISTS (SELECT 1 FROM (SELECT v FROM t) AS __msduck_in (__msduck_v) WHERE __msduck_unicode_order_key(__msduck_unicode_operand(n)) = __msduck_unicode_order_key(__msduck_unicode_operand(__msduck_in.__msduck_v))) THEN true"), "{member}");
@@ -837,7 +1050,9 @@ mod tests {
     fn nesting_does_not_copy_lowered_operands() {
         let mut nested = "n".to_string();
         for _ in 0..20 {
-            nested = format!("CASE WHEN {nested} = 'a' THEN n ELSE m END");
+            nested = format!(
+                "CASE WHEN __msduck_unicode_maybe({nested}) = 'a' THEN __msduck_left_unicode(n, 1) ELSE m END"
+            );
         }
         let mut cast = "n".to_string();
         for _ in 0..20 {

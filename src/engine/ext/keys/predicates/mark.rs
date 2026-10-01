@@ -8,13 +8,28 @@
 //! Operands that resolve to carrier columns, directly or through character
 //! functions, are wrapped in a marker here; the lowering compares marked
 //! operations as Unicode text without the dispatch.
-use super::catalog::Catalog;
-use super::lower::{MARK, MEMBER};
+use super::catalog::{Catalog, Resolution};
+use super::lower::{MARK, MAYBE, MEMBER};
 use sqlparser::ast::*;
 use std::ops::ControlFlow;
 
 fn marked(expr: &Expr) -> bool {
-    matches!(expr, Expr::Function(f) if f.name.to_string() == MARK)
+    matches!(expr, Expr::Function(f) if [MARK, MAYBE].contains(&f.name.to_string().as_str()))
+}
+
+/// Whether `expr` is a column reference whose type is unknown here: a
+/// derived-table, CTE or outer column. The backend lowering checks its
+/// type; columns known not to be carriers are left alone.
+fn unknown(catalog: &Catalog, expr: &Expr) -> bool {
+    match expr {
+        Expr::Nested(inner) => unknown(catalog, inner),
+        // Variables and parameters are VARCHAR text in the backend.
+        Expr::Identifier(ident) if ident.value.starts_with('@') => false,
+        Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
+            matches!(catalog.resolve(expr), Resolution::Unknown)
+        }
+        _ => false,
+    }
 }
 
 fn first_argument(function: &Function) -> Option<&Expr> {
@@ -28,13 +43,21 @@ fn first_argument(function: &Function) -> Option<&Expr> {
 }
 
 /// Whether `expr` is Unicode text: a carrier column, a character function
-/// of one (ISNULL and COALESCE take the type of their first argument), or
-/// a scalar subquery selecting one.
+/// of one (ISNULL and COALESCE take the type of their first argument), a
+/// CASE with one among its results, or a scalar subquery selecting one.
 fn unicode(catalog: &Catalog, expr: &Expr) -> bool {
     match expr {
         Expr::Nested(inner) => unicode(catalog, inner),
         Expr::Identifier(_) | Expr::CompoundIdentifier(_) => catalog.carrier(expr).is_some(),
         Expr::Substring { expr, .. } | Expr::Trim { expr, .. } => unicode(catalog, expr),
+        Expr::Case {
+            conditions,
+            else_result,
+            ..
+        } => {
+            conditions.iter().any(|c| unicode(catalog, &c.result))
+                || else_result.as_deref().is_some_and(|e| unicode(catalog, e))
+        }
         Expr::Subquery(query) => match query.body.as_ref() {
             SetExpr::Select(select) => match select.projection.as_slice() {
                 [SelectItem::UnnamedExpr(p) | SelectItem::ExprWithAlias { expr: p, .. }] => {
@@ -73,17 +96,25 @@ fn collated(expr: &Expr) -> bool {
     }
 }
 
-/// Mark the operands of one operation when any of them is Unicode text.
-/// Explicitly collated operations are left to the COLLATE handling.
+/// Mark the operands of one operation when any of them is Unicode text;
+/// otherwise mark operands of unknown type for the backend `typeof`
+/// dispatch. Explicitly collated operations are left to the COLLATE
+/// handling.
 fn mark(catalog: &Catalog, operands: Vec<&mut Expr>) {
-    if operands.iter().any(|o| collated(o) || marked(o))
-        || !operands.iter().any(|o| unicode(catalog, o))
-    {
+    if operands.iter().any(|o| collated(o) || marked(o)) {
         return;
     }
+    let text = operands.iter().any(|o| unicode(catalog, o));
     for operand in operands {
+        let name = if text {
+            MARK
+        } else if unknown(catalog, operand) {
+            MAYBE
+        } else {
+            continue;
+        };
         let inner = std::mem::replace(operand, Expr::Value(Value::Null.into()));
-        *operand = msduck_sql::expr::unary_function(MARK, inner);
+        *operand = msduck_sql::expr::unary_function(name, inner);
     }
 }
 
@@ -127,6 +158,23 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T) {
                     let mut operands = vec![operand.as_mut()];
                     operands.extend(conditions.iter_mut().map(|c| &mut c.condition));
                     mark(self.0, operands)
+                }
+                // NULLIF(a, b) becomes CASE WHEN a = b …; marking `b` alone
+                // keeps `a`, which gives the result its type, as written.
+                Expr::Function(f) if f.name.to_string().eq_ignore_ascii_case("NULLIF") => {
+                    if let FunctionArguments::List(list) = &mut f.args
+                        && let [
+                            FunctionArg::Unnamed(FunctionArgExpr::Expr(first)),
+                            FunctionArg::Unnamed(FunctionArgExpr::Expr(second)),
+                        ] = list.args.as_mut_slice()
+                        && !collated(first)
+                        && !collated(second)
+                        && !marked(second)
+                        && unicode(self.0, first)
+                    {
+                        let inner = std::mem::replace(second, Expr::Value(Value::Null.into()));
+                        *second = msduck_sql::expr::unary_function(MARK, inner);
+                    }
                 }
                 Expr::InSubquery {
                     expr: value,
