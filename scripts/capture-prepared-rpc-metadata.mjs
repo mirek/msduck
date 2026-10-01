@@ -67,6 +67,20 @@ export const declarationProfiles=[
  ['datetime COALESCE','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIME2(7))) AS d'],
  ['datetime mixed offset','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIMEOFFSET(7))) AS d'],
 ]
+export const catalogBatchProfiles=[
+ ['catalog width contract','SELECT object_id,column_id,system_type_id,user_type_id,max_length,precision,scale,is_identity FROM sys.columns WHERE 1=0'],
+ ['catalog complete batch shape','SELECT * FROM sys.columns WHERE 1=0'],
+ ['identity complete batch shape','SELECT * FROM sys.identity_columns WHERE 1=0'],
+]
+export async function observeCatalogBatches(connection,{verifyVersion=true}={}){
+ const records=[]
+ for(const [name,sql] of [['version',version],...catalogBatchProfiles]){
+  const result=canonical(await captureBatch(connection,sql))
+  if(name!=='version'||verifyVersion)assert.deepEqual(result.errors,[])
+  records.push({name,sql,result})
+ }
+ return records
+}
 export const catalogDeclarationSetup=setup+'; CREATE TABLE dbo.prepare_identity(id BIGINT IDENTITY(2147483648,3),v INT)'
 export const catalogDeclarationProfiles=[
  ['columns empty shape','SELECT * FROM sys.columns WHERE 1=0'],
@@ -311,11 +325,22 @@ export async function retainedSetProperties(){
 }
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined
- if(![undefined,'--check','--write-fixture','--regressions','--declarations','--window-declarations','--order-declarations','--order-properties','--bitwise-declarations','--ranking-declarations','--grouping-order','--catalog-declarations','--temporal-sets','--set-properties','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --window-declarations | --order-declarations | --order-properties | --bitwise-declarations | --ranking-declarations | --grouping-order | --catalog-declarations | --temporal-sets | --set-properties | --cte-delete] [output]')
+ if(![undefined,'--check','--write-fixture','--regressions','--declarations','--window-declarations','--order-declarations','--order-properties','--bitwise-declarations','--ranking-declarations','--grouping-order','--catalog-declarations','--catalog-batches','--temporal-sets','--set-properties','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --window-declarations | --order-declarations | --order-properties | --bitwise-declarations | --ranking-declarations | --grouping-order | --catalog-declarations | --catalog-batches | --temporal-sets | --set-properties | --cte-delete] [output]')
  if(mode==='--check'){const r=await retained();console.log('Checked prepared RPC records',r.runs[0].length);return}
  if(mode==='--write-fixture')await refuseExistingFixture(fixture)
  const output=resolve(args[0]??'artifacts/prepared-rpc-metadata/capture.json');assert.notEqual(output,fileURLToPath(fixture))
  const regression=mode==='--catalog-declarations'||mode==='--grouping-order'||mode==='--ranking-declarations'||mode==='--bitwise-declarations'||mode==='--order-properties'||mode==='--order-declarations'||mode==='--window-declarations'||mode==='--regressions'||mode==='--declarations'||mode==='--temporal-sets'||mode==='--set-properties';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--catalog-declarations'?catalogDeclarationProfiles:mode==='--grouping-order'?groupingOrderProfiles:mode==='--ranking-declarations'?rankingDeclarationProfiles:mode==='--bitwise-declarations'?bitwiseDeclarationProfiles:mode==='--order-properties'?orderPropertyProfiles:mode==='--order-declarations'?orderDeclarationProfiles:mode==='--window-declarations'?windowDeclarationProfiles:mode==='--set-properties'?setPropertyProfiles:mode==='--temporal-sets'?temporalSetProfiles:mode==='--declarations'?declarationProfiles:regressionProfiles
+ if(mode==='--catalog-batches'){
+  const runs=[]
+  for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,observeCatalogBatches)))
+  for(const run of runs){
+   assertSameCapture(run.map(({name,sql})=>({name,sql})),[['version',version],...catalogBatchProfiles].map(([name,sql])=>({name,sql})),'catalog batch plan')
+   for(const record of run){phase(record.result);assert.deepEqual(record.result.errors,[])}
+  }
+  assertSameCapture(runs[0],runs[1],'catalog batch independent captures')
+  await mkdir(dirname(output),{recursive:true});await writeNewFixture(output,{image:referenceImage,runs})
+  console.log('Captured catalog batch records',runs[0].length);return
+ }
  const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,connection=>observe(connection,cteDelete?cteDeleteOptions:regression?{profilePlan:preparationProfiles,variantPlan:['api-default','named-one'],execute:false,...(mode==='--catalog-declarations'?{setupSql:catalogDeclarationSetup}:mode==='--set-properties'?{setupSql:setPropertySetup}:mode==='--bitwise-declarations'?{setupSql:bitwiseSetup}:{})}:{}))))
  if(cteDelete)for(const run of runs){
   assert.equal(run.length,10)
