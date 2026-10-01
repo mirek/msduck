@@ -713,3 +713,33 @@ fn temporary_tables_roll_back_and_table_variables_keep_their_rows() {
     )
     .unwrap();
 }
+
+#[test]
+fn columns_named_like_aliases_and_cte_writes_are_restored() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    run(
+        &mut s,
+        "CREATE TABLE dbo.keyed(id INT PRIMARY KEY, c INT, t INT);
+         CREATE TABLE dbo.heap(c INT, t INT);
+         INSERT dbo.keyed VALUES (1, 1, 1); INSERT dbo.heap VALUES (1, 1), (1, 2)",
+    )
+    .unwrap();
+    run(
+        &mut s,
+        "BEGIN TRAN; SAVE TRAN s;
+         UPDATE dbo.keyed SET t = 9;
+         UPDATE dbo.heap SET t = 9 WHERE t = 2;
+         WITH src AS (SELECT 2 AS id) INSERT dbo.keyed(id, c, t) SELECT id, 2, 2 FROM src;
+         ROLLBACK TRAN s; COMMIT",
+    )
+    .unwrap();
+    assert_eq!(
+        pairs(
+            &s,
+            "SELECT t, CAST(c AS VARCHAR) FROM dbo.keyed ORDER BY id"
+        ),
+        [(1, Some("1".into()))]
+    );
+    assert_eq!(ints(&s, "SELECT t FROM dbo.heap ORDER BY t"), [1, 2]);
+}
