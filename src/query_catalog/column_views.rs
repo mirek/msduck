@@ -468,7 +468,14 @@ mod tests {
             }
             for view in ["columns", "identity_columns"] {
                 let sql = format!("SELECT * FROM sys.{view} WHERE 1=0");
-                let native = session.db.prepare(&sql).unwrap().column_names();
+                // The native client exposes column names only after executing
+                // this explicitly empty, effect-free catalog SELECT. Production
+                // preparation uses the explicit snapshot without stepping SQL.
+                let mut statement = session.db.prepare(&sql).unwrap();
+                let mut rows = statement.query([]).unwrap();
+                assert!(rows.next().unwrap().is_none());
+                drop(rows);
+                let native = statement.column_names();
                 let statements = msduck_sql::batch::parse(&sql).unwrap();
                 let sqlparser::ast::Statement::Query(query) = &statements[0] else {
                     panic!()
