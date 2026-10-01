@@ -77,8 +77,6 @@ pub fn declared_parameters(source: &str) -> Result<Vec<DeclaredParameter>> {
     let mut kept = String::new();
     let mut last = 0;
     for token in &tokens {
-        let start = crate::dialect::ext::procedures::offset(source, token.span.start);
-        let end = crate::dialect::ext::procedures::offset(source, token.span.end);
         match &token.token {
             Token::LParen => depth += 1,
             Token::RParen => depth = depth.saturating_sub(1),
@@ -92,6 +90,8 @@ pub fn declared_parameters(source: &str) -> Result<Vec<DeclaredParameter>> {
                 let output = outputs.last_mut().expect("one declaration");
                 ensure!(!*output, "invalid parameter declarations");
                 *output = true;
+                let start = crate::dialect::ext::procedures::offset(source, token.span.start);
+                let end = crate::dialect::ext::procedures::offset(source, token.span.end);
                 kept.push_str(&source[last..start]);
                 last = end;
             }

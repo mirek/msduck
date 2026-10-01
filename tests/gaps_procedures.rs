@@ -314,9 +314,31 @@ async fn parameters_outputs_errors_and_dynamic_sql() {
             "DECLARE @a int = 1; EXEC sp_executesql N'SELECT @a AS a'",
             137,
         ),
+        ("EXEC p_rec 1 + 1", 102),
+        ("DECLARE @t tinyint; EXEC p_out 300, 0, @t OUTPUT", 8114),
+        ("EXEC sp_executesql N'BEGIN TRAN'", 266),
     ] {
         assert_eq!(error(&mut client, sql).await, number, "{sql}");
     }
-    // The connection stays usable.
-    assert_eq!(ints(&mut client, "SELECT 1 AS one").await, [[Some(1)]]);
+    // The connection stays usable; the 266 call left its transaction open.
+    assert_eq!(
+        ints(&mut client, "SELECT @@TRANCOUNT AS tc; ROLLBACK").await,
+        [[Some(1)]]
+    );
+    assert_eq!(
+        ints(
+            &mut client,
+            "BEGIN TRY EXEC p_rec 40 END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n END CATCH"
+        )
+        .await,
+        [[Some(217)]]
+    );
+    assert_eq!(
+        ints(
+            &mut client,
+            "EXEC ('SELECT @@NESTLEVEL AS a'); EXEC sp_executesql N'SELECT @@NESTLEVEL AS b'"
+        )
+        .await,
+        [[Some(1)], [Some(2)]]
+    );
 }
