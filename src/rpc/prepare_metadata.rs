@@ -578,8 +578,44 @@ fn prepared_order(
             field.info.as_ref()?;
             Some(field)
         }
+        fn integer_key<'a>(
+            expr: &Expr,
+            scope: &'a Scope,
+        ) -> Option<(&'a msduck_sql::binding_scope::Field, i32)> {
+            fn literal(expr: &Expr) -> Option<i32> {
+                match expr {
+                    Expr::Nested(expr) => literal(expr),
+                    Expr::UnaryOp {
+                        op: UnaryOperator::Plus,
+                        expr,
+                    } => literal(expr),
+                    Expr::UnaryOp {
+                        op: UnaryOperator::Minus,
+                        expr,
+                    } => literal(expr)?.checked_neg(),
+                    Expr::Value(value) => match &value.value {
+                        Value::Number(n, false) => n.parse().ok(),
+                        _ => None,
+                    },
+                    _ => None,
+                }
+            }
+            if let Expr::Nested(expr) = expr {
+                return integer_key(expr, scope);
+            }
+            let Expr::BinaryOp {
+                left,
+                op: BinaryOperator::Plus,
+                right,
+            } = expr
+            else {
+                return None;
+            };
+            let source = column(left, scope)?;
+            (source.info.as_ref()?.system_type_id == Some(56)).then_some((source, literal(right)?))
+        }
         let projected_key = |expr: &Expr| {
-            if column(expr, &scope).is_some() {
+            if column(expr, &scope).is_some() || integer_key(expr, &scope).is_some() {
                 return true;
             }
             if msduck_sql::expression_metadata::conditional::candidate(expr)
@@ -668,19 +704,12 @@ fn prepared_order(
                 // Captured hidden INT-column-plus-integer keys use ordinal
                 // zero. The original native binding validates arithmetic;
                 // this declaration check neither evaluates nor rewrites it.
-                if let Expr::BinaryOp {
-                    left,
-                    op: BinaryOperator::Plus,
-                    right,
-                } = &key.expr
-                    && column(left, &scope).is_some_and(|field| {
-                        field.info.as_ref().and_then(|info| info.system_type_id) == Some(56)
-                    })
-                    && matches!(right.as_ref(), Expr::Value(value)
-                        if matches!(&value.value, Value::Number(number, false)
-                            if number.parse::<i32>().is_ok()))
-                {
-                    let projected = expressions.iter().position(|expr| *expr == &key.expr);
+                if let Some((source, value)) = integer_key(&key.expr, &scope) {
+                    let projected = expressions.iter().position(|expr| {
+                        integer_key(expr, &scope).is_some_and(|(other, literal)| {
+                            std::ptr::eq(source, other) && value == literal
+                        })
+                    });
                     if projected.is_none() && select.distinct.is_some() {
                         return None;
                     }
@@ -787,6 +816,7 @@ fn query_description(
             }
         }
     }
+    let hidden_order = matches!(prepared_order(&catalog, query, &scope, &fields, parameters), projection::order::Plan::Token(keys) if keys.contains(&0));
     // Preparation retains fComputed for the captured CAST of an INT column
     // to SQL_VARIANT. Ordinary execution projection rules omit it for this
     // family, so derive this preparation property from the original AST and
@@ -897,7 +927,14 @@ fn query_description(
                     .and_then(|info| info.system_type_id)
                     == Some(56)
                 {
-                    field.properties = msduck_core::result::Properties::expression(true);
+                    field.properties = msduck_core::result::Properties {
+                        nullable: Some(true),
+                        origin: if hidden_order {
+                            msduck_core::result::Origin::Derived
+                        } else {
+                            msduck_core::result::Origin::Expression
+                        },
+                    };
                 }
             }
         }
@@ -906,6 +943,7 @@ fn query_description(
         !fields.is_empty(),
         "unsupported empty prepared result declarations"
     );
+    let order = prepared_order(&catalog, query, &scope, &fields, parameters);
     let aligned = crate::result_metadata::Aligned::new(fields.len(), &fields, &[]);
     let columns = fields
         .iter()
@@ -945,7 +983,7 @@ fn query_description(
         }
         out.extend_from_slice(&encoded[3..]);
     }
-    match prepared_order(&catalog, query, &scope, &fields, parameters) {
+    match order {
         projection::order::Plan::Token(ordinals) => tds::order::encode(&mut out, &ordinals)?,
         projection::order::Plan::NoToken => {}
         projection::order::Plan::Unknown(_) => bail!("unsupported prepared ORDER declaration"),
@@ -1267,6 +1305,21 @@ mod tests {
             prepared_order(&catalog, &query, &scope, &fields, &HashMap::new()),
             projection::order::Plan::Token(vec![2])
         );
+        for sql in [
+            "SELECT NTILE(@p) OVER(ORDER BY t.a) AS r,t.a+1 AS n FROM dbo.prepare_heap t ORDER BY a+1",
+            "SELECT NTILE(@p) OVER(ORDER BY t.a) AS r,(t.a+01) AS n FROM dbo.prepare_heap t ORDER BY (a+(+1))",
+        ] {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            let mut fields = prepared_fields(&catalog, &query, &scope).unwrap();
+            fields[0].info = catalog.cast_info(&DataType::BigInt(None));
+            assert_eq!(
+                prepared_order(&catalog, &query, &scope, &fields, &HashMap::new()),
+                projection::order::Plan::Token(vec![2]),
+                "{sql}"
+            );
+        }
         for sql in [
             "SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap UNION ALL SELECT b FROM dbo.prepare_heap",
             "SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap UNION ALL SELECT CAST(b AS FLOAT) FROM dbo.prepare_heap",

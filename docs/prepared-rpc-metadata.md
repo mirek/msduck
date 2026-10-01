@@ -211,3 +211,13 @@ All 18 preparation/unprepare records are embedded verbatim in the dedicated
 public regression, including return handles, metadata flags, ORDER bytes,
 completion tokens and nonexecution state. These are reference evidence; adding
 the regression does not establish that the current server passes it.
+
+The separate `--order-properties` controls retain eight profiles in two fresh
+SQL Server runs, including no ORDER, projected variant keys, hidden columns,
+hidden arithmetic and projected arithmetic. Full raw SHA256 is
+`b19c9afb3f8caf06b62d8f23e0948a2bf1bbe028bae490578531ee14a04522ed`.
+All 16 preparation/unprepare responses are embedded verbatim in the public
+provenance regression. These controls distinguish a direct INT-to-variant
+projection with flags33 from one with a hidden ORDER key and flags1.
+Resolved arithmetic identity compares explicit source fields and integer
+literals, preserving projected ordinals across qualification and parentheses.
