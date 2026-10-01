@@ -263,6 +263,8 @@ const known = {
   'missing procedure continues': failedCall,
   'p_missing ends the procedure': failedCall,
   'p_tran mismatch': failedCall,
+  'exec string transaction mismatch': failedCall,
+  'executesql transaction mismatch': failedCall,
   'exec string scope': failedCall,
   'exec string return value': failedCall,
   'exec string missing table': failedCall,
@@ -291,7 +293,8 @@ const doneDifferences = new Set([
   'server version', 'too many arguments', 'positional after named', 'output constant', 'p_dup status',
   'p_throw aborts batch', 'p_trycatch nocount', 'xact_abort raiserror', 'p_outer_throw', 'p_rec over limit',
   'p_tran mismatch', 'executesql extra name', 'rpc output parameter', 'not first in batch', 'drop missing',
-  'drop table name', 'drop list continues',
+  'drop table name', 'drop list continues', 'exec string transaction mismatch',
+  'executesql transaction mismatch', 'output overflow', 'positional expression',
 ])
 
 test('captured SQL Server observations replay with the same results', { timeout: 120000 }, async t => {
