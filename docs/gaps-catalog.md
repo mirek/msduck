@@ -96,10 +96,12 @@ allocators are not objects.
 
 `sys.columns.default_object_id` therefore names the DEFAULT of every column
 that has one, and the DEFAULT can be dropped by its generated name. As in
-SQL Server, a column with a DEFAULT cannot be dropped (5074, 4922), and
-ALTER COLUMN keeps a DEFAULT only when the type stays the same (another
-length, precision or scale is allowed) and a CHECK only when a
-variable-length type changes its length.
+SQL Server, ALTER COLUMN keeps a DEFAULT only when the type stays the same
+(another length, precision or scale is allowed) and a CHECK only when a
+variable-length type changes its length, and a column with a named DEFAULT
+cannot be dropped (5074, 4922). A column whose DEFAULT has a generated name
+is still dropped together with it, as msduck did before (SQL Server refuses
+that too).
 
 ### Modules and views
 
@@ -137,10 +139,13 @@ keyword, SQL Server's defaults apply.
 The backend tables of `#temp` tables, table variables and `##global`
 tables live in the current database, where other features find them
 through `sys.objects` and `OBJECT_ID`. SQL Server shows them only in
-tempdb, so a user query's `sys.objects`, `sys.all_objects` and `sys.tables`
-read a derived table without them, their constraints and their triggers.
-The derived table selects from the system view, so result metadata is
-unchanged. The views defined here leave them out too.
+tempdb, so in a user query each `sys.objects`, `sys.all_objects` and
+`sys.tables` of a SELECT gets a condition that leaves them, their
+constraints and their triggers out: in WHERE for a FROM item, in ON for an
+inner or left join. The result's metadata stays the system view's. Where a
+condition cannot apply (the preserved side of an outer join, APPLY, a join
+without ON) the view becomes a filtered derived table instead. The views
+defined here leave them out too.
 
 ## INFORMATION_SCHEMA
 
@@ -250,6 +255,8 @@ renames and definitions, and key identities through the keys lifecycle.
   as are temporary tables. Schema-bound views and functions are not recorded
   as dependencies, so the 15336 SQL Server raises for their tables and
   columns is not.
+- DROP COLUMN of a column whose DEFAULT has a generated name drops the
+  DEFAULT too; SQL Server fails with 5074 and 4922.
 - `OBJECT_DEFINITION` of system objects is NULL.
 - `sys.sql_modules` reports the session's SET options rather than those at
   creation, and `execute_as_principal_id` is NULL.

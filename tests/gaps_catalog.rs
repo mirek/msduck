@@ -334,9 +334,7 @@ fn bound_defaults_and_checks_follow_sql_server_alter_column_rules() {
         &mut session,
         "ALTER TABLE dbo.a ALTER COLUMN n BIGINT"
     ));
-    // Dropping a column with a DEFAULT fails until the DEFAULT is dropped by
-    // its generated name.
-    assert!(fails(&mut session, "ALTER TABLE dbo.a DROP COLUMN v"));
+    // An unnamed DEFAULT is dropped by its generated name.
     let name = rows(
         &session,
         "SELECT d.name FROM sys.default_constraints d JOIN sys.columns c ON c.object_id=d.parent_object_id AND c.column_id=d.parent_column_id WHERE c.name='v'",
@@ -345,8 +343,30 @@ fn bound_defaults_and_checks_follow_sql_server_alter_column_rules() {
     assert!(name.starts_with("DF__a__v__"));
     run(
         &mut session,
-        &format!("ALTER TABLE dbo.a DROP CONSTRAINT {name}; ALTER TABLE dbo.a DROP COLUMN v"),
+        &format!("ALTER TABLE dbo.a DROP CONSTRAINT {name}"),
     );
+    assert!(
+        rows(
+            &session,
+            "SELECT name FROM sys.default_constraints WHERE name LIKE 'DF__a__v__%'"
+        )
+        .is_empty()
+    );
+    // A named DEFAULT keeps its column, as in SQL Server (5074). A column
+    // with an unnamed one is dropped with it, as msduck always has.
+    run(
+        &mut session,
+        "ALTER TABLE dbo.a ADD x INT NOT NULL CONSTRAINT df_x DEFAULT 2; ALTER TABLE dbo.a ADD u INT DEFAULT 3",
+    );
+    assert_eq!(
+        rows(
+            &session,
+            "SELECT name,definition,is_system_named FROM sys.default_constraints WHERE name='df_x'"
+        ),
+        ["df_x|((2))|0"]
+    );
+    assert!(fails(&mut session, "ALTER TABLE dbo.a DROP COLUMN x"));
+    run(&mut session, "ALTER TABLE dbo.a DROP COLUMN u, v");
     // ALTER TABLE ... ADD gives unnamed DEFAULTs objects too.
     run(&mut session, "ALTER TABLE dbo.a ADD w INT DEFAULT 5");
     assert_eq!(

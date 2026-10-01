@@ -456,15 +456,37 @@ fn information_schema(
     })
 }
 
-/// The derived table that replaces `sys.objects`, `sys.all_objects` or
-/// `sys.tables`: the system view without temporary objects.
-fn filtered(view: &str, alias: Option<TableAlias>) -> Option<TableFactor> {
-    let temporary = |column: &str| {
-        format!(
-            "({column} LIKE '\\_\\_msduck\\_temp\\_%' ESCAPE '\\' OR {column} LIKE '\\_\\_msduck\\_tv\\_%' ESCAPE '\\' OR {column} LIKE '\\_\\_msduck\\_global\\_%' ESCAPE '\\')"
-        )
+fn temporary(column: &str) -> String {
+    format!(
+        "({column} LIKE '\\_\\_msduck\\_temp\\_%' ESCAPE '\\' OR {column} LIKE '\\_\\_msduck\\_tv\\_%' ESCAPE '\\' OR {column} LIKE '\\_\\_msduck\\_global\\_%' ESCAPE '\\')"
+    )
+}
+
+/// The rows of `sys.objects`, `sys.all_objects` or `sys.tables` (as
+/// `qualifier`) that SQL Server shows outside tempdb: not temporary
+/// objects, nor their constraints and triggers.
+fn visible_rows(qualifier: &str) -> Option<Expr> {
+    let qualifier = bracket(qualifier);
+    let sql = format!(
+        "SELECT 1 WHERE NOT {} AND {qualifier}.[parent_object_id] NOT IN (SELECT object_id FROM sys.objects AS {FILTERED} WHERE {})",
+        temporary(&format!("{qualifier}.[name]")),
+        temporary("name")
+    );
+    let mut statements = msduck_sql::batch::parse(&sql).ok()?;
+    let Statement::Query(query) = statements.pop()? else {
+        return None;
     };
-    // Constraints and triggers of a temporary table are in tempdb too.
+    let SetExpr::Select(select) = *query.body else {
+        return None;
+    };
+    select.selection
+}
+
+/// The derived table that replaces `sys.objects`, `sys.all_objects` or
+/// `sys.tables` where a condition cannot be added (the preserved side of
+/// an outer join, APPLY, joins without ON): the system view without
+/// temporary objects.
+fn filtered(view: &str, alias: Option<TableAlias>) -> Option<TableFactor> {
     let sql = format!(
         "SELECT * FROM sys.{view} AS {FILTERED} WHERE NOT {} AND parent_object_id NOT IN (SELECT object_id FROM sys.objects AS {FILTERED} WHERE {})",
         temporary("name"),
@@ -485,6 +507,106 @@ fn filtered(view: &str, alias: Option<TableAlias>) -> Option<TableFactor> {
         })),
         sample: None,
     })
+}
+
+/// The system view a table factor names (`objects`, `all_objects` or
+/// `tables`), and the qualifier of its columns.
+fn system_view(factor: &TableFactor) -> Option<(String, String)> {
+    let TableFactor::Table {
+        name,
+        alias,
+        args: None,
+        version: None,
+        ..
+    } = factor
+    else {
+        return None;
+    };
+    if alias
+        .as_ref()
+        .is_some_and(|alias| alias.name.value == FILTERED)
+    {
+        return None;
+    }
+    let parts: Vec<&str> = name
+        .0
+        .iter()
+        .filter_map(|part| part.as_ident().map(|ident| ident.value.as_str()))
+        .collect();
+    if parts.len() != name.0.len() || parts.len() < 2 {
+        return None;
+    }
+    let view = parts[parts.len() - 1];
+    if !parts[parts.len() - 2].eq_ignore_ascii_case("sys")
+        || !["objects", "all_objects", "tables"]
+            .iter()
+            .any(|candidate| candidate.eq_ignore_ascii_case(view))
+    {
+        return None;
+    }
+    let qualifier = alias
+        .as_ref()
+        .map_or_else(|| view.to_owned(), |alias| alias.name.value.clone());
+    Some((view.to_ascii_lowercase(), qualifier))
+}
+
+/// `left AND right`, unless `left` already holds `right`.
+fn conjoin(left: Option<Expr>, right: Expr) -> Expr {
+    match left {
+        Some(left) if left.to_string().contains(&right.to_string()) => left,
+        Some(left) => Expr::BinaryOp {
+            left: Box::new(Expr::Nested(Box::new(left))),
+            op: BinaryOperator::And,
+            right: Box::new(right),
+        },
+        None => right,
+    }
+}
+
+/// Filter the system views of one SELECT: a condition in WHERE for a FROM
+/// item, in ON for an inner or left-joined one, and a derived table where
+/// neither applies. Conditions keep the result's metadata, which a derived
+/// table changes.
+fn filter_select(select: &mut Select) {
+    let mut conditions = Vec::new();
+    for item in &mut select.from {
+        if let Some((view, qualifier)) = system_view(&item.relation) {
+            match visible_rows(&qualifier) {
+                Some(condition) => conditions.push(condition),
+                None => continue,
+            }
+            let _ = view;
+        }
+        for join in &mut item.joins {
+            let Some((view, qualifier)) = system_view(&join.relation) else {
+                continue;
+            };
+            let constraint = match &mut join.join_operator {
+                JoinOperator::Join(constraint)
+                | JoinOperator::Inner(constraint)
+                | JoinOperator::Left(constraint)
+                | JoinOperator::LeftOuter(constraint) => Some(constraint),
+                _ => None,
+            };
+            match (constraint, visible_rows(&qualifier)) {
+                (Some(JoinConstraint::On(on)), Some(condition)) => {
+                    *on = conjoin(Some(on.clone()), condition);
+                }
+                _ => {
+                    let alias = match &join.relation {
+                        TableFactor::Table { alias, .. } => alias.clone(),
+                        _ => None,
+                    };
+                    if let Some(derived) = filtered(&view, alias) {
+                        join.relation = derived;
+                    }
+                }
+            }
+        }
+    }
+    for condition in conditions {
+        select.selection = Some(conjoin(select.selection.take(), condition));
+    }
 }
 
 /// Rewrite a user statement's references to the views above.
@@ -530,12 +652,6 @@ pub(super) fn rewrite(session: &Session, statement: &mut Statement) {
             let view = parts[parts.len() - 1];
             let replacement = if schema.eq_ignore_ascii_case("INFORMATION_SCHEMA") {
                 information_schema(view, self.database, alias.clone())
-            } else if schema.eq_ignore_ascii_case("sys")
-                && ["objects", "all_objects", "tables"]
-                    .iter()
-                    .any(|candidate| candidate.eq_ignore_ascii_case(view))
-            {
-                filtered(&view.to_ascii_lowercase(), alias.clone())
             } else {
                 None
             };
@@ -548,6 +664,25 @@ pub(super) fn rewrite(session: &Session, statement: &mut Statement) {
             ControlFlow::Continue(())
         }
     }
+    struct Selects;
+    impl VisitorMut for Selects {
+        type Break = ();
+        fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
+            fn body(set: &mut SetExpr) {
+                match set {
+                    SetExpr::Select(select) => filter_select(select),
+                    SetExpr::SetOperation { left, right, .. } => {
+                        body(left);
+                        body(right);
+                    }
+                    _ => {}
+                }
+            }
+            body(&mut query.body);
+            ControlFlow::Continue(())
+        }
+    }
+    let _ = statement.visit(&mut Selects);
     let mut rewrite = Rewrite {
         database: &session.database.name,
         renamed: Vec::new(),

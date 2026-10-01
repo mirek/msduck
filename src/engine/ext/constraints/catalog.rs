@@ -604,14 +604,21 @@ pub(crate) fn default_named(db: &Connection, schema: &str, name: &str) -> Result
 }
 
 /// Named DEFAULT constraints of a table: (name, column).
-pub(crate) fn defaults_of(db: &Connection, table: &Table) -> Result<Vec<(i32, String, String)>> {
+/// DEFAULT constraints of a table: (object ID, name, column, whether SQL
+/// Server generated the name).
+pub(crate) fn defaults_of(
+    db: &Connection,
+    table: &Table,
+) -> Result<Vec<(i32, String, String, bool)>> {
     let mut statement = db.prepare(
-        "SELECT d.object_id,d.name,k.name FROM main.__msduck_default_constraints d
+        "SELECT d.object_id,d.name,k.name,
+           coalesce((SELECT bool_or(s.is_system_named) FROM main.__msduck_default_sources s WHERE s.object_id=d.object_id),false)
+         FROM main.__msduck_default_constraints d
          JOIN main.__msduck_column_info k ON k.object_id=d.parent_object_id AND k.column_id=d.column_id
          WHERE d.parent_object_id=? ORDER BY d.object_id",
     )?;
     let rows = statement.query_map([table.id], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
     })?;
     Ok(rows.collect::<duckdb::Result<_>>()?)
 }

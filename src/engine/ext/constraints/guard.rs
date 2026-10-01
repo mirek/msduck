@@ -131,7 +131,10 @@ pub(crate) fn truncate(session: &mut Session, statement: &Statement) -> Result<(
 /// What an object that depends on a column is.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Dependency {
-    Default,
+    /// A DEFAULT, and whether SQL Server generated its name.
+    Default {
+        generated: bool,
+    },
     Check,
     Foreign,
 }
@@ -146,8 +149,8 @@ fn dependents(
 ) -> Result<Vec<(i32, String, Dependency)>> {
     let mut objects: Vec<(i32, String, Dependency)> = catalog::defaults_of(&session.db, table)?
         .into_iter()
-        .filter(|(_, _, c)| c.eq_ignore_ascii_case(column))
-        .map(|(id, name, _)| (id, name, Dependency::Default))
+        .filter(|(_, _, c, _)| c.eq_ignore_ascii_case(column))
+        .map(|(id, name, _, generated)| (id, name, Dependency::Default { generated }))
         .collect();
     // Key constraints are checked by the keys feature, which allows widening
     // a key column.
@@ -198,7 +201,7 @@ fn allowed(dependency: Dependency, old: &DataType, new: &DataType) -> bool {
         return false;
     }
     match dependency {
-        Dependency::Default => true,
+        Dependency::Default { .. } => true,
         Dependency::Check => {
             matches!(old.name, "varchar" | "nvarchar" | "varbinary")
                 && old.precision == new.precision
@@ -224,7 +227,15 @@ pub(crate) fn alter_table(session: &mut Session, statement: &mut Statement) -> R
         match operation {
             AlterTableOperation::DropColumn { column_names, .. } => {
                 for column in column_names {
-                    let objects = dependents(session, &constraints, &table, &column.value)?;
+                    // A DEFAULT without a declared name goes with its column:
+                    // msduck has always dropped such columns, although SQL
+                    // Server refuses them (5074) too.
+                    let objects: Vec<_> = dependents(session, &constraints, &table, &column.value)?
+                        .into_iter()
+                        .filter(|(_, _, dependency)| {
+                            !matches!(dependency, Dependency::Default { generated: true })
+                        })
+                        .collect();
                     if !objects.is_empty() {
                         let names: Vec<String> = objects.into_iter().map(|(_, n, _)| n).collect();
                         return Err(errors::dependent_column(
