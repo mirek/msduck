@@ -8589,6 +8589,22 @@
       "dependencies": [],
       "issue": 723,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQsr"
+    },
+    {
+      "id": "gaps-identifiers-v1-dialect",
+      "title": "Dialect delegation for contextual identifiers (aliases, prefix words, table versioning)",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-identifiers-v1",
+      "scope": [
+        "crates/msduck-sql/src/dialect.rs"
+      ],
+      "acceptance": [
+        "ServerDialect delegates bare select-item and table aliases and prefix parsing of words SQL Server treats as regular identifiers (offset, limit, qualify, at, using, window, interval, trim, lateral and similar) to crates/msduck-sql/src/dialect/ext/identifiers.rs, keeping T-SQL syntax such as ORDER BY ... OFFSET, AT TIME ZONE, WINDOW clauses and MERGE ... USING intact.",
+        "Snowflake/BigQuery-style table versioning (AT(...), BEFORE(...), CHANGES) no longer captures a table alias named at; the change is minimal delegation and lands in the gaps-identifiers-v1 PR with its tests."
+      ],
+      "dependencies": [],
+      "issue": 729,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQvb"
     }
   ]
 }
