@@ -8396,7 +8396,7 @@
     {
       "id": "gaps-temp-tables-v1",
       "title": "#temp tables and table variables",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
       "scope": [
         "src/engine/ext/temp_tables.rs",
@@ -8540,7 +8540,7 @@
     {
       "id": "gaps-temp-tables-v1-hooks",
       "title": "Batch scope hooks for #temp tables and table variables",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-temp-tables-v1",
       "scope": [
         "src/engine.rs",
