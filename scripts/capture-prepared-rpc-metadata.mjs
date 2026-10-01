@@ -67,6 +67,14 @@ export const declarationProfiles=[
  ['datetime COALESCE','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIME2(7))) AS d'],
  ['datetime mixed offset','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIMEOFFSET(7))) AS d'],
 ]
+export const rankingDeclarationProfiles=[
+ ['floating ranks','SELECT a,PERCENT_RANK() OVER(ORDER BY b) AS p,CUME_DIST() OVER(ORDER BY b) AS c FROM dbo.prepare_heap ORDER BY a'],
+ ['floating ranks partition','SELECT a,PERCENT_RANK() OVER(PARTITION BY b ORDER BY a DESC) AS p,CUME_DIST() OVER(PARTITION BY b ORDER BY a DESC) AS c FROM dbo.prepare_heap ORDER BY a'],
+ ['floating ranks empty','SELECT PERCENT_RANK() OVER(ORDER BY a) AS p,CUME_DIST() OVER(ORDER BY a) AS c FROM dbo.prepare_heap WHERE 1=0'],
+ ['floating ranks derived','WITH q AS (SELECT a,PERCENT_RANK() OVER(ORDER BY b) AS p,CUME_DIST() OVER(ORDER BY b) AS c FROM dbo.prepare_heap) SELECT p,c FROM q ORDER BY a'],
+ ['floating ranks conditional','SELECT CASE WHEN @p=1 THEN PERCENT_RANK() OVER(ORDER BY a) ELSE CUME_DIST() OVER(ORDER BY a) END AS n FROM dbo.prepare_heap'],
+ ['floating ranks named window','SELECT a,PERCENT_RANK() OVER w AS p,CUME_DIST() OVER w AS c FROM dbo.prepare_heap WINDOW w AS(PARTITION BY b ORDER BY a) ORDER BY a'],
+]
 export const bitwiseSetup=setup+'; CREATE TABLE dbo.prepare_bits(b BIT,t TINYINT,s SMALLINT,i INT,big BIGINT); INSERT INTO dbo.prepare_bits VALUES(1,170,75,-1,4294967296),(NULL,NULL,NULL,NULL,NULL)'
 export const bitwiseDeclarationProfiles=[
  ['BIT pair parameter declarations','SELECT CAST(@p AS BIT)&CAST(@p AS BIT) AS a,CAST(@p AS BIT)|CAST(@p AS BIT) AS o,CAST(@p AS BIT)^CAST(@p AS BIT) AS x'],
@@ -280,11 +288,11 @@ export async function retainedSetProperties(){
 }
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined
- if(![undefined,'--check','--write-fixture','--regressions','--declarations','--window-declarations','--order-declarations','--order-properties','--bitwise-declarations','--temporal-sets','--set-properties','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --window-declarations | --order-declarations | --order-properties | --bitwise-declarations | --temporal-sets | --set-properties | --cte-delete] [output]')
+ if(![undefined,'--check','--write-fixture','--regressions','--declarations','--window-declarations','--order-declarations','--order-properties','--bitwise-declarations','--ranking-declarations','--temporal-sets','--set-properties','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --window-declarations | --order-declarations | --order-properties | --bitwise-declarations | --ranking-declarations | --temporal-sets | --set-properties | --cte-delete] [output]')
  if(mode==='--check'){const r=await retained();console.log('Checked prepared RPC records',r.runs[0].length);return}
  if(mode==='--write-fixture')await refuseExistingFixture(fixture)
  const output=resolve(args[0]??'artifacts/prepared-rpc-metadata/capture.json');assert.notEqual(output,fileURLToPath(fixture))
- const regression=mode==='--bitwise-declarations'||mode==='--order-properties'||mode==='--order-declarations'||mode==='--window-declarations'||mode==='--regressions'||mode==='--declarations'||mode==='--temporal-sets'||mode==='--set-properties';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--bitwise-declarations'?bitwiseDeclarationProfiles:mode==='--order-properties'?orderPropertyProfiles:mode==='--order-declarations'?orderDeclarationProfiles:mode==='--window-declarations'?windowDeclarationProfiles:mode==='--set-properties'?setPropertyProfiles:mode==='--temporal-sets'?temporalSetProfiles:mode==='--declarations'?declarationProfiles:regressionProfiles
+ const regression=mode==='--ranking-declarations'||mode==='--bitwise-declarations'||mode==='--order-properties'||mode==='--order-declarations'||mode==='--window-declarations'||mode==='--regressions'||mode==='--declarations'||mode==='--temporal-sets'||mode==='--set-properties';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--ranking-declarations'?rankingDeclarationProfiles:mode==='--bitwise-declarations'?bitwiseDeclarationProfiles:mode==='--order-properties'?orderPropertyProfiles:mode==='--order-declarations'?orderDeclarationProfiles:mode==='--window-declarations'?windowDeclarationProfiles:mode==='--set-properties'?setPropertyProfiles:mode==='--temporal-sets'?temporalSetProfiles:mode==='--declarations'?declarationProfiles:regressionProfiles
  const runs=[];for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,connection=>observe(connection,cteDelete?cteDeleteOptions:regression?{profilePlan:preparationProfiles,variantPlan:['api-default','named-one'],execute:false,...(mode==='--set-properties'?{setupSql:setPropertySetup}:mode==='--bitwise-declarations'?{setupSql:bitwiseSetup}:{})}:{}))))
  if(cteDelete)for(const run of runs){
   assert.equal(run.length,10)
