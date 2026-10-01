@@ -108,7 +108,8 @@ pub(super) fn restore(
         backend.alias == session.database.alias(),
         "unsupported table variable restore in another database"
     );
-    if !exists(&session.db, &backend.physical)? {
+    let recreated = !exists(&session.db, &backend.physical)?;
+    if recreated {
         let create = msduck_sql::dialect::ext::temp_tables::create_table(
             definition,
             &sqlparser::ast::Ident::with_quote('"', &backend.physical),
@@ -119,11 +120,29 @@ pub(super) fn restore(
     session
         .db
         .execute_batch(&format!("DELETE FROM dbo.{}", quote(&backend.physical)))?;
-    let mut appender = session.db.appender_to_db(&backend.physical, "dbo")?;
-    for batch in rows {
-        appender.append_record_batch(batch)?;
+    {
+        let mut appender = session.db.appender_to_db(&backend.physical, "dbo")?;
+        for batch in rows {
+            appender.append_record_batch(batch)?;
+        }
+        appender.flush()?;
     }
-    appender.flush()?;
+    if recreated {
+        // IDENTITY values are not rolled back: continue after the restored
+        // rows rather than from the seed of the recreated sequence.
+        let table = msduck_sql::dialect::ext::temp_tables::backend_name(&backend.physical);
+        for (column, sequence) in crate::identity::columns(&session.db, &table)? {
+            session.db.query_row(
+                &format!(
+                    "SELECT count(nextval('{sequence}')) FROM main.__msduck_identity_definitions d, range(CAST(coalesce((SELECT (max({}) - d.seed) // d.increment_value + 1 FROM dbo.{}), 0) AS BIGINT)) WHERE d.sequence_name = ?",
+                    quote(&column),
+                    quote(&backend.physical)
+                ),
+                [&sequence],
+                |row| row.get::<_, i64>(0),
+            )?;
+        }
+    }
     Ok(())
 }
 

@@ -179,6 +179,7 @@ impl Feature for Hooks {
         statement: &mut Statement,
         parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Option<Execution>> {
+        syntax::tempdb_catalog(statement);
         if let Some(variable) = syntax::table_variable(statement) {
             declare(session, &variable)?;
             return Ok(Some(Execution::statement(Vec::new(), None, 0)));
@@ -657,11 +658,19 @@ fn drop_tables(
         // Only missing temporary tables with IF EXISTS.
         return Ok(Execution::statement(Vec::new(), None, 199));
     }
-    *names = kept;
-    let execution = reenter(session, NAME, |session| {
-        session.execute(statement, parameters)
-    })
-    .map_err(|error| localize(&session.ext.temp_tables, error))?;
+    // The backend drops one table per statement.
+    let mut execution = None;
+    for object in kept {
+        let mut single = statement.clone();
+        if let Statement::Drop { names, .. } = &mut single {
+            *names = vec![object];
+        }
+        execution = Some(
+            reenter(session, NAME, |session| session.execute(single, parameters))
+                .map_err(|error| localize(&session.ext.temp_tables, error))?,
+        );
+    }
+    let execution = execution.expect("at least one table");
     let in_transaction = session.transactions > 0;
     let state = &mut session.ext.temp_tables;
     for (name, physical) in dropped {

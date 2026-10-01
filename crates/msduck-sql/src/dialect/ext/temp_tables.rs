@@ -256,6 +256,26 @@ impl Visitor for Collect<'_> {
     }
 }
 
+/// Read `tempdb.sys.*` and `tempdb.INFORMATION_SCHEMA.*` from the current
+/// database, whose catalog holds the backend tables of temporary objects.
+/// Returns whether anything changed.
+pub fn tempdb_catalog<T: VisitMut>(node: &mut T) -> bool {
+    let mut changed = false;
+    let _ = visit_relations_mut(node, |relation| {
+        if let [ObjectNamePart::Identifier(database), ObjectNamePart::Identifier(schema), _] =
+            relation.0.as_slice()
+            && database.value.eq_ignore_ascii_case("tempdb")
+            && (schema.value.eq_ignore_ascii_case("sys")
+                || schema.value.eq_ignore_ascii_case("information_schema"))
+        {
+            relation.0.remove(0);
+            changed = true;
+        }
+        ControlFlow::<()>::Continue(())
+    });
+    changed
+}
+
 /// Temporary objects a statement writes: INSERT, UPDATE, DELETE and MERGE
 /// targets and `OUTPUT ... INTO` tables, at any nesting depth.
 pub fn targets<T: Visit>(node: &T) -> Vec<TempName> {
@@ -592,6 +612,14 @@ mod tests {
         assert_eq!(drop.to_string(), r#"DROP TABLE dbo."tt", dbo.other"#);
         let mut missing = statement("SELECT * FROM #missing");
         assert_eq!(rewrite(&mut missing, &mut resolve), Err("#missing".into()));
+        let mut catalog = statement(
+            "SELECT c.name FROM tempdb.sys.columns c JOIN tempdb.INFORMATION_SCHEMA.TABLES t ON 1 = 1",
+        );
+        assert!(tempdb_catalog(&mut catalog));
+        assert_eq!(
+            catalog.to_string(),
+            "SELECT c.name FROM sys.columns AS c JOIN INFORMATION_SCHEMA.TABLES AS t ON 1 = 1"
+        );
         let mut plain = statement("SELECT * FROM dbo.t");
         assert!(!rewrite(&mut plain, &mut resolve).unwrap());
         assert_eq!(
