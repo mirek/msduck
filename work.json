@@ -8961,6 +8961,22 @@
       "dependencies": [],
       "issue": 761,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pe8Ux"
+    },
+    {
+      "id": "gaps-transactions-v1-procedures",
+      "title": "Restore the isolation level when a procedure or dynamic SQL frame returns (gaps-transactions-v1)",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-transactions-v1",
+      "scope": [
+        "src/engine/ext/procedures/run.rs"
+      ],
+      "acceptance": [
+        "A procedure or EXEC/sp_executesql frame restores the caller's transaction isolation level when it returns, like its other SET options, matching reference/gaps-transactions.json.",
+        "Merged in the same PR as gaps-transactions-v1 with its verification."
+      ],
+      "dependencies": [],
+      "issue": 727,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQur"
     }
   ]
 }
