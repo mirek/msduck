@@ -856,6 +856,70 @@ fn series_declarations(query: &Query, parameters: &HashMap<String, Parameter>) -
     declared
 }
 
+// Flatten an unaliased APPLY group only in a declaration clone. Sequential
+// metadata joins retain left-input correlation; OUTER APPLY null-extends every
+// right field. Original native binding has validated scopes and predicates.
+// Aliased groups and joins with other semantics remain unresolved.
+fn joined_apply_declarations(query: &Query) -> Query {
+    use sqlparser::ast::*;
+    struct Declare;
+    impl VisitorMut for Declare {
+        type Break = ();
+        fn post_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
+            let SetExpr::Select(select) = query.body.as_mut() else {
+                return ControlFlow::Continue(());
+            };
+            for table in &mut select.from {
+                let mut joins = Vec::new();
+                for mut join in std::mem::take(&mut table.joins) {
+                    let outer = match join.join_operator {
+                        JoinOperator::CrossApply => false,
+                        JoinOperator::OuterApply => true,
+                        _ => {
+                            joins.push(join);
+                            continue;
+                        }
+                    };
+                    let TableFactor::NestedJoin {
+                        table_with_joins,
+                        alias: None,
+                    } = &join.relation
+                    else {
+                        joins.push(join);
+                        continue;
+                    };
+                    if table_with_joins.joins.iter().any(|child| {
+                        !matches!(
+                            child.join_operator,
+                            JoinOperator::CrossJoin(JoinConstraint::None)
+                                | JoinOperator::CrossApply
+                        )
+                    }) {
+                        joins.push(join);
+                        continue;
+                    }
+                    let inner = *table_with_joins.clone();
+                    join.relation = inner.relation;
+                    joins.push(join);
+                    for mut child in inner.joins {
+                        child.join_operator = if outer {
+                            JoinOperator::OuterApply
+                        } else {
+                            JoinOperator::CrossApply
+                        };
+                        joins.push(child);
+                    }
+                }
+                table.joins = joins;
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut declared = query.clone();
+    let _ = VisitMut::visit(&mut declared, &mut Declare);
+    declared
+}
+
 // Enrich nested source declarations bottom-up, retaining the original outer
 // expressions for ORDER identity. Only a proven one-column variant UNION may
 // use a synthetic declaration; recursive/CTE references and aliases are barriers.
@@ -945,7 +1009,8 @@ fn source_declarations(
     }
     // Create the non-null series carrier after generic expression enrichment,
     // which deliberately uses typed NULLs for ordinary numeric declarations.
-    let enriched = expression_declarations(query, parameters, catalog, outer);
+    let joined = joined_apply_declarations(query);
+    let enriched = expression_declarations(&joined, parameters, catalog, outer);
     let mut declared = series_declarations(&enriched, parameters);
     let _ = declared.visit(&mut Declare {
         catalog,
@@ -976,6 +1041,11 @@ fn prepared_order(
     let original = projection::order::infer(catalog, query, outer);
     if !matches!(original, projection::order::Plan::Unknown(_)) {
         return original;
+    }
+    let joined = joined_apply_declarations(query);
+    let declared = projection::order::infer(catalog, &joined, outer);
+    if !matches!(declared, projection::order::Plan::Unknown(_)) {
+        return declared;
     }
     let infer = || -> Option<Vec<u16>> {
         let order = query.order_by.as_ref()?;
@@ -1314,6 +1384,7 @@ fn query_description(
         }
     }
     let mut fields = prepared_fields(&catalog, query, &scope)
+        .or_else(|| prepared_fields(&catalog, &joined_apply_declarations(query), &scope))
         .ok_or_else(|| anyhow::anyhow!("unsupported prepared result declarations"))?;
     // Preserve original explicit VALUES declarations before operand annotation
     // lowers temporal sources into native helper calls. The annotated candidate
@@ -2163,6 +2234,78 @@ mod tests {
                 panic!("query")
             };
             assert_eq!(series_declarations(&query, &parameters), *query, "{sql}");
+        }
+    }
+
+    #[test]
+    fn joined_apply_metadata_retains_correlation_and_outer_nullability() {
+        let mut catalog = CatalogSnapshot::default();
+        catalog.types.insert(
+            "int".into(),
+            TypeMetadata {
+                system_type_id: Some(56),
+                user_type_id: Some(56),
+                max_length: Some(4),
+                precision: Some(10),
+                scale: Some(0),
+                ..Default::default()
+            },
+        );
+        let mut scope = Scope::default();
+        scope.parameters.insert(
+            "@p".into(),
+            catalog.cast_info(&DataType::Int(None)).unwrap(),
+        );
+        for (apply, nullable) in [
+            ("CROSS APPLY", vec![Some(false); 3]),
+            ("OUTER APPLY", vec![Some(false), Some(true), Some(true)]),
+        ] {
+            let sql = format!(
+                "SELECT a.v,b.w,c.k FROM (VALUES(1),(2)) a(v) {apply} ((SELECT a.v AS w WHERE a.v=@p) b CROSS JOIN (VALUES(10),(20)) c(k)) ORDER BY a.v,c.k"
+            );
+            let Statement::Query(query) = msduck_sql::batch::parse(&sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            let original = query.clone();
+            assert!(prepared_fields(&catalog, &query, &scope).is_none());
+            let declared = joined_apply_declarations(&query);
+            let fields = prepared_fields(&catalog, &declared, &scope).unwrap();
+            assert_eq!(
+                fields.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(),
+                ["v", "w", "k"]
+            );
+            assert!(fields.iter().all(|f| {
+                f.info
+                    .as_ref()
+                    .is_some_and(|i| i.system_type_id == Some(56) && i.user_type_id == Some(56))
+            }));
+            assert_eq!(
+                fields
+                    .iter()
+                    .map(|f| f.properties.nullable)
+                    .collect::<Vec<_>>(),
+                nullable
+            );
+            assert_eq!(
+                prepared_order(&catalog, &query, &scope, &fields, &HashMap::new()),
+                projection::order::Plan::Token(vec![1, 3])
+            );
+            assert_eq!(query, original);
+        }
+        for sql in [
+            "SELECT * FROM (VALUES(1)) a(v) CROSS APPLY ((SELECT a.v AS w) b CROSS JOIN (VALUES(10)) c(k)) q",
+            "SELECT * FROM (VALUES(1)) a(v) OUTER APPLY ((SELECT a.v AS w) b LEFT JOIN (VALUES(10)) c(k) ON 1=1)",
+            "SELECT * FROM (VALUES(1)) a(v) CROSS APPLY ((SELECT missing.v AS w) b CROSS JOIN (VALUES(10)) c(k))",
+        ] {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            let declared = joined_apply_declarations(&query);
+            assert!(
+                prepared_fields(&catalog, &declared, &scope)
+                    .is_none_or(|fields| fields.iter().any(|f| f.info.is_none())),
+                "{sql}"
+            );
         }
     }
 
