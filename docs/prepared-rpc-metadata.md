@@ -231,3 +231,13 @@ BIT/BIT binary operators prepare as BitN, while a BIT/integer pair retains the
 integer operand's width. Declarations use explicit parameter and catalog types,
 with aliases, approximate types, untyped NULL and unresolved sources remaining
 unknown. This preparation evidence does not establish execution wire parity.
+
+The `--ranking-declarations` mode retains six direct, partitioned, empty,
+derived, conditional and named-window PERCENT_RANK/CUME_DIST preparations
+in two fresh SQL Server runs. Full raw SHA256 is
+`28437ac7b677f91f08c5f8556369f4dda0758a2e7b0d9c3e7e82d5177ca30f6b`.
+All twelve complete responses are embedded verbatim in the public regression.
+The valid window calls have fixed FloatN(8) declarations even for empty input;
+source/native validation precedes metadata enrichment. Conditional expression
+provenance remains computed, while direct and derived ranking outputs retain
+their captured derived flags. No window operand is evaluated for metadata.

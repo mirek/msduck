@@ -402,6 +402,13 @@ fn expression_declarations(
                     && matches!(&f.args, FunctionArguments::List(a) if a.args.is_empty())
                 {
                     Some(DataType::Uuid)
+                } else if matches!(name.as_str(), "percent_rank" | "cume_dist")
+                    && msduck_sql::ranking::validate(f).is_ok()
+                    && !f.uses_odbc_syntax
+                {
+                    // Original native binding checked the window and names.
+                    // The result declaration is fixed even for empty input.
+                    Some(DataType::Double(ExactNumberInfo::None))
                 } else if matches!(name.as_str(), "stdev" | "stdevp" | "var" | "varp")
                     && msduck_sql::aggregate::validate(f).is_ok()
                 {
