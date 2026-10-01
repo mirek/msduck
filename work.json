@@ -8671,6 +8671,27 @@
       "dependencies": [],
       "issue": 719,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQrO"
+    },
+    {
+      "id": "gaps-transactions-v1-engine",
+      "title": "Transaction begin, RPC scope and savepoint engine wiring for gaps-transactions-v1",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-transactions-v1",
+      "scope": [
+        "src/engine.rs",
+        "src/engine/ext.rs",
+        "docs/extension-hooks.md",
+        "docs/savepoint.md",
+        "docs/transaction-manager.md"
+      ],
+      "acceptance": [
+        "Add transaction_begin and rpc_begin/rpc_end hooks so transaction-manager begin requests record the session isolation level and a level set inside sp_executesql reverts, let a savepoint shadow a same-named outer transaction for TM rollback, write Partial tokens in emit_error, and let prepared validation accept extension carriers and SET TRANSACTION.",
+        "Update the engine unit test that asserted the previous rejection of SERIALIZABLE restarts and transaction-manager savepoints; document the hooks in docs/extension-hooks.md and the current savepoint state in docs/savepoint.md and docs/transaction-manager.md.",
+        "Merged in the same PR as gaps-transactions-v1 with its verification."
+      ],
+      "dependencies": [],
+      "issue": 727,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQur"
     }
   ]
 }
