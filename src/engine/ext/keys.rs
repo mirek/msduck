@@ -15,6 +15,8 @@
 //!   DuckDB refuses while they exist.
 //! - INSERT, UPDATE and MERGE: DuckDB duplicate-key errors become 2627 or
 //!   2601 with SQL Server's message.
+//! - Comparisons, LIKE, ORDER BY, concatenation and character conversions
+//!   over Unicode carrier values ([`predicates`]).
 //!
 //! The deterministic parts live in `msduck_sql::dialect::ext::keys`. See
 //! docs/gaps-keys.md.
@@ -22,7 +24,7 @@ use super::Feature;
 use crate::engine::{Execution, Parameter, Session};
 use anyhow::Result;
 use msduck_core::diagnostic::SqlError;
-use sqlparser::ast::Statement;
+use sqlparser::ast::{Expr, Statement};
 use std::collections::HashMap;
 
 mod alter_table;
@@ -31,6 +33,7 @@ mod create_index;
 mod create_table;
 mod drop_index;
 mod duplicate;
+mod predicates;
 mod tables;
 
 #[derive(Default)]
@@ -48,6 +51,34 @@ impl Feature for Hooks {
 
     fn bootstrap_database(&self, db: &duckdb::Connection) -> Result<()> {
         catalog::bootstrap(db)
+    }
+
+    fn register(&self, db: &duckdb::Connection) -> Result<()> {
+        predicates::register(db)
+    }
+
+    fn rewrite_statement(
+        &self,
+        session: &Session,
+        statement: &mut Statement,
+        _parameters: &HashMap<String, Parameter>,
+    ) -> Result<()> {
+        predicates::rewrite_statement(&session.db, statement)
+    }
+
+    fn rewrite_expr(
+        &self,
+        session: &Session,
+        expr: &mut Expr,
+        _parameters: &HashMap<String, Parameter>,
+    ) -> Result<()> {
+        predicates::check(expr).map_err(error)?;
+        predicates::rewrite_expr(&session.db, expr)
+    }
+
+    fn lower_expr(&self, expr: &mut Expr) -> Result<(), String> {
+        predicates::lower_expr(expr);
+        Ok(())
     }
 
     fn batch(
