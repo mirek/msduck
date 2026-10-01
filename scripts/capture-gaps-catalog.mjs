@@ -108,6 +108,24 @@ export async function observeDefinitions(connection){
  return records
 }
 
+export const namespaceQueries=[
+ ['version',"SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)) AS version"],
+ ['namespace table setup','CREATE TABLE dbo.namespace_defaults(id INT CONSTRAINT DF_namespace DEFAULT(1))'],
+ ['existing table default precedence','CREATE TABLE dbo.namespace_defaults(id INT CONSTRAINT DF_namespace DEFAULT(1))'],
+ ['namespace view setup','CREATE VIEW dbo.namespace_view AS SELECT 1 AS id'],
+ ['existing view default precedence','CREATE TABLE dbo.namespace_view(id INT CONSTRAINT DF_namespace DEFAULT(1))'],
+ ['existing default namespace collision','CREATE TABLE dbo.namespace_failed(id INT CONSTRAINT DF_namespace DEFAULT(1))'],
+ ['namespace key setup','CREATE TABLE dbo.namespace_key(id INT CONSTRAINT PK_namespace PRIMARY KEY)'],
+ ['existing key default collision','CREATE TABLE dbo.namespace_failed_key(id INT CONSTRAINT PK_namespace DEFAULT(1))'],
+ ['namespace check setup','CREATE TABLE dbo.namespace_check(id INT CONSTRAINT CK_namespace CHECK(id>0))'],
+ ['existing check default collision','CREATE TABLE dbo.namespace_failed_check(id INT CONSTRAINT CK_namespace DEFAULT(1))'],
+]
+export async function observeNamespace(connection){
+ const records=[]
+ for(const [name,sql] of namespaceQueries){records.push({name,sql,result:canonical(await captureBatch(connection,sql))})}
+ return records
+}
+
 async function referenceRun(observe=observeCatalog){
  return withReferenceContainer(async(config,metadata)=>{
   assertSameCapture(metadata.image,referenceImage,'pinned reference image')
@@ -123,27 +141,28 @@ async function referenceRun(observe=observeCatalog){
 
 async function main(args){
  const definitions=args[0]==='--definitions'
- if(definitions)args=args.slice(1)
- if(args.length>1)throw Error('usage: capture-gaps-catalog.mjs [--definitions] [new-output.json]')
- if(definitions&&!args[0])throw Error('definition profile requires a new output path')
+ const namespace=args[0]==='--namespace'
+ if(definitions||namespace)args=args.slice(1)
+ if(args.length>1)throw Error('usage: capture-gaps-catalog.mjs [--definitions|--namespace] [new-output.json]')
+ if((definitions||namespace)&&!args[0])throw Error('profile requires a new output path')
  const output=resolve(args[0]??'reference/gaps-catalog.json')
  await refuseExistingFixture(output)
- const observe=definitions?observeDefinitions:observeCatalog
+ const observe=namespace?observeNamespace:definitions?observeDefinitions:observeCatalog
  const runs=[await referenceRun(observe),await referenceRun(observe)]
- const failures=new Set(['pkeys missing parameter','fkeys missing parameters','rename missing object','rename invalid object type','rename column with enforced dependencies'])
+ const failures=new Set(namespace?['existing table default precedence','existing view default precedence','existing default namespace collision','existing key default collision','existing check default collision']:['pkeys missing parameter','fkeys missing parameters','rename missing object','rename invalid object type','rename column with enforced dependencies'])
  for(const run of runs)for(const record of run){
   if(Boolean(record.result.errors.length)!==failures.has(record.name))throw Error('unexpected error outcome: '+record.name+' '+JSON.stringify(record.result.errors).slice(0,800))
  }
  // Clock/ID/file values are retained in both raw runs. Only the complete empty
  // view responses are asserted equal here; no dynamic differences are erased.
- const views=definitions?['default_constraints','computed_columns']:catalogViews
+ const views=namespace?[]:definitions?['default_constraints','computed_columns']:catalogViews
  for(const view of views){
   const name='empty schema '+view
   const results=runs.map(run=>run.find(record=>record.name===name)?.result)
   if(results.some(result=>!result||result.errors.length||result.sets.length!==1||result.sets[0].rows.length))throw Error('missing schema capture: '+view)
   assertSameCapture(results[0],results[1],name)
  }
- if(definitions)assertSameCapture(runs[0],runs[1],'complete definition profile')
+ if(definitions||namespace)assertSameCapture(runs[0],runs[1],namespace?'complete namespace profile':'complete definition profile')
  await mkdir(dirname(output),{recursive:true})
  await writeNewFixture(output,{image:referenceImage,contract:'Complete empty schemas agree; other responses retained raw in both runs without normalization.',runs})
  console.log(JSON.stringify({output,records:runs.map(run=>run.length),schemaControls:views.length,definitions}))
