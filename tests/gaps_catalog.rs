@@ -802,3 +802,40 @@ fn named_check_catalog_matches_reference_and_rolls_back_with_table() {
         .unwrap();
     assert_eq!(retained, 0);
 }
+
+#[test]
+fn namespace_diagnostics_match_pinned_sql_server_errors() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let reference: serde_json::Value =
+        serde_json::from_str(include_str!("../reference/gaps-catalog.json")).unwrap();
+    for record in reference["namespaceProfile"]["runs"][0]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["name"] != "version")
+    {
+        let sql = record["sql"].as_str().unwrap();
+        let (response, success) = session.batch_response(sql, &Default::default(), false, None);
+        let errors = record["result"]["errors"].as_array().unwrap();
+        assert_eq!(success, errors.is_empty(), "{sql}");
+        for expected in errors {
+            let mut token = Vec::new();
+            msduck_tds::sql_error(
+                &mut token,
+                &msduck_core::diagnostic::SqlError::new(
+                    expected["number"].as_i64().unwrap() as i32,
+                    expected["state"].as_u64().unwrap() as u8,
+                    expected["message"].as_str().unwrap(),
+                ),
+            );
+            assert_eq!(expected["class"], 16);
+            assert_eq!(expected["lineNumber"], 1);
+            assert!(
+                response.windows(token.len()).any(|bytes| bytes == token),
+                "{sql}: missing {:?}",
+                expected
+            );
+        }
+    }
+}

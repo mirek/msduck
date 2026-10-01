@@ -86,3 +86,15 @@ test('named CHECK identities and rows retain reference relationships',async t=>{
  await query(connection,'DROP TABLE dbo.catalog_child')
  assert.deepEqual((await query(connection,capture.sql)).rows,[])
 })
+
+test('object namespace diagnostics retain SQL Server error precedence and states',async t=>{
+ const connection=await start(t)
+ for(const record of reference.namespaceProfile.runs[0].filter(r=>r.name!=='version')){
+  if(!record.result.errors.length){await query(connection,record.sql);continue}
+  await assert.rejects(query(connection,record.sql),error=>{
+   const errors=Array.isArray(error.errors)?error.errors:[error]
+   assert.deepEqual(errors.map(({number,state,class:severity,lineNumber,message})=>({number,state,class:severity,lineNumber,message})),record.result.errors,record.name)
+   return true
+  })
+ }
+})

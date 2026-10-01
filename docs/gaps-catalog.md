@@ -34,10 +34,11 @@ in one declaration.
 SQL Server17.0.4065.4 containers, including descriptors, rows, diagnostics,
 return status, completion commands/status and token order. The image is pinned
 explicitly and the helper-reported image is checked before work begins.
-The original envelope (excluding the additive `definitionProfile`) retains
+The original envelope (excluding additive `definitionProfile` and
+`namespaceProfile`) retains
 SHA-256 `e7210ca707919bae43093f4207a76256a86873e9350b5b6a621c291797bcdc8e`.
 Aggregate fixture SHA-256:
-`6d763f84f5b96a36d11f820dfb0c9ed11213e289a7de3ffb98fb2fcf617f786c`.
+`bd024b56b37216c580e4c4bc6e755aa1ac9f1b1b577d310537ebdca54ab9ae9c`.
 
 The additive profile retains eight complete responses from each of two fresh
 pinned containers at capture revision fc4bb84. Both full runs agree, covering
@@ -118,3 +119,14 @@ reads the same stored text. Namespace conflicts are rejected before native DDL;
 drop/rollback follow table identity. Unnamed CHECK identities, legacy backfill,
 constraint alteration/trust controls, wider expression relationships and complete
 wire descriptors remain unfinished.
+
+The namespace profile retains ten complete responses from each of two fresh
+pinned SQL Server17.0.4065.4 instances at capture revision fc6221f; both full
+runs agree. Existing table/view names take precedence over their DEFAULT names
+with 2714/state6. Existing DEFAULT/PK/CHECK namespace conflicts retain both
+2714/state5 and1750/state1 errors, severity16 and line1. The root catalog hook
+now emits these logical errors before native DDL rather than exposing DuckDB's
+existing-object message. Rust/client regressions assert the captured diagnostics.
+Removing only namespaceProfile reproduces preceding aggregate SHA-256
+`6d763f84f5b96a36d11f820dfb0c9ed11213e289a7de3ffb98fb2fcf617f786c`.
+Use `--namespace` with a new immutable output path to recapture this profile.
