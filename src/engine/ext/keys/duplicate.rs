@@ -44,8 +44,11 @@ pub(super) fn run(
 ) -> Result<Execution> {
     let target = target(statement);
     // SQL Server ends only the statement on a duplicate key; the engine
-    // continues the batch after a failed INSERT or UPDATE it can identify.
+    // continues a SQL batch after a failed INSERT or UPDATE it can identify.
+    // RPC requests keep ending at the error: the engine's RPC completion
+    // for a continued request is not yet SQL Server's (docs/gaps-keys.md).
     let command = match statement {
+        _ if session.ext.keys.rpc => None,
         Statement::Insert(_) => Some(0xc3),
         Statement::Update(_) => Some(0xc5),
         _ => None,

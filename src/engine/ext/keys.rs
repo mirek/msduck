@@ -34,7 +34,10 @@ mod duplicate;
 mod tables;
 
 #[derive(Default)]
-pub(crate) struct State;
+pub(crate) struct State {
+    /// Whether the current batch is an RPC request (see [`duplicate`]).
+    rpc: bool,
+}
 
 pub(super) struct Hooks;
 
@@ -45,6 +48,17 @@ impl Feature for Hooks {
 
     fn bootstrap_database(&self, db: &duckdb::Connection) -> Result<()> {
         catalog::bootstrap(db)
+    }
+
+    fn batch(
+        &self,
+        session: &mut Session,
+        _sql: &str,
+        _parameters: &HashMap<String, Parameter>,
+        rpc: bool,
+    ) -> Option<(Vec<u8>, bool)> {
+        session.ext.keys.rpc = rpc;
+        None
     }
 
     fn statement(

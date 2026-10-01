@@ -165,8 +165,8 @@ kept in `main.__msduck_keys`.
   - `ALTER TABLE DROP COLUMN code failed because one or more objects access this column.`
 - ALTER COLUMN of such a column fails the same way, unless it widens a
   varchar, nvarchar or varbinary column, which SQL Server allows.
-- DuckDB refuses ALTER TABLE forms other than ADD COLUMN while a table has
-  an index. The feature therefore drops the table's indexes (its own and the
+- DuckDB refuses most ALTER TABLE forms while a table has an index, even
+  ADD COLUMN with a default or NOT NULL. The feature therefore drops the table's indexes (its own and the
   table-owned index catalog's), runs the change, and recreates them from
   their definitions. The catalogs keep the same index IDs and names. Keys
   are enforced again afterwards; the tests check duplicates and DROP INDEX
@@ -217,8 +217,9 @@ The values are shown as SQL Server shows them:
 
 The errors are catchable (ERROR_NUMBER, ERROR_SEVERITY, ERROR_STATE,
 ERROR_MESSAGE, @@ERROR) and work for parameterized statements. As in SQL
-Server, a failed INSERT or UPDATE ends only its statement: the engine adds
-"The statement has been terminated." (3621) and the batch continues.
+Server, a failed INSERT or UPDATE in a SQL batch ends only its statement:
+the engine adds "The statement has been terminated." (3621) and the batch
+continues.
 A failed statement can abort DuckDB's transaction. The catalog is then read
 through a separate connection.
 
@@ -268,9 +269,15 @@ through a separate connection.
 - **Transactions.** A duplicate key inside an explicit transaction still
   aborts DuckDB's transaction, so later statements fail until ROLLBACK. That
   is existing engine behavior.
-- **MERGE.** A duplicate key in MERGE (which the MERGE work implements) gets
-  the SQL Server message but still ends the batch. 1505 is not followed by
-  3621.
+- **RPC requests and MERGE.** A duplicate key in an RPC request
+  (sp_executesql, sp_prepexec) or in MERGE gets SQL Server's error but
+  still ends the request, as before. SQL Server ends only the statement. A
+  probe on the pinned image shows that sp_prepexec with a duplicate INSERT
+  returns 2627, 3621, a DONEINPROC with the error flag, RETURNSTATUS 2627,
+  the prepared handle, and a DONEPROC without the error flag.
+  `rpc::tests::failed_prepexec_does_not_leak_a_handle` (src/rpc.rs, held by
+  the prepared RPC work) still expects the ended request.
+- **1505** is not followed by 3621.
 
 ## References
 

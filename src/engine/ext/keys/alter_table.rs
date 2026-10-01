@@ -4,8 +4,8 @@
 //!   and 4922 when a key constraint or index uses the column, as in SQL
 //!   Server. Widening a variable-length character or binary key column is
 //!   allowed.
-//! - DuckDB refuses most ALTER TABLE forms other than ADD COLUMN while the
-//!   table has an index, so the table's indexes are dropped before the
+//! - DuckDB refuses most ALTER TABLE forms while the table has an index
+//!   (even ADD COLUMN, when the column gets a default or NOT NULL), so the table's indexes are dropped before the
 //!   change and recreated from their definitions after it. Outside a user
 //!   transaction the drop commits first, and the indexes return even when
 //!   the change fails. Inside one, everything shares the transaction (see
@@ -153,14 +153,6 @@ pub(super) fn run(
             ])
             .into());
         }
-    }
-    // DuckDB allows ADD COLUMN while indexes exist.
-    if alter
-        .operations
-        .iter()
-        .all(|operation| matches!(operation, AlterTableOperation::AddColumn { .. }))
-    {
-        return Ok(None);
     }
     let indexes: Vec<(String, String)> = session
         .db
