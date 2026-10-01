@@ -8638,6 +8638,24 @@
         "Two fresh complete SQL Server reference runs and full target-row nonexecution probes; retain raw differences. Coordinate owner engine adapter scope before claiming; exact-head workspace/client/audit/review/CI gates. Backlog does not reserve files."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdV5D"
+    },
+    {
+      "id": "gaps-json-string-v1-hooks",
+      "title": "Preflight and runtime diagnostic hooks for FOR JSON AUTO and json_string natives",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-json-string-v1",
+      "scope": [
+        "crates/msduck-sql/src/preflight.rs",
+        "src/json_extract.rs"
+      ],
+      "acceptance": [
+        "Batch preflight validates FOR JSON AUTO clauses through the json_string syntax module (13600, 13605, 13620) instead of rejecting AUTO; FOR JSON PATH preflight is unchanged.",
+        "The runtime diagnostic chain recovers SQL Server error number, state and text from bounded json_string native error markers, with an allowlist of numbers, and leaves every other message unchanged.",
+        "Delivered in the same PR as gaps-json-string-v1, with its tests and verification."
+      ],
+      "dependencies": [],
+      "issue": 724,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQtE"
     }
   ]
 }
