@@ -2168,6 +2168,70 @@ mod tests {
     }
 
     #[test]
+    fn grouped_variant_order_retains_conditional_declarations() {
+        use msduck_sql::binding_scope::Field;
+        let mut catalog = CatalogSnapshot::default();
+        for (name, id) in [("int", 56), ("sql_variant", 98)] {
+            catalog.types.insert(
+                name.into(),
+                TypeMetadata {
+                    system_type_id: Some(id),
+                    user_type_id: Some(i32::from(id)),
+                    ..Default::default()
+                },
+            );
+        }
+        catalog.tables.insert(
+            "dbo.prepare_heap".into(),
+            vec![Field {
+                name: "b".into(),
+                info: catalog.cast_info(&DataType::Int(None)),
+                properties: msduck_core::result::Properties::default(),
+                collation: None,
+                json_fragment: false,
+            }],
+        );
+        let parameters = HashMap::from([(
+            "@p".into(),
+            Parameter {
+                value: Value::Null,
+                data_type: SqlType::Int,
+            },
+        )]);
+        let mut outer = Scope::default();
+        outer.parameters.insert(
+            "@p".into(),
+            catalog.cast_info(&DataType::Int(None)).unwrap(),
+        );
+        let Statement::Query(query) = msduck_sql::batch::parse("SELECT CAST(COALESCE(v,CAST(@p AS SQL_VARIANT)) AS INT),COUNT(*) FROM (SELECT CAST(b AS SQL_VARIANT) AS v FROM dbo.prepare_heap) h GROUP BY COALESCE(v,CAST(@p AS SQL_VARIANT)) ORDER BY 1").unwrap().remove(0) else {
+            panic!("query")
+        };
+        let declared = source_declarations(&query, &parameters, &catalog, &outer);
+        let scope = projection::scopes(&catalog, &declared, &outer).body;
+        let sqlparser::ast::SetExpr::Select(select) = declared.body.as_ref() else {
+            panic!("select")
+        };
+        let sqlparser::ast::SelectItem::UnnamedExpr(Expr::Cast { expr, .. }) =
+            &select.projection[0]
+        else {
+            panic!("cast")
+        };
+        let sqlparser::ast::GroupByExpr::Expressions(keys, _) = &select.group_by else {
+            panic!("group")
+        };
+        assert_eq!(variant_declaration(expr, &scope, &parameters), Some(true));
+        assert_eq!(
+            projection::order::expression_identity(expr, &keys[0], &[], &scope),
+            Some(true)
+        );
+        let fields = prepared_fields(&catalog, &query, &outer).unwrap();
+        assert_eq!(
+            prepared_order(&catalog, &query, &outer, &fields, &parameters),
+            projection::order::Plan::Token(vec![1])
+        );
+    }
+
+    #[test]
     fn prepared_order_uses_original_cast_sources_and_proven_variant_sets() {
         use msduck_sql::binding_scope::Field;
         let mut catalog = CatalogSnapshot::default();
