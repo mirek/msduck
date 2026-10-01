@@ -558,7 +558,7 @@ fn prepared_order(
             if column(expr, &scope).is_some() {
                 return true;
             }
-            if msduck_sql::conditional::candidate(expr)
+            if msduck_sql::expression_metadata::conditional::candidate(expr)
                 && variant_declaration(expr, &scope, parameters) == Some(true)
             {
                 return true;
