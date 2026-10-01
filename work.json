@@ -9164,6 +9164,24 @@
       "dependencies": [],
       "issue": 729,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQvb"
+    },
+    {
+      "id": "gaps-catalog-v2-constraints",
+      "title": "Unnamed DEFAULT objects and SQL Server's ALTER COLUMN rules for bound constraints (gaps-catalog-v2)",
+      "state": "ready",
+      "authorization": "Owner standing authorization for stale claims; successor of stale gaps-catalog-v1 and catalog-key-identities-v1 (evidence in the registry change), umbrella #710, issue #728. companion of gaps-catalog-v2",
+      "scope": [
+        "src/engine/ext/constraints/catalog.rs",
+        "src/engine/ext/constraints/define.rs",
+        "src/engine/ext/constraints/guard.rs"
+      ],
+      "acceptance": [
+        "Unnamed DEFAULTs of CREATE TABLE and ALTER TABLE ... ADD are objects with SQL Server's generated names (DF/CK/FK names share SQL Server's 14-character rule) and can be dropped by name; ALTER COLUMN follows SQL Server's rules for columns with a DEFAULT (length, precision or scale may change) or CHECK (length of a variable-length type may change).",
+        "Covered by gaps-catalog-v2 tests and verification in the same PR."
+      ],
+      "dependencies": [],
+      "issue": 728,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQvA"
     }
   ]
 }
