@@ -334,5 +334,20 @@ All twelve complete preparation/unprepare/state controls are retained verbatim
 in the strict public regression. The series result uses a non-null fixed INT
 descriptor; grouped conversion retains computed flags33; derived hidden variant
 keys advertise ORDER ordinal0. These are reference requirements, not a current
-implementation pass. Runtime differences remain in the complete diagnostic
-artifact rather than being normalized to passing comparisons.
+implementation pass at the older full-verification revision above.
+
+At `038e57749e2672d692c15cd05a85bb9a13b601c7`, all twelve complete source
+preparation/unprepare/state comparisons pass, alongside all six existing variant,
+series and recursive-anchor clients. Formatting, strict workspace/all-target
+Clippy, the all-target build, four pure ORDER identity tests and twelve root
+metadata tests pass. Independent owner-run review found no confirmed findings.
+The non-null series declaration carrier is created after generic expression
+enrichment; a composed-path regression checks that nullable typed NULL enrichment
+cannot replace it. Grouped conditional ordering borrows the original integer
+conversion operand through the existing parser marker helper and retains the
+resolved-column, built-in variant-family and GROUP BY identity guards. Neither
+metadata clone changes execution SQL or evaluates parameter values.
+
+Full workspace/default-client/audit checks of this newer implementation remain
+required. The earlier diagnostic gaps tracked in #705, #731, #734 and #735 remain
+separate work; the focused pass does not establish complete compatibility.
