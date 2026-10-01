@@ -124,7 +124,7 @@ impl Feature for Hooks {
                FROM sys.objects o JOIN main.__msduck_key_objects k USING(object_id);
              CREATE OR REPLACE VIEW sys.computed_columns AS
                SELECT c.object_id,c.name,c.column_id,c.system_type_id,c.user_type_id,c.max_length,
-                 c.precision,c.scale,c.collation_name,c.is_nullable,c.is_ansi_padded,
+                 c.precision,c.scale,c.collation_name,d.is_nullable,c.is_ansi_padded,
                  c.is_rowguidcol,c.is_identity,c.is_filestream,c.is_replicated,
                  c.is_non_sql_subscribed,c.is_merge_published,c.is_dts_replicated,
                  c.is_xml_document,c.xml_collection_id,c.default_object_id,c.rule_object_id,

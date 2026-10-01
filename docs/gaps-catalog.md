@@ -43,8 +43,8 @@ The additive profile retains eight complete responses from each of two fresh
 pinned containers at capture revision fc4bb84. Both full runs agree, covering
 15 DEFAULT and nine computed expressions, including their complete metadata,
 diagnostics and completion streams. The deterministic formatter is checked
-against every expression's retained definition. Computed catalog integration
-and the remaining expression syntax still need implementation; passing the
+against every expression's retained definition. Computed catalog rows are now implemented for the retained controls;
+the remaining expression syntax still needs implementation; passing the
 formatter test does not establish computed column metadata compatibility.
 
 All ten complete empty catalog responses agree between the runs:
@@ -105,5 +105,7 @@ catalog definitions in a table/column-owned transactional store. The view uses
 the captured 44-column order, with persisted state from the computed-column
 adapter and cleanup through column/table drop and rollback. Legacy definitions
 remain NULL. The controlled persisted arithmetic row is tested against the raw
-reference; complete expression nullability (including ISNULL/CASE), definition
-backfill and full descriptor parity remain outstanding.
+reference; logical nullability reuses deterministic expression properties over explicit
+source-column declarations, including the retained ISNULL/CASE controls.
+Legacy definition/property backfill and full wire descriptor parity remain
+outstanding. No stored operand is evaluated during inference.

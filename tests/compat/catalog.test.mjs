@@ -64,3 +64,11 @@ test('computed catalog rows match the controlled SQL Server fixture',async t=>{
  await query(connection,'DROP TABLE dbo.catalog_child')
  assert.deepEqual((await query(connection,capture.sql)).rows,[])
 })
+
+test('computed expression types and nullability retain reference catalog rows',async t=>{
+ const connection=await start(t)
+ const records=reference.definitionProfile.runs[0]
+ await query(connection,records.find(r=>r.name==='setup computed definitions').sql)
+ const capture=records.find(r=>r.name==='computed definitions')
+ assert.deepEqual((await query(connection,capture.sql)).rows,capture.result.sets[0].rows)
+})

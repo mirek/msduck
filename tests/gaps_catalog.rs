@@ -630,3 +630,36 @@ fn computed_catalog_shape_and_definitions_follow_column_lifecycle() {
         .unwrap();
     assert_eq!(retained, 0);
 }
+
+#[test]
+fn computed_expression_profile_matches_reference_types_and_nullability() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let reference: serde_json::Value =
+        serde_json::from_str(include_str!("../reference/gaps-catalog.json")).unwrap();
+    let records = reference["definitionProfile"]["runs"][0]
+        .as_array()
+        .unwrap();
+    let setup = records
+        .iter()
+        .find(|r| r["name"] == "setup computed definitions")
+        .unwrap()["sql"]
+        .as_str()
+        .unwrap();
+    assert!(
+        session
+            .batch_response(setup, &Default::default(), false, None)
+            .1
+    );
+    let expected = &records
+        .iter()
+        .find(|r| r["name"] == "computed definitions")
+        .unwrap()["result"]["sets"][0]["rows"];
+    let actual = session.db.prepare("SELECT name,column_id,system_type_id,user_type_id,max_length,precision,scale,is_nullable,definition,uses_database_collation,is_persisted FROM sys.computed_columns WHERE object_id=main.__msduck_object_id('dbo.definition_computed','U') ORDER BY column_id").unwrap()
+        .query_map([], |r| Ok(serde_json::json!([
+            r.get::<_,String>(0)?,r.get::<_,i32>(1)?,r.get::<_,i32>(2)?,r.get::<_,i32>(3)?,
+            r.get::<_,i32>(4)?,r.get::<_,i32>(5)?,r.get::<_,i32>(6)?,r.get::<_,Option<bool>>(7)?,
+            r.get::<_,Option<String>>(8)?,r.get::<_,Option<bool>>(9)?,r.get::<_,bool>(10)?
+        ]))).unwrap().collect::<duckdb::Result<Vec<_>>>().unwrap();
+    assert_eq!(serde_json::Value::Array(actual), *expected);
+}

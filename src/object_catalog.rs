@@ -264,6 +264,12 @@ fn record_computed_definitions(db: &Connection, statement: &Statement) -> Result
     let Some(object_id) = object_id else {
         return Ok(());
     };
+    let sources = db
+        .prepare("SELECT name,is_nullable FROM sys.columns WHERE object_id=?")?
+        .query_map([object_id], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, bool>(1)?))
+        })?
+        .collect::<duckdb::Result<Vec<_>>>()?;
     for column in &table.columns {
         let Some((expression, _)) = msduck_sql::dialect::computed_column::computed(column) else {
             continue;
@@ -276,8 +282,13 @@ fn record_computed_definitions(db: &Connection, statement: &Statement) -> Result
         let definition =
             msduck_sql::dialect::ext::catalog::definition::expression_definition(expression);
         db.execute(
-            "INSERT INTO main.__msduck_computed_definitions(object_id,column_id,definition,source_expression) VALUES(?,?,?,?)",
-            duckdb::params![object_id,column_id,definition,expression.to_string()]
+            "INSERT INTO main.__msduck_computed_definitions(object_id,column_id,definition,source_expression,is_nullable) VALUES(?,?,?,?,?)",
+            duckdb::params![object_id,column_id,definition,expression.to_string(),
+                if column.options.iter().any(|option| matches!(option.option,ColumnOption::NotNull)) {
+                    Some(false)
+                } else {
+                    msduck_sql::dialect::ext::catalog::computed_properties::nullable(expression,&sources)
+                }]
         )?;
     }
     Ok(())

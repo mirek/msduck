@@ -6,6 +6,7 @@ use sqlparser::{
     parser::{Parser, ParserError},
 };
 
+pub mod computed_properties;
 pub mod definition;
 
 /// Parse a statement this feature owns, or decline without consuming tokens.
