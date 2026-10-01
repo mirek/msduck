@@ -110,6 +110,10 @@ test('defaults read the session that inserts, including RPC and after reset', as
   ])
   const { rows: names } = await query(b, 'SELECT HOST_NAME(), APP_NAME(), SUSER_SNAME()')
   assert.deepEqual(names, [['host-b', 'app-b', 'sa']])
+  // A view reads the session that queries it.
+  await query(b, 'CREATE VIEW client_names AS SELECT HOST_NAME() AS host, APP_NAME() AS app')
+  assert.deepEqual((await query(a, 'SELECT host, app FROM client_names')).rows, [['host-a', 'app-a']])
+  assert.deepEqual((await query(b, 'SELECT host, app FROM client_names')).rows, [['host-b', 'app-b']])
 })
 
 test('computed columns over Unicode columns are filtered, indexed and reported', async t => {

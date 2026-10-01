@@ -13,22 +13,26 @@ use std::collections::BTreeMap;
 
 #[derive(Default)]
 pub(crate) struct State {
-    /// LOGIN7 host and application names, read once from the session
-    /// registry. RESETCONNECTION creates a new session and state.
-    client: Option<(Option<String>, Option<String>)>,
+    /// LOGIN7 host and application names from the session registry, with the
+    /// SPID they were read for. RESETCONNECTION moves the client's
+    /// registration to the replacement session, whose SPID then changes.
+    client: Option<(i16, Option<String>, Option<String>)>,
     /// Variables as last written to the connection.
     written: BTreeMap<String, String>,
 }
 
-fn client(session: &Session) -> (Option<String>, Option<String>) {
-    session
+/// The client's host and program names; `None` when the registry cannot be
+/// read now (for example in a transaction DuckDB already aborted).
+fn client(session: &Session) -> Option<(Option<String>, Option<String>)> {
+    let mut query = session
         .db
-        .query_row(
-            "SELECT host_name, program_name FROM __msduck_sessions() WHERE session_id = ?",
-            [session.process.spid()],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .unwrap_or((None, None))
+        .prepare("SELECT host_name, program_name FROM __msduck_sessions() WHERE session_id = ?")
+        .ok()?;
+    let mut rows = query.query([session.process.spid()]).ok()?;
+    Some(match rows.next().ok()? {
+        Some(row) => (row.get(0).ok()?, row.get(1).ok()?),
+        None => (None, None),
+    })
 }
 
 /// The variables the session's current values call for.
@@ -55,13 +59,20 @@ fn wanted(session: &Session, host: Option<&str>, app: Option<&str>) -> BTreeMap<
 /// in a transaction DuckDB already aborted) leaves the variable to be
 /// written again next time; it never fails the user's statement.
 pub(super) fn sync(session: &mut Session) {
+    let spid = session.process.spid();
     let (host, app) = match &session.ext.computed.variables.client {
-        Some(client) => client.clone(),
-        None => {
-            let client = client(session);
-            session.ext.computed.variables.client = Some(client.clone());
-            client
-        }
+        Some((read, host, app)) if *read == spid => (host.clone(), app.clone()),
+        _ => match client(session) {
+            Some((host, app)) => {
+                session.ext.computed.variables.client = Some((spid, host.clone(), app.clone()));
+                (host, app)
+            }
+            // Keep what the connection already holds.
+            None => {
+                let written = &session.ext.computed.variables.written;
+                (written.get(HOST).cloned(), written.get(APP).cloned())
+            }
+        },
     };
     let wanted = wanted(session, host.as_deref(), app.as_deref());
     let state = &mut session.ext.computed.variables;
