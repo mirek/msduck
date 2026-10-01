@@ -5,7 +5,6 @@
 //! `Cannot insert the value NULL into column 'c', table 'db.dbo.t'; column
 //! does not allow nulls. INSERT fails.` (`UPDATE fails.` for an UPDATE).
 use super::super::{Execution, Parameter, Partial, Session, reenter};
-use crate::query_error::{FailedQuery, attach_context};
 use anyhow::Result;
 use msduck_core::diagnostic::SqlError;
 use sqlparser::ast::{Statement, TableFactor, TableObject};
@@ -79,13 +78,11 @@ fn translate(
             session.database.name
         ),
     );
-    // The client sees the SqlError; the backend text stays the error's
-    // display, which message-based classification (515) still reads.
-    let translated = anyhow::Error::from(diagnostic).context(message);
-    match error.downcast_ref::<FailedQuery>() {
-        Some(failed) => attach_context(translated, failed.metadata.clone(), failed.command),
-        None => translated,
-    }
+    // Keep every context the engine attached (failed-query metadata,
+    // OUTPUT sink state) and add the SqlError, which the client sees. The
+    // backend text stays the error's display, which message-based
+    // classification (515) reads.
+    error.context(diagnostic).context(message)
 }
 
 /// Split DuckDB's `table.column` against the current database's catalog,

@@ -81,8 +81,9 @@ Two layers make this work:
   handling are unchanged. The backend text remains the error's display, so
   message-based classification still yields 515.
 - **2627** and **2601** name the object as `'dbo.items'` in SQL Server, with
-  no database part, so they never carried the wrong database. Their text is
-  unchanged by this task (see below).
+  no database part, so they never carried the wrong database. Their SQL
+  Server text comes from the keys feature; the replay differs only in the
+  generated PRIMARY KEY constraint name suffix.
 
 ## Verification
 
@@ -105,9 +106,6 @@ Two layers make this work:
   `tablesample`, `values`) are not rejected with SQL Server's 156 "Incorrect
   syntax near the keyword" diagnostic: `values` is accepted, and the others
   fail with a different number.
-- 2627 and 2601 keep DuckDB's message text, report 2601 as 2627 and use
-  class 16 instead of 14. SQL Server's text needs the constraint or index
-  name and the formatted key, which DuckDB's message does not carry.
 - 515 from a statement nested in a trigger or procedure body reports the
   outer statement's verb (`INSERT fails.`/`UPDATE fails.`). MERGE, SELECT
   INTO and ALTER TABLE paths keep DuckDB's NOT NULL text.
