@@ -15,6 +15,8 @@ use std::ops::ControlFlow;
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Column {
     pub carrier: bool,
+    /// Whether the backend type is text (VARCHAR or a carrier).
+    pub text: bool,
     /// The SQL Server declaration of a carrier column, after [`Catalog::declare`].
     pub declared: Option<DataType>,
 }
@@ -22,8 +24,11 @@ pub(super) struct Column {
 /// What a column reference resolves to.
 pub(super) enum Resolution<'a> {
     Carrier(&'a Column),
-    /// A column of a known relation that is not a carrier.
-    Plain,
+    /// A column of a known relation that is not a carrier, and whether it
+    /// is VARCHAR text.
+    Plain {
+        text: bool,
+    },
     /// A derived-table, CTE, alias or outer column, or an ambiguous name.
     Unknown,
 }
@@ -189,18 +194,22 @@ impl Catalog {
             let columns = catalog.tables.entry(table.clone()).or_default();
             for row in rows {
                 let Ok((name, kind)) = row else { continue };
+                let carrier = crate::unicode_carrier::is_storage_name(&kind);
                 let column = Column {
-                    carrier: crate::unicode_carrier::is_storage_name(&kind),
+                    carrier,
+                    text: carrier || kind == "VARCHAR",
                     declared: None,
                 };
                 match columns.get(&name) {
                     // Same-named tables in several schemas or databases
                     // count as carriers only when they agree.
                     Some(existing) if !existing.carrier || !column.carrier => {
+                        let text = existing.text || column.text;
                         columns.insert(
                             name,
                             Column {
                                 carrier: false,
+                                text,
                                 declared: None,
                             },
                         );
@@ -300,12 +309,14 @@ impl Catalog {
         };
         let mut found: Option<&Column> = None;
         let mut plain = false;
+        let mut text = false;
         for table in tables {
             let Some(column) = self.tables.get(table).and_then(|c| c.get(&name)) else {
                 continue;
             };
             if !column.carrier {
                 plain = true;
+                text |= column.text;
             } else if found.is_some_and(|f| f != column) {
                 return Resolution::Unknown;
             } else {
@@ -314,7 +325,7 @@ impl Catalog {
         }
         match (found, plain) {
             (Some(column), false) => Resolution::Carrier(column),
-            (None, true) => Resolution::Plain,
+            (None, true) => Resolution::Plain { text },
             _ => Resolution::Unknown,
         }
     }
