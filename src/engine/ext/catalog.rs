@@ -122,6 +122,24 @@ impl Feature for Hooks {
                SELECT o.*, CAST(NULL AS INTEGER) AS unique_index_id,
                  k.is_system_named, true AS is_enforced
                FROM sys.objects o JOIN main.__msduck_key_objects k USING(object_id);
+             CREATE OR REPLACE VIEW sys.computed_columns AS
+               SELECT c.object_id,c.name,c.column_id,c.system_type_id,c.user_type_id,c.max_length,
+                 c.precision,c.scale,c.collation_name,c.is_nullable,c.is_ansi_padded,
+                 c.is_rowguidcol,c.is_identity,c.is_filestream,c.is_replicated,
+                 c.is_non_sql_subscribed,c.is_merge_published,c.is_dts_replicated,
+                 c.is_xml_document,c.xml_collection_id,c.default_object_id,c.rule_object_id,
+                 d.definition,CASE WHEN d.definition IS NOT NULL THEN true ELSE CAST(NULL AS BOOLEAN) END AS uses_database_collation,
+                 cc.is_persisted,c.is_computed,c.is_sparse,c.is_column_set,
+                 c.generated_always_type,c.generated_always_type_desc,c.encryption_type,
+                 c.encryption_type_desc,c.encryption_algorithm_name,c.column_encryption_key_id,
+                 c.column_encryption_key_database_name,c.is_hidden,c.is_masked,
+                 c.graph_type,c.graph_type_desc,c.is_data_deletion_filter_column,
+                 c.ledger_view_column_type,c.ledger_view_column_type_desc,
+                 c.is_dropped_ledger_column,false AS is_index_column_expression
+               FROM sys.columns c JOIN main.__msduck_computed_columns cc
+                 ON cc.object_id=c.object_id AND cc.name_key=lower(c.name)
+               LEFT JOIN main.__msduck_computed_definitions d
+                 ON d.object_id=c.object_id AND d.column_id=c.column_id;
              CREATE OR REPLACE MACRO main.__msduck_object_definition(value) AS
                map_extract_value((SELECT map(list(object_id),list(definition))
                  FROM (SELECT object_id,definition FROM main.__msduck_modules

@@ -550,3 +550,83 @@ fn existing_table_error_precedes_its_named_default_conflict() {
             .any(|bytes| bytes == constraint)
     );
 }
+
+#[test]
+fn computed_catalog_shape_and_definitions_follow_column_lifecycle() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let reference: serde_json::Value =
+        serde_json::from_str(include_str!("../reference/gaps-catalog.json")).unwrap();
+    let expected = reference["runs"][0]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == "empty schema computed_columns")
+        .unwrap()["result"]["sets"][0]["columns"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["name"].as_str().unwrap().to_owned())
+        .collect::<Vec<_>>();
+    let mut statement = session
+        .db
+        .prepare("SELECT * FROM sys.computed_columns LIMIT 0")
+        .unwrap();
+    {
+        assert!(statement.query([]).unwrap().next().unwrap().is_none());
+    }
+    assert_eq!(statement.column_names(), expected);
+    drop(statement);
+    let run = |session: &mut Session, sql: &str| {
+        session
+            .batch_response(sql, &Default::default(), false, None)
+            .1
+    };
+    assert!(run(
+        &mut session,
+        "CREATE TABLE dbo.catalog_parent(a INT NOT NULL,b INT NOT NULL,label VARCHAR(40),doubled AS a*2 PERSISTED)"
+    ));
+    let row: (String,i32,String,bool,bool) = session.db.query_row(
+        "SELECT name,column_id,definition,uses_database_collation,is_persisted FROM sys.computed_columns WHERE name='doubled'",
+        [], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))
+    ).unwrap();
+    let capture = reference["runs"][0]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == "computed")
+        .unwrap()["result"]["sets"][0]["rows"][0]
+        .clone();
+    assert_eq!(
+        serde_json::json!([row.0, row.1, row.2, row.3, row.4]),
+        serde_json::json!([capture[0], capture[1], capture[8], capture[9], capture[10]])
+    );
+    assert!(run(
+        &mut session,
+        "BEGIN TRANSACTION; ALTER TABLE dbo.catalog_parent DROP COLUMN doubled"
+    ));
+    let count = |session: &Session| {
+        session
+            .db
+            .query_row(
+                "SELECT count(*) FROM sys.computed_columns WHERE name='doubled'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap()
+    };
+    assert_eq!(count(&session), 0);
+    assert!(run(&mut session, "ROLLBACK"));
+    assert_eq!(count(&session), 1);
+    assert!(run(&mut session, "DROP TABLE dbo.catalog_parent"));
+    assert_eq!(count(&session), 0);
+    let retained: i64 = session
+        .db
+        .query_row(
+            "SELECT count(*) FROM main.__msduck_computed_definitions",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(retained, 0);
+}

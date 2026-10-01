@@ -42,6 +42,11 @@ pub fn register(db: &Connection) -> Result<()> {
         CREATE OR REPLACE MACRO main.__msduck_object_id(value,kind) AS map_extract_value((SELECT map(list(key),list(object_id)) FROM (SELECT lower(s.name)||chr(0)||lower(o.name)||chr(0)||k.kind AS key,o.object_id FROM sys.all_objects o JOIN main.__msduck_schemas s USING(schema_id) CROSS JOIN LATERAL (VALUES (''),(rtrim(o.type))) k(kind))),__msduck_identity_key(CAST(value AS VARCHAR))||chr(0)||upper(rtrim(coalesce(CAST(kind AS VARCHAR),''))));
         CREATE OR REPLACE MACRO main.__msduck_object_name(value) AS map_extract_value((SELECT map(list(object_id),list(name)) FROM (SELECT object_id,name FROM sys.all_objects UNION ALL SELECT object_id,name FROM main.__msduck_hidden_column_owners)),value);
         CREATE OR REPLACE MACRO main.__msduck_object_schema_name(value) AS map_extract_value((SELECT map(list(object_id),list(schema_name)) FROM (SELECT o.object_id,s.name AS schema_name FROM sys.all_objects o JOIN main.__msduck_schemas s USING(schema_id) UNION ALL SELECT object_id,schema_name FROM main.__msduck_hidden_column_owners)),value)")?;
+    db.execute_batch(
+        "CREATE TABLE IF NOT EXISTS main.__msduck_computed_definitions(
+        object_id INTEGER NOT NULL,column_id INTEGER NOT NULL,definition VARCHAR,
+        source_expression VARCHAR NOT NULL,PRIMARY KEY(object_id,column_id))",
+    )?;
     crate::column_catalog::register(db)?;
     db.execute_batch(include_str!("table_catalog.sql"))?;
     Ok(sync(db)?)
@@ -52,6 +57,7 @@ pub fn sync(db: &Connection) -> duckdb::Result<()> {
         INSERT INTO main.__msduck_objects SELECT CAST(nextval('main.__msduck_object_ids') AS INTEGER),l.schema_id,l.name,l.type_code,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP) FROM main.__msduck_live_objects l WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_objects o WHERE o.schema_id=l.schema_id AND lower(o.name)=lower(l.name))")?;
     crate::column_catalog::sync(db)?;
     db.execute("DELETE FROM main.__msduck_key_objects k WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_objects o WHERE o.object_id=k.parent_object_id AND o.type_code='U')", [])?;
+    db.execute("DELETE FROM main.__msduck_computed_definitions d WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_column_info c WHERE c.object_id=d.object_id AND c.column_id=d.column_id)", [])?;
     sync_lob(db)
 }
 
@@ -147,6 +153,7 @@ pub fn is_ddl(statement: &Statement) -> bool {
 
 pub fn touch(db: &Connection, statement: &Statement) -> Result<()> {
     record_named_defaults(db, statement)?;
+    record_computed_definitions(db, statement)?;
     let name = match statement {
         Statement::AlterTable(table) => &table.name,
         Statement::AlterView { name, .. } => name,
@@ -239,6 +246,39 @@ fn record_named_defaults(db: &Connection, statement: &Statement) -> Result<()> {
                 msduck_sql::dialect::ext::catalog::definition::expression_definition(expression);
             db.execute("INSERT INTO main.__msduck_default_constraints(object_id,parent_object_id,column_id,name,create_date,modify_date,definition,source_expression) SELECT CAST(nextval('main.__msduck_object_ids') AS INTEGER),?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP),?,? WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_default_constraints WHERE parent_object_id=? AND column_id=?)",duckdb::params![object_id,column_id,name.value,definition,expression.to_string(),object_id,column_id])?;
         }
+    }
+    Ok(())
+}
+
+/// Keep original computed expressions before backend lowering. Definitions
+/// share table/column identities and participate in the existing DDL transaction.
+fn record_computed_definitions(db: &Connection, statement: &Statement) -> Result<()> {
+    let Statement::CreateTable(table) = statement else {
+        return Ok(());
+    };
+    let object_id: Option<i32> = db.query_row(
+        "SELECT __msduck_object_id(?,'U')",
+        [table.name.to_string()],
+        |row| row.get(0),
+    )?;
+    let Some(object_id) = object_id else {
+        return Ok(());
+    };
+    for column in &table.columns {
+        let Some((expression, _)) = msduck_sql::dialect::computed_column::computed(column) else {
+            continue;
+        };
+        let column_id: Option<i32> = db.query_row(
+            "SELECT column_id FROM main.__msduck_column_info WHERE object_id=? AND lower(name)=lower(?)",
+            duckdb::params![object_id,column.name.value], |row| row.get(0)
+        )?;
+        let Some(column_id) = column_id else { continue };
+        let definition =
+            msduck_sql::dialect::ext::catalog::definition::expression_definition(expression);
+        db.execute(
+            "INSERT INTO main.__msduck_computed_definitions(object_id,column_id,definition,source_expression) VALUES(?,?,?,?)",
+            duckdb::params![object_id,column_id,definition,expression.to_string()]
+        )?;
     }
     Ok(())
 }

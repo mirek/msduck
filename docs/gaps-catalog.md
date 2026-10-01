@@ -99,3 +99,11 @@ views, system procedure contracts, rename effects and failure atomicity; add
 Rust/tedious regressions; complete exact-head workspace/client/audit/CI/review
 verification; merge and publish task completion. engine.rs and other workers'
 extension modules remain outside this task's scope.
+
+Computed columns now retain original source expressions and supported SQL Server
+catalog definitions in a table/column-owned transactional store. The view uses
+the captured 44-column order, with persisted state from the computed-column
+adapter and cleanup through column/table drop and rollback. Legacy definitions
+remain NULL. The controlled persisted arithmetic row is tested against the raw
+reference; complete expression nullability (including ISNULL/CASE), definition
+backfill and full descriptor parity remain outstanding.
