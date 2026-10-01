@@ -611,6 +611,27 @@ fn duplicate(session: &Session, table: &Table, columns: &[String]) -> Result<Opt
     Ok(rows.next().transpose()?)
 }
 
+/// A key added by ALTER TABLE is a native DuckDB constraint, which cannot
+/// cover the STRUCT storage of NVARCHAR, DATETIME2 and similar columns.
+fn indexable(session: &Session, table: &Table, columns: &[String]) -> Result<()> {
+    let mut statement = session.db.prepare(
+        "SELECT column_name,data_type FROM duckdb_columns() WHERE database_name=current_database()
+         AND schema_name=? AND table_name=? AND data_type LIKE 'STRUCT%'",
+    )?;
+    let structured = statement
+        .query_map([&table.schema, &table.name], |row| row.get::<_, String>(0))?
+        .collect::<duckdb::Result<Vec<_>>>()?;
+    if let Some(column) = columns
+        .iter()
+        .find(|c| structured.iter().any(|s| s.eq_ignore_ascii_case(c)))
+    {
+        bail!(
+            "unsupported ALTER TABLE ADD PRIMARY KEY or UNIQUE on column {column}: its storage needs a key from CREATE TABLE or CREATE UNIQUE INDEX"
+        );
+    }
+    Ok(())
+}
+
 /// Stored form of one planned constraint.
 struct Stored {
     planned: Planned,
@@ -630,6 +651,16 @@ impl Stored {
         }
     }
     fn save(&self, session: &Session, table: &Table, untrusted: bool) -> Result<()> {
+        // The keys feature records key constraints.
+        if matches!(self.kind(), Type::Primary | Type::Unique) {
+            return catalog::insert_key(
+                &session.db,
+                table,
+                &self.planned.name,
+                self.kind() == Type::Primary,
+                &self.columns,
+            );
+        }
         let empty = Vec::new();
         catalog::insert(
             &session.db,
@@ -780,6 +811,10 @@ fn check_cascades(session: &Session, table: &Table, stored: &[Stored]) -> Result
 /// Reject `items` that are not valid for a new table before it exists: name
 /// conflicts and missing referenced tables (all other checks need the table).
 fn precheck_create(session: &Session, schema: &str, table: &str, items: &[Item]) -> Result<()> {
+    // An existing table is reported by CREATE TABLE itself.
+    if catalog::table(&session.db, schema, table)?.is_some() {
+        return Ok(());
+    }
     let mut seen = HashSet::new();
     for item in items {
         if let Some(name) = &item.name {
@@ -865,6 +900,11 @@ pub(crate) fn create_table(
             let table = catalog::table(&session.db, &schema, &name)?.ok_or_else(|| {
                 anyhow::anyhow!("created table {schema}.{name} is not in the catalog")
             })?;
+            // The keys feature records this statement's key constraints.
+            let items = items
+                .into_iter()
+                .filter(|item| matches!(item.kind, Kind::Check(_) | Kind::ForeignKey(_)))
+                .collect();
             let planned = plan(session, &table, items, true)?;
             let stored = resolve(session, &table, planned)?;
             check_cascades(session, &table, &stored)?;
@@ -1162,6 +1202,12 @@ fn add(
                 }
             }
         }
+        if matches!(
+            entry.planned.item.kind,
+            Kind::PrimaryKey(_) | Kind::Unique(_)
+        ) {
+            indexable(session, table, &entry.columns)?;
+        }
     }
     *wrote = true;
     let mut defaults_planned = defaults_planned.into_iter();
@@ -1369,25 +1415,37 @@ fn drop(
                         .map(|c| c.to_lowercase())
                         .collect();
                     let primary = constraint.kind == Type::Primary;
-                    rebuild::keys(session, table, |keys| {
-                        let before = keys.len();
-                        if let Some(index) = keys.iter().position(|key| {
-                            key.primary == primary
-                                && key.columns.len() == columns.len()
-                                && key
-                                    .columns
-                                    .iter()
-                                    .all(|c| columns.contains(&c.to_lowercase()))
-                        }) {
-                            keys.remove(index);
-                        }
-                        if keys.len() == before {
-                            bail!("constraint {} has no native key", constraint.name);
-                        }
-                        Ok(())
-                    })?;
+                    let (native, managed) = catalog::key_storage(&session.db, constraint.id)?;
+                    if let Some(index) = managed {
+                        session.db.execute_batch(&format!(
+                            "DROP INDEX {}.{}",
+                            catalog::quote(&table.schema),
+                            catalog::quote(&index)
+                        ))?;
+                    }
+                    if native {
+                        rebuild::keys(session, table, |keys| {
+                            let before = keys.len();
+                            if let Some(index) = keys.iter().position(|key| {
+                                key.primary == primary
+                                    && key.columns.len() == columns.len()
+                                    && key
+                                        .columns
+                                        .iter()
+                                        .all(|c| columns.contains(&c.to_lowercase()))
+                            }) {
+                                keys.remove(index);
+                            }
+                            if keys.len() == before {
+                                bail!("constraint {} has no native key", constraint.name);
+                            }
+                            Ok(())
+                        })?;
+                    }
+                    catalog::delete_key(&session.db, constraint.id)?;
+                } else {
+                    catalog::delete(&session.db, constraint.id)?;
                 }
-                catalog::delete(&session.db, constraint.id)?;
             }
             Target::Default(id, column) => {
                 session.db.execute_batch(&format!(

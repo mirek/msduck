@@ -141,7 +141,12 @@ fn dependents(
         .filter(|(_, _, c)| c.eq_ignore_ascii_case(column))
         .map(|(id, name, _)| (id, name))
         .collect();
-    for constraint in constraints {
+    // Key constraints are checked by the keys feature, which allows widening
+    // a key column.
+    for constraint in constraints
+        .iter()
+        .filter(|c| !matches!(c.kind, Type::Primary | Type::Unique))
+    {
         let own = constraint.table.id == table.id
             && constraint
                 .columns

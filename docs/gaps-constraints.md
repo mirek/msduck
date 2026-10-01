@@ -3,7 +3,9 @@
 Issue #716 (task `gaps-constraints-v1`). msduck stores and enforces CHECK and
 FOREIGN KEY constraints itself, because DuckDB can neither add, drop nor
 disable them after CREATE TABLE, and does not support ON DELETE / ON UPDATE
-actions. PRIMARY KEY and UNIQUE stay native DuckDB constraints.
+actions. PRIMARY KEY and UNIQUE belong to the keys feature
+([gaps-keys.md](gaps-keys.md)), which records them in `main.__msduck_keys`;
+this feature adds and drops them by name with ALTER TABLE.
 
 The expected behavior comes from SQL Server 2022 (16.0.4236.2), captured by
 `scripts/capture-gaps-constraints.mjs` into `reference/gaps-constraints.json`.
@@ -108,8 +110,15 @@ level, including foreign keys with actions.
 - **Changed columns.** An UPDATE checks only the constraints over columns it
   assigns, or over computed columns, as SQL Server does; an INSERT checks
   only its new rows.
+- **Foreign keys reference any recorded key.** Candidate keys are the
+  table's native PRIMARY KEY and UNIQUE constraints, the keys recorded in
+  `main.__msduck_keys` (including keys-managed keys over NVARCHAR or
+  DATETIMEOFFSET storage, which DuckDB foreign keys could not reference) and
+  unfiltered unique indexes.
 - **Catalog.** `sys.objects` lists CHECK (`C`), FOREIGN KEY (`F`), PRIMARY KEY
-  (`PK`) and UNIQUE (`UQ`) constraints, so `OBJECT_ID` finds them.
+  (`PK`) and UNIQUE (`UQ`) constraints, so `OBJECT_ID` finds them. Key
+  constraints come from `main.__msduck_keys`; their object id is
+  2000000000 plus the key's tag, since that store has no object ids.
   `sys.check_constraints`, `sys.foreign_keys`, `sys.foreign_key_columns` and
   `sys.key_constraints` are derived from the constraint store, with
   `is_disabled`, `is_not_trusted`, referential actions, `parent_column_id`
@@ -140,7 +149,10 @@ The feature uses the extension hooks (docs/extension-hooks.md):
   - `rebuild.rs`: DuckDB cannot add a UNIQUE constraint, add a primary key
     to a table with indexes, or drop either, so those changes rebuild the
     table under the same name. Rows (in order), defaults, identity sequences,
-    indexes and the catalog identity of the table and its columns survive.
+    indexes (including keys-managed ones) and the catalog identity of the
+    table and its columns survive. Keys added this way are recorded in
+    `main.__msduck_keys` as native keys; dropping a keys-managed key drops
+    its index.
   - `guard.rs`: DROP TABLE, TRUNCATE TABLE and column changes.
 
 ## Remaining limits
@@ -152,10 +164,12 @@ The feature uses the extension hooks (docs/extension-hooks.md):
   `UNIQUE` (crates/msduck-sql/tests/character_declaration_metadata.rs), when
   nothing else in the statement is a constraint. The NOT NULL and WITH
   VALUES default forms, named column keys and table-level keys work.
-- UNIQUE constraints accept several NULLs, and 2627 duplicate-key messages
-  are DuckDB's text rather than "Violation of UNIQUE KEY constraint ...".
-  Key storage and UNIQUE NULL semantics belong to the keys task
-  (gaps-keys-v1).
+- ALTER TABLE ADD PRIMARY KEY / UNIQUE creates native DuckDB keys: over
+  columns with STRUCT storage (NVARCHAR, NCHAR, DATETIME2, DATETIMEOFFSET)
+  it fails explicitly, and a UNIQUE key added on nullable columns accepts
+  several NULLs afterwards (existing duplicate NULLs are refused with 1505).
+  CREATE TABLE and CREATE UNIQUE INDEX keys, from the keys feature, have
+  neither limit. Duplicate-key messages belong to that feature.
 - Character keys match binary, like msduck's other comparisons and native
   keys: case-insensitive collation and trailing-space equivalence do not
   apply to foreign keys.

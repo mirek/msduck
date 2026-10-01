@@ -393,3 +393,69 @@ fn failures_inside_transactions_never_commit_partial_effects() {
         [[Some(1)]]
     );
 }
+
+#[test]
+fn foreign_keys_reference_keys_of_every_storage() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    // An NVARCHAR primary key is enforced by the keys feature's own index;
+    // foreign keys and their actions still reference it.
+    ok(
+        &mut session,
+        "CREATE TABLE p(code NVARCHAR(10) NOT NULL CONSTRAINT pk_p PRIMARY KEY)",
+    );
+    ok(
+        &mut session,
+        "CREATE TABLE q(id INT, code NVARCHAR(10) CONSTRAINT fk_q REFERENCES p(code) ON DELETE CASCADE)",
+    );
+    ok(
+        &mut session,
+        "INSERT p VALUES (N'x'), (N'y'); INSERT q VALUES (1, N'x'), (2, N'y')",
+    );
+    assert_eq!(caught(&mut session, "INSERT q VALUES (3, N'z')").0, 547);
+    // (nvarchar comparison with a literal is not lowered yet; compare columns)
+    ok(
+        &mut session,
+        "DELETE p WHERE code IN (SELECT code FROM q WHERE id = 1)",
+    );
+    assert_eq!(ints(&session, "SELECT id FROM q"), [[Some(2)]]);
+    assert_eq!(
+        caught(&mut session, "ALTER TABLE p DROP CONSTRAINT pk_p").0,
+        3727
+    );
+    assert_eq!(
+        texts(
+            &session,
+            "SELECT name FROM sys.key_constraints WHERE parent_object_id = __msduck_object_id('p','U')"
+        ),
+        ["pk_p"]
+    );
+    // ALTER TABLE adds keys as native DuckDB constraints, which cannot cover
+    // that storage: the statement fails explicitly and changes nothing.
+    ok(
+        &mut session,
+        "CREATE TABLE u(id INT NOT NULL, code NVARCHAR(10) NOT NULL)",
+    );
+    assert!(!run(
+        &mut session,
+        "ALTER TABLE u ADD CONSTRAINT uq_u UNIQUE (code)"
+    ));
+    assert_eq!(
+        ints(
+            &session,
+            "SELECT count(*) FROM sys.key_constraints WHERE parent_object_id = __msduck_object_id('u','U')"
+        ),
+        [[Some(0)]]
+    );
+    ok(
+        &mut session,
+        "ALTER TABLE u ADD CONSTRAINT pk_u PRIMARY KEY (id)",
+    );
+    assert_eq!(
+        texts(
+            &session,
+            "SELECT name FROM sys.key_constraints WHERE parent_object_id = __msduck_object_id('u','U')"
+        ),
+        ["pk_u"]
+    );
+}

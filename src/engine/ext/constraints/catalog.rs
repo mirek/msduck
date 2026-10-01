@@ -131,7 +131,14 @@ pub(crate) fn bootstrap(db: &Connection) -> Result<()> {
           SELECT c.*,o.schema_id,
             CAST(CASE c.type_code WHEN 'C' THEN 'CHECK_CONSTRAINT' WHEN 'F' THEN 'FOREIGN_KEY_CONSTRAINT'
               WHEN 'PK' THEN 'PRIMARY_KEY_CONSTRAINT' ELSE 'UNIQUE_CONSTRAINT' END AS VARCHAR) AS type_desc
-          FROM main.__msduck_constraints c JOIN main.__msduck_objects o ON o.object_id=c.parent_object_id AND o.type_code='U';
+          FROM main.__msduck_constraints c JOIN main.__msduck_objects o ON o.object_id=c.parent_object_id AND o.type_code='U'
+          UNION ALL
+          SELECT CAST(2000000000+k.tag AS INTEGER),k.object_id,k.name,k.kind,
+            starts_with(k.name,k.kind||'__'),false,false,CAST(NULL AS VARCHAR),CAST([] AS VARCHAR[]),
+            CAST(NULL AS VARCHAR),CAST(NULL AS INTEGER),CAST([] AS VARCHAR[]),0,0,o.create_date,o.modify_date,o.schema_id,
+            CAST(CASE k.kind WHEN 'PK' THEN 'PRIMARY_KEY_CONSTRAINT' ELSE 'UNIQUE_CONSTRAINT' END AS VARCHAR)
+          FROM main.__msduck_keys k JOIN main.__msduck_objects o ON o.object_id=k.object_id AND o.type_code='U'
+          WHERE k.kind IN ('PK','UQ');
         DROP VIEW IF EXISTS sys.__msduck_constraint_base_objects;
         ALTER VIEW sys.objects RENAME TO __msduck_constraint_base_objects;
         CREATE VIEW sys.objects AS
@@ -237,7 +244,97 @@ fn read(row: &duckdb::Row<'_>) -> duckdb::Result<Constraint> {
 pub(crate) fn load(db: &Connection) -> Result<Vec<Constraint>> {
     let mut statement = db.prepare(&format!("{SELECT} ORDER BY c.object_id"))?;
     let rows = statement.query_map([], read)?;
-    Ok(rows.collect::<duckdb::Result<_>>()?)
+    let mut constraints: Vec<Constraint> = rows.collect::<duckdb::Result<_>>()?;
+    constraints.extend(keys(db)?);
+    Ok(constraints)
+}
+
+/// PRIMARY KEY and UNIQUE constraints are recorded by the keys feature in
+/// `main.__msduck_keys`; their object ids are `KEY_IDS + tag`.
+pub(crate) const KEY_IDS: i64 = 2_000_000_000;
+
+fn keys(db: &Connection) -> Result<Vec<Constraint>> {
+    let mut statement = db.prepare(
+        "SELECT k.tag,k.name,k.kind,k.object_id,s.name,o.name,k.key_columns
+         FROM main.__msduck_keys k JOIN main.__msduck_objects o ON o.object_id=k.object_id AND o.type_code='U'
+         JOIN main.__msduck_schemas s ON s.schema_id=o.schema_id
+         WHERE k.kind IN ('PK','UQ') ORDER BY k.tag",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            Table {
+                id: row.get(3)?,
+                schema: row.get(4)?,
+                name: row.get(5)?,
+            },
+            row.get::<_, String>(6)?,
+        ))
+    })?;
+    let mut keys = Vec::new();
+    for row in rows {
+        let (tag, name, kind, table, columns) = row?;
+        keys.push(Constraint {
+            id: (KEY_IDS + tag) as i32,
+            name,
+            kind: if kind == "PK" {
+                Type::Primary
+            } else {
+                Type::Unique
+            },
+            table,
+            columns: serde_json::from_str(&columns).unwrap_or_default(),
+            referenced: None,
+            referenced_columns: vec![],
+            on_delete: Referential::NoAction,
+            on_update: Referential::NoAction,
+            definition: None,
+            disabled: false,
+            untrusted: false,
+            column: None,
+        });
+    }
+    Ok(keys)
+}
+
+/// Record a PRIMARY KEY or UNIQUE constraint that DuckDB enforces natively,
+/// in the keys feature's store.
+pub(crate) fn insert_key(
+    db: &Connection,
+    table: &Table,
+    name: &str,
+    primary: bool,
+    columns: &[String],
+) -> Result<()> {
+    db.execute(
+        "INSERT INTO main.__msduck_keys VALUES(nextval('main.__msduck_key_tags'),?,?,?,true,false,true,NULL,NULL,?,'[]',NULL,'[]')",
+        duckdb::params![
+            table.id,
+            name,
+            if primary { "PK" } else { "UQ" },
+            serde_json::to_string(columns)?,
+        ],
+    )?;
+    Ok(())
+}
+
+/// Whether a recorded key is native, and the DuckDB index of a managed one.
+pub(crate) fn key_storage(db: &Connection, id: i32) -> Result<(bool, Option<String>)> {
+    Ok(db.query_row(
+        "SELECT is_native,backend_name FROM main.__msduck_keys WHERE tag=?",
+        [i64::from(id) - KEY_IDS],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?)
+}
+
+pub(crate) fn delete_key(db: &Connection, id: i32) -> Result<()> {
+    db.execute(
+        "DELETE FROM main.__msduck_keys WHERE tag=?",
+        [i64::from(id) - KEY_IDS],
+    )?;
+    Ok(())
 }
 
 /// Whether the database has any constraint that msduck enforces itself, or
@@ -441,6 +538,26 @@ pub(crate) fn native_keys(db: &Connection, table: &Table) -> Result<Vec<(bool, V
         Ok((row.get::<_, bool>(0)?, strings(row.get(1)?)))
     })?;
     let mut keys = rows.collect::<duckdb::Result<Vec<_>>>()?;
+    // Keys the keys feature records, including those it enforces through
+    // its own indexes, and unfiltered unique indexes.
+    let mut statement = db.prepare(
+        "SELECT kind='PK',key_columns FROM main.__msduck_keys
+         WHERE object_id=? AND is_unique AND filter_definition IS NULL ORDER BY kind='PK' DESC,tag",
+    )?;
+    let rows = statement.query_map([table.id], |row| {
+        Ok((row.get::<_, bool>(0)?, row.get::<_, String>(1)?))
+    })?;
+    for row in rows {
+        let (primary, columns) = row?;
+        let columns: Vec<String> = serde_json::from_str(&columns).unwrap_or_default();
+        if !keys
+            .iter()
+            .any(|(p, c)| *p == primary && same_columns(c, &columns))
+        {
+            keys.push((primary, columns));
+        }
+    }
+    keys.sort_by_key(|(primary, _)| !primary);
     // Unique indexes also qualify as candidate keys.
     let mut statement = db.prepare(
         "SELECT expressions FROM duckdb_indexes() WHERE database_name=current_database()
@@ -462,6 +579,12 @@ pub(crate) fn native_keys(db: &Connection, table: &Table) -> Result<Vec<(bool, V
         }
     }
     Ok(keys)
+}
+
+fn same_columns(a: &[String], b: &[String]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .all(|x| b.iter().any(|y| x.eq_ignore_ascii_case(y)))
 }
 
 /// Whether an object of any type named `name` exists in the schema.
