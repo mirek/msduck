@@ -15,7 +15,7 @@ use std::ops::ControlFlow;
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Column {
     pub carrier: bool,
-    /// The SQL Server declaration of a carrier column, when requested.
+    /// The SQL Server declaration of a carrier column, after [`Catalog::declare`].
     pub declared: Option<DataType>,
 }
 
@@ -28,6 +28,8 @@ pub(super) struct Catalog {
     /// Names the statement defines itself (select-list aliases, CTE names
     /// and columns, derived-table columns), which a bare name may refer to.
     defined: HashSet<String>,
+    /// The relations by their AST spelling, with their table name.
+    names: HashMap<String, String>,
 }
 
 fn lower(ident: &Ident) -> String {
@@ -117,15 +119,14 @@ impl Visitor for Relations {
 
 impl Catalog {
     /// The columns of the relations `node` reads, from DuckDB's catalog.
-    /// With `declared`, carrier columns also carry their SQL Server
-    /// declaration, which costs a full catalog snapshot.
-    pub fn load<T: Visit>(db: &duckdb::Connection, node: &T, declared: bool) -> Result<Self> {
+    pub fn load<T: Visit>(db: &duckdb::Connection, node: &T) -> Result<Self> {
         let mut relations = Relations::default();
         let _ = node.visit(&mut relations);
         let mut catalog = Catalog {
             tables: HashMap::new(),
             qualifiers: relations.qualifiers,
             defined: relations.defined,
+            names: HashMap::new(),
         };
         for (spelling, table) in &relations.names {
             // A CTE of the same name hides the table.
@@ -169,42 +170,46 @@ impl Catalog {
                 }
             }
         }
-        if declared && catalog.has_carriers() {
-            let snapshot = crate::query_catalog::snapshot(db, node)?;
-            let mut types: HashMap<(String, String), Option<DataType>> = HashMap::new();
-            for (spelling, fields) in &snapshot.tables {
-                let Some(table) = relations.names.get(spelling) else {
-                    continue;
-                };
-                for field in fields {
-                    let kind = field
-                        .info
-                        .as_ref()
-                        .and_then(|info| info.logical_type())
-                        .map(msduck_sql::sql_type::ast);
-                    let key = (table.clone(), field.name.to_lowercase());
-                    // Disagreeing declarations of same-named tables: unknown.
-                    match types.get(&key) {
-                        Some(existing) if *existing != kind => {
-                            types.insert(key, None);
-                        }
-                        Some(_) => {}
-                        None => {
-                            types.insert(key, kind);
-                        }
+        catalog.names = relations.names;
+        Ok(catalog)
+    }
+
+    /// Add the SQL Server declarations of the carrier columns, which costs
+    /// a full catalog snapshot.
+    pub fn declare<T: Visit>(&mut self, db: &duckdb::Connection, node: &T) -> Result<()> {
+        let snapshot = crate::query_catalog::snapshot(db, node)?;
+        let mut types: HashMap<(String, String), Option<DataType>> = HashMap::new();
+        for (spelling, fields) in &snapshot.tables {
+            let Some(table) = self.names.get(spelling) else {
+                continue;
+            };
+            for field in fields {
+                let kind = field
+                    .info
+                    .as_ref()
+                    .and_then(|info| info.logical_type())
+                    .map(msduck_sql::sql_type::ast);
+                let key = (table.clone(), field.name.to_lowercase());
+                // Disagreeing declarations of same-named tables: unknown.
+                match types.get(&key) {
+                    Some(existing) if *existing != kind => {
+                        types.insert(key, None);
                     }
-                }
-            }
-            for (table, columns) in &mut catalog.tables {
-                for (name, column) in columns.iter_mut() {
-                    if column.carrier {
-                        column.declared =
-                            types.get(&(table.clone(), name.clone())).cloned().flatten();
+                    Some(_) => {}
+                    None => {
+                        types.insert(key, kind);
                     }
                 }
             }
         }
-        Ok(catalog)
+        for (table, columns) in &mut self.tables {
+            for (name, column) in columns.iter_mut() {
+                if column.carrier {
+                    column.declared = types.get(&(table.clone(), name.clone())).cloned().flatten();
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn has_carriers(&self) -> bool {

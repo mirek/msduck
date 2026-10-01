@@ -165,6 +165,37 @@ fn is_typeof(expr: &Expr) -> bool {
     function_name(expr).is_some_and(|name| name.eq_ignore_ascii_case("typeof"))
 }
 
+/// Whether `expr` contains a dispatch made here, outside subqueries.
+/// Dispatching again over it would copy it into every branch, which grows
+/// exponentially with nesting.
+fn lowered(expr: &Expr) -> bool {
+    struct Find(usize);
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
+            self.0 += 1;
+            ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
+            self.0 -= 1;
+            ControlFlow::Continue(())
+        }
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            if self.0 == 0 && own(expr) {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        }
+    }
+    expr.visit(&mut Find(0)).is_break()
+}
+
+/// Whether a conversion of `value` dispatches on its type.
+fn converted(value: &Expr) -> bool {
+    carries(value) && !lowered(value)
+}
+
 fn has_subquery(expr: &Expr) -> bool {
     struct Find;
     impl Visitor for Find {
@@ -250,7 +281,7 @@ fn dispatched(operands: &[&Expr]) -> bool {
     operands.iter().any(|o| carries(o))
         && !operands
             .iter()
-            .any(|o| has_subquery(o) || collated(o) || is_typeof(o))
+            .any(|o| has_subquery(o) || collated(o) || is_typeof(o) || lowered(o))
 }
 
 /// The rewrite of one comparison, or `None` when it needs none.
@@ -441,12 +472,12 @@ fn rewrite(expr: &mut Expr) {
             expr: value,
             data_type: DataType::Varchar(None) | DataType::Text | DataType::String(None),
             format: None,
-        } if carries(value) => Some(case(
+        } if converted(value) => Some(case(
             type_in(value, &[CARRIER]),
             call(TEXT, vec![input(*value.clone())]),
             expr.clone(),
         )),
-        Expr::Substring { expr: value, .. } if carries(value) => {
+        Expr::Substring { expr: value, .. } if converted(value) => {
             let mut lowered = expr.clone();
             if let Expr::Substring { expr: value, .. } = &mut lowered {
                 **value = as_text(value);
@@ -465,7 +496,7 @@ fn function(name: &str, expr: &Expr) -> Option<Expr> {
     let args = arguments(expr)?;
     if let Some((cast, unicode)) = carrier_cast(name)
         && let [value, width] = args.as_slice()
-        && carries(value)
+        && converted(value)
     {
         let converted = call(cast, vec![input((*value).clone()), (*width).clone()]);
         return Some(case(
@@ -524,7 +555,7 @@ fn function(name: &str, expr: &Expr) -> Option<Expr> {
         _ => {
             let positions = text_arguments(name)?;
             let wrap =
-                |(i, a): (usize, &&Expr)| positions.is_none_or(|p| p.contains(&i)) && carries(a);
+                |(i, a): (usize, &&Expr)| positions.is_none_or(|p| p.contains(&i)) && converted(a);
             if !args.iter().enumerate().any(wrap) {
                 return None;
             }
@@ -800,6 +831,21 @@ mod tests {
             substring.ends_with("ELSE CAST(n AS VARCHAR) END, x, 2)"),
             "{substring}"
         );
+    }
+
+    #[test]
+    fn nesting_does_not_copy_lowered_operands() {
+        let mut nested = "n".to_string();
+        for _ in 0..20 {
+            nested = format!("CASE WHEN {nested} = 'a' THEN n ELSE m END");
+        }
+        let mut cast = "n".to_string();
+        for _ in 0..20 {
+            cast = format!("__msduck_cast_nvarchar({cast}, 5)");
+        }
+        // Each level adds a bounded amount, not a multiple of the inner size.
+        assert!(lowered(&nested).len() < 40 * nested.len(), "{}", lowered(&nested).len());
+        assert!(lowered(&cast).len() < 10 * cast.len(), "{}", lowered(&cast).len());
     }
 
     #[test]

@@ -19,22 +19,26 @@ fn null(expr: &Expr) -> bool {
     }
 }
 
-/// Pin the carrier columns among `values` when they mix with other values.
-fn pin(catalog: &Catalog, values: Vec<&mut Expr>) {
-    let declared: Vec<Option<DataType>> = values
+/// Whether `values` mix a carrier column with other (non-NULL) values.
+fn mixed(catalog: &Catalog, values: &[&Expr]) -> bool {
+    let carriers: Vec<bool> = values
         .iter()
-        .map(|v| catalog.carrier(v).and_then(|c| c.declared.clone()))
+        .map(|v| catalog.carrier(v).is_some())
         .collect();
-    let mixed = declared.iter().any(Option::is_some)
-        && values
-            .iter()
-            .zip(&declared)
-            .any(|(v, d)| d.is_none() && !null(v));
-    if !mixed {
-        return;
+    carriers.iter().any(|c| *c) && values.iter().zip(&carriers).any(|(v, c)| !c && !null(v))
+}
+
+/// Pin the carrier columns among `values` when they mix with other values;
+/// a dry run only reports whether any would be.
+fn pin(catalog: &Catalog, values: Vec<&mut Expr>, apply: bool) -> bool {
+    if !mixed(catalog, &values.iter().map(|v| &**v).collect::<Vec<_>>()) {
+        return false;
     }
-    for (value, declared) in values.into_iter().zip(declared) {
-        if let Some(data_type) = declared {
+    if !apply {
+        return true;
+    }
+    for value in values {
+        if let Some(data_type) = catalog.carrier(value).and_then(|c| c.declared.clone()) {
             let column = std::mem::replace(value, Expr::Value(Value::Null.into()));
             *value = Expr::Cast {
                 kind: CastKind::Cast,
@@ -44,6 +48,7 @@ fn pin(catalog: &Catalog, values: Vec<&mut Expr>) {
             };
         }
     }
+    true
 }
 
 fn arguments(function: &mut Function) -> Vec<&mut Expr> {
@@ -159,8 +164,14 @@ fn pin_branches(catalog: &Catalog, body: &mut SetExpr, positions: &[usize]) {
     }
 }
 
-pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T) {
-    struct Pin<'a>(&'a Catalog);
+/// Pin the mixed carrier columns of `node`, or with `apply` false only
+/// report whether there are any (before their declarations are loaded).
+pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T, apply: bool) -> bool {
+    struct Pin<'a> {
+        catalog: &'a Catalog,
+        apply: bool,
+        found: bool,
+    }
     impl VisitorMut for Pin<'_> {
         type Break = ();
         fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
@@ -174,25 +185,23 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T) {
             }
             let positions: Vec<usize> = (0..width)
                 .filter(|&position| {
-                    let values: Vec<Option<&Expr>> = projections
+                    let values: Option<Vec<&Expr>> = projections
                         .iter()
                         .map(|p| item_expr(&p[position]))
                         .collect();
-                    let carrier = |v: &Option<&Expr>| {
-                        v.and_then(|e| self.0.carrier(e))
-                            .is_some_and(|c| c.declared.is_some())
-                    };
-                    values.iter().any(carrier)
-                        && values.iter().any(|v| !carrier(v) && !v.is_some_and(null))
+                    values.is_some_and(|values| mixed(self.catalog, &values))
                 })
                 .collect();
             if !positions.is_empty() {
-                pin_branches(self.0, &mut query.body, &positions);
+                self.found = true;
+                if self.apply {
+                    pin_branches(self.catalog, &mut query.body, &positions);
+                }
             }
             ControlFlow::Continue(())
         }
         fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
-            match expr {
+            let found = match expr {
                 Expr::Case {
                     conditions,
                     else_result,
@@ -203,17 +212,28 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T) {
                     if let Some(otherwise) = else_result {
                         values.push(otherwise);
                     }
-                    pin(self.0, values);
+                    pin(self.catalog, values, self.apply)
                 }
                 Expr::Function(f) => match f.name.to_string().to_ascii_uppercase().as_str() {
-                    "ISNULL" | "COALESCE" => pin(self.0, arguments(f)),
-                    "IIF" => pin(self.0, arguments(f).into_iter().skip(1).collect()),
-                    _ => {}
+                    "ISNULL" | "COALESCE" => pin(self.catalog, arguments(f), self.apply),
+                    "IIF" => pin(
+                        self.catalog,
+                        arguments(f).into_iter().skip(1).collect(),
+                        self.apply,
+                    ),
+                    _ => false,
                 },
-                _ => {}
-            }
+                _ => false,
+            };
+            self.found |= found;
             ControlFlow::Continue(())
         }
     }
-    let _ = node.visit(&mut Pin(catalog));
+    let mut pin = Pin {
+        catalog,
+        apply,
+        found: false,
+    };
+    let _ = node.visit(&mut pin);
+    pin.found
 }

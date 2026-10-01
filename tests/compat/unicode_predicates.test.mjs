@@ -77,6 +77,7 @@ test('filters, updates and LIKE over nvarchar columns no longer fail', async t =
   assert.deepEqual(await ids("SELECT id FROM dbo.items WHERE name = 'y'"), [[2]])
   assert.deepEqual(await ids("DECLARE @n nvarchar(50) = N'y'; SELECT id FROM dbo.items WHERE name = @n"), [[2]])
   assert.deepEqual(await ids("SELECT id FROM dbo.items WHERE name LIKE N'x%' ORDER BY id"), [[1], [3]])
+  assert.deepEqual(await ids("SELECT id FROM dbo.items WHERE ISNULL(name, N'') = N'x' AND UPPER(name) <> N'Y' ORDER BY id"), [[1], [3]])
   assert.deepEqual(await ids('SELECT id FROM dbo.items WHERE name = @p', [['p', TYPES.NVarChar, 'y']]), [[2]])
   assert.deepEqual(await ids('SELECT id FROM dbo.items WHERE name < @p ORDER BY id', [['p', TYPES.VarChar, 'y']]), [[1], [3]])
   await query(c, "UPDATE dbo.items SET id = id + 10 WHERE name = N'x'")
