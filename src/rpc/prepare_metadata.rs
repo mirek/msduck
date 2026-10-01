@@ -679,9 +679,13 @@ fn prepared_order(
                     && matches!(right.as_ref(), Expr::Value(value)
                         if matches!(&value.value, Value::Number(number, false)
                             if number.parse::<i32>().is_ok()))
-                    && select.distinct.is_none()
                 {
-                    ordinals.push(0);
+                    let projected = expressions.iter().position(|expr| *expr == &key.expr);
+                    if projected.is_none() && select.distinct.is_some() {
+                        return None;
+                    }
+                    ordinals
+                        .push(projected.map_or(Some(0), |index| u16::try_from(index + 1).ok())?);
                     continue;
                 }
                 let field = column(&key.expr, &scope)?;
@@ -857,6 +861,25 @@ fn query_description(
                 // The property name and runtime payload do not choose the
                 // result declaration: both strings and integers are variants.
                 field.properties = msduck_core::result::Properties::expression(true);
+            }
+            if let Expr::Cast {
+                expr, data_type, ..
+            }
+            | Expr::Convert {
+                expr,
+                data_type: Some(data_type),
+                ..
+            } = expression
+                && catalog
+                    .cast_info(data_type)
+                    .is_some_and(|info| matches!(info.system_type_id, Some(48 | 52 | 56 | 127)))
+            {
+                let source = msduck_sql::variant_cast::source(expr).unwrap_or(expr);
+                if variant_declaration(source, &source_scope, parameters) == Some(true) {
+                    // Captured preparation keeps computed provenance for an
+                    // explicit integer conversion of a declared variant.
+                    field.properties.origin = msduck_core::result::Origin::Expression;
+                }
             }
             if let Expr::Cast {
                 expr, data_type, ..
@@ -1233,6 +1256,17 @@ mod tests {
                 "{sql}"
             );
         }
+        let sql =
+            "SELECT NTILE(@p) OVER(ORDER BY a) AS r,a+1 AS n FROM dbo.prepare_heap ORDER BY a+1";
+        let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+            panic!("query")
+        };
+        let mut fields = prepared_fields(&catalog, &query, &scope).unwrap();
+        fields[0].info = catalog.cast_info(&DataType::BigInt(None));
+        assert_eq!(
+            prepared_order(&catalog, &query, &scope, &fields, &HashMap::new()),
+            projection::order::Plan::Token(vec![2])
+        );
         for sql in [
             "SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap UNION ALL SELECT b FROM dbo.prepare_heap",
             "SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap UNION ALL SELECT CAST(b AS FLOAT) FROM dbo.prepare_heap",
