@@ -1,4 +1,5 @@
 //! Session-owned DuckDB execution with AST-based T-SQL translation.
+pub(crate) mod ext;
 mod joined_output;
 pub(crate) mod rand;
 mod session_context;
@@ -378,6 +379,13 @@ pub struct Session {
     process: crate::sessions::Registration,
     /// Keys set by sp_set_session_context; RESETCONNECTION starts a new session.
     session_context: msduck_sql::session_function::SessionContext,
+    /// State of extension features (see `ext`).
+    ext: ext::State,
+}
+impl Drop for Session {
+    fn drop(&mut self) {
+        ext::session_end(self);
+    }
 }
 impl Session {
     pub fn new(connection: crate::server::Connection) -> Result<Self> {
@@ -403,7 +411,7 @@ impl Session {
         )?;
         db.execute_batch("CREATE TEMP MACRO __msduck_int_div(a,b) AS CASE WHEN b=0 THEN error('Divide by zero error encountered.') ELSE a // b END;
             CREATE TEMP MACRO __msduck_int_mod(a,b) AS CASE WHEN b=0 THEN error('Divide by zero error encountered.') ELSE a % b END")?;
-        Ok(Self {
+        let mut session = Self {
             db,
             diagnostics,
             rand: rand::Generator::new()?,
@@ -427,7 +435,10 @@ impl Session {
             holds: Vec::new(),
             process,
             session_context: Self::empty_session_context(),
-        })
+            ext: ext::State::default(),
+        };
+        ext::session_start(&mut session)?;
+        Ok(session)
     }
 
     /// The session's SPID.
@@ -1191,6 +1202,7 @@ impl Session {
         self.qualify_databases(&mut expression)?;
         let lowered = self.lower_session_functions_shared(&mut expression, parameters)?;
         let parameters = &*lowered;
+        ext::rewrite(self, &mut expression, parameters)?;
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
             .map_err(anyhow::Error::msg)?;
@@ -1330,6 +1342,9 @@ impl Session {
     ) -> (Vec<u8>, bool) {
         let rpc = rpc_execution.is_some();
         self.caught_error = None;
+        if let Some(response) = ext::batch(self, sql, parameters, rpc) {
+            return response;
+        }
         let mut out = Vec::new();
         let mut had_runtime_error = false;
         let statements = match parse_batch(sql) {
@@ -1644,15 +1659,20 @@ impl Session {
                 );
                 continue;
             }
-            if let Some(result) = self.set_session_context(statement, &variables) {
+            let procedure_call = match self.set_session_context(statement, &variables) {
+                Some(result) => Some(result.map(|()| ext::Exec::status(0))),
+                None => ext::exec(self, statement, &mut variables),
+            };
+            if let Some(result) = procedure_call {
                 executed_leaf = true;
                 // EXEC keeps @@ROWCOUNT. A batch reports RETURNSTATUS (0, or 1
                 // after a failure) and DONEPROC; inside sp_executesql the call
                 // ends with DONEINPROC and a failure becomes the RPC status.
                 let status: i32 = match result {
-                    Ok(()) => {
+                    Ok(ext::Exec { tokens, status }) => {
+                        out.extend(tokens);
                         self.last_error = 0;
-                        0
+                        status
                     }
                     Err(error) => {
                         if self.catch_error(&mut pending, &error) {
@@ -2086,6 +2106,9 @@ impl Session {
         }
     }
     fn validate_isolation(isolation: u8) -> Result<()> {
+        if let Some(result) = ext::isolation(isolation) {
+            return result;
+        }
         // DuckDB currently supplies snapshot isolation. Other locking modes
         // require further emulation; do not silently accept SERIALIZABLE.
         ensure!(
@@ -2137,6 +2160,9 @@ impl Session {
             self.transaction_name.clear();
         }
         self.transactions -= 1;
+        if self.transactions == 0 {
+            ext::transaction_end(self, true);
+        }
         self.sync_datefirst()?;
         Ok(out)
     }
@@ -2145,6 +2171,12 @@ impl Session {
             self.transactions > 0,
             "ROLLBACK has no corresponding BEGIN TRANSACTION"
         );
+        if !name.is_empty()
+            && name != self.transaction_name
+            && let Some(result) = ext::rollback_to(self, name)
+        {
+            return result;
+        }
         ensure!(
             name.is_empty() || name == self.transaction_name,
             "Cannot roll back {name}. No transaction or savepoint of that name was found."
@@ -2156,6 +2188,7 @@ impl Session {
         self.transaction_doomed = false;
         self.transaction_descriptor = 0;
         self.transaction_name.clear();
+        ext::transaction_end(self, false);
         self.sync_datefirst()?;
         Ok(out)
     }
@@ -2180,9 +2213,10 @@ impl Session {
             TransactionRequest::Rollback { name, restart } => {
                 (self.rollback_transaction(&name)?, restart)
             }
-            TransactionRequest::Save { .. } => {
-                bail!("unsupported savepoint: DuckDB has no native savepoint support")
-            }
+            TransactionRequest::Save { name } => match ext::save_transaction(self, &name) {
+                Some(result) => (result?, None),
+                None => bail!("unsupported savepoint: DuckDB has no native savepoint support"),
+            },
         };
         if let Some(begin) = restart {
             out.extend(self.begin_transaction(begin.isolation, &begin.name)?);
@@ -2258,11 +2292,15 @@ impl Session {
         mut statement: Statement,
         parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Execution> {
+        if let Some(execution) = ext::statement(self, &mut statement, parameters)? {
+            return Ok(execution);
+        }
         // Resolve database names before any DDL dispatch or catalog
         // bookkeeping, which see only two-part names.
         self.lower_database_functions(&mut statement)?;
         self.qualify_databases(&mut statement)?;
         self.lower_session_functions(&mut statement, parameters)?;
+        ext::rewrite(self, &mut statement, parameters)?;
         if let Statement::CreateTable(table) = &mut statement {
             crate::computed_columns::plan(&self.db, table)?;
         }
@@ -4684,6 +4722,9 @@ impl VisitorMut for Translator<'_> {
             } else if function.name.to_string().eq_ignore_ascii_case("COUNT_BIG") {
                 function.name = ObjectName::from(vec![Ident::new("count")]);
             }
+        }
+        if let Err(error) = ext::lower_expr(expr) {
+            return ControlFlow::Break(error);
         }
         ControlFlow::Continue(())
     }
