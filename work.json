@@ -8707,6 +8707,22 @@
       "dependencies": [],
       "issue": 718,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQq1"
+    },
+    {
+      "id": "gaps-rowversion-identity-v1-insert",
+      "title": "INSERT binding permit for explicit identity values under SET IDENTITY_INSERT ON",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-rowversion-identity-v1",
+      "scope": [
+        "src/insert.rs"
+      ],
+      "acceptance": [
+        "src/insert.rs lets the rowversion_identity feature permit explicit identity-column values for one resolved target table while that session has SET IDENTITY_INSERT ON for it; without the permit the existing 544 rejection and identity-column omission are unchanged.",
+        "Delivered in the same PR as gaps-rowversion-identity-v1 (issue #717), with its tests and verification."
+      ],
+      "dependencies": [],
+      "issue": 717,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQqi"
     }
   ]
 }
