@@ -18,7 +18,36 @@ pub(super) fn bootstrap(db: &Connection) -> Result<()> {
           kind VARCHAR NOT NULL,is_unique BOOLEAN NOT NULL,is_clustered BOOLEAN NOT NULL,
           is_native BOOLEAN NOT NULL,backend_name VARCHAR,incarnation BIGINT,key_columns VARCHAR NOT NULL,
           included_columns VARCHAR NOT NULL,filter_definition VARCHAR,
-          filter_columns VARCHAR NOT NULL)",
+          filter_columns VARCHAR NOT NULL);
+        -- The declared layout of PRIMARY KEY and UNIQUE constraints: the
+        -- CLUSTERED or NONCLUSTERED keyword (NULL when neither was written,
+        -- or for keys recorded before this table existed) and the 1-based
+        -- ordinals of DESC key columns. sys.indexes and sys.index_columns
+        -- read it; a key without a row keeps SQL Server's defaults.
+        CREATE TABLE IF NOT EXISTS main.__msduck_key_layout(
+          tag BIGINT NOT NULL,clustered BOOLEAN,descending INTEGER[] NOT NULL)",
+    )?;
+    Ok(())
+}
+
+/// Record the declared layout of a key constraint.
+pub(super) fn record_layout(
+    db: &Connection,
+    tag: i64,
+    clustered: Option<bool>,
+    descending: &[i32],
+) -> Result<()> {
+    db.execute("DELETE FROM main.__msduck_key_layout WHERE tag=?", [tag])?;
+    let ordinals = descending
+        .iter()
+        .map(i32::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
+    db.execute(
+        &format!(
+            "INSERT INTO main.__msduck_key_layout VALUES(?,?,CAST([{ordinals}] AS INTEGER[]))"
+        ),
+        params![tag, clustered],
     )?;
     Ok(())
 }
@@ -92,6 +121,7 @@ pub(super) fn insert(db: &Connection, key: &Key) -> Result<()> {
 
 pub(super) fn remove(db: &Connection, tag: i64) -> Result<()> {
     db.execute("DELETE FROM main.__msduck_keys WHERE tag=?", [tag])?;
+    db.execute("DELETE FROM main.__msduck_key_layout WHERE tag=?", [tag])?;
     Ok(())
 }
 
@@ -150,7 +180,9 @@ pub(super) fn all(db: &Connection) -> Result<Vec<Key>> {
 pub(super) fn prune(db: &Connection) -> Result<()> {
     db.execute_batch(
         "DELETE FROM main.__msduck_keys k WHERE NOT EXISTS(
-           SELECT 1 FROM sys.objects o WHERE o.object_id=k.object_id AND rtrim(o.type)='U')",
+           SELECT 1 FROM sys.objects o WHERE o.object_id=k.object_id AND rtrim(o.type)='U');
+         DELETE FROM main.__msduck_key_layout l WHERE NOT EXISTS(
+           SELECT 1 FROM main.__msduck_keys k WHERE k.tag=l.tag)",
     )?;
     Ok(())
 }
