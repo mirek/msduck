@@ -4610,7 +4610,8 @@ test('sys.columns retains declared lengths types and transactional ALTER metadat
   await query(c,'CREATE VIEW declared_view AS SELECT id,v FROM declared_probe')
   assert.deepEqual((await query(c,"SELECT name,TYPE_NAME(user_type_id),max_length FROM sys.columns WHERE object_id=OBJECT_ID(N'declared_view') ORDER BY column_id")).rows,[['id','int',4],['v','nvarchar',18]])
   const empty=await query(c,'SELECT object_id,column_id,system_type_id,user_type_id,max_length,precision,scale,is_identity FROM sys.columns WHERE 1=0')
-  assert.deepEqual(empty.columns[0].map(c=>c.dataLength),[4,4,1,4,2,1,1,1])
+  // Two fresh SQL Server ordinary batch captures retain fixed scalar types.
+  assert.deepEqual(empty.columns[0].map(c=>[c.type.name,c.dataLength]),[['Int',undefined],['Int',undefined],['TinyInt',undefined],['Int',undefined],['SmallInt',undefined],['TinyInt',undefined],['TinyInt',undefined],['Bit',undefined]])
   await assert.rejects(query(c,'DROP VIEW sys.columns'),e=>e.message.includes('cannot be changed'))
   await p.release()
 })
