@@ -177,3 +177,51 @@ fn default_catalog_creation_and_cleanup_share_the_ddl_transaction() {
         0
     );
 }
+
+#[test]
+fn default_expression_families_match_sql_server_catalog_text() {
+    let reference: serde_json::Value =
+        serde_json::from_str(include_str!("../reference/gaps-catalog.json")).unwrap();
+    let records = reference["definitionProfile"]["runs"][0]
+        .as_array()
+        .unwrap();
+    let record = |name| records.iter().find(|r| r["name"] == name).unwrap();
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    assert!(
+        session
+            .batch_response(
+                record("setup default definitions")["sql"].as_str().unwrap(),
+                &Default::default(),
+                false,
+                None
+            )
+            .1
+    );
+    let rows = session
+        .db
+        .prepare(record("default definitions")["sql"].as_str().unwrap())
+        .unwrap()
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, i32>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, bool>(3)?,
+            ))
+        })
+        .unwrap()
+        .collect::<duckdb::Result<Vec<_>>>()
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(rows).unwrap(),
+        record("default definitions")["result"]["sets"][0]["rows"]
+    );
+    // Original source remains distinct from serialized definitions, including
+    // volatile function declarations. This checks text, not default execution.
+    let (source, definition): (String,String) = session.db.query_row(
+        "SELECT source_expression,definition FROM main.__msduck_default_constraints WHERE name='DF_definition_clock'", [], |r| Ok((r.get(0)?,r.get(1)?))
+    ).unwrap();
+    assert!(source.eq_ignore_ascii_case("(GETDATE())"));
+    assert_eq!(definition, "(getdate())");
+}

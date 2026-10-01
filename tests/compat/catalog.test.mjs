@@ -8,6 +8,16 @@ import {start,query} from '../support/client.mjs'
 const reference=JSON.parse(readFileSync(new URL('../../reference/gaps-catalog.json',import.meta.url),'utf8'))
 const defaults=reference.runs[0].find(record=>record.name==='defaults')
 
+test('DEFAULT expression families retain SQL Server catalog text',async t=>{
+ const connection=await start(t)
+ const records=reference.definitionProfile.runs[0]
+ await query(connection,records.find(r=>r.name==='setup default definitions').sql)
+ for(const name of ['default definitions','default object definitions']){
+  const record=records.find(r=>r.name===name)
+  assert.deepEqual((await query(connection,record.sql)).rows,record.result.sets[0].rows,name)
+ }
+})
+
 test('named DEFAULT catalog rows match the controlled SQL Server fixture',async t=>{
  const connection=await start(t)
  await query(connection,'CREATE TABLE dbo.catalog_child(a INT,b INT,state BIT CONSTRAINT DF_catalog_child_state DEFAULT(1))')

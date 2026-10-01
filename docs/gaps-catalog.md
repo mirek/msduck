@@ -8,11 +8,12 @@ restart. Startup execution and replication are unsupported and their flags are
 false. Procedure creation/execution belongs to its separate extension, which
 is still a stub on this branch; tests exercise the shared store directly.
 Named DEFAULT constraints now project their existing object/column IDs through
-`sys.default_constraints`. Integer literal definitions use the captured
-`((1))` form and are also returned by `OBJECT_DEFINITION`. Source expressions
-are retained separately from SQL Server catalog text. Definitions for other
-expression families and preexisting rows whose source was not stored remain
-NULL until verified serialization/backfill is implemented. Additive storage
+`sys.default_constraints`. Definition serialization covers the retained numeric,
+negative, decimal/scientific, escaped string/Unicode, NULL, binary, arithmetic,
+function and integer CAST/CONVERT controls, and is also used by
+`OBJECT_DEFINITION`. Source expressions are retained separately from SQL Server
+catalog text. Unsupported syntax and preexisting rows whose source was not
+stored remain NULL until serialization/backfill is implemented. Additive storage
 migration preserves existing constraint identities. View/check definitions,
 unnamed DEFAULT constraints and complete wire descriptor parity remain
 unimplemented. This checkpoint does not establish full catalog compatibility.
@@ -21,7 +22,18 @@ unimplemented. This checkpoint does not establish full catalog compatibility.
 SQL Server17.0.4065.4 containers, including descriptors, rows, diagnostics,
 return status, completion commands/status and token order. The image is pinned
 explicitly and the helper-reported image is checked before work begins.
-Fixture SHA-256: `e7210ca707919bae43093f4207a76256a86873e9350b5b6a621c291797bcdc8e`.
+The original envelope (excluding the additive `definitionProfile`) retains
+SHA-256 `e7210ca707919bae43093f4207a76256a86873e9350b5b6a621c291797bcdc8e`.
+Aggregate fixture SHA-256:
+`6d763f84f5b96a36d11f820dfb0c9ed11213e289a7de3ffb98fb2fcf617f786c`.
+
+The additive profile retains eight complete responses from each of two fresh
+pinned containers at capture revision fc4bb84. Both full runs agree, covering
+15 DEFAULT and nine computed expressions, including their complete metadata,
+diagnostics and completion streams. The deterministic formatter is checked
+against every expression's retained definition. Computed catalog integration
+and the remaining expression syntax still need implementation; passing the
+formatter test does not establish computed column metadata compatibility.
 
 All ten complete empty catalog responses agree between the runs:
 
@@ -67,6 +79,8 @@ To capture into a new immutable path, use
 `node scripts/capture-gaps-catalog.mjs artifacts/new-catalog-reference.json`.
 The output must not exist; containers are owned and removed by that invocation.
 On the shared Linux builder, hold its runner lock through the capture.
+The broader expression profile uses
+`node scripts/capture-gaps-catalog.mjs --definitions artifacts/new-definitions.json`.
 
 Remaining work: implement persistent transactional catalog bookkeeping and
 views, system procedure contracts, rename effects and failure atomicity; add

@@ -167,9 +167,7 @@ fn record_named_defaults(db: &Connection, statement: &Statement) -> Result<()> {
                 "DEFAULT constraint name already exists in schema"
             );
             let definition =
-                msduck_sql::dialect::ext::catalog::definition::literal_default_definition(
-                    expression,
-                );
+                msduck_sql::dialect::ext::catalog::definition::expression_definition(expression);
             db.execute("INSERT INTO main.__msduck_default_constraints(object_id,parent_object_id,column_id,name,create_date,modify_date,definition,source_expression) SELECT CAST(nextval('main.__msduck_object_ids') AS INTEGER),?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP),?,? WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_default_constraints WHERE parent_object_id=? AND column_id=?)",duckdb::params![object_id,column_id,name.value,definition,expression.to_string(),object_id,column_id])?;
         }
     }
