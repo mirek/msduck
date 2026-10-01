@@ -96,6 +96,7 @@ fn variant_declaration(
             return scope
                 .parameters
                 .get(&id.value.to_lowercase())
+                .filter(|info| info.user_type_id == info.system_type_id.map(i32::from))
                 .and_then(|info| info.system_type_id)
                 .and_then(|id| match id {
                     98 => Some(true),
@@ -109,6 +110,7 @@ fn variant_declaration(
     };
     msduck_sql::binding_scope::resolve(&ids, &[], &scope.rows)
         .and_then(|field| field.info.as_ref())
+        .filter(|info| info.user_type_id == info.system_type_id.map(i32::from))
         .and_then(|info| info.system_type_id)
         .and_then(|id| match id {
             98 => Some(true),
@@ -854,6 +856,115 @@ fn series_declarations(query: &Query, parameters: &HashMap<String, Parameter>) -
     declared
 }
 
+// Enrich nested source declarations bottom-up, retaining the original outer
+// expressions for ORDER identity. Only a proven one-column variant UNION may
+// use a synthetic declaration; recursive/CTE references and aliases are barriers.
+fn source_declarations(
+    query: &Query,
+    parameters: &HashMap<String, Parameter>,
+    catalog: &CatalogSnapshot,
+    outer: &Scope,
+) -> Query {
+    struct Declare<'a> {
+        catalog: &'a CatalogSnapshot,
+        outer: &'a Scope,
+        scopes: Vec<Scope>,
+    }
+    impl VisitorMut for Declare<'_> {
+        type Break = ();
+        fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
+            self.scopes.push(
+                projection::scopes(
+                    self.catalog,
+                    query,
+                    self.scopes.last().unwrap_or(self.outer),
+                )
+                .body,
+            );
+            ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
+            self.scopes.pop();
+            let inherited = self.scopes.last().unwrap_or(self.outer);
+            if self.scopes.is_empty()
+                || !matches!(
+                    query.body.as_ref(),
+                    sqlparser::ast::SetExpr::SetOperation {
+                        op: sqlparser::ast::SetOperator::Union,
+                        ..
+                    }
+                )
+            {
+                return ControlFlow::Continue(());
+            }
+            if sqlparser::ast::visit_relations(query, |name| {
+                if name.0.len() == 1
+                    && inherited
+                        .ctes
+                        .contains_key(&name.to_string().to_lowercase())
+                {
+                    ControlFlow::Break(())
+                } else {
+                    ControlFlow::Continue(())
+                }
+            })
+            .is_break()
+            {
+                return ControlFlow::Continue(());
+            }
+            let Some(fields) = prepared_fields(self.catalog, query, inherited) else {
+                return ControlFlow::Continue(());
+            };
+            let [field] = fields.as_slice() else {
+                return ControlFlow::Continue(());
+            };
+            if !field.info.as_ref().is_some_and(|info| {
+                info.system_type_id == Some(98) && info.user_type_id == Some(98)
+            }) {
+                return ControlFlow::Continue(());
+            }
+            let Ok(mut statements) =
+                msduck_sql::batch::parse("SELECT CAST(NULL AS SQL_VARIANT) AS value")
+            else {
+                return ControlFlow::Continue(());
+            };
+            let Statement::Query(mut declaration) = statements.remove(0) else {
+                return ControlFlow::Continue(());
+            };
+            let sqlparser::ast::SetExpr::Select(select) = declaration.body.as_mut() else {
+                return ControlFlow::Continue(());
+            };
+            if let sqlparser::ast::SelectItem::ExprWithAlias { alias, .. } =
+                &mut select.projection[0]
+            {
+                *alias = sqlparser::ast::Ident::with_quote('"', &field.name);
+            }
+            query.body = declaration.body;
+            ControlFlow::Continue(())
+        }
+    }
+    let mut declared = expression_declarations(
+        &series_declarations(query, parameters),
+        parameters,
+        catalog,
+        outer,
+    );
+    let _ = declared.visit(&mut Declare {
+        catalog,
+        outer,
+        scopes: Vec::new(),
+    });
+    if let (sqlparser::ast::SetExpr::Select(original), sqlparser::ast::SetExpr::Select(enriched)) =
+        (query.body.as_ref(), declared.body.as_mut())
+    {
+        let sources = enriched.from.clone();
+        **enriched = *original.clone();
+        enriched.from = sources;
+    }
+    declared.order_by = query.order_by.clone();
+    declared
+}
+
 // Additional captured ORDER shapes use the already-proven output width, while
 // resolving keys against original explicit row scopes. Unknowns remain barriers.
 fn prepared_order(
@@ -888,7 +999,7 @@ fn prepared_order(
         {
             return None;
         }
-        let mut expanded = query.clone();
+        let mut expanded = source_declarations(query, parameters, catalog, outer);
         if matches!(expanded.body.as_ref(), SetExpr::Select(_)) {
             projection::expand_stars(catalog, &mut expanded, outer)?;
         }
@@ -918,8 +1029,7 @@ fn prepared_order(
             }
             return None;
         };
-        let scope =
-            projection::scopes(catalog, &series_declarations(&expanded, parameters), outer).body;
+        let scope = projection::scopes(catalog, &expanded, outer).body;
         let expressions = select
             .projection
             .iter()
@@ -1217,7 +1327,7 @@ fn query_description(
         .map_err(anyhow::Error::msg)?;
     let json_query = json_declarations(query, &catalog, &scope);
     for candidate in [
-        series_declarations(query, parameters),
+        source_declarations(query, parameters, &catalog, &scope),
         original_declarations,
         json_query.clone(),
         expression_declarations(&json_query, parameters, &catalog, &scope),
@@ -1995,6 +2105,7 @@ mod tests {
                 max_length: Some(4),
                 precision: Some(10),
                 scale: Some(0),
+                ..Default::default()
             },
         );
         for sql in [
