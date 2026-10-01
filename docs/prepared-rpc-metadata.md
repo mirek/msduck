@@ -221,3 +221,13 @@ provenance regression. These controls distinguish a direct INT-to-variant
 projection with flags33 from one with a hidden ORDER key and flags1.
 Resolved arithmetic identity compares explicit source fields and integer
 literals, preserving projected ordinals across qualification and parentheses.
+
+The `--bitwise-declarations` mode captures six BIT-pair, mixed integer-width,
+complement, stored/empty and derived-source profiles twice in fresh SQL Server
+containers. Full raw SHA256 is
+`bce0d8c21056abc81ddde716f932a0e4feb5be42882efd8e8cde1d03aa8c86fa`.
+All twelve complete preparation/unprepare responses are embedded verbatim.
+BIT/BIT binary operators prepare as BitN, while a BIT/integer pair retains the
+integer operand's width. Declarations use explicit parameter and catalog types,
+with aliases, approximate types, untyped NULL and unresolved sources remaining
+unknown. This preparation evidence does not establish execution wire parity.

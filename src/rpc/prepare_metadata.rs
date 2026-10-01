@@ -117,6 +117,72 @@ fn variant_declaration(
         })
 }
 
+// Captured bitwise declarations depend on operand types, not NULL values
+// or payloads. Alias, approximate and unresolved sources remain barriers.
+fn bitwise_declaration(
+    expression: &Expr,
+    parameters: &HashMap<String, Parameter>,
+    scope: &Scope,
+) -> Option<DataType> {
+    let column = |expr: &Expr| {
+        let ids = match expr {
+            Expr::Identifier(id) if !id.value.starts_with('@') => vec![id],
+            Expr::CompoundIdentifier(ids) => ids.iter().collect(),
+            _ => return None,
+        };
+        let info = msduck_sql::binding_scope::resolve(&ids, &[], &scope.rows)?
+            .info
+            .as_ref()?;
+        let id = info.system_type_id?;
+        if info.user_type_id.is_some_and(|user| user != i32::from(id)) {
+            return None;
+        }
+        Some(match id {
+            104 => DataType::Bit(None),
+            48 => DataType::TinyInt(None),
+            52 => DataType::SmallInt(None),
+            56 => DataType::Int(None),
+            127 => DataType::BigInt(None),
+            _ => return None,
+        })
+    };
+    let operand = |expr: &Expr| {
+        if msduck_sql::expression_metadata::conditional::literal_null(expr) {
+            return None;
+        }
+        msduck_sql::expression_metadata::storage::kind(expr, parameters, &column)
+            .or_else(|| bitwise_declaration(expr, parameters, scope))
+            .filter(|kind| {
+                matches!(kind, DataType::Bit(_)) || msduck_sql::sql_type::integral_type(kind)
+            })
+    };
+    match expression {
+        Expr::Nested(expr) => bitwise_declaration(expr, parameters, scope),
+        Expr::UnaryOp {
+            op: sqlparser::ast::UnaryOperator::BitwiseNot,
+            expr,
+        } => operand(expr),
+        Expr::BinaryOp {
+            left,
+            op:
+                sqlparser::ast::BinaryOperator::BitwiseAnd
+                | sqlparser::ast::BinaryOperator::BitwiseOr
+                | sqlparser::ast::BinaryOperator::BitwiseXor,
+            right,
+        } => {
+            let (left, right) = (operand(left)?, operand(right)?);
+            if matches!(left, DataType::Bit(_)) {
+                Some(right)
+            } else if matches!(right, DataType::Bit(_)) {
+                Some(left)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 // A captured ROW_NUMBER over declared variant conditional keys has a BIGINT
 // declaration. Preserve the original key binding proof instead of assigning a
 // type to every function name or erasing ORDER BY columns in a metadata clone.
@@ -277,6 +343,13 @@ fn expression_declarations(
                 .or_else(|| {
                     msduck_sql::case_types::is_bit(expression, self.parameters)
                         .then_some(DataType::Bit(None))
+                })
+                .or_else(|| {
+                    bitwise_declaration(
+                        expression,
+                        self.parameters,
+                        self.scopes.last().unwrap_or(self.outer),
+                    )
                 })
                 .or_else(|| {
                     datetime2_declaration(expression, self.parameters).and_then(|scale| {
@@ -1225,6 +1298,68 @@ pub(super) fn handle(out: &mut Vec<u8>, name: &str, value: Option<i32>) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bitwise_declarations_use_catalog_types_and_keep_unknown_barriers() {
+        use msduck_sql::binding_scope::Field;
+        let mut catalog = CatalogSnapshot::default();
+        catalog.tables.insert(
+            "bits".into(),
+            [
+                ("b", 104, 104),
+                ("s", 52, 52),
+                ("f", 62, 62),
+                ("alias", 104, 900),
+            ]
+            .into_iter()
+            .map(|(name, id, user)| Field {
+                name: name.into(),
+                info: Some(TypeMetadata {
+                    system_type_id: Some(id),
+                    user_type_id: Some(user),
+                    ..Default::default()
+                }),
+                properties: msduck_core::result::Properties::expression(true),
+                collation: None,
+                json_fragment: false,
+            })
+            .collect(),
+        );
+        for (expression, expected) in [
+            ("b&b", Some(DataType::Bit(None))),
+            ("b|b", Some(DataType::Bit(None))),
+            ("b^b", Some(DataType::Bit(None))),
+            ("b&s", Some(DataType::SmallInt(None))),
+            ("s|b", Some(DataType::SmallInt(None))),
+            ("~b", Some(DataType::Bit(None))),
+            ("(b&b)^b", Some(DataType::Bit(None))),
+            ("b&CAST(NULL AS BIT)", Some(DataType::Bit(None))),
+            ("b&f", None),
+            ("b&alias", None),
+            ("b&missing", None),
+            ("b&NULL", None),
+        ] {
+            let Statement::Query(query) =
+                msduck_sql::batch::parse(&format!("SELECT {expression} FROM bits"))
+                    .unwrap()
+                    .remove(0)
+            else {
+                panic!("query")
+            };
+            let sqlparser::ast::SetExpr::Select(select) = query.body.as_ref() else {
+                panic!("select")
+            };
+            let sqlparser::ast::SelectItem::UnnamedExpr(expr) = &select.projection[0] else {
+                panic!("expression")
+            };
+            let scope = projection::scopes(&catalog, &query, &Scope::default()).body;
+            assert_eq!(
+                bitwise_declaration(expr, &HashMap::new(), &scope),
+                expected,
+                "{expression}"
+            );
+        }
+    }
 
     #[test]
     fn prepared_order_uses_original_cast_sources_and_proven_variant_sets() {
