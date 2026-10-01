@@ -8126,7 +8126,7 @@
     {
       "id": "gaps-rowversion-identity-v1",
       "title": "rowversion/timestamp, decimal identity, SCOPE_IDENTITY and IDENTITY_INSERT",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
       "scope": [
         "src/engine/ext/rowversion_identity.rs",
@@ -8711,7 +8711,7 @@
     {
       "id": "gaps-rowversion-identity-v1-insert",
       "title": "INSERT binding permit for explicit identity values under SET IDENTITY_INSERT ON",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-rowversion-identity-v1",
       "scope": [
         "src/insert.rs"
@@ -8727,7 +8727,7 @@
     {
       "id": "gaps-rowversion-identity-v1-types",
       "title": "timestamp (189) column metadata as binary(8) and numeric sql_variant payloads for decimal identity catalogs",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-rowversion-identity-v1",
       "scope": [
         "crates/msduck-core/src/catalog.rs",
