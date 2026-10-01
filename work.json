@@ -8873,6 +8873,24 @@
       ],
       "issue": 756,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PeQ1k"
+    },
+    {
+      "id": "gaps-index-catalog-v1-keys",
+      "title": "Record descending index keys for sys.index_columns and add tedious index catalog tests",
+      "state": "ready",
+      "authorization": "Owner-approved successor (2026-10-01) of stalled index-catalog-adapter-v1 for src/index_catalog.rs, umbrella #710. companion of gaps-index-catalog-v1",
+      "scope": [
+        "src/engine/ext/keys/create_index.rs",
+        "tests/compat/index_catalog.test.mjs"
+      ],
+      "acceptance": [
+        "The keys feature's CREATE INDEX registers which key columns are descending in the table-owned index catalog, so sys.index_columns reports is_descending_key as SQL Server does; existing keys behavior and tests are unchanged.",
+        "tests/compat/index_catalog.test.mjs queries sys.indexes and sys.index_columns through tedious (including WHERE object_id=OBJECT_ID(N'...')) for constraint-backed and keys-managed indexes and asserts captured SQL Server rows.",
+        "Merged in the same PR as gaps-index-catalog-v1 after its AGENTS.md checks, review or recorded fallback; completion published with it."
+      ],
+      "dependencies": [],
+      "issue": 754,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PeNM8"
     }
   ]
 }
