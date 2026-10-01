@@ -128,7 +128,7 @@ pub fn sync(db: &Connection) -> Result<()> {
         WHERE o.object_id=c.object_id AND rtrim(o.type)='U');
         DELETE FROM main.__msduck_index_keys k WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_index_catalog c WHERE c.incarnation=k.incarnation)")?;
     publish_key_indexes(db, false)?;
-    allocate(db)?;
+    allocate(db, false)?;
     // The keys feature rebuilds an altered table's indexes under their old
     // incarnations, so its record keeps their key order.
     db.execute_batch("DELETE FROM main.__msduck_index_descending d
@@ -142,7 +142,7 @@ pub fn sync(db: &Connection) -> Result<()> {
 /// A PRIMARY KEY that held ID 1 while the table had no clustered index gets
 /// a nonclustered ID once it has one. An index the keys feature rebuilds
 /// around an ALTER TABLE is briefly missing from the catalog and keeps its ID.
-fn allocate(db: &Connection) -> Result<()> {
+fn allocate(db: &Connection, bootstrap: bool) -> Result<()> {
     let published: bool = db.query_row(
         "SELECT EXISTS(SELECT 1 FROM duckdb_views() WHERE database_name=current_database()
            AND schema_name='main' AND view_name='__msduck_index_entries')",
@@ -154,13 +154,20 @@ fn allocate(db: &Connection) -> Result<()> {
     }
     // The assignments are computed from the stored ones, so they are
     // materialized before the stored ones change.
-    db.execute_batch(
+    // Bootstrap can run in a separate instance whose transaction IDs mean
+    // nothing to the server, so its assignments name no transaction.
+    let transaction = if bootstrap {
+        "CAST(NULL AS VARCHAR)"
+    } else {
+        "main.__msduck_index_transaction()"
+    };
+    db.execute_batch(&format!(
         "DELETE FROM main.__msduck_index_ids p
          WHERE NOT EXISTS(SELECT 1 FROM sys.objects o WHERE o.object_id=p.object_id AND rtrim(o.type)='U')
            OR (p.tag IS NOT NULL AND NOT EXISTS(SELECT 1 FROM main.__msduck_key_indexes k
              WHERE k.object_id=p.object_id AND k.tag=p.tag));
          CREATE OR REPLACE TEMP TABLE __msduck_index_ids_next AS
-           SELECT object_id,tag,incarnation,index_id,fallback,main.__msduck_index_transaction() AS txn
+           SELECT object_id,tag,incarnation,index_id,fallback,{transaction} AS txn
            FROM main.__msduck_index_entries;
          DELETE FROM main.__msduck_index_ids p WHERE EXISTS(SELECT 1 FROM __msduck_index_ids_next n
            WHERE n.object_id=p.object_id AND n.tag IS NOT DISTINCT FROM p.tag
@@ -169,8 +176,8 @@ fn allocate(db: &Connection) -> Result<()> {
          INSERT INTO main.__msduck_index_ids SELECT * FROM __msduck_index_ids_next n
            WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_index_ids p WHERE n.object_id=p.object_id
              AND n.tag IS NOT DISTINCT FROM p.tag AND n.incarnation IS NOT DISTINCT FROM p.incarnation);
-         DROP TABLE __msduck_index_ids_next",
-    )?;
+         DROP TABLE __msduck_index_ids_next"
+    ))?;
     Ok(())
 }
 
@@ -373,7 +380,7 @@ pub fn drop_index(db: &Connection, expected: &Index, owner: Transaction) -> Resu
             "DELETE FROM main.__msduck_index_ids WHERE incarnation=?",
             [expected.incarnation],
         )?;
-        allocate(db)?;
+        allocate(db, false)?;
         Ok(())
     })
 }
@@ -642,7 +649,7 @@ pub fn publish_views(db: &Connection) -> Result<()> {
           CAST(0 AS UTINYINT) AS column_store_order_ordinal,CAST(0 AS UTINYINT) AS data_clustering_ordinal
         FROM members
         WHERE main.__msduck_index_catalog_ready()")?;
-    allocate(db)?;
+    allocate(db, true)?;
     Ok(())
 }
 

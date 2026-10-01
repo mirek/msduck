@@ -605,3 +605,28 @@ fn index_ids_survive_restarts_with_reused_transaction_ids() {
     drop(server);
     let _ = std::fs::remove_dir_all(&directory);
 }
+
+/// DROP_EXISTING rebuilds the same index, which keeps its ID.
+#[test]
+fn drop_existing_keeps_the_index_id() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    for sql in [
+        "CREATE TABLE d (a int, b int, c int)",
+        "CREATE INDEX d1 ON d(a) INCLUDE (c)",
+        "CREATE INDEX d2 ON d(b) INCLUDE (c)",
+        "DROP INDEX d1 ON d",
+        "CREATE INDEX d2 ON d(b, a) INCLUDE (c) WITH (DROP_EXISTING = ON)",
+    ] {
+        run(&mut s, sql);
+    }
+    // SQL Server: the same rows.
+    assert_eq!(
+        rows(
+            &s,
+            "SELECT i.name,i.index_id FROM sys.indexes i JOIN sys.objects o ON o.object_id=i.object_id
+             WHERE o.name='d' ORDER BY i.index_id"
+        ),
+        ["NULL|0", "d2|3"]
+    );
+}
