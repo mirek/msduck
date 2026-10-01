@@ -8605,6 +8605,39 @@
       "dependencies": [],
       "issue": 729,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQvb"
+    },
+    {
+      "id": "json-path-client-diagnostic-v1",
+      "title": "Align empty-property JSON client diagnostic with captured SQL Server error",
+      "state": "backlog",
+      "authorization": "Owner continuing compatibility goal; PR703 core fix #733 exposes stale state/message expectation. File reserved by own #712, no new work authorization until scope coordinated.",
+      "issue": 734,
+      "scope": [
+        "tests/tedious.test.mjs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Change only the JSON diagnostics empty-property $. [ (without space) expected number/state/message to immutable two-run captured number13607/state14/bracket position2. Preserve catch/rethrow and exact error assertions; do not normalize differences.",
+        "Coordinate file scope with #712 before implementation; exact-head core/workspace/client/review gates required. Backlog publishes no reservation."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdV4M"
+    },
+    {
+      "id": "joined-output-unicode-binding-v1",
+      "title": "Lower Unicode string expressions over joined OUTPUT images before native binding",
+      "state": "backlog",
+      "authorization": "Owner continuing compatibility goal; independently captured SQL Server OUTPUT controls and failing PR703 replay. Engine owner separate work; no reservation or handoff implied.",
+      "issue": 735,
+      "scope": [
+        "src/engine/joined_output.rs",
+        "tests/joined_output_unicode.rs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Use explicit catalog declarations to lower UPPER/Unicode character OUTPUT image expressions before native binding; keep preparation nonexecuting and actual execution compatible. Preserve NULL/empty/source collation/width and Unicode data.",
+        "Two fresh complete SQL Server reference runs and full target-row nonexecution probes; retain raw differences. Coordinate owner engine adapter scope before claiming; exact-head workspace/client/audit/review/CI gates. Backlog does not reserve files."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdV5D"
     }
   ]
 }
