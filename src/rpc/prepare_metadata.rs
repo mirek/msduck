@@ -822,7 +822,7 @@ fn series_declarations(query: &Query, parameters: &HashMap<String, Parameter>) -
                 Some(TableAlias {
                     name: Ident::new("generate_series"),
                     columns: vec![],
-                    at: false,
+                    at: None,
                     explicit: false,
                 })
             });
