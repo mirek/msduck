@@ -22,6 +22,9 @@ pub(super) struct JoinedExecution {
     candidates: ObjectName,
     images: ObjectName,
     sink: Option<crate::output_sink::Bound>,
+    /// An empty OUTPUT list (see `ext::outer_dml`): write the chosen rows and
+    /// return only the completion count.
+    silent: bool,
 }
 
 /// Substitute a generated single-source stage for description only. Executing
@@ -90,6 +93,23 @@ impl Session {
         let candidates = crate::output_image::name();
         let images = crate::output_image::name();
         let alias = images.0.last().unwrap().as_ident().unwrap().clone();
+        // No user writes an empty OUTPUT list; the outer-join UPDATE hook does,
+        // to choose one joined row per target row without returning rows. A
+        // constant projection keeps the output stage well formed.
+        let silent = matches!(&update.output, Some(OutputClause::Output { select_items, into_table: None, .. }) if select_items.is_empty());
+        let mut planned;
+        let update = if silent {
+            planned = update.clone();
+            let Some(OutputClause::Output { select_items, .. }) = &mut planned.output else {
+                unreachable!()
+            };
+            select_items.push(SelectItem::UnnamedExpr(Expr::value(
+                sqlparser::ast::Value::Number("1".into(), false),
+            )));
+            &planned
+        } else {
+            update
+        };
         let plan = self.prepare_joined_output(
             update,
             with,
@@ -118,6 +138,7 @@ impl Session {
             candidates,
             images,
             sink,
+            silent,
         })
     }
 
@@ -130,6 +151,7 @@ impl Session {
             candidates: candidate_name,
             images: image_name,
             sink,
+            silent,
         } = execution;
         let types = crate::result_types::from_fields(&plan.fields);
         let candidates = crate::output_image::Image::create_bound(
@@ -145,8 +167,9 @@ impl Session {
             &plan.images.values,
         )?;
         let mut output = self.db.prepare(&plan.output.query.to_string())?;
-        let metadata = sink
-            .is_none()
+        // A silent write has no OUTPUT result, so its errors carry no
+        // result metadata either.
+        let metadata = (sink.is_none() && !silent)
             .then(|| crate::query_error::describe(&output, &plan.fields, &types))
             .flatten();
         let describe = |error: anyhow::Error| match &metadata {
@@ -154,6 +177,8 @@ impl Session {
             None if sink.is_some() => {
                 crate::output_sink::failed(error, msduck_sql::output::Operation::Update)
             }
+            // Like any UPDATE, a silent write that fails ends the statement.
+            None if silent => crate::query_error::attach_context(error, vec![], 0xc5),
             None => error,
         };
         {
@@ -193,13 +218,20 @@ impl Session {
                 )
                 .map_err(&assignment_error)?;
         }
-        self.db
+        let written = self
+            .db
             .execute(
                 &plan.write.update.to_string(),
                 duckdb::params_from_iter(plan.write.values.iter()),
             )
             .map_err(anyhow::Error::new)
             .map_err(&describe)?;
+        if silent {
+            drop(output);
+            images.close()?;
+            candidates.close()?;
+            return Ok(Execution::statement(vec![], Some(written as u64), 0xc5));
+        }
         let batches = output
             .query_arrow(duckdb::params_from_iter(plan.output.values.iter()))
             .map_err(anyhow::Error::new)

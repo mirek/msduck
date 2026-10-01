@@ -29,6 +29,8 @@ impl Binding {
             unreachable!()
         };
         select.qualify = None;
+        // Declarations only: parenthesized joins are spliced as in the scope.
+        select.from = select.from.iter().map(flatten).collect();
         select.projection = update
             .assignments
             .iter()
@@ -155,6 +157,73 @@ impl Binding {
     }
 }
 
+/// A copy of a FROM tree whose unaliased parenthesized joins are spliced into
+/// the enclosing join list, in the order `output_target` lists factors. Only
+/// declarations and nullability are taken from it; the captured rows still
+/// come from the original tree. Spliced factors stay nullable when the
+/// enclosing join null-extends them.
+fn flatten(tree: &TableWithJoins) -> TableWithJoins {
+    fn splice(
+        relation: &TableFactor,
+        operator: Option<&JoinOperator>,
+        out: &mut Vec<(TableFactor, Option<JoinOperator>)>,
+    ) {
+        let TableFactor::NestedJoin {
+            table_with_joins,
+            alias: None,
+        } = relation
+        else {
+            out.push((relation.clone(), operator.cloned()));
+            return;
+        };
+        let always = || JoinConstraint::On(Expr::value(sqlparser::ast::Value::Boolean(true)));
+        let first = operator.map(|operator| match operator {
+            JoinOperator::Left(_) | JoinOperator::LeftOuter(_) => JoinOperator::Left(always()),
+            JoinOperator::Right(_) | JoinOperator::RightOuter(_) => JoinOperator::Right(always()),
+            JoinOperator::FullOuter(_) => JoinOperator::FullOuter(always()),
+            JoinOperator::CrossJoin(_) | JoinOperator::CrossApply | JoinOperator::OuterApply => {
+                operator.clone()
+            }
+            _ => JoinOperator::Inner(always()),
+        });
+        let extended = matches!(
+            operator,
+            Some(
+                JoinOperator::Left(_)
+                    | JoinOperator::LeftOuter(_)
+                    | JoinOperator::FullOuter(_)
+                    | JoinOperator::OuterApply
+            )
+        );
+        splice(&table_with_joins.relation, first.as_ref(), out);
+        for join in &table_with_joins.joins {
+            let operator = if extended {
+                JoinOperator::Left(always())
+            } else {
+                join.join_operator.clone()
+            };
+            splice(&join.relation, Some(&operator), out);
+        }
+    }
+    let mut factors = vec![];
+    splice(&tree.relation, None, &mut factors);
+    for join in &tree.joins {
+        splice(&join.relation, Some(&join.join_operator), &mut factors);
+    }
+    let mut factors = factors.into_iter();
+    let (relation, _) = factors.next().expect("a FROM tree has a relation");
+    TableWithJoins {
+        relation,
+        joins: factors
+            .map(|(relation, operator)| Join {
+                relation,
+                global: false,
+                join_operator: operator.unwrap_or(JoinOperator::CrossJoin(JoinConstraint::None)),
+            })
+            .collect(),
+    }
+}
+
 pub fn bind(
     db: &Connection,
     update: &Update,
@@ -212,7 +281,7 @@ pub fn bind(
     let SetExpr::Select(select) = logical.body.as_mut() else {
         unreachable!()
     };
-    select.from = resolved.sources.clone();
+    select.from = resolved.sources.iter().map(flatten).collect();
     let catalog = crate::query_catalog::snapshot(
         db,
         &vec![
@@ -262,8 +331,8 @@ pub fn bind(
         .last()
         .and_then(Option::as_ref)
         .ok_or_else(|| anyhow::anyhow!("joined OUTPUT requires resolved source columns"))?;
-    let factors = resolved
-        .sources
+    let flattened = resolved.sources.iter().map(flatten).collect::<Vec<_>>();
+    let factors = flattened
         .iter()
         .flat_map(|tree| {
             std::iter::once(&tree.relation).chain(tree.joins.iter().map(|join| &join.relation))

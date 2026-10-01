@@ -50,13 +50,25 @@ fn frame(select: &Select, metadata: &Scope, capture: Option<&Plan>) -> Result<Ve
         .last()
         .and_then(Option::as_ref)
         .ok_or_else(|| anyhow::anyhow!("assignment binding requires resolved subquery sources"))?;
-    let factors = select
-        .from
-        .iter()
-        .flat_map(|tree| {
+    // Unaliased parenthesized joins contribute their own factors, in the
+    // order output_target lists them and the joined scope declares them.
+    fn flatten<'a>(tree: &'a TableWithJoins, factors: &mut Vec<&'a TableFactor>) {
+        for factor in
             std::iter::once(&tree.relation).chain(tree.joins.iter().map(|join| &join.relation))
-        })
-        .collect::<Vec<_>>();
+        {
+            match factor {
+                TableFactor::NestedJoin {
+                    table_with_joins,
+                    alias: None,
+                } => flatten(table_with_joins, factors),
+                factor => factors.push(factor),
+            }
+        }
+    }
+    let mut factors = vec![];
+    for tree in &select.from {
+        flatten(tree, &mut factors);
+    }
     ensure!(
         factors.len() == fields.len(),
         "assignment source scope mismatch"
