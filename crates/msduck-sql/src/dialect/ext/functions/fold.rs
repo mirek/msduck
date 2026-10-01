@@ -69,16 +69,8 @@ pub fn bind_arguments(
         .zip(arguments)
         .map(|(parameter, argument)| {
             if is_default_keyword(argument) {
-                parameter.default.clone().ok_or_else(|| {
-                    SqlError::new(
-                        313,
-                        3,
-                        format!(
-                            "An insufficient number of arguments were supplied for the procedure or function {display}."
-                        ),
-                    )
-                    .into()
-                })
+                // A parameter without a default takes NULL.
+                Ok(parameter.default.clone().unwrap_or_else(null))
             } else {
                 Ok(argument.clone())
             }

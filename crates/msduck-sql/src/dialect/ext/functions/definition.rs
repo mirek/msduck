@@ -102,7 +102,7 @@ impl Definition {
 }
 
 fn syntax(near: &str) -> anyhow::Error {
-    SqlError::syntax(102, 1, format!("Incorrect syntax near '{near}'.")).into()
+    SqlError::syntax(102, 31, format!("Incorrect syntax near '{near}'.")).into()
 }
 
 fn token_text(token: &Token) -> String {

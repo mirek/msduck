@@ -68,11 +68,12 @@ fn declared(statements: &[Statement], variables: &HashMap<String, Parameter>) ->
     };
     let message = failure.to_string();
     if let Some(name) = message.strip_prefix("Must declare the scalar variable ") {
-        return Err(error(
+        return Err(SqlError::syntax(
             137,
             2,
             format!("Must declare the scalar variable \"{}\".", name.trim()),
-        ));
+        )
+        .into());
     }
     if message.contains("has already been declared") {
         return Err(error(134, 1, message));
@@ -151,18 +152,20 @@ fn check(statement: &Statement, definition: &Definition, variable: Option<&str>)
             );
             match (&definition.returns, value) {
                 (Returns::Table { .. }, Some(_)) if !marker => {
-                    return Err(error(
+                    return Err(SqlError::syntax(
                         178,
                         1,
                         "A RETURN statement with a return value cannot be used in this context.",
-                    ));
+                    )
+                    .into());
                 }
                 (Returns::Scalar(_), None) => {
-                    return Err(error(
-                        178,
+                    return Err(SqlError::syntax(
+                        1075,
                         1,
-                        "A RETURN statement with a return value cannot be used in this context.",
-                    ));
+                        "RETURN statements in scalar valued functions must include an argument.",
+                    )
+                    .into());
                 }
                 _ => {}
             }

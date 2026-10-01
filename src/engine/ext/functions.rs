@@ -15,6 +15,7 @@ use msduck_sql::dialect::ext::functions::{
 use sqlparser::ast::{Expr, ObjectName, Statement};
 use std::collections::HashMap;
 
+mod dependencies;
 mod expand;
 mod run;
 
@@ -25,6 +26,8 @@ pub(crate) struct State {
     aliases: std::cell::Cell<u64>,
     /// Nesting level of interpreted calls that are running.
     depth: std::cell::Cell<usize>,
+    /// The source of the current batch when it defines a view.
+    view_source: std::cell::RefCell<Option<String>>,
 }
 
 impl State {
@@ -46,14 +49,22 @@ impl Feature for Hooks {
         &self,
         session: &mut Session,
         sql: &str,
-        _parameters: &HashMap<String, Parameter>,
+        parameters: &HashMap<String, Parameter>,
         rpc: bool,
     ) -> Option<(Vec<u8>, bool)> {
+        *session.ext.functions.view_source.borrow_mut() = view_source(sql);
         // Cheap filter before tokenizing: every definition names FUNCTION.
         if !contains_ignore_case(sql, "function") {
             return None;
         }
         if let Some(action) = Action::of(sql) {
+            // sp_executesql with parameters compiles a parameterized batch
+            // in which the definition is not the first statement.
+            if rpc && !parameters.is_empty() {
+                let error =
+                    SqlError::syntax(156, 1, "Incorrect syntax near the keyword 'FUNCTION'.");
+                return Some(respond(session, rpc, Err(error.into())));
+            }
             let result = define(session, sql, action);
             return Some(respond(session, rpc, result));
         }
@@ -72,35 +83,77 @@ impl Feature for Hooks {
         statement: &mut Statement,
         _parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Option<Execution>> {
+        if matches!(statement, Statement::Drop { .. }) {
+            dependencies::drop_objects(session, statement)?;
+            return Ok(None);
+        }
         let Statement::DropFunction(drop) = statement else {
             return Ok(None);
         };
         session.require_committable()?;
         for function in &drop.func_desc {
             let (schema, name) = split(&function.name)?;
+            let display = function.name.to_string();
             let found = modules::schema_id(&session.db, schema.as_deref())
                 .ok()
                 .map(|_| modules::find(&session.db, schema.as_deref(), &name))
                 .transpose()?
-                .flatten()
-                .filter(|module| is_function(&module.type_code));
+                .flatten();
             match found {
-                Some(module) => {
+                Some(module) if is_function(&module.type_code) => {
+                    dependencies::check_function(
+                        session,
+                        module.object_id,
+                        &display,
+                        dependencies::Change::Drop,
+                    )?;
                     modules::remove(&session.db, module.object_id)?;
+                    dependencies::forget_function(session, &module.schema, &module.name)?;
                     expand::forget(&module.definition);
                 }
-                None if drop.if_exists => {}
-                None => bail!(SqlError::new(
-                    3701,
-                    5,
-                    format!(
-                        "Cannot drop the function '{}', because it does not exist or you do not have permission.",
-                        function.name
-                    )
-                )),
+                found => {
+                    let kind = match found {
+                        Some(module) => Some(module.type_code),
+                        None => other_object(session, schema.as_deref(), &name)
+                            .ok()
+                            .flatten()
+                            .map(|(_, kind)| kind),
+                    };
+                    let use_instead = match kind.as_deref() {
+                        Some("U") => Some(("table", "TABLE")),
+                        Some("V") => Some(("view", "VIEW")),
+                        Some("P") => Some(("procedure", "PROCEDURE")),
+                        Some("TR") => Some(("trigger", "TRIGGER")),
+                        _ => None,
+                    };
+                    if let Some((noun, statement)) = use_instead {
+                        bail!(SqlError::new(
+                            3705,
+                            1,
+                            format!(
+                                "Cannot use DROP FUNCTION with '{display}' because '{display}' is a {noun}. Use DROP {statement}."
+                            )
+                        ));
+                    }
+                    if !drop.if_exists {
+                        let mut error = SqlError::new(
+                            3701,
+                            5,
+                            format!(
+                                "Cannot drop the function '{display}', because it does not exist or you do not have permission."
+                            ),
+                        );
+                        error.severity = 11;
+                        bail!(error);
+                    }
+                }
             }
         }
         Ok(Some(Execution::statement(vec![], None, 179)))
+    }
+
+    fn bootstrap_database(&self, db: &duckdb::Connection) -> Result<()> {
+        dependencies::bootstrap(db)
     }
 
     fn rewrite_statement(
@@ -109,6 +162,14 @@ impl Feature for Hooks {
         statement: &mut Statement,
         parameters: &HashMap<String, Parameter>,
     ) -> Result<()> {
+        dependencies::record_table(session, statement)?;
+        if matches!(
+            statement,
+            Statement::CreateView(_) | Statement::AlterView { .. }
+        ) {
+            let source = session.ext.functions.view_source.borrow().clone();
+            dependencies::record_view(session, statement, source.as_deref())?;
+        }
         expand::statement(session, statement, parameters)
     }
 
@@ -120,6 +181,24 @@ impl Feature for Hooks {
     ) -> Result<()> {
         expand::expression(session, expr, parameters)
     }
+}
+
+/// A view definition's batch text (CREATE VIEW must be alone in a batch).
+fn view_source(sql: &str) -> Option<String> {
+    if !contains_ignore_case(sql, "view") {
+        return None;
+    }
+    let mut end = sql.len().min(4096);
+    while !sql.is_char_boundary(end) {
+        end -= 1;
+    }
+    let words = msduck_sql::dialect::ext::leading_words(&sql[..end], 4);
+    let words: Vec<&str> = words.iter().map(String::as_str).collect();
+    matches!(
+        words.as_slice(),
+        ["CREATE", "VIEW", ..] | ["ALTER", "VIEW", ..] | ["CREATE", "OR", "ALTER", "VIEW"]
+    )
+    .then(|| sql.to_string())
 }
 
 fn contains_ignore_case(haystack: &str, needle: &str) -> bool {
@@ -161,14 +240,22 @@ fn define(session: &mut Session, sql: &str, action: Action) -> Result<()> {
         Some(schema) => format!("{schema}.{}", definition.name),
         None => definition.name.clone(),
     };
-    modules::schema_id(&session.db, schema)?;
+    let schema_id = modules::schema_id(&session.db, schema)?;
+    let schema_name: String = session.db.query_row(
+        "SELECT name FROM main.__msduck_schemas WHERE schema_id = ?",
+        [schema_id],
+        |row| row.get(0),
+    )?;
+    let references = dependencies::bind_schema(session, &definition, &display)?;
     let existing = modules::find(&session.db, schema, &definition.name)?;
     let properties = properties(&definition).to_string();
     let text = sql.trim();
     match (action, existing) {
         (Action::Create, _) | (Action::CreateOrAlter, None) => {
-            if let Some(object) = other_object(session, schema, &definition.name)? {
-                let _ = object;
+            if other_object(session, schema, &definition.name)?.is_some() {
+                if action == Action::CreateOrAlter {
+                    bail!(incompatible(&display));
+                }
                 bail!(SqlError::new(
                     2714,
                     3,
@@ -178,7 +265,7 @@ fn define(session: &mut Session, sql: &str, action: Action) -> Result<()> {
                     )
                 ));
             }
-            let created = modules::create(
+            modules::create(
                 &session.db,
                 schema,
                 &definition.name,
@@ -186,16 +273,7 @@ fn define(session: &mut Session, sql: &str, action: Action) -> Result<()> {
                 0,
                 text,
                 &properties,
-            );
-            if let Err(error) = created {
-                // modules::create reports duplicates with state 6.
-                if let Some(error) = error.downcast_ref::<SqlError>()
-                    && error.number == 2714
-                {
-                    bail!(SqlError::new(2714, 3, error.message.clone()));
-                }
-                return Err(error);
-            }
+            )?;
         }
         (Action::Alter, None) => {
             if other_object(session, schema, &definition.name)?.is_some() {
@@ -208,19 +286,22 @@ fn define(session: &mut Session, sql: &str, action: Action) -> Result<()> {
             ));
         }
         (Action::Alter | Action::CreateOrAlter, Some(module)) => {
-            if !compatible(&module.type_code, definition.type_code()) {
+            if module.type_code != definition.type_code() {
                 bail!(incompatible(&display));
             }
+            dependencies::check_function(
+                session,
+                module.object_id,
+                &display,
+                dependencies::Change::Alter,
+            )?;
             expand::forget(&module.definition);
             modules::alter(&session.db, module.object_id, text, &properties)?;
-            if module.type_code != definition.type_code() {
-                session.db.execute(
-                    "UPDATE main.__msduck_modules SET type_code = ? WHERE object_id = ?",
-                    duckdb::params![definition.type_code(), module.object_id],
-                )?;
-            }
+            dependencies::record_function(session, &schema_name, &definition.name, &references)?;
+            return dependencies::rebind_views(session, module.object_id);
         }
     }
+    dependencies::record_function(session, &schema_name, &definition.name, &references)?;
     Ok(())
 }
 
@@ -232,25 +313,19 @@ fn incompatible(display: &str) -> SqlError {
     )
 }
 
-/// Scalar functions alter only to scalar functions; table-valued functions
-/// alter to either table-valued kind.
-fn compatible(existing: &str, new: &str) -> bool {
-    match existing {
-        "FN" => new == "FN",
-        "IF" | "TF" => matches!(new, "IF" | "TF"),
-        _ => false,
-    }
-}
-
-/// A table, view or other non-module object with this name.
-fn other_object(session: &Session, schema: Option<&str>, name: &str) -> Result<Option<i32>> {
+/// Any object with this name: its id and type code.
+fn other_object(
+    session: &Session,
+    schema: Option<&str>,
+    name: &str,
+) -> Result<Option<(i32, String)>> {
     let schema_id = modules::schema_id(&session.db, schema)?;
-    let id: Option<i32> = duckdb::OptionalExt::optional(session.db.query_row(
-        "SELECT object_id FROM sys.objects WHERE schema_id = ? AND lower(name) = lower(?) LIMIT 1",
+    let found: Option<(i32, String)> = duckdb::OptionalExt::optional(session.db.query_row(
+        "SELECT object_id, rtrim(type) FROM sys.objects WHERE schema_id = ? AND lower(name) = lower(?) LIMIT 1",
         duckdb::params![schema_id, name],
-        |row| row.get(0),
+        |row| Ok((row.get(0)?, row.get(1)?)),
     ))?;
-    Ok(id)
+    Ok(found)
 }
 
 fn type_name(data_type: &sqlparser::ast::DataType) -> String {
