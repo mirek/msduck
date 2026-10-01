@@ -200,3 +200,14 @@ conditional-key declarations additionally require valid function/window shape,
 proven supported key declarations and a resolved source column in each order key.
 The original query and execution operands remain unchanged; no values or volatile
 operands are evaluated for these declarations.
+
+The supplemental `--order-declarations` mode captures nine variant ORDER shapes
+in two fresh SQL Server containers without executing the prepared statements:
+integer casts of declared variant sources, alias/position order, grouped casts,
+conditional variant keys, a hidden arithmetic key, DISTINCT and UNION/UNION ALL.
+The complete raw artifact is retained separately with SHA256
+`09a1e9cd0762f0e64bf6c13011bcdd902b9304d3f113b71065ba7db953def6bf`.
+All 18 preparation/unprepare records are embedded verbatim in the dedicated
+public regression, including return handles, metadata flags, ORDER bytes,
+completion tokens and nonexecution state. These are reference evidence; adding
+the regression does not establish that the current server passes it.
