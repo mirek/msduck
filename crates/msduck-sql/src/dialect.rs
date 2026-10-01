@@ -9,6 +9,7 @@ use sqlparser::{
 
 pub mod alter_database;
 pub mod computed_column;
+pub mod ext;
 pub mod key_index_type;
 pub mod table_hints;
 
@@ -268,6 +269,9 @@ impl Dialect for ServerDialect {
         })())
     }
     fn parse_statement(&self, parser: &mut Parser) -> Option<Result<Statement, ParserError>> {
+        if let Some(statement) = ext::parse(parser) {
+            return Some(statement);
+        }
         if crate::drop_index_syntax::starts(parser) {
             return Some(crate::drop_index_syntax::parse(parser));
         }
