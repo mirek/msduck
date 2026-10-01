@@ -8791,7 +8791,7 @@
     {
       "id": "gaps-rpc-procedures-v1",
       "title": "RPC procedure calls and RPC OUTPUT parameters",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner-approved successor (2026-10-01) of stalled prepared-rpc-metadata-v1 for src/rpc.rs, umbrella #710.",
       "scope": [
         "src/rpc.rs",
@@ -8981,7 +8981,7 @@
     {
       "id": "gaps-rpc-procedures-v1-runtime",
       "title": "Procedure runtime entry for RPC calls; RPC duplicate keys end only the statement",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner-approved successor (2026-10-01) of stalled prepared-rpc-metadata-v1 for src/rpc.rs, umbrella #710. companion of gaps-rpc-procedures-v1",
       "scope": [
         "src/engine/ext/procedures.rs",
