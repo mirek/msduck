@@ -1,0 +1,2944 @@
+{
+ "image": "mcr.microsoft.com/mssql/server:2022-latest",
+ "version": "16.0.4236.2",
+ "groups": [
+  {
+   "name": "alter lifecycle",
+   "steps": [
+    {
+     "sql": "CREATE TABLE parent(id int NOT NULL PRIMARY KEY, name varchar(10)); INSERT parent VALUES (1,'a'),(2,'b')",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE items(id int NOT NULL, value int, parent_id int); INSERT items VALUES (1,10,1),(2,-5,2),(3,30,NULL)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items ADD added int NOT NULL CONSTRAINT df_added DEFAULT 7 WITH VALUES",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT id, added FROM items ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1,
+         7
+        ],
+        [
+         2,
+         7
+        ],
+        [
+         3,
+         7
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "ALTER TABLE items ADD CONSTRAINT ck_items CHECK(value>0)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The ALTER TABLE statement conflicted with the CHECK constraint \"ck_items\". The conflict occurred in database \"gaps_constraints\", table \"dbo.items\", column 'value'."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items WITH CHECK ADD CONSTRAINT ck_items CHECK(value>0)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The ALTER TABLE statement conflicted with the CHECK constraint \"ck_items\". The conflict occurred in database \"gaps_constraints\", table \"dbo.items\", column 'value'."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items WITH NOCHECK ADD CONSTRAINT ck_items CHECK(value>0)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT name, is_disabled, is_not_trusted, parent_column_id, is_system_named FROM sys.check_constraints",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         "ck_items",
+         false,
+         true,
+         2,
+         false
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "INSERT items(id, value, parent_id) VALUES (4,-1,1)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the CHECK constraint \"ck_items\". The conflict occurred in database \"gaps_constraints\", table \"dbo.items\", column 'value'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE items SET value=-2 WHERE id=1",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The UPDATE statement conflicted with the CHECK constraint \"ck_items\". The conflict occurred in database \"gaps_constraints\", table \"dbo.items\", column 'value'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE items SET parent_id=1 WHERE id=2",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE items SET value=-7 WHERE id=2",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The UPDATE statement conflicted with the CHECK constraint \"ck_items\". The conflict occurred in database \"gaps_constraints\", table \"dbo.items\", column 'value'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT items(id, value, parent_id) VALUES (4,4,1),(5,-5,1)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the CHECK constraint \"ck_items\". The conflict occurred in database \"gaps_constraints\", table \"dbo.items\", column 'value'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items ADD CONSTRAINT df_items DEFAULT(0) FOR value",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items ADD CONSTRAINT df_again DEFAULT(1) FOR value",
+     "result": {
+      "errors": [
+       {
+        "number": 1781,
+        "state": 1,
+        "class": 16,
+        "message": "Column already has a DEFAULT bound to it."
+       },
+       {
+        "number": 1750,
+        "state": 0,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT items(id, parent_id) VALUES (5,1); SELECT id, value, parent_id, added FROM items ORDER BY id",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the CHECK constraint \"ck_items\". The conflict occurred in database \"gaps_constraints\", table \"dbo.items\", column 'value'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": [
+       [
+        [
+         1,
+         10,
+         1,
+         7
+        ],
+        [
+         2,
+         -5,
+         1,
+         7
+        ],
+        [
+         3,
+         30,
+         null,
+         7
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "INSERT items(id, value, parent_id) VALUES (1,11,1)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items ADD CONSTRAINT uq_items UNIQUE(id)",
+     "result": {
+      "errors": [
+       {
+        "number": 1505,
+        "state": 1,
+        "class": 16,
+        "message": "The CREATE UNIQUE INDEX statement terminated because a duplicate key was found for the object name 'dbo.items' and the index name 'uq_items'. The duplicate key value is (1)."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DELETE items WHERE value = 11",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items ADD CONSTRAINT uq_items UNIQUE(id)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items ADD CONSTRAINT pk_items PRIMARY KEY(id)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items ADD CONSTRAINT pk_other PRIMARY KEY(value)",
+     "result": {
+      "errors": [
+       {
+        "number": 1779,
+        "state": 0,
+        "class": 16,
+        "message": "Table 'items' already has a primary key defined on it."
+       },
+       {
+        "number": 1750,
+        "state": 0,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items ADD CONSTRAINT fk_items FOREIGN KEY(parent_id) REFERENCES parent(id)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT items(id, value, parent_id) VALUES (6,6,9)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the FOREIGN KEY constraint \"fk_items\". The conflict occurred in database \"gaps_constraints\", table \"dbo.parent\", column 'id'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DELETE parent WHERE id=1",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The DELETE statement conflicted with the REFERENCE constraint \"fk_items\". The conflict occurred in database \"gaps_constraints\", table \"dbo.items\", column 'parent_id'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE parent SET id=5 WHERE id=1",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The UPDATE statement conflicted with the REFERENCE constraint \"fk_items\". The conflict occurred in database \"gaps_constraints\", table \"dbo.items\", column 'parent_id'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items NOCHECK CONSTRAINT ALL",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT items(id, value, parent_id) VALUES (6,-6,9)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items WITH CHECK CHECK CONSTRAINT fk_items",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The ALTER TABLE statement conflicted with the FOREIGN KEY constraint \"fk_items\". The conflict occurred in database \"gaps_constraints\", table \"dbo.parent\", column 'id'."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items CHECK CONSTRAINT ALL",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT name, is_disabled, is_not_trusted FROM sys.check_constraints UNION ALL SELECT name, is_disabled, is_not_trusted FROM sys.foreign_keys ORDER BY name",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         "ck_items",
+         false,
+         true
+        ],
+        [
+         "fk_items",
+         false,
+         true
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "DELETE items WHERE id IN (2,6)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items WITH CHECK CHECK CONSTRAINT ALL",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT name, is_disabled, is_not_trusted FROM sys.check_constraints UNION ALL SELECT name, is_disabled, is_not_trusted FROM sys.foreign_keys ORDER BY name",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         "ck_items",
+         false,
+         false
+        ],
+        [
+         "fk_items",
+         false,
+         false
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "ALTER TABLE items NOCHECK CONSTRAINT uq_items",
+     "result": {
+      "errors": [
+       {
+        "number": 11415,
+        "state": 1,
+        "class": 16,
+        "message": "Object 'uq_items' cannot be disabled or enabled. This action applies only to foreign key and check constraints."
+       },
+       {
+        "number": 4916,
+        "state": 0,
+        "class": 16,
+        "message": "Could not enable or disable the constraint. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items NOCHECK CONSTRAINT nope",
+     "result": {
+      "errors": [
+       {
+        "number": 4917,
+        "state": 0,
+        "class": 16,
+        "message": "Constraint 'nope' does not exist."
+       },
+       {
+        "number": 4916,
+        "state": 0,
+        "class": 16,
+        "message": "Could not enable or disable the constraint. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DROP TABLE parent",
+     "result": {
+      "errors": [
+       {
+        "number": 3726,
+        "state": 1,
+        "class": 16,
+        "message": "Could not drop object 'parent' because it is referenced by a FOREIGN KEY constraint."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "TRUNCATE TABLE parent",
+     "result": {
+      "errors": [
+       {
+        "number": 4712,
+        "state": 1,
+        "class": 16,
+        "message": "Cannot truncate table 'parent' because it is being referenced by a FOREIGN KEY constraint."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items DROP COLUMN parent_id",
+     "result": {
+      "errors": [
+       {
+        "number": 5074,
+        "state": 1,
+        "class": 16,
+        "message": "The object 'fk_items' is dependent on column 'parent_id'."
+       },
+       {
+        "number": 4922,
+        "state": 9,
+        "class": 16,
+        "message": "ALTER TABLE DROP COLUMN parent_id failed because one or more objects access this column."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE parent DROP CONSTRAINT fk_items",
+     "result": {
+      "errors": [
+       {
+        "number": 3733,
+        "state": 2,
+        "class": 16,
+        "message": "Constraint 'fk_items' does not belong to table 'parent'."
+       },
+       {
+        "number": 3727,
+        "state": 0,
+        "class": 16,
+        "message": "Could not drop constraint. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items DROP CONSTRAINT df_items",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items DROP CONSTRAINT ck_items",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items DROP CONSTRAINT IF EXISTS ck_items",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items DROP CONSTRAINT ck_items",
+     "result": {
+      "errors": [
+       {
+        "number": 3728,
+        "state": 1,
+        "class": 16,
+        "message": "'ck_items' is not a constraint."
+       },
+       {
+        "number": 3727,
+        "state": 0,
+        "class": 16,
+        "message": "Could not drop constraint. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items DROP CONSTRAINT fk_items, nope",
+     "result": {
+      "errors": [
+       {
+        "number": 3728,
+        "state": 1,
+        "class": 16,
+        "message": "'nope' is not a constraint."
+       },
+       {
+        "number": 3727,
+        "state": 0,
+        "class": 16,
+        "message": "Could not drop constraint. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items DROP CONSTRAINT fk_items, uq_items",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE items DROP CONSTRAINT pk_items",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT name, type FROM sys.objects WHERE parent_object_id = OBJECT_ID('items') ORDER BY name",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         "df_added",
+         "D "
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "INSERT items(id, value, parent_id) VALUES (1,-1,99); SELECT id, value, parent_id, added FROM items ORDER BY id, value",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1,
+         -1,
+         99,
+         7
+        ],
+        [
+         1,
+         10,
+         1,
+         7
+        ],
+        [
+         3,
+         30,
+         null,
+         7
+        ]
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "definition errors",
+   "steps": [
+    {
+     "sql": "CREATE TABLE p(id int PRIMARY KEY, code varchar(10) NOT NULL UNIQUE, other int); CREATE TABLE np(id int)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c1(id int, pid int CONSTRAINT f1 REFERENCES np)",
+     "result": {
+      "errors": [
+       {
+        "number": 1773,
+        "state": 0,
+        "class": 16,
+        "message": "Foreign key 'f1' has implicit reference to object 'np' which does not have a primary key defined on it."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c2(id int, pid int, CONSTRAINT f2 FOREIGN KEY (pid) REFERENCES p(other))",
+     "result": {
+      "errors": [
+       {
+        "number": 1776,
+        "state": 0,
+        "class": 16,
+        "message": "There are no primary or candidate keys in the referenced table 'p' that match the referencing column list in the foreign key 'f2'."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c3(id int, pid int CONSTRAINT f3 REFERENCES nope(id))",
+     "result": {
+      "errors": [
+       {
+        "number": 1767,
+        "state": 0,
+        "class": 16,
+        "message": "Foreign key 'f3' references invalid table 'nope'."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c4(id bigint CONSTRAINT f4 REFERENCES p(id))",
+     "result": {
+      "errors": [
+       {
+        "number": 1778,
+        "state": 0,
+        "class": 16,
+        "message": "Column 'p.id' is not the same data type as referencing column 'c4.id' in foreign key 'f4'."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c5(code varchar(20) CONSTRAINT f5 REFERENCES p(code))",
+     "result": {
+      "errors": [
+       {
+        "number": 1753,
+        "state": 0,
+        "class": 16,
+        "message": "Column 'p.code' is not the same length or scale as referencing column 'c5.code' in foreign key 'f5'. Columns participating in a foreign key relationship must be defined with the same length and scale."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c6(id int NOT NULL CONSTRAINT f6 REFERENCES p(id) ON DELETE SET NULL)",
+     "result": {
+      "errors": [
+       {
+        "number": 1761,
+        "state": 0,
+        "class": 16,
+        "message": "Cannot create the foreign key \"f6\" with the SET NULL referential action, because one or more referencing columns are not nullable."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c7(id int NOT NULL CONSTRAINT f7 REFERENCES p(id) ON DELETE SET DEFAULT)",
+     "result": {
+      "errors": [
+       {
+        "number": 1762,
+        "state": 0,
+        "class": 16,
+        "message": "Cannot create the foreign key \"f7\" with the SET DEFAULT referential action, because one or more referencing not-nullable columns lack a default constraint."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c8(id int, x int, CONSTRAINT f8 FOREIGN KEY (id, x) REFERENCES p(id))",
+     "result": {
+      "errors": [
+       {
+        "number": 8139,
+        "state": 0,
+        "class": 16,
+        "message": "Number of referencing columns in foreign key differs from number of referenced columns, table 'c8'."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c9(id int, CONSTRAINT dup CHECK (id > 0), CONSTRAINT dup CHECK (id > 1))",
+     "result": {
+      "errors": [
+       {
+        "number": 8168,
+        "state": 0,
+        "class": 16,
+        "message": "Cannot create, drop, enable, or disable more than one constraint, column, index, or trigger named 'dup' in this context. Duplicate names are not allowed."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c10(id int CONSTRAINT c10 CHECK (id > 0))",
+     "result": {
+      "errors": [
+       {
+        "number": 2714,
+        "state": 5,
+        "class": 16,
+        "message": "There is already an object named 'c10' in the database."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c11(id int CHECK (id > (SELECT 1)))",
+     "result": {
+      "errors": [
+       {
+        "number": 1046,
+        "state": 1,
+        "class": 15,
+        "message": "Subqueries are not allowed in this context. Only scalar expressions are allowed."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c12(id int CHECK (missing > 1))",
+     "result": {
+      "errors": [
+       {
+        "number": 207,
+        "state": 1,
+        "class": 16,
+        "message": "Invalid column name 'missing'."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c13(id int, CONSTRAINT f13 FOREIGN KEY (missing) REFERENCES p(id))",
+     "result": {
+      "errors": [
+       {
+        "number": 1769,
+        "state": 1,
+        "class": 16,
+        "message": "Foreign key 'f13' references invalid column 'missing' in referencing table 'c13'."
+       },
+       {
+        "number": 1750,
+        "state": 0,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c14(id int, CONSTRAINT f14 FOREIGN KEY (id) REFERENCES p(missing))",
+     "result": {
+      "errors": [
+       {
+        "number": 1770,
+        "state": 0,
+        "class": 16,
+        "message": "Foreign key 'f14' references invalid column 'missing' in referenced table 'p'."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT count(*) FROM sys.objects WHERE name LIKE 'c[0-9]%' OR name LIKE 'f[0-9]%'",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         0
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE ch(id int, pid int)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE ch ADD CONSTRAINT df_missing DEFAULT 1 FOR missing",
+     "result": {
+      "errors": [
+       {
+        "number": 1752,
+        "state": 0,
+        "class": 16,
+        "message": "Column 'missing' in table 'ch' is invalid for creating a default constraint."
+       },
+       {
+        "number": 1750,
+        "state": 0,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE ch ADD CONSTRAINT df_column DEFAULT (id + 1) FOR pid",
+     "result": {
+      "errors": [
+       {
+        "number": 128,
+        "state": 1,
+        "class": 15,
+        "message": "The name \"id\" is not permitted in this context. Valid expressions are constants, constant expressions, and (in some contexts) variables. Column names are not permitted."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE ch ADD CONSTRAINT ck_sub CHECK (pid > (SELECT 1))",
+     "result": {
+      "errors": [
+       {
+        "number": 1046,
+        "state": 1,
+        "class": 15,
+        "message": "Subqueries are not allowed in this context. Only scalar expressions are allowed."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE ch ADD CONSTRAINT ck_col CHECK (missing > 1)",
+     "result": {
+      "errors": [
+       {
+        "number": 207,
+        "state": 1,
+        "class": 16,
+        "message": "Invalid column name 'missing'."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE ch ADD CONSTRAINT p CHECK (id > 0)",
+     "result": {
+      "errors": [
+       {
+        "number": 2714,
+        "state": 5,
+        "class": 16,
+        "message": "There is already an object named 'p' in the database."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "BEGIN TRY ALTER TABLE ch ADD CONSTRAINT p CHECK (id > 0) END TRY BEGIN CATCH SELECT ERROR_NUMBER(), ERROR_MESSAGE() END CATCH",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1750,
+         "Could not create constraint or index. See previous errors."
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "ALTER TABLE ch ADD CONSTRAINT ck_a CHECK (id > 0), CONSTRAINT ck_b CHECK (id > 1)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE ch NOCHECK CONSTRAINT ck_a, nope",
+     "result": {
+      "errors": [
+       {
+        "number": 4917,
+        "state": 0,
+        "class": 16,
+        "message": "Constraint 'nope' does not exist."
+       },
+       {
+        "number": 4916,
+        "state": 0,
+        "class": 16,
+        "message": "Could not enable or disable the constraint. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE ch NOCHECK CONSTRAINT ck_a, ck_b",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE ch DROP CONSTRAINT ck_a, ck_zzz",
+     "result": {
+      "errors": [
+       {
+        "number": 3728,
+        "state": 1,
+        "class": 16,
+        "message": "'ck_zzz' is not a constraint."
+       },
+       {
+        "number": 3727,
+        "state": 0,
+        "class": 16,
+        "message": "Could not drop constraint. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT name, is_disabled, is_not_trusted FROM sys.check_constraints ORDER BY name",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         "ck_a",
+         true,
+         true
+        ],
+        [
+         "ck_b",
+         true,
+         true
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE ck_a(id int)",
+     "result": {
+      "errors": [
+       {
+        "number": 2714,
+        "state": 6,
+        "class": 16,
+        "message": "There is already an object named 'ck_a' in the database."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE VIEW ck_b AS SELECT 1 AS one",
+     "result": {
+      "errors": [
+       {
+        "number": 2714,
+        "state": 3,
+        "class": 16,
+        "message": "There is already an object named 'ck_b' in the database."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT name, type FROM sys.objects WHERE name IN ('ck_a', 'ck_b') ORDER BY name",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         "ck_a",
+         "C "
+        ],
+        [
+         "ck_b",
+         "C "
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE k(a int NOT NULL, b int NOT NULL); INSERT k VALUES (1,1),(1,2)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE k ADD PRIMARY KEY NONCLUSTERED (a, b DESC)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT type FROM sys.key_constraints WHERE parent_object_id = OBJECT_ID('k')",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         "PK"
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "INSERT k VALUES (1,1)",
+     "result": {
+      "errors": [
+       {
+        "number": 2627,
+        "state": 1,
+        "class": 14,
+        "message": "Violation of PRIMARY KEY constraint 'PK__k__2792E7E8DF9F3E08'. Cannot insert duplicate key in object 'dbo.k'. The duplicate key value is (1, 1)."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE nk(id int NULL)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE nk ADD CONSTRAINT pk_nk PRIMARY KEY (id)",
+     "result": {
+      "errors": [
+       {
+        "number": 8111,
+        "state": 1,
+        "class": 16,
+        "message": "Cannot define PRIMARY KEY constraint on nullable column in table 'nk'."
+       },
+       {
+        "number": 1750,
+        "state": 0,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE ch ADD CONSTRAINT fk_ch FOREIGN KEY (pid) REFERENCES p(id)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE p DROP CONSTRAINT IF EXISTS fk_ch",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE ch DROP fk_ch",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE tree(id int PRIMARY KEY, parent int, CONSTRAINT fk_tree FOREIGN KEY (parent) REFERENCES tree(id))",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT tree VALUES (1, 2)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the FOREIGN KEY SAME TABLE constraint \"fk_tree\". The conflict occurred in database \"gaps_constraints\", table \"dbo.tree\", column 'id'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT tree VALUES (1, NULL), (2, 1), (3, 2)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE tree SET parent = 5 WHERE id = 2",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The UPDATE statement conflicted with the FOREIGN KEY SAME TABLE constraint \"fk_tree\". The conflict occurred in database \"gaps_constraints\", table \"dbo.tree\", column 'id'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE tree SET id = 7 WHERE id = 1",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The UPDATE statement conflicted with the SAME TABLE REFERENCE constraint \"fk_tree\". The conflict occurred in database \"gaps_constraints\", table \"dbo.tree\", column 'parent'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DELETE tree WHERE id = 1",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The DELETE statement conflicted with the SAME TABLE REFERENCE constraint \"fk_tree\". The conflict occurred in database \"gaps_constraints\", table \"dbo.tree\", column 'parent'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DELETE tree; SELECT count(*) FROM tree",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         0
+        ]
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "referential actions",
+   "steps": [
+    {
+     "sql": "CREATE TABLE a(id int PRIMARY KEY, k int NOT NULL CONSTRAINT uq_a UNIQUE)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE b(id int PRIMARY KEY, a_id int CONSTRAINT fk_ba REFERENCES a(id) ON DELETE CASCADE ON UPDATE CASCADE, a_k int DEFAULT 2, CONSTRAINT fk_bk FOREIGN KEY (a_k) REFERENCES a(k))",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c(id int PRIMARY KEY, b_id int)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE c ADD CONSTRAINT fk_cb FOREIGN KEY (b_id) REFERENCES b(id) ON DELETE SET NULL ON UPDATE CASCADE",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE d(id int PRIMARY KEY, c_id int, CONSTRAINT fk_dc FOREIGN KEY (c_id) REFERENCES c(id) ON DELETE CASCADE)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT a VALUES (1,1),(2,2),(3,3); INSERT b VALUES (10,1,1),(11,1,3),(12,2,2),(13,3,3); INSERT c VALUES (100,10),(101,11),(102,12); INSERT d VALUES (1000,100),(1001,102)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DELETE a WHERE id = 1",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM b ORDER BY id; SELECT * FROM c ORDER BY id; SELECT * FROM d ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         12,
+         2,
+         2
+        ],
+        [
+         13,
+         3,
+         3
+        ]
+       ],
+       [
+        [
+         100,
+         null
+        ],
+        [
+         101,
+         null
+        ],
+        [
+         102,
+         12
+        ]
+       ],
+       [
+        [
+         1000,
+         100
+        ],
+        [
+         1001,
+         102
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "UPDATE a SET id = id + 10",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM a ORDER BY id; SELECT * FROM b ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         12,
+         2
+        ],
+        [
+         13,
+         3
+        ]
+       ],
+       [
+        [
+         12,
+         12,
+         2
+        ],
+        [
+         13,
+         13,
+         3
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "UPDATE b SET id = id * 2",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM b ORDER BY id; SELECT * FROM c ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         24,
+         12,
+         2
+        ],
+        [
+         26,
+         13,
+         3
+        ]
+       ],
+       [
+        [
+         100,
+         null
+        ],
+        [
+         101,
+         null
+        ],
+        [
+         102,
+         24
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "DELETE a WHERE k = 2",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM a ORDER BY id; SELECT * FROM b ORDER BY id; SELECT * FROM c ORDER BY id; SELECT * FROM d ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         13,
+         3
+        ]
+       ],
+       [
+        [
+         26,
+         13,
+         3
+        ]
+       ],
+       [
+        [
+         100,
+         null
+        ],
+        [
+         101,
+         null
+        ],
+        [
+         102,
+         null
+        ]
+       ],
+       [
+        [
+         1000,
+         100
+        ],
+        [
+         1001,
+         102
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "DELETE c WHERE id = 102; SELECT * FROM d ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1000,
+         100
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "UPDATE a SET k = 30",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The UPDATE statement conflicted with the REFERENCE constraint \"fk_bk\". The conflict occurred in database \"gaps_constraints\", table \"dbo.b\", column 'a_k'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DELETE a; SELECT count(*) FROM b",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         0
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "SELECT name, delete_referential_action_desc, update_referential_action_desc, is_disabled, is_not_trusted FROM sys.foreign_keys ORDER BY name",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         "fk_ba",
+         "CASCADE",
+         "CASCADE",
+         false,
+         false
+        ],
+        [
+         "fk_bk",
+         "NO_ACTION",
+         "NO_ACTION",
+         false,
+         false
+        ],
+        [
+         "fk_cb",
+         "SET_NULL",
+         "CASCADE",
+         false,
+         false
+        ],
+        [
+         "fk_dc",
+         "CASCADE",
+         "NO_ACTION",
+         false,
+         false
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE b2(id int, x int CONSTRAINT fk_b2x REFERENCES a(id) ON DELETE CASCADE, y int, CONSTRAINT fk_b2y FOREIGN KEY (y) REFERENCES a(id) ON DELETE SET NULL)",
+     "result": {
+      "errors": [
+       {
+        "number": 1785,
+        "state": 0,
+        "class": 16,
+        "message": "Introducing FOREIGN KEY constraint 'fk_b2y' on table 'b2' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE e(id int PRIMARY KEY, parent int, CONSTRAINT fk_e FOREIGN KEY (parent) REFERENCES e(id) ON DELETE CASCADE)",
+     "result": {
+      "errors": [
+       {
+        "number": 1785,
+        "state": 0,
+        "class": 16,
+        "message": "Introducing FOREIGN KEY constraint 'fk_e' on table 'e' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE e(id int PRIMARY KEY, parent int)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE e ADD CONSTRAINT fk_e FOREIGN KEY (parent) REFERENCES e(id) ON UPDATE CASCADE",
+     "result": {
+      "errors": [
+       {
+        "number": 1785,
+        "state": 0,
+        "class": 16,
+        "message": "Introducing FOREIGN KEY constraint 'fk_e' on table 'e' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE p2(id int PRIMARY KEY); INSERT p2 VALUES (1),(5)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c2(id int PRIMARY KEY, p int DEFAULT 5 CONSTRAINT fk_c2 REFERENCES p2 ON DELETE SET DEFAULT ON UPDATE SET DEFAULT)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c3(id int PRIMARY KEY, p int, CONSTRAINT fk_c3 FOREIGN KEY (p) REFERENCES p2(id) ON DELETE SET NULL ON UPDATE SET NULL)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT c2 VALUES (1,1); INSERT c3 VALUES (1,1),(2,5)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DELETE p2 WHERE id = 1",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM c2; SELECT * FROM c3 ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1,
+         5
+        ]
+       ],
+       [
+        [
+         1,
+         null
+        ],
+        [
+         2,
+         5
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "UPDATE p2 SET id = 6",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The UPDATE statement conflicted with the FOREIGN KEY constraint \"fk_c2\". The conflict occurred in database \"gaps_constraints\", table \"dbo.p2\", column 'id'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DELETE p2",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The DELETE statement conflicted with the FOREIGN KEY constraint \"fk_c2\". The conflict occurred in database \"gaps_constraints\", table \"dbo.p2\", column 'id'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DELETE c2; UPDATE p2 SET id = 6; SELECT * FROM c3 ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1,
+         null
+        ],
+        [
+         2,
+         null
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE m1(a int, b int, PRIMARY KEY(a,b)); CREATE TABLE m2(id int, x int, y int)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE m2 ADD CONSTRAINT fk_m FOREIGN KEY (x,y) REFERENCES m1(a,b) ON UPDATE CASCADE ON DELETE CASCADE",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT m1 VALUES (1,1),(1,2); INSERT m2 VALUES (1,1,1),(2,1,NULL),(3,9,NULL)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT m2 VALUES (4,9,9)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the FOREIGN KEY constraint \"fk_m\". The conflict occurred in database \"gaps_constraints\", table \"dbo.m1\"."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE m1 SET b = b + 10; SELECT * FROM m2 ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1,
+         1,
+         11
+        ],
+        [
+         2,
+         1,
+         null
+        ],
+        [
+         3,
+         9,
+         null
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "DELETE m1 WHERE b = 11; SELECT * FROM m2 ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         2,
+         1,
+         null
+        ],
+        [
+         3,
+         9,
+         null
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "INSERT m1 VALUES (2,2); INSERT m2 VALUES (5,2,2); ALTER TABLE m2 NOCHECK CONSTRAINT fk_m; DELETE m1 WHERE a = 2; SELECT id FROM m2 WHERE x = 2",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         5
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "ALTER TABLE m2 WITH CHECK CHECK CONSTRAINT fk_m",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The ALTER TABLE statement conflicted with the FOREIGN KEY constraint \"fk_m\". The conflict occurred in database \"gaps_constraints\", table \"dbo.m1\"."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "update shapes and computed columns",
+   "steps": [
+    {
+     "sql": "CREATE TABLE customers(id int PRIMARY KEY)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE invoices(id int PRIMARY KEY, customer_id int CONSTRAINT fk_invoices REFERENCES customers(id) ON UPDATE CASCADE)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE orders(id int PRIMARY KEY, customer_id int)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT customers VALUES (1),(2); INSERT invoices VALUES (10,1); INSERT orders VALUES (1,1)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE orders SET id = id + 1 WHERE customer_id IN (SELECT id FROM customers)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM invoices; SELECT * FROM orders",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         10,
+         1
+        ]
+       ],
+       [
+        [
+         2,
+         1
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "UPDATE customers SET id = customers.id + 10 FROM customers JOIN orders ON orders.customer_id = customers.id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM customers ORDER BY id; SELECT * FROM invoices",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         2
+        ],
+        [
+         11
+        ]
+       ],
+       [
+        [
+         10,
+         11
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "UPDATE c SET id = c.id + 100 FROM customers c WHERE c.id = 11",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM customers ORDER BY id; SELECT * FROM invoices",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         2
+        ],
+        [
+         111
+        ]
+       ],
+       [
+        [
+         10,
+         111
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE p(id int PRIMARY KEY)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE n(id int PRIMARY KEY, pid int CONSTRAINT fk_n REFERENCES p(id) ON UPDATE SET NULL)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE d(id int PRIMARY KEY, pid int DEFAULT 100 CONSTRAINT fk_d REFERENCES p(id) ON UPDATE SET DEFAULT)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT p VALUES (1),(2),(100); INSERT n VALUES (10,1),(20,2),(30,100); INSERT d VALUES (10,1),(20,2)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE p SET id = id + 1 WHERE id < 100",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM p ORDER BY id; SELECT * FROM n ORDER BY id; SELECT * FROM d ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         2
+        ],
+        [
+         3
+        ],
+        [
+         100
+        ]
+       ],
+       [
+        [
+         10,
+         null
+        ],
+        [
+         20,
+         null
+        ],
+        [
+         30,
+         100
+        ]
+       ],
+       [
+        [
+         10,
+         100
+        ],
+        [
+         20,
+         100
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "UPDATE n SET pid = 2; UPDATE d SET pid = 3",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE p SET id = CASE id WHEN 2 THEN 3 ELSE 2 END WHERE id < 100",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM p ORDER BY id; SELECT * FROM n ORDER BY id; SELECT * FROM d ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         2
+        ],
+        [
+         3
+        ],
+        [
+         100
+        ]
+       ],
+       [
+        [
+         10,
+         null
+        ],
+        [
+         20,
+         null
+        ],
+        [
+         30,
+         null
+        ]
+       ],
+       [
+        [
+         10,
+         100
+        ],
+        [
+         20,
+         100
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE r(RowId int, v int CONSTRAINT ck_r CHECK (v > 0)); INSERT r VALUES (5, 1)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT r VALUES (1, -1)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the CHECK constraint \"ck_r\". The conflict occurred in database \"gaps_constraints\", table \"dbo.r\", column 'v'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT r VALUES (7, 2); SELECT RowId, v FROM r ORDER BY RowId",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         5,
+         1
+        ],
+        [
+         7,
+         2
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE t(a int, b int, s AS a + b, CONSTRAINT ck_t CHECK (s > 0))",
+     "result": {
+      "errors": [
+       {
+        "number": 1764,
+        "state": 1,
+        "class": 16,
+        "message": "Computed Column 's' in table 't' is invalid for use in 'CHECK CONSTRAINT' because it is not persisted."
+       },
+       {
+        "number": 1750,
+        "state": 0,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE t(a int, b int, s AS a + b PERSISTED, CONSTRAINT ck_t CHECK (s > 0))",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT t(a, b) VALUES (1, 1)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE t SET a = -100",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The UPDATE statement conflicted with the CHECK constraint \"ck_t\". The conflict occurred in database \"gaps_constraints\", table \"dbo.t\", column 's'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT a, b, s FROM t",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1,
+         1,
+         2
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE fc(id int, x AS id, CONSTRAINT fk_fc FOREIGN KEY (x) REFERENCES p(id))",
+     "result": {
+      "errors": [
+       {
+        "number": 1764,
+        "state": 1,
+        "class": 16,
+        "message": "Computed Column 'x' in table 'fc' is invalid for use in 'FOREIGN KEY CONSTRAINT' because it is not persisted."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE fu(id int, x AS id PERSISTED, CONSTRAINT fk_fu FOREIGN KEY (x) REFERENCES p(id) ON UPDATE CASCADE)",
+     "result": {
+      "errors": [
+       {
+        "number": 1715,
+        "state": 1,
+        "class": 16,
+        "message": "Foreign key 'fk_fu' creation failed. Only NO ACTION referential update action is allowed for referencing computed column 'x'."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE fd(id int, x AS id PERSISTED, CONSTRAINT fk_fd FOREIGN KEY (x) REFERENCES p(id) ON DELETE SET NULL)",
+     "result": {
+      "errors": [
+       {
+        "number": 1765,
+        "state": 1,
+        "class": 16,
+        "message": "Foreign key 'fk_fd' creation failed. Only NO ACTION and CASCADE referential delete actions are allowed for referencing computed column 'x'."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE fk(id int, x AS id PERSISTED, CONSTRAINT fk_fk FOREIGN KEY (x) REFERENCES p(id) ON DELETE CASCADE); INSERT fk(id) VALUES (3)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DELETE p WHERE id = 3; SELECT count(*) FROM fk",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         0
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE w(s date, e date, CONSTRAINT ck_w CHECK (DATEDIFF(day, s, e) <= 30))",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT w VALUES ('2020-01-01', '2020-01-15')",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT w VALUES ('2020-01-01', '2020-03-01')",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the CHECK constraint \"ck_w\". The conflict occurred in database \"gaps_constraints\", table \"dbo.w\"."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE [x]]y] (id int CONSTRAINT [ck]]z] CHECK (id > 0))",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT [x]]y] VALUES (0)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the CHECK constraint \"ck]z\". The conflict occurred in database \"gaps_constraints\", table \"dbo.x]y\", column 'id'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE [x]]y] DROP CONSTRAINT [ck]]z]",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT [x]]y] VALUES (0); SELECT count(*) FROM [x]]y]",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE [t]]q]([a]]b] int CONSTRAINT [ck]]2] CHECK ([a]]b] > 0))",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT [t]]q] VALUES (0)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the CHECK constraint \"ck]2\". The conflict occurred in database \"gaps_constraints\", table \"dbo.t]q\", column 'a]b'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT [t]]q] VALUES (1); SELECT [a]]b] FROM [t]]q]",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1
+        ]
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "transactions",
+   "steps": [
+    {
+     "sql": "CREATE TABLE p(id int PRIMARY KEY); INSERT p VALUES (1)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE ch(id int, pid int CONSTRAINT fk_ch REFERENCES p(id), v int CONSTRAINT ck_v CHECK (v > 0))",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "BEGIN TRANSACTION; INSERT ch VALUES (1, 1, 1)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT ch VALUES (2, 9, 1), (3, 1, 1)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the FOREIGN KEY constraint \"fk_ch\". The conflict occurred in database \"gaps_constraints\", table \"dbo.p\", column 'id'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT ch VALUES (4, 1, -1)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the CHECK constraint \"ck_v\". The conflict occurred in database \"gaps_constraints\", table \"dbo.ch\", column 'v'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT @@TRANCOUNT, XACT_STATE()",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1,
+         1
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "INSERT ch VALUES (5, 1, 5); COMMIT",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT id FROM ch ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1
+        ],
+        [
+         5
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "UPDATE ch SET v = v - 2",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The UPDATE statement conflicted with the CHECK constraint \"ck_v\". The conflict occurred in database \"gaps_constraints\", table \"dbo.ch\", column 'v'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT id, v FROM ch ORDER BY id; SELECT @@TRANCOUNT",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1,
+         1
+        ],
+        [
+         5,
+         5
+        ]
+       ],
+       [
+        [
+         0
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "BEGIN TRY INSERT ch VALUES (9, 1, 0) END TRY BEGIN CATCH SELECT ERROR_NUMBER(), ERROR_MESSAGE() END CATCH",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         547,
+         "The INSERT statement conflicted with the CHECK constraint \"ck_v\". The conflict occurred in database \"gaps_constraints\", table \"dbo.ch\", column 'v'."
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "BEGIN TRANSACTION; ALTER TABLE ch ADD CONSTRAINT ck_id CHECK (id < 100); ROLLBACK",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT ch VALUES (200, 1, 1); SELECT count(*) FROM sys.check_constraints WHERE name = 'ck_id'",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         0
+        ]
+       ]
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}
