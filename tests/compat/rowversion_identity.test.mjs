@@ -295,3 +295,19 @@ test('SET IDENTITY_INSERT inside an RPC request does not outlive it', async t =>
   await ok(c, 'INSERT items(id,value) VALUES(8,1)')
   assert.deepEqual(await ok(c, 'SELECT id FROM items ORDER BY id'), [[7], [8]])
 })
+
+test('a trigger is a scope of its own: SCOPE_IDENTITY stays with the caller, @@IDENTITY follows the trigger', async t => {
+  const c = await fresh(t)
+  await ok(c, 'CREATE TABLE t(id int IDENTITY, v int); CREATE TABLE audit(id int IDENTITY(100,1), v int)')
+  await ok(c, 'CREATE TRIGGER t_ai ON t AFTER INSERT AS INSERT audit(v) SELECT v FROM inserted')
+  assert.deepEqual(await ok(c, 'INSERT t(v) VALUES(1); SELECT SCOPE_IDENTITY(), @@IDENTITY'), [[1, 100]])
+  assert.deepEqual(await ok(c, 'SET IDENTITY_INSERT t ON; INSERT t(id,v) VALUES(10,1); SET IDENTITY_INSERT t OFF; SELECT SCOPE_IDENTITY(), @@IDENTITY'), [[10, 101]])
+  // The OFF after the trigger fired applies to the session.
+  assert.deepEqual(await ok(c, 'INSERT t(v) VALUES(2); SELECT SCOPE_IDENTITY(), @@IDENTITY'), [[11, 102]])
+  // The session's setting applies inside the trigger.
+  await ok(c, 'SET IDENTITY_INSERT audit ON')
+  await fails(c, 'INSERT t(v) VALUES(3)', 545)
+  await ok(c, 'SET IDENTITY_INSERT audit OFF')
+  // The failed INSERT consumed t's value 12.
+  assert.deepEqual(await rpc(c, 'INSERT t(v) VALUES(@v); SELECT SCOPE_IDENTITY(), @@IDENTITY', [['v', TYPES.Int, 3]]), [[13, 103]])
+})

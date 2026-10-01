@@ -99,7 +99,8 @@ successful INSERT:
 
 The values persist across batches of a connection, and each session has its
 own. Each RPC request (`sp_executesql`, which tedious uses for `execSql`, and
-prepared execution) starts with `SCOPE_IDENTITY()` NULL. Afterwards the
+prepared execution) and each trigger body starts with `SCOPE_IDENTITY()`
+NULL. Afterwards the
 caller's scope value is unchanged, while `@@IDENTITY` keeps the RPC's last
 value. This follows `reference/identity-insert-rpc.json` and
 `reference/identity-retrieval.json`.
@@ -163,9 +164,11 @@ are `src/identity_insert_*.rs`. Earlier tasks captured these rules (see the
   bigint range, because DuckDB sequences are BIGINT. A seed or increment
   beyond it fails explicitly (40515). ALTER TABLE ADD of a decimal identity
   column is still unsupported.
-- **Scopes.** Procedures, triggers and functions do not get scopes of their
-  own (other tasks implement them): SCOPE_IDENTITY() inside and after them
-  follows the session, like @@IDENTITY.
+- **Scopes.** Each batch opened through the engine's batch frames gets a
+  scope of its own: RPC requests, trigger bodies and other module bodies run
+  as RPC executions. A trigger's INSERT sets `@@IDENTITY` but leaves the
+  caller's `SCOPE_IDENTITY()`, as SQL Server does. Module bodies that run
+  without such a frame share the caller's scope.
 - **Rowversion writes.** MERGE, OUTPUT INTO and BULK INSERT do not assign
   new rowversion values on update. Their inserts use the column default.
 - **Positional sources without a known width.** A positional INSERT whose

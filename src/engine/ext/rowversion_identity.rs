@@ -13,9 +13,10 @@
 //! - [`insert`]: `SET IDENTITY_INSERT` with SQL Server's rules, explicit
 //!   identity values and the allocator advance past them.
 //!
-//! RPC requests (sp_executesql, prepared execution) start with the caller's
-//! IDENTITY_INSERT table and an empty identity scope, and leave both of the
-//! caller's unchanged, as SQL Server does; `@@IDENTITY` is session-wide. See
+//! RPC requests (sp_executesql, prepared execution) and module bodies such
+//! as triggers start with the caller's IDENTITY_INSERT table and an empty
+//! identity scope, and leave both of the caller's unchanged, as SQL Server
+//! does; `@@IDENTITY` is session-wide. See
 //! docs/gaps-rowversion_identity.md.
 use super::Feature;
 use crate::engine::{Execution, Parameter, Session};
@@ -40,49 +41,49 @@ const NAME: &str = "rowversion_identity";
 
 #[derive(Default)]
 pub(crate) struct State {
-    /// Whether the current batch is an RPC request.
-    rpc: bool,
-    /// The SET IDENTITY_INSERT table of SQL batches, and of the current RPC
-    /// request (a copy of the caller's, discarded when the request ends).
+    /// Open batches, innermost last (see [`Feature::batch_begin`]).
+    frames: Vec<Frame>,
+    /// The current scope's SET IDENTITY_INSERT table.
     insert: write::session::State,
-    rpc_insert: write::session::State,
-    /// SCOPE_IDENTITY() of SQL batches and of the current RPC request.
+    /// The current scope's SCOPE_IDENTITY().
     scope: Option<i128>,
-    rpc_scope: Option<i128>,
     /// @@IDENTITY.
     last: Option<i128>,
+    /// Counts recorded INSERTs, so an INSERT can tell whether a nested one
+    /// (in a trigger) set @@IDENTITY while it ran.
+    recorded: u64,
+}
+
+/// An open batch. An RPC request, a trigger body or another module body is
+/// a scope of its own: it starts with the caller's IDENTITY_INSERT table and
+/// no SCOPE_IDENTITY(), and the caller's are restored when it ends.
+struct Frame {
+    saved: Option<(write::session::State, Option<i128>)>,
 }
 
 impl State {
     fn insert(&self) -> &write::session::State {
-        if self.rpc {
-            &self.rpc_insert
-        } else {
-            &self.insert
-        }
+        &self.insert
     }
 
     fn insert_mut(&mut self) -> &mut write::session::State {
-        if self.rpc {
-            &mut self.rpc_insert
-        } else {
-            &mut self.insert
-        }
+        &mut self.insert
     }
 
     fn scope(&self) -> Option<i128> {
-        if self.rpc { self.rpc_scope } else { self.scope }
+        self.scope
     }
 
     /// An INSERT completed: `value` is its last identity value, or None for
-    /// a table without an identity column.
-    fn record(&mut self, value: Option<i128>) {
-        if self.rpc {
-            self.rpc_scope = value;
-        } else {
-            self.scope = value;
+    /// a table without an identity column. `before` is [`State::recorded`]
+    /// when the INSERT started: an INSERT nested in it (in a trigger) that
+    /// recorded since then keeps its @@IDENTITY, as in SQL Server.
+    fn record(&mut self, value: Option<i128>, before: u64) {
+        self.scope = value;
+        if self.recorded == before {
+            self.last = value;
         }
-        self.last = value;
+        self.recorded += 1;
     }
 }
 
@@ -102,20 +103,21 @@ impl Feature for Hooks {
         rowversion::bootstrap(db)
     }
 
-    fn batch(
-        &self,
-        session: &mut Session,
-        _sql: &str,
-        _parameters: &HashMap<String, Parameter>,
-        rpc: bool,
-    ) -> Option<(Vec<u8>, bool)> {
+    fn batch_begin(&self, session: &mut Session, rpc: bool) {
         let state = &mut session.ext.rowversion_identity;
-        state.rpc = rpc;
-        if rpc {
-            state.rpc_insert = state.insert.fork_rpc();
-            state.rpc_scope = None;
+        let saved = rpc.then(|| (state.insert.fork_rpc(), state.scope.take()));
+        state.frames.push(Frame { saved });
+    }
+
+    fn batch_end(&self, session: &mut Session) {
+        let state = &mut session.ext.rowversion_identity;
+        if let Some(Frame {
+            saved: Some((insert, scope)),
+        }) = state.frames.pop()
+        {
+            state.insert = insert;
+            state.scope = scope;
         }
-        None
     }
 
     fn statement(

@@ -456,10 +456,11 @@ pub(super) fn run(
         rowversion::insert(&session.db, &table, insert, &columns)?;
     }
     let token = session.ext.token;
+    let recorded = session.ext.rowversion_identity.recorded;
     match mode {
         Mode::Plain => {
             let execution = execute(session, statement.clone(), parameters)?;
-            session.ext.rowversion_identity.record(None);
+            session.ext.rowversion_identity.record(None, recorded);
             Ok(Some(execution))
         }
         Mode::Generated { sequence } => {
@@ -470,7 +471,7 @@ pub(super) fn run(
                 .map_err(|error| overflow(session, &table, &identity.name, error))?;
             let after = scope::last_value(&session.db, &sequence)?;
             if after != before {
-                session.ext.rowversion_identity.record(after);
+                session.ext.rowversion_identity.record(after, recorded);
             }
             Ok(Some(execution))
         }
@@ -480,7 +481,7 @@ pub(super) fn run(
             let Statement::Insert(insert) = &mut statement else {
                 unreachable!()
             };
-            let recorded = record_values(insert, column, token);
+            let noting = record_values(insert, column, token);
             seen().remove(&token);
             let result = crate::insert::with_explicit_identity(&table.schema, &table.name, || {
                 execute(session, statement, parameters)
@@ -490,7 +491,7 @@ pub(super) fn run(
             if execution.count == Some(0) {
                 return Ok(Some(execution));
             }
-            let values = if recorded {
+            let values = if noting {
                 noted
             } else {
                 extremes(session, &table, &identity.name)?
@@ -517,7 +518,7 @@ pub(super) fn run(
             }
             let last = values.last.or(values.max);
             if last.is_some() {
-                session.ext.rowversion_identity.record(last);
+                session.ext.rowversion_identity.record(last, recorded);
             }
             Ok(Some(execution))
         }
