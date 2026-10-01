@@ -749,7 +749,10 @@ fn prepared_order(
                         && args.clauses.is_empty()
                         && matches!(args.args.as_slice(), [FunctionArg::Unnamed(FunctionArgExpr::Expr(expr))]
                             if column(expr, &scope).is_some_and(|field|
-                                field.info.as_ref().and_then(|info| info.system_type_id) == Some(56)))
+                                field.info.as_ref().and_then(|info| info.system_type_id) == Some(56))
+                                || (msduck_sql::expression_metadata::conditional::candidate(expr)
+                                    && variant_declaration(expr, &scope, parameters) == Some(false)
+                                    && projection::order::expression_identity(expr, expr, &[], &scope) == Some(true)))
                 }
                 Expr::Function(f)
                     if f.name.to_string().eq_ignore_ascii_case("SUM")
