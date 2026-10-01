@@ -70,6 +70,7 @@ pub(super) fn frame(
     session: &mut Session,
     name: Option<String>,
     in_try: bool,
+    levels: usize,
     body: impl FnOnce(&mut Session, &mut Vec<u8>) -> Result<Finished, Failure>,
 ) -> (Vec<u8>, Result<Finished, Failure>) {
     let saved = Saved {
@@ -80,7 +81,11 @@ pub(super) fn frame(
         caught_error: session.caught_error.clone(),
         base: session.ext.procedures.base,
     };
-    session.ext.procedures.frames.push(Frame { name, in_try });
+    session.ext.procedures.frames.push(Frame {
+        name,
+        in_try,
+        levels,
+    });
     let mut out = Vec::new();
     let result = body(session, &mut out);
     session.ext.procedures.frames.pop();

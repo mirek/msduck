@@ -189,6 +189,14 @@ const observations = [
   ['p_rec over limit', "EXEC p_rec 40; SELECT 'never' AS n"],
   ['create p_tran', 'CREATE PROCEDURE p_tran AS BEGIN TRANSACTION'],
   ['p_tran mismatch', 'EXEC p_tran; SELECT @@TRANCOUNT AS tc; ROLLBACK'],
+  ['exec string transaction mismatch', "EXEC ('BEGIN TRAN'); SELECT @@TRANCOUNT AS tc; ROLLBACK"],
+  ['executesql transaction mismatch', "EXEC sp_executesql N'BEGIN TRAN'; SELECT @@TRANCOUNT AS tc; ROLLBACK"],
+  ['nesting caught by caller', 'BEGIN TRY EXEC p_rec 40 END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n END CATCH'],
+  ['dynamic nest levels', "EXEC ('SELECT @@NESTLEVEL AS a'); EXEC sp_executesql N'SELECT @@NESTLEVEL AS b'"],
+  ['error procedure outside procedures', 'EXEC p_div; BEGIN TRY SELECT 1/0 AS x END TRY BEGIN CATCH SELECT ERROR_PROCEDURE() AS p END CATCH'],
+  ['create p_big', 'CREATE PROCEDURE p_big @o int OUTPUT AS BEGIN SELECT 1 AS a; SET @o = 300 END'],
+  ['output overflow', 'DECLARE @t tinyint; EXEC p_big @t OUTPUT; SELECT @t AS t'],
+  ['positional expression', 'EXEC p_in 1 + 1, 2'],
 
   // Dynamic SQL.
   ['exec string', "EXEC ('SELECT 5 AS five')"],
@@ -327,6 +335,13 @@ function validate(results) {
   assertSameCapture(rows('p_outer_missing'), [[['first']], [['outer after']], [[0, 0]]], 'nested scope abort changed')
   assertSameCapture(rows('p_catch_outer'), [[[50000]], [['end']], [[0]]], 'catch in caller procedure changed')
   assertSameCapture(rows('p_rec 3'), [[[4]]], 'recursion changed')
+  for (const name of ['exec string transaction mismatch', 'executesql transaction mismatch']) {
+    expect(name, [266])
+    assertSameCapture(rows(name), [[[1]]], `${name}: transaction count changed`)
+  }
+  assertSameCapture(rows('nesting caught by caller'), [[[217]]], 'nesting catch changed')
+  assertSameCapture(rows('dynamic nest levels'), [[[1]], [[2]]], 'dynamic nest levels changed')
+  assertSameCapture(rows('error procedure outside procedures').at(-1), [[null]], 'stale ERROR_PROCEDURE changed')
   assertSameCapture(rows('exec string calls procedure'), [[[7]]], 'dynamic call changed')
   assertSameCapture(rows('executesql output'), [[[12]]], 'sp_executesql OUTPUT changed')
   assertSameCapture(rows('executesql output positional'), [[[2]]], 'sp_executesql positional OUTPUT changed')
