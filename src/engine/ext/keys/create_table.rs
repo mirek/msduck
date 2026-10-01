@@ -5,7 +5,7 @@ use anyhow::Result;
 use msduck_core::diagnostic::SqlError;
 use msduck_sql::dialect::ext::keys::table::{self as plan, Constraint};
 use sqlparser::ast::{CreateTable, Statement};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// DuckDB rejects STRUCT and other storage types as index keys.
 const INVALID_KEY_TYPE: &str = "Invalid type for index key";
@@ -82,24 +82,57 @@ fn create(
     parameters: &mut HashMap<String, Parameter>,
 ) -> Result<Execution> {
     catalog::prune(&session.db)?;
-    let (schema, _) = tables::parts(&table.name).expect("checked one- or two-part name");
+    let (schema, object_name) = tables::parts(&table.name).expect("checked one- or two-part name");
     let schema = schema.unwrap_or_else(|| "dbo".into());
     // Constraint names are schema-scoped objects. An existing table is
     // reported first, by the CREATE TABLE itself.
     let exists = tables::resolve(&session.db, &table.name)?.is_some();
+    let mut declared = HashSet::new();
+    // Include the new table and non-key constraint names so a namespace
+    // conflict cannot fail only after native DDL in a caller transaction.
+    let other_names = std::iter::once(object_name.as_str())
+        .chain(
+            table
+                .columns
+                .iter()
+                .flat_map(|column| column.options.iter())
+                .filter(|option| {
+                    !matches!(
+                        option.option,
+                        sqlparser::ast::ColumnOption::PrimaryKey(_)
+                            | sqlparser::ast::ColumnOption::Unique(_)
+                    )
+                })
+                .filter_map(|option| option.name.as_ref().map(|name| name.value.as_str())),
+        )
+        .chain(
+            table
+                .constraints
+                .iter()
+                .filter_map(|constraint| match constraint {
+                    sqlparser::ast::TableConstraint::Check(check) => check.name.as_ref(),
+                    sqlparser::ast::TableConstraint::ForeignKey(key) => key.name.as_ref(),
+                    _ => None,
+                })
+                .map(|name| name.value.as_str()),
+        );
+    for name in other_names {
+        let normalized: String = session
+            .db
+            .query_row("SELECT lower(?)", [name], |r| r.get(0))?;
+        declared.insert(normalized);
+    }
     for name in constraints
         .iter()
         .filter(|_| !exists)
         .filter_map(|c| c.name.as_deref())
     {
-        let taken: i64 = session.db.query_row(
-            "SELECT count(*) FROM main.__msduck_keys k JOIN sys.objects o USING(object_id)
-             JOIN sys.schemas s USING(schema_id)
-             WHERE k.kind IN ('PK','UQ') AND lower(k.name)=lower(?) AND lower(s.name)=lower(?)",
-            [name, &schema],
-            |r| r.get(0),
-        )?;
-        if taken > 0 {
+        let normalized: String = session
+            .db
+            .query_row("SELECT lower(?)", [name], |r| r.get(0))?;
+        if !declared.insert(normalized)
+            || crate::object_catalog::key_name_exists(&session.db, &schema, name)?
+        {
             return Err(duplicate_name(name));
         }
     }
@@ -159,6 +192,12 @@ fn create(
                 filter: None,
                 filter_columns: vec![],
             },
+        )?;
+        // The original plan knows whether SQL Server supplied the name.
+        // Legacy rows do not, so backfill deliberately retains NULL provenance.
+        session.db.execute(
+            "UPDATE main.__msduck_key_objects SET is_system_named=? WHERE key_tag=?",
+            duckdb::params![constraint.name.is_none(), tag],
         )?;
     }
     Ok(execution)

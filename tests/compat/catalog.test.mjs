@@ -8,6 +8,21 @@ import {start,query} from '../support/client.mjs'
 const reference=JSON.parse(readFileSync(new URL('../../reference/gaps-catalog.json',import.meta.url),'utf8'))
 const defaults=reference.runs[0].find(record=>record.name==='defaults')
 
+test('PRIMARY KEY and UNIQUE identities match controlled catalog object rows',async t=>{
+ const connection=await start(t)
+ await query(connection,'CREATE TABLE dbo.catalog_parent(a INT NOT NULL,b INT NOT NULL,label NVARCHAR(40),CONSTRAINT PK_catalog_parent PRIMARY KEY(a,b),CONSTRAINT UQ_catalog_parent_label UNIQUE(label)); CREATE TABLE dbo.catalog_child(a INT NOT NULL,b INT NOT NULL,CONSTRAINT PK_catalog_child PRIMARY KEY(a,b))')
+ const sql="SELECT name,RTRIM(type) AS type,type_desc,OBJECT_NAME(parent_object_id) AS parent FROM sys.objects WHERE parent_object_id IN(OBJECT_ID('dbo.catalog_parent'),OBJECT_ID('dbo.catalog_child')) AND RTRIM(type) IN('PK','UQ') ORDER BY name"
+ const expected=reference.runs[0].find(r=>r.name==='constraint objects').result.sets[0].rows.filter(row=>['PK','UQ'].includes(row[1]))
+ assert.deepEqual((await query(connection,sql)).rows,expected)
+ const idSql="SELECT OBJECT_ID('dbo.PK_catalog_child','PK') AS id"
+ const original=(await query(connection,idSql)).rows[0][0]
+ assert.equal(typeof original,'number')
+ await query(connection,'BEGIN TRANSACTION; DROP TABLE dbo.catalog_child; CREATE TABLE dbo.catalog_child(a INT,b INT,CONSTRAINT PK_catalog_child PRIMARY KEY(a,b))')
+ assert.notEqual((await query(connection,idSql)).rows[0][0],original)
+ await query(connection,'ROLLBACK')
+ assert.deepEqual((await query(connection,idSql)).rows,[[original]])
+})
+
 test('DEFAULT expression families retain SQL Server catalog text',async t=>{
  const connection=await start(t)
  const records=reference.definitionProfile.runs[0]

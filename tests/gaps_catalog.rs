@@ -233,3 +233,208 @@ fn default_expression_families_match_sql_server_catalog_text() {
     assert!(source.eq_ignore_ascii_case("(GETDATE())"));
     assert_eq!(definition, "(getdate())");
 }
+
+#[test]
+fn key_objects_have_distinct_stable_ids_and_source_name_provenance() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    assert!(session.batch_response(
+        "CREATE TABLE dbo.catalog_parent(a INT NOT NULL,b INT NOT NULL,label NVARCHAR(40),CONSTRAINT PK_catalog_parent PRIMARY KEY(a,b),CONSTRAINT UQ_catalog_parent_label UNIQUE(label)); CREATE TABLE dbo.catalog_child(a INT NOT NULL,b INT NOT NULL,CONSTRAINT PK_catalog_child PRIMARY KEY(a,b))",
+        &Default::default(),false,None
+    ).1);
+    let rows = session.db.prepare("SELECT name,rtrim(type),type_desc,main.__msduck_object_name(parent_object_id) FROM sys.objects WHERE rtrim(type) IN ('PK','UQ') ORDER BY name").unwrap()
+        .query_map([],|r| Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?,r.get::<_,String>(2)?,r.get::<_,String>(3)?)))
+        .unwrap().collect::<duckdb::Result<Vec<_>>>().unwrap();
+    let reference: serde_json::Value =
+        serde_json::from_str(include_str!("../reference/gaps-catalog.json")).unwrap();
+    let expected = reference["runs"][0]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == "constraint objects")
+        .unwrap()["result"]["sets"][0]["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r[1] == "PK" || r[1] == "UQ")
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(
+        serde_json::to_value(rows).unwrap(),
+        serde_json::to_value(expected).unwrap()
+    );
+    let ids = || {
+        session.db.prepare("SELECT object_id,parent_object_id,is_system_named,is_enforced FROM sys.key_constraints ORDER BY object_id").unwrap()
+        .query_map([],|r|Ok((r.get::<_,i32>(0)?,r.get::<_,i32>(1)?,r.get::<_,Option<bool>>(2)?,r.get::<_,bool>(3)?))).unwrap().collect::<duckdb::Result<Vec<_>>>().unwrap()
+    };
+    let original = ids();
+    assert_eq!(original.len(), 3);
+    assert!(
+        original
+            .iter()
+            .all(|(id, parent, named, enforced)| id != parent
+                && *named == Some(false)
+                && *enforced)
+    );
+    let before: i64 = session
+        .db
+        .query_row("SELECT currval('main.__msduck_object_ids')", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(ids(), original);
+    assert_eq!(
+        session
+            .db
+            .query_row("SELECT currval('main.__msduck_object_ids')", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        before
+    );
+    assert!(
+        session
+            .batch_response(
+                "CREATE TABLE dbo.generated_key(a INT PRIMARY KEY)",
+                &Default::default(),
+                false,
+                None
+            )
+            .1
+    );
+    assert_eq!(session.db.query_row("SELECT is_system_named FROM sys.key_constraints WHERE parent_object_id=main.__msduck_object_id('dbo.generated_key','U')",[],|r|r.get::<_,Option<bool>>(0)).unwrap(),Some(true));
+    let identity = |session: &Session| {
+        session
+            .db
+            .query_row(
+                "SELECT main.__msduck_object_id('dbo.PK_catalog_child','PK')",
+                [],
+                |r| r.get::<_, Option<i32>>(0),
+            )
+            .unwrap()
+    };
+    let old = identity(&session).unwrap();
+    assert!(session.batch_response("BEGIN TRANSACTION; DROP TABLE dbo.catalog_child; CREATE TABLE dbo.catalog_child(a INT,b INT,CONSTRAINT PK_catalog_child PRIMARY KEY(a,b))", &Default::default(),false,None).1);
+    assert_ne!(identity(&session), Some(old));
+    assert!(
+        session
+            .batch_response("ROLLBACK", &Default::default(), false, None)
+            .1
+    );
+    assert_eq!(identity(&session), Some(old));
+    assert!(session.batch_response("DROP TABLE dbo.catalog_child; CREATE TABLE dbo.catalog_child(a INT,b INT,CONSTRAINT PK_catalog_child PRIMARY KEY(a,b))", &Default::default(),false,None).1);
+    assert_ne!(identity(&session), Some(old));
+}
+
+#[test]
+fn legacy_key_backfill_preserves_parent_and_retains_unknown_name_provenance() {
+    let directory = std::env::temp_dir().join(format!(
+        "msduck-legacy-key-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("primary.duckdb");
+    let mut original_parent = None;
+    let mut backfilled = None;
+    for restart in 0..3 {
+        let server = Server::open(path.to_str().unwrap()).unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        if restart == 0 {
+            assert!(
+                session
+                    .batch_response(
+                        "CREATE TABLE legacy_key(a INT CONSTRAINT PK_legacy PRIMARY KEY)",
+                        &Default::default(),
+                        false,
+                        None
+                    )
+                    .1
+            );
+            original_parent = Some(
+                session
+                    .db
+                    .query_row(
+                        "SELECT main.__msduck_object_id('dbo.legacy_key','U')",
+                        [],
+                        |r| r.get::<_, i32>(0),
+                    )
+                    .unwrap(),
+            );
+            // Model the pre-catalog layout: native/keys records existed, but
+            // no SQL Server constraint identity or name provenance was stored.
+            session
+                .db
+                .execute("DELETE FROM main.__msduck_key_objects", [])
+                .unwrap();
+        } else {
+            let row: (i32,i32,Option<bool>) = session.db.query_row("SELECT object_id,parent_object_id,is_system_named FROM sys.key_constraints WHERE name='PK_legacy'",[],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).unwrap();
+            assert_eq!(Some(row.1), original_parent);
+            assert_eq!(row.2, None);
+            if let Some(expected) = backfilled {
+                assert_eq!(row, expected);
+            } else {
+                backfilled = Some(row);
+            }
+        }
+    }
+    std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn key_namespace_failures_preserve_the_callers_transaction_and_writes() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let run = |session: &mut Session, sql: &str| {
+        session
+            .batch_response(sql, &Default::default(), false, None)
+            .1
+    };
+    assert!(run(
+        &mut session,
+        "CREATE TABLE kept(id INT); CREATE TABLE defaults(id INT CONSTRAINT DF_shared DEFAULT(1)); BEGIN TRANSACTION; INSERT kept VALUES(42)"
+    ));
+    for (table, sql) in [
+        (
+            "failed_existing",
+            "CREATE TABLE failed_existing(id INT CONSTRAINT DF_shared PRIMARY KEY)",
+        ),
+        (
+            "failed_dupe",
+            "CREATE TABLE failed_dupe(a INT,b INT,CONSTRAINT repeated PRIMARY KEY(a),CONSTRAINT repeated UNIQUE(b))",
+        ),
+        (
+            "failed_default",
+            "CREATE TABLE failed_default(a INT CONSTRAINT repeated DEFAULT(1),CONSTRAINT repeated PRIMARY KEY(a))",
+        ),
+        (
+            "failed_self",
+            "CREATE TABLE failed_self(a INT CONSTRAINT failed_self PRIMARY KEY)",
+        ),
+    ] {
+        assert!(!run(&mut session, sql), "{table}");
+        assert_eq!(session.transactions, 1);
+        assert_eq!(
+            session
+                .db
+                .query_row("SELECT main.__msduck_object_id(?,'U')", [table], |r| r
+                    .get::<_, Option<
+                    i32,
+                >>(
+                    0
+                ))
+                .unwrap(),
+            None
+        );
+    }
+    assert!(run(&mut session, "COMMIT"));
+    assert_eq!(
+        session
+            .db
+            .query_row("SELECT id FROM dbo.kept", [], |r| r.get::<_, i32>(0))
+            .unwrap(),
+        42
+    );
+}

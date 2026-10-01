@@ -15,6 +15,7 @@ pub fn register(db: &Connection) -> Result<()> {
     db.execute_batch("CREATE TABLE IF NOT EXISTS main.__msduck_objects(object_id INTEGER PRIMARY KEY, schema_id INTEGER NOT NULL, name VARCHAR NOT NULL, type_code VARCHAR NOT NULL, create_date TIMESTAMP NOT NULL, modify_date TIMESTAMP NOT NULL, UNIQUE(schema_id,name));
         CREATE TABLE IF NOT EXISTS main.__msduck_table_types(user_type_id INTEGER PRIMARY KEY,name VARCHAR NOT NULL,schema_id INTEGER NOT NULL,type_table_object_id INTEGER NOT NULL UNIQUE,object_name VARCHAR NOT NULL UNIQUE,create_date TIMESTAMP NOT NULL,UNIQUE(schema_id,name));
         CREATE TABLE IF NOT EXISTS main.__msduck_table_properties(object_id INTEGER PRIMARY KEY,lob_data_space_id INTEGER NOT NULL DEFAULT 0 CHECK(lob_data_space_id IN (0,1)));
+        CREATE TABLE IF NOT EXISTS main.__msduck_key_objects(key_tag BIGINT PRIMARY KEY,object_id INTEGER NOT NULL UNIQUE,parent_object_id INTEGER NOT NULL,name VARCHAR NOT NULL,kind VARCHAR NOT NULL CHECK(kind IN ('PK','UQ')),is_system_named BOOLEAN,create_date TIMESTAMP NOT NULL,modify_date TIMESTAMP NOT NULL);
         CREATE TABLE IF NOT EXISTS main.__msduck_hidden_column_owners(object_id INTEGER PRIMARY KEY,schema_name VARCHAR NOT NULL,name VARCHAR NOT NULL,UNIQUE(schema_name,name));
         CREATE TABLE IF NOT EXISTS main.__msduck_default_constraints(object_id INTEGER PRIMARY KEY,parent_object_id INTEGER NOT NULL,column_id INTEGER NOT NULL,name VARCHAR NOT NULL,create_date TIMESTAMP NOT NULL,modify_date TIMESTAMP NOT NULL,UNIQUE(parent_object_id,column_id));
         CREATE SEQUENCE IF NOT EXISTS main.__msduck_object_ids START 100000001 MAXVALUE 2147483647 NO CYCLE;
@@ -30,7 +31,10 @@ pub fn register(db: &Connection) -> Result<()> {
           FROM main.__msduck_table_types
           UNION ALL
           SELECT d.name,d.object_id,CAST(NULL AS INTEGER),o.schema_id,d.parent_object_id,'D ','DEFAULT_CONSTRAINT',d.create_date,d.modify_date,false,false,false
-          FROM main.__msduck_default_constraints d JOIN main.__msduck_objects o ON o.object_id=d.parent_object_id;
+          FROM main.__msduck_default_constraints d JOIN main.__msduck_objects o ON o.object_id=d.parent_object_id
+          UNION ALL
+          SELECT k.name,k.object_id,CAST(NULL AS INTEGER),o.schema_id,k.parent_object_id,rpad(k.kind,2,' '),CASE k.kind WHEN 'PK' THEN 'PRIMARY_KEY_CONSTRAINT' ELSE 'UNIQUE_CONSTRAINT' END,k.create_date,k.modify_date,false,false,false
+          FROM main.__msduck_key_objects k JOIN main.__msduck_objects o ON o.object_id=k.parent_object_id;
         CREATE OR REPLACE VIEW sys.system_objects AS
           SELECT name,object_id,principal_id,schema_id,parent_object_id,type,type_desc,create_date,modify_date,is_ms_shipped,is_published,is_schema_published
           FROM main.__msduck_builtin_objects WHERE in_system_objects;
@@ -47,7 +51,72 @@ pub fn sync(db: &Connection) -> duckdb::Result<()> {
     db.execute_batch("DELETE FROM main.__msduck_objects o WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_live_objects l WHERE l.schema_id=o.schema_id AND lower(l.name)=lower(o.name) AND l.type_code=o.type_code);
         INSERT INTO main.__msduck_objects SELECT CAST(nextval('main.__msduck_object_ids') AS INTEGER),l.schema_id,l.name,l.type_code,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP) FROM main.__msduck_live_objects l WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_objects o WHERE o.schema_id=l.schema_id AND lower(o.name)=lower(l.name))")?;
     crate::column_catalog::sync(db)?;
+    db.execute("DELETE FROM main.__msduck_key_objects k WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_objects o WHERE o.object_id=k.parent_object_id AND o.type_code='U')", [])?;
     sync_lob(db)
+}
+
+/// Constraint names share the schema's object namespace. This check performs
+/// no writes and can run before native DDL, including in a caller transaction.
+pub(crate) fn key_name_exists(db: &Connection, schema: &str, name: &str) -> Result<bool> {
+    Ok(db.query_row(
+        "SELECT count(*)>0 FROM sys.all_objects o JOIN main.__msduck_schemas s USING(schema_id) WHERE lower(s.name)=lower(?) AND lower(o.name)=lower(?)",
+        duckdb::params![schema,name], |r| r.get(0)
+    )?)
+}
+
+/// Called by the keys lifecycle in its DDL transaction, never by catalog reads.
+/// A key tag survives in-place changes; the globally shared object sequence
+/// gives newly created/recreated constraints distinct persistent identities.
+pub(crate) fn record_key_identity(
+    db: &Connection,
+    tag: i64,
+    parent: i32,
+    name: &str,
+    kind: &str,
+    is_system_named: Option<bool>,
+) -> Result<()> {
+    anyhow::ensure!(
+        matches!(kind, "PK" | "UQ"),
+        "unsupported constraint identity kind"
+    );
+    let conflict: i64 = db.query_row(
+        "SELECT count(*) FROM sys.all_objects WHERE schema_id=(SELECT schema_id FROM main.__msduck_objects WHERE object_id=?) AND lower(name)=lower(?) AND object_id<>coalesce((SELECT object_id FROM main.__msduck_key_objects WHERE key_tag=?),-2147483648)",
+        duckdb::params![parent,name,tag], |r| r.get(0)
+    )?;
+    if conflict != 0 {
+        anyhow::bail!(msduck_core::diagnostic::SqlError::new(
+            2714,
+            5,
+            format!("There is already an object named '{name}' in the database.")
+        ));
+    }
+    let incompatible: i64 = db.query_row(
+        "SELECT count(*) FROM main.__msduck_key_objects WHERE key_tag=? AND (parent_object_id<>? OR kind<>?)",
+        duckdb::params![tag,parent,kind], |r| r.get(0)
+    )?;
+    anyhow::ensure!(
+        incompatible == 0,
+        "key tag changed constraint ownership or kind"
+    );
+    db.execute(
+        "INSERT INTO main.__msduck_key_objects(key_tag,object_id,parent_object_id,name,kind,is_system_named,create_date,modify_date)
+         SELECT ?,CAST(nextval('main.__msduck_object_ids') AS INTEGER),?,?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP)
+         WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_key_objects WHERE key_tag=?)",
+        duckdb::params![tag,parent,name,kind,is_system_named,tag]
+    )?;
+    db.execute(
+        "UPDATE main.__msduck_key_objects SET modify_date=CASE WHEN name<>? THEN CAST(current_timestamp AS TIMESTAMP) ELSE modify_date END,name=?,is_system_named=coalesce(?,is_system_named) WHERE key_tag=?",
+        duckdb::params![name,name,is_system_named,tag]
+    )?;
+    Ok(())
+}
+
+pub(crate) fn remove_key_identity(db: &Connection, tag: i64) -> Result<()> {
+    db.execute(
+        "DELETE FROM main.__msduck_key_objects WHERE key_tag=?",
+        [tag],
+    )?;
+    Ok(())
 }
 
 /// Logical default-filegroup identity survives dropping the last MAX column.

@@ -20,6 +20,17 @@ pub(super) fn bootstrap(db: &Connection) -> Result<()> {
           included_columns VARCHAR NOT NULL,filter_definition VARCHAR,
           filter_columns VARCHAR NOT NULL)",
     )?;
+    prune(db)?;
+    for key in all(db)?.into_iter().filter(Key::constraint) {
+        crate::object_catalog::record_key_identity(
+            db,
+            key.tag,
+            key.object_id,
+            &key.name,
+            &key.kind,
+            None,
+        )?;
+    }
     Ok(())
 }
 
@@ -87,11 +98,22 @@ pub(super) fn insert(db: &Connection, key: &Key) -> Result<()> {
             list(&key.filter_columns),
         ],
     )?;
+    if key.constraint() {
+        crate::object_catalog::record_key_identity(
+            db,
+            key.tag,
+            key.object_id,
+            &key.name,
+            &key.kind,
+            None,
+        )?;
+    }
     Ok(())
 }
 
 pub(super) fn remove(db: &Connection, tag: i64) -> Result<()> {
     db.execute("DELETE FROM main.__msduck_keys WHERE tag=?", [tag])?;
+    crate::object_catalog::remove_key_identity(db, tag)?;
     Ok(())
 }
 

@@ -3,7 +3,7 @@
 use super::Feature;
 use anyhow::Result;
 use duckdb::Connection;
-use sqlparser::ast::{DataType, Expr};
+use sqlparser::ast::{DataType, Expr, Statement};
 
 #[derive(Default)]
 pub(crate) struct State;
@@ -13,6 +13,44 @@ pub(super) struct Hooks;
 impl Feature for Hooks {
     fn name(&self) -> &'static str {
         "catalog"
+    }
+
+    fn statement(
+        &self,
+        session: &mut super::Session,
+        statement: &mut Statement,
+        _parameters: &mut std::collections::HashMap<String, super::Parameter>,
+    ) -> Result<Option<super::Execution>> {
+        let name = match statement {
+            Statement::CreateTable(table) => &table.name,
+            Statement::CreateView(view) if !view.or_replace && !view.or_alter => &view.name,
+            _ => return Ok(None),
+        };
+        let parts = name
+            .0
+            .iter()
+            .map(|part| part.as_ident().map(|ident| ident.value.as_str()))
+            .collect::<Option<Vec<_>>>();
+        let Some(parts) = parts else {
+            return Ok(None);
+        };
+        let (schema, name) = match parts.as_slice() {
+            [name] => ("dbo", *name),
+            [schema, name] => (*schema, *name),
+            _ => return Ok(None),
+        };
+        let exists: bool = session.db.query_row(
+            "SELECT count(*)>0 FROM sys.objects o JOIN main.__msduck_schemas s USING(schema_id) WHERE lower(s.name)=lower(?) AND lower(o.name)=lower(?) AND rtrim(o.type) IN ('D','PK','UQ')",
+            [schema,name], |r| r.get(0)
+        )?;
+        if exists {
+            anyhow::bail!(msduck_core::diagnostic::SqlError::new(
+                2714,
+                6,
+                format!("There is already an object named '{name}' in the database.")
+            ));
+        }
+        Ok(None)
     }
 
     fn bootstrap_database(&self, db: &Connection) -> Result<()> {
@@ -31,6 +69,10 @@ impl Feature for Hooks {
                SELECT o.*, d.column_id AS parent_column_id,
                  d.definition, false AS is_system_named
                FROM sys.objects o JOIN main.__msduck_default_constraints d USING(object_id);
+             CREATE OR REPLACE VIEW sys.key_constraints AS
+               SELECT o.*, CAST(NULL AS INTEGER) AS unique_index_id,
+                 k.is_system_named, true AS is_enforced
+               FROM sys.objects o JOIN main.__msduck_key_objects k USING(object_id);
              CREATE OR REPLACE MACRO main.__msduck_object_definition(value) AS
                map_extract_value((SELECT map(list(object_id),list(definition))
                  FROM (SELECT object_id,definition FROM main.__msduck_modules

@@ -18,6 +18,18 @@ migration preserves existing constraint identities. View/check definitions,
 unnamed DEFAULT constraints and complete wire descriptor parity remain
 unimplemented. This checkpoint does not establish full catalog compatibility.
 
+PK/UQ constraints now have persistent object IDs allocated by the keys DDL
+lifecycle under companion #756. They appear in `sys.objects`, `OBJECT_ID` and
+`sys.key_constraints`; reads allocate no IDs. Table and constraint identities
+are distinct; rollback restores old IDs and committed drop/recreate allocates
+new ones. New keys retain explicit/generated name provenance. Bootstrap fills
+missing legacy identities without changing parents, retaining unknown name
+provenance as NULL. The key view has the captured 15-column order;
+`unique_index_id` remains unknown until logical index/clustering provenance is
+wired in. No index-ID or full wire parity is claimed. Explicit namespace
+conflicts are checked before native table creation, including duplicate names
+in one declaration.
+
 `reference/gaps-catalog.json` retains all46 responses from each of two fresh
 SQL Server17.0.4065.4 containers, including descriptors, rows, diagnostics,
 return status, completion commands/status and token order. The image is pinned
