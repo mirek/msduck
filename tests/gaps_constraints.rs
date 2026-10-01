@@ -313,3 +313,83 @@ fn referential_actions_follow_update_from_and_report_numbers() {
         547
     );
 }
+
+#[test]
+fn failures_inside_transactions_never_commit_partial_effects() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    // A user column named RowId hides DuckDB's row id: a failed INSERT
+    // cannot be undone by row id, so the transaction is invalidated rather
+    // than deleting existing rows.
+    ok(
+        &mut session,
+        "CREATE TABLE r(RowId INT, v INT CONSTRAINT ck_r CHECK (v > 0)); INSERT r VALUES (5, 1)",
+    );
+    assert_eq!(caught(&mut session, "INSERT r VALUES (1, -1)").0, 547);
+    ok(&mut session, "BEGIN TRANSACTION");
+    ok(&mut session, "INSERT r VALUES (7, 2)");
+    assert!(!run(&mut session, "INSERT r VALUES (2, -2)"));
+    assert!(!run(&mut session, "SELECT 1"));
+    ok(&mut session, "ROLLBACK");
+    assert_eq!(
+        ints(&session, "SELECT RowId, v FROM r ORDER BY RowId"),
+        [[Some(5), Some(1)]]
+    );
+
+    // An action that cannot be applied after the statement wrote: the
+    // caller's transaction cannot commit the parent change alone.
+    ok(&mut session, "CREATE TABLE p(id INT PRIMARY KEY)");
+    ok(
+        &mut session,
+        "CREATE TABLE c(id INT PRIMARY KEY, pid INT CONSTRAINT uq_c UNIQUE CONSTRAINT fk_c REFERENCES p(id) ON UPDATE SET NULL)",
+    );
+    ok(
+        &mut session,
+        "CREATE TABLE g(id INT PRIMARY KEY, cpid INT CONSTRAINT fk_g REFERENCES c(pid) ON UPDATE CASCADE)",
+    );
+    ok(
+        &mut session,
+        "INSERT p VALUES (1); INSERT c VALUES (10, 1); INSERT g VALUES (100, 1)",
+    );
+    ok(&mut session, "BEGIN TRANSACTION");
+    assert!(!run(&mut session, "UPDATE p SET id = 2"));
+    assert!(!run(&mut session, "SELECT 1"));
+    // Like after a native constraint error, COMMIT ends the transaction
+    // without its changes.
+    let _ = run(&mut session, "COMMIT");
+    assert_eq!(ints(&session, "SELECT id FROM p"), [[Some(1)]]);
+    assert_eq!(
+        ints(&session, "SELECT id, pid FROM c"),
+        [[Some(10), Some(1)]]
+    );
+    assert_eq!(
+        ints(&session, "SELECT id, cpid FROM g"),
+        [[Some(100), Some(1)]]
+    );
+
+    // New key values must be the ones the UPDATE writes.
+    ok(
+        &mut session,
+        "CREATE TABLE k(id UNIQUEIDENTIFIER PRIMARY KEY)",
+    );
+    ok(
+        &mut session,
+        "CREATE TABLE kc(id INT, kid UNIQUEIDENTIFIER CONSTRAINT fk_kc REFERENCES k(id) ON UPDATE CASCADE)",
+    );
+    ok(
+        &mut session,
+        "INSERT k VALUES ('00000000-0000-0000-0000-000000000001'); INSERT kc VALUES (1, '00000000-0000-0000-0000-000000000001')",
+    );
+    assert!(!run(&mut session, "UPDATE k SET id = NEWID()"));
+    assert_eq!(
+        texts(&session, "SELECT CAST(kid AS VARCHAR) FROM kc"),
+        ["00000000-0000-0000-0000-000000000001"]
+    );
+    assert_eq!(
+        ints(
+            &session,
+            "SELECT count(*) FROM k WHERE CAST(id AS VARCHAR) = '00000000-0000-0000-0000-000000000001'"
+        ),
+        [[Some(1)]]
+    );
+}

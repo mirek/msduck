@@ -1323,7 +1323,7 @@
         "number": 2627,
         "state": 1,
         "class": 14,
-        "message": "Violation of PRIMARY KEY constraint 'PK__k__2792E7E8F6817AA5'. Cannot insert duplicate key in object 'dbo.k'. The duplicate key value is (1, 1)."
+        "message": "Violation of PRIMARY KEY constraint 'PK__k__2792E7E8ADF54006'. Cannot insert duplicate key in object 'dbo.k'. The duplicate key value is (1, 1)."
        }
       ],
       "info": [
@@ -2141,6 +2141,505 @@
       ],
       "info": [],
       "sets": []
+     }
+    }
+   ]
+  },
+  {
+   "name": "update shapes and computed columns",
+   "steps": [
+    {
+     "sql": "CREATE TABLE customers(id int PRIMARY KEY)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE invoices(id int PRIMARY KEY, customer_id int CONSTRAINT fk_invoices REFERENCES customers(id) ON UPDATE CASCADE)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE orders(id int PRIMARY KEY, customer_id int)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT customers VALUES (1),(2); INSERT invoices VALUES (10,1); INSERT orders VALUES (1,1)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE orders SET id = id + 1 WHERE customer_id IN (SELECT id FROM customers)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM invoices; SELECT * FROM orders",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         10,
+         1
+        ]
+       ],
+       [
+        [
+         2,
+         1
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "UPDATE customers SET id = customers.id + 10 FROM customers JOIN orders ON orders.customer_id = customers.id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM customers ORDER BY id; SELECT * FROM invoices",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         2
+        ],
+        [
+         11
+        ]
+       ],
+       [
+        [
+         10,
+         11
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "UPDATE c SET id = c.id + 100 FROM customers c WHERE c.id = 11",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM customers ORDER BY id; SELECT * FROM invoices",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         2
+        ],
+        [
+         111
+        ]
+       ],
+       [
+        [
+         10,
+         111
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE p(id int PRIMARY KEY)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE n(id int PRIMARY KEY, pid int CONSTRAINT fk_n REFERENCES p(id) ON UPDATE SET NULL)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE d(id int PRIMARY KEY, pid int DEFAULT 100 CONSTRAINT fk_d REFERENCES p(id) ON UPDATE SET DEFAULT)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT p VALUES (1),(2),(100); INSERT n VALUES (10,1),(20,2),(30,100); INSERT d VALUES (10,1),(20,2)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE p SET id = id + 1 WHERE id < 100",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM p ORDER BY id; SELECT * FROM n ORDER BY id; SELECT * FROM d ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         2
+        ],
+        [
+         3
+        ],
+        [
+         100
+        ]
+       ],
+       [
+        [
+         10,
+         null
+        ],
+        [
+         20,
+         null
+        ],
+        [
+         30,
+         100
+        ]
+       ],
+       [
+        [
+         10,
+         100
+        ],
+        [
+         20,
+         100
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "UPDATE n SET pid = 2; UPDATE d SET pid = 3",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE p SET id = CASE id WHEN 2 THEN 3 ELSE 2 END WHERE id < 100",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM p ORDER BY id; SELECT * FROM n ORDER BY id; SELECT * FROM d ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         2
+        ],
+        [
+         3
+        ],
+        [
+         100
+        ]
+       ],
+       [
+        [
+         10,
+         null
+        ],
+        [
+         20,
+         null
+        ],
+        [
+         30,
+         null
+        ]
+       ],
+       [
+        [
+         10,
+         100
+        ],
+        [
+         20,
+         100
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE r(RowId int, v int CONSTRAINT ck_r CHECK (v > 0)); INSERT r VALUES (5, 1)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT r VALUES (1, -1)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the CHECK constraint \"ck_r\". The conflict occurred in database \"gaps_constraints\", table \"dbo.r\", column 'v'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT r VALUES (7, 2); SELECT RowId, v FROM r ORDER BY RowId",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         5,
+         1
+        ],
+        [
+         7,
+         2
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE t(a int, b int, s AS a + b, CONSTRAINT ck_t CHECK (s > 0))",
+     "result": {
+      "errors": [
+       {
+        "number": 1764,
+        "state": 1,
+        "class": 16,
+        "message": "Computed Column 's' in table 't' is invalid for use in 'CHECK CONSTRAINT' because it is not persisted."
+       },
+       {
+        "number": 1750,
+        "state": 0,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE t(a int, b int, s AS a + b PERSISTED, CONSTRAINT ck_t CHECK (s > 0))",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT t(a, b) VALUES (1, 1)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE t SET a = -100",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The UPDATE statement conflicted with the CHECK constraint \"ck_t\". The conflict occurred in database \"gaps_constraints\", table \"dbo.t\", column 's'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT a, b, s FROM t",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1,
+         1,
+         2
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE fc(id int, x AS id, CONSTRAINT fk_fc FOREIGN KEY (x) REFERENCES p(id))",
+     "result": {
+      "errors": [
+       {
+        "number": 1764,
+        "state": 1,
+        "class": 16,
+        "message": "Computed Column 'x' in table 'fc' is invalid for use in 'FOREIGN KEY CONSTRAINT' because it is not persisted."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE w(s date, e date, CONSTRAINT ck_w CHECK (DATEDIFF(day, s, e) <= 30))",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT w VALUES ('2020-01-01', '2020-01-15')",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT w VALUES ('2020-01-01', '2020-03-01')",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the CHECK constraint \"ck_w\". The conflict occurred in database \"gaps_constraints\", table \"dbo.w\"."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE [x]]y] (id int CONSTRAINT [ck]]z] CHECK (id > 0))",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT [x]]y] VALUES (0)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the CHECK constraint \"ck]z\". The conflict occurred in database \"gaps_constraints\", table \"dbo.x]y\", column 'id'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE [x]]y] DROP CONSTRAINT [ck]]z]",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT [x]]y] VALUES (0); SELECT count(*) FROM [x]]y]",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1
+        ]
+       ]
+      ]
      }
     }
    ]

@@ -180,12 +180,11 @@ struct Scratch {
 impl Scratch {
     fn name(&mut self) -> String {
         self.next += 1;
-        let name = format!("__msduck_ck_{}_{}", self.token, self.next);
-        self.names.push(name.clone());
-        name
+        format!("__msduck_ck_{}_{}", self.token, self.next)
     }
     fn create(&mut self, session: &Session, query: &str) -> Result<String> {
         let name = self.name();
+        self.names.push(name.clone());
         session.db.execute_batch(&format!(
             "CREATE OR REPLACE TEMP TABLE {} AS {query}",
             quote(&name)
@@ -215,7 +214,7 @@ struct Keys {
     name: String,
 }
 
-/// Old and new key values of updated rows (ON UPDATE CASCADE).
+/// Old and new key values of updated rows.
 #[derive(Clone, Debug)]
 struct Mapping {
     table: i32,
@@ -223,6 +222,19 @@ struct Mapping {
     relation: String,
     /// Lower-cased column → (old, new) column of the relation.
     columns: HashMap<String, (String, String)>,
+}
+
+/// The one table a statement writes, when it can be resolved.
+struct Target {
+    table: Table,
+    /// For an INSERT: the largest row id before the statement. Rows above
+    /// it are the new ones. None when a user column hides `rowid`.
+    rowid: Option<i64>,
+    /// For an UPDATE: the lower-cased columns it assigns, if all are plain
+    /// column names, and the table's computed columns, which change with
+    /// their inputs.
+    assigned: Option<HashSet<String>>,
+    computed: HashSet<String>,
 }
 
 struct Run<'a> {
@@ -238,22 +250,27 @@ struct Run<'a> {
     acted: HashSet<i32>,
     /// Tables written by referential actions.
     action_tables: HashSet<i32>,
-    /// Columns the statement's UPDATE assigns, when known.
-    assigned: Option<HashSet<String>>,
-    /// The INSERT target and its largest row id before the statement: rows
-    /// above it are the new ones.
-    inserted: Option<(Table, i64)>,
+    target: Option<Target>,
 }
 
 impl Run<'_> {
     /// Whether `columns` of `table` may have changed. Only referential
     /// actions and the assigned columns of the statement's UPDATE change
-    /// values; constraints over other columns keep their results.
+    /// values; constraints over other stored columns keep their results.
     fn may_change(&self, table: i32, columns: &[String]) -> bool {
-        match &self.assigned {
-            Some(assigned) if !self.action_tables.contains(&table) => columns
-                .iter()
-                .any(|column| assigned.contains(&column.to_lowercase())),
+        if self.action_tables.contains(&table) || columns.is_empty() {
+            return true;
+        }
+        match &self.target {
+            Some(Target {
+                table: target,
+                assigned: Some(assigned),
+                computed,
+                ..
+            }) if target.id == table => columns.iter().any(|column| {
+                let column = column.to_lowercase();
+                assigned.contains(&column) || computed.contains(&column)
+            }),
             _ => true,
         }
     }
@@ -261,10 +278,16 @@ impl Run<'_> {
     /// A condition restricting the rows of `table` to check, if only some can
     /// be new.
     fn restriction(&self, table: i32) -> Option<String> {
-        self.inserted
-            .as_ref()
-            .filter(|(target, _)| target.id == table && !self.action_tables.contains(&table))
-            .map(|(_, rowid)| format!("__msduck_c.rowid > {rowid}"))
+        match &self.target {
+            Some(Target {
+                table: target,
+                rowid: Some(rowid),
+                ..
+            }) if target.id == table && !self.action_tables.contains(&table) => {
+                Some(format!("__msduck_c.rowid > {rowid}"))
+            }
+            _ => None,
+        }
     }
 
     fn keys_of(&self, table: i32, columns: &[String]) -> Option<&Keys> {
@@ -356,6 +379,21 @@ impl Run<'_> {
             |row| row.get(0),
         )?;
         Ok((!empty).then_some(name))
+    }
+
+    /// Old and new values of the key `constraint` references, when the
+    /// statement or an action recorded them.
+    fn mapping(&self, table: i32, constraint: &Constraint) -> Option<Mapping> {
+        self.mappings
+            .iter()
+            .find(|m| {
+                m.table == table
+                    && constraint
+                        .referenced_columns
+                        .iter()
+                        .all(|c| m.columns.contains_key(&c.to_lowercase()))
+            })
+            .cloned()
     }
 
     fn written(&mut self, table: i32, event: Event) {
@@ -460,84 +498,172 @@ fn factor_name(factor: &TableFactor) -> Option<(&ObjectName, Option<&Ident>)> {
     }
 }
 
-/// Materialize (old, new) values of `columns` for the rows `update` changes,
-/// through the engine, before it runs.
-fn map_update(
-    session: &mut Session,
-    parameters: &mut HashMap<String, Parameter>,
-    statement: &Statement,
-    table: &Table,
-    columns: &[String],
-    relation: &str,
-) -> Result<HashMap<String, (String, String)>> {
-    let unsupported = || {
-        anyhow::anyhow!(
-            "unsupported UPDATE shape for ON UPDATE CASCADE on {}",
-            table.display()
-        )
-    };
-    let (update, with) = update_of(statement).ok_or_else(unsupported)?;
-    if update.limit.is_some() || !update.order_by.is_empty() {
-        return Err(unsupported());
-    }
-    let (target, target_alias) = factor_name(&update.table.relation).ok_or_else(unsupported)?;
-    let sources: Vec<TableWithJoins> = match &update.from {
+fn update_sources(update: &Update) -> Vec<TableWithJoins> {
+    match &update.from {
         Some(UpdateTableFromKind::AfterSet(from) | UpdateTableFromKind::BeforeSet(from)) => {
             from.clone()
         }
         None => vec![],
-    };
-    // `UPDATE alias SET ... FROM table alias ...` names its target by alias.
-    let aliased_in_from = target.0.len() == 1
-        && sources.iter().any(|source| {
-            std::iter::once(&source.relation)
-                .chain(source.joins.iter().map(|j| &j.relation))
-                .any(|factor| {
-                    factor_name(factor).is_some_and(|(_, alias)| {
-                        alias.is_some_and(|alias| {
-                            target.0[0]
-                                .as_ident()
-                                .is_some_and(|t| t.value.eq_ignore_ascii_case(&alias.value))
-                        })
-                    })
-                })
-        });
-    let qualifier: Vec<Ident> = match target_alias {
-        Some(alias) => vec![alias.clone()],
-        None => target
-            .0
+    }
+}
+
+fn same_name(a: &ObjectName, b: &ObjectName) -> bool {
+    a.0.len() == b.0.len()
+        && a.0
             .iter()
-            .map(|part| part.as_ident().cloned())
-            .collect::<Option<Vec<_>>>()
-            .ok_or_else(unsupported)?,
+            .zip(&b.0)
+            .all(|(x, y)| match (x.as_ident(), y.as_ident()) {
+                (Some(x), Some(y)) => x.value.eq_ignore_ascii_case(&y.value),
+                _ => false,
+            })
+}
+
+/// Where an UPDATE writes: the resolved table, how its columns are
+/// qualified, and whether FROM already names it (`UPDATE a ... FROM t a` or
+/// `UPDATE t ... FROM t JOIN u`).
+struct UpdateTarget {
+    table: Table,
+    qualifier: Vec<Ident>,
+    in_from: bool,
+}
+
+fn update_target(session: &Session, statement: &Statement) -> Result<Option<UpdateTarget>> {
+    let Some((update, _)) = update_of(statement) else {
+        return Ok(None);
     };
-    let from = if aliased_in_from {
-        sources
+    let Some((name, alias)) = factor_name(&update.table.relation) else {
+        return Ok(None);
+    };
+    let Some(parts) = name
+        .0
+        .iter()
+        .map(|part| part.as_ident().cloned())
+        .collect::<Option<Vec<_>>>()
+    else {
+        return Ok(None);
+    };
+    let mut resolved = name.clone();
+    let mut qualifier = alias.map_or_else(|| parts.clone(), |alias| vec![alias.clone()]);
+    let mut in_from = false;
+    if alias.is_none() {
+        let sources = update_sources(update);
+        let factors = sources.iter().flat_map(|source| {
+            std::iter::once(&source.relation).chain(source.joins.iter().map(|j| &j.relation))
+        });
+        for factor in factors {
+            let Some((source, source_alias)) = factor_name(factor) else {
+                continue;
+            };
+            match source_alias {
+                Some(source_alias)
+                    if parts.len() == 1
+                        && source_alias.value.eq_ignore_ascii_case(&parts[0].value) =>
+                {
+                    resolved = source.clone();
+                    qualifier = vec![source_alias.clone()];
+                    in_from = true;
+                    break;
+                }
+                None if same_name(source, name) => {
+                    in_from = true;
+                    break;
+                }
+                _ => {}
+            }
+        }
+    }
+    let table = resolve(session, std::slice::from_ref(&resolved))?
+        .into_iter()
+        .next();
+    Ok(table.map(|table| UpdateTarget {
+        table,
+        qualifier,
+        in_from,
+    }))
+}
+
+/// Whether evaluating `expr` twice may give different values.
+fn volatile(expr: &Expr) -> bool {
+    const FUNCTIONS: &[&str] = &[
+        "NEWID",
+        "NEWSEQUENTIALID",
+        "RAND",
+        "CRYPT_GEN_RANDOM",
+        "GETDATE",
+        "GETUTCDATE",
+        "SYSDATETIME",
+        "SYSUTCDATETIME",
+        "SYSDATETIMEOFFSET",
+        "CURRENT_TIMESTAMP",
+    ];
+    visit_expressions(expr, |expr| {
+        let name = match expr {
+            Expr::Function(function) => function.name.to_string(),
+            Expr::Identifier(ident) if ident.quote_style.is_none() => ident.value.clone(),
+            _ => return ControlFlow::Continue(()),
+        };
+        if FUNCTIONS.iter().any(|f| f.eq_ignore_ascii_case(&name))
+            || name.to_ascii_uppercase().starts_with("NEXT VALUE")
+        {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    })
+    .is_break()
+}
+
+/// Materialize (old, new) values of the target's `columns` for the rows the
+/// UPDATE changes, through the engine, before it runs.
+fn map_update(
+    session: &mut Session,
+    parameters: &mut HashMap<String, Parameter>,
+    statement: &Statement,
+    target: &UpdateTarget,
+    columns: &[String],
+    relation: &str,
+) -> Result<HashMap<String, (String, String)>> {
+    let unsupported = |why: &str| {
+        anyhow::anyhow!(
+            "unsupported UPDATE of keys referenced with ON UPDATE actions on {}: {why}",
+            target.table.display()
+        )
+    };
+    let (update, with) = update_of(statement).ok_or_else(|| unsupported("statement shape"))?;
+    if update.limit.is_some() || !update.order_by.is_empty() {
+        return Err(unsupported("TOP or ORDER BY"));
+    }
+    let from = if target.in_from {
+        update_sources(update)
     } else {
         std::iter::once(update.table.clone())
-            .chain(sources)
+            .chain(update_sources(update))
             .collect()
     };
     let mut assigned: HashMap<String, Expr> = HashMap::new();
     for assignment in &update.assignments {
         let AssignmentTarget::ColumnName(name) = &assignment.target else {
-            return Err(unsupported());
+            return Err(unsupported("tuple assignment"));
         };
         let Some(column) = name.0.last().and_then(|part| part.as_ident()) else {
-            return Err(unsupported());
+            return Err(unsupported("assignment target"));
         };
         assigned.insert(column.value.to_lowercase(), assignment.value.clone());
     }
     let mut projection = Vec::new();
     let mut pairs = HashMap::new();
     for (index, column) in columns.iter().enumerate() {
-        let mut parts = qualifier.clone();
+        let mut parts = target.qualifier.clone();
         parts.push(Ident::with_quote('[', column));
         let old = Expr::CompoundIdentifier(parts);
-        let new = assigned
-            .get(&column.to_lowercase())
-            .cloned()
-            .unwrap_or_else(|| old.clone());
+        let new = match assigned.get(&column.to_lowercase()) {
+            // The pairs are computed apart from the UPDATE itself.
+            Some(value) if volatile(value) => {
+                return Err(unsupported("nondeterministic key value"));
+            }
+            Some(value) => value.clone(),
+            None => old.clone(),
+        };
         projection.push(SelectItem::ExprWithAlias {
             expr: old,
             alias: Ident::new(format!("o{index}")),
@@ -588,27 +714,6 @@ fn assigned_columns(statement: &Statement) -> Option<HashSet<String>> {
         columns.insert(name.0.last()?.as_ident()?.value.to_lowercase());
     }
     Some(columns)
-}
-
-fn assigns_any(statement: &Statement, columns: &[String]) -> bool {
-    let Some((update, _)) = update_of(statement) else {
-        return true;
-    };
-    update
-        .assignments
-        .iter()
-        .any(|assignment| match &assignment.target {
-            AssignmentTarget::ColumnName(name) => name
-                .0
-                .last()
-                .and_then(|part| part.as_ident())
-                .is_some_and(|column| {
-                    columns
-                        .iter()
-                        .any(|c| c.eq_ignore_ascii_case(&column.value))
-                }),
-            AssignmentTarget::Tuple(_) => true,
-        })
 }
 
 /// Tables reachable from `start` through enabled foreign keys with actions.
@@ -713,8 +818,7 @@ pub(crate) fn dml(
         events: HashMap::new(),
         acted: HashSet::new(),
         action_tables: HashSet::new(),
-        assigned: assigned_columns(statement),
-        inserted: None,
+        target: None,
     };
     let result = execute(
         session,
@@ -729,7 +833,15 @@ pub(crate) fn dml(
     run.scratch.cleanup(session);
     let result = match result {
         Ok(execution) => Ok(execution),
-        Err(Failure::Engine(error)) => Err(error),
+        Err(Failure::Before(error)) => Err(error),
+        Err(Failure::After(error)) => {
+            // The statement wrote: in the caller's transaction, its partial
+            // effects must not commit.
+            if !transaction.owned {
+                super::invalidate(session);
+            }
+            Err(error)
+        }
         Err(Failure::Violation(error, undo)) => {
             if !transaction.owned {
                 match undo {
@@ -755,22 +867,39 @@ pub(crate) fn dml(
 }
 
 enum Failure {
-    /// The statement or an action failed; the engine reports it.
-    Engine(anyhow::Error),
+    /// Nothing was written yet; the engine reports the error.
+    Before(anyhow::Error),
+    /// The statement ran, then an action or a check failed.
+    After(anyhow::Error),
     /// A constraint is violated; undo with the INSERT rows above a row id.
     Violation(msduck_core::diagnostic::SqlError, Option<(Table, i64)>),
 }
 
 impl From<anyhow::Error> for Failure {
     fn from(error: anyhow::Error) -> Self {
-        Self::Engine(error)
+        Self::Before(error)
     }
 }
 
 impl From<duckdb::Error> for Failure {
     fn from(error: duckdb::Error) -> Self {
-        Self::Engine(error.into())
+        Self::Before(error.into())
     }
+}
+
+/// Whether a user column hides DuckDB's `rowid` pseudo-column.
+fn hides_rowid(session: &Session, table: &Table) -> Result<bool> {
+    Ok(catalog::columns(&session.db, table)?
+        .iter()
+        .any(|column| column.name.eq_ignore_ascii_case("rowid")))
+}
+
+fn computed_columns(session: &Session, table: &Table) -> Result<HashSet<String>> {
+    Ok(catalog::columns(&session.db, table)?
+        .into_iter()
+        .filter(|column| column.computed)
+        .map(|column| column.name.to_lowercase())
+        .collect())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -786,67 +915,93 @@ fn execute(
 ) -> Result<Execution, Failure> {
     let event = Event::of(verb);
     let constraints = run.constraints;
-    let target = match statement {
-        Statement::Insert(insert) if verb == Verb::Insert => match &insert.table {
-            TableObject::TableName(name) => resolve(session, std::slice::from_ref(name))?
-                .into_iter()
-                .next(),
-            _ => None,
-        },
-        _ => None,
-    };
-    if let Some(table) = target {
-        let rowid: i64 = session.db.query_row(
-            &format!("SELECT coalesce(max(rowid),-1) FROM {}", table.sql()),
-            [],
-            |row| row.get(0),
-        )?;
-        run.inserted = Some((table, rowid));
+    // The table the statement writes, when it can be resolved.
+    let mut update_target_info = None;
+    match statement {
+        Statement::Insert(insert) => {
+            if let TableObject::TableName(name) = &insert.table
+                && let Some(table) = resolve(session, std::slice::from_ref(name))?
+                    .into_iter()
+                    .next()
+            {
+                let rowid = if hides_rowid(session, &table)? {
+                    None
+                } else {
+                    Some(session.db.query_row(
+                        &format!("SELECT coalesce(max(rowid),-1) FROM {}", table.sql()),
+                        [],
+                        |row| row.get::<_, i64>(0),
+                    )?)
+                };
+                run.target = Some(Target {
+                    table,
+                    rowid,
+                    assigned: None,
+                    computed: HashSet::new(),
+                });
+            }
+        }
+        _ if verb == Verb::Update => {
+            if let Some(target) = update_target(session, statement)? {
+                run.target = Some(Target {
+                    table: target.table.clone(),
+                    rowid: None,
+                    assigned: assigned_columns(statement),
+                    computed: computed_columns(session, &target.table)?,
+                });
+                update_target_info = Some(target);
+            }
+        }
+        _ => {}
     }
-    // Old violations of untrusted constraints stay acceptable.
-    // An INSERT checks only its new rows, so it needs no record of them.
+    let only_new_rows = run
+        .target
+        .as_ref()
+        .is_some_and(|target| target.rowid.is_some());
+    // Old violations of untrusted constraints stay acceptable. An INSERT
+    // that checks only its new rows needs no record of them.
     for constraint in constraints {
-        if constraint.untrusted && run.inserted.is_none() && relevant(constraint, scope) {
+        if constraint.untrusted && !only_new_rows && relevant(constraint, scope) {
             let query = violations_query(session, constraint, None)?;
             let name = run.scratch.create(session, &query)?;
             run.untrusted.insert(constraint.id, name);
         }
     }
+    let written: Vec<Table> = match &run.target {
+        Some(target) => vec![target.table.clone()],
+        None => touched.to_vec(),
+    };
     if event.removes() {
-        for table in touched {
+        for table in &written {
             run.snapshot_keys(session, table, false)?;
         }
     }
-    // ON UPDATE CASCADE needs each updated row's old and new key.
-    if event == Event::Update {
-        for table in touched {
-            let cascading: Vec<&Constraint> = constraints
-                .iter()
-                .filter(|c| {
-                    c.kind == Type::Foreign
-                        && c.enabled()
-                        && c.on_update == Referential::Cascade
-                        && c.referenced.as_ref().is_some_and(|r| r.id == table.id)
-                        && assigns_any(statement, &c.referenced_columns)
-                })
-                .collect();
-            if cascading.is_empty() {
-                continue;
-            }
-            let mut columns: Vec<String> = Vec::new();
-            for constraint in &cascading {
+    // ON UPDATE actions need each updated row's old and new key.
+    if let Some(target) = &update_target_info {
+        let mut columns: Vec<String> = Vec::new();
+        for constraint in constraints {
+            if constraint.kind == Type::Foreign
+                && constraint.enabled()
+                && constraint.on_update != Referential::NoAction
+                && constraint
+                    .referenced
+                    .as_ref()
+                    .is_some_and(|r| r.id == target.table.id)
+                && run.may_change(target.table.id, &constraint.referenced_columns)
+            {
                 for column in &constraint.referenced_columns {
                     if !columns.iter().any(|c| c.eq_ignore_ascii_case(column)) {
                         columns.push(column.clone());
                     }
                 }
             }
+        }
+        if !columns.is_empty() {
             let relation = run.scratch.name();
-            run.scratch.names.pop();
             run.scratch.mapped.push(relation.clone());
-            let pairs = map_update(session, parameters, statement, table, &columns, &relation)?;
+            let pairs = map_update(session, parameters, statement, target, &columns, &relation)?;
             run.mappings.push(Mapping {
-                table: table.id,
+                table: target.table.id,
                 relation: format!("main.{}", quote(&relation)),
                 columns: pairs,
             });
@@ -854,32 +1009,36 @@ fn execute(
     }
     // Rows above the old largest row id are this INSERT's: deleting them
     // undoes it inside the caller's transaction.
-    let undo = run
-        .inserted
-        .clone()
-        .filter(|_| !transaction.owned && output_targets(statement).is_empty());
+    let undo = match &run.target {
+        Some(Target {
+            table,
+            rowid: Some(rowid),
+            ..
+        }) if verb == Verb::Insert
+            && !transaction.owned
+            && output_targets(statement).is_empty() =>
+        {
+            Some((table.clone(), *rowid))
+        }
+        _ => None,
+    };
     let execution = ext::reenter(session, "constraints", |session| {
         session.execute(statement.clone(), parameters)
     })?;
-    // An INSERT writes only its target; other named tables are read.
-    match &run.inserted {
-        Some((target, _)) => {
-            let id = target.id;
-            run.written(id, event);
+    let after = (|| -> Result<Option<msduck_core::diagnostic::SqlError>> {
+        for table in &written {
+            run.written(table.id, event);
         }
-        None => {
-            for table in touched {
-                run.written(table.id, event);
-            }
+        if event.removes() {
+            actions(session, run, &written, event)?;
         }
+        validate(session, run, verb)
+    })();
+    match after {
+        Ok(None) => Ok(execution),
+        Ok(Some(error)) => Err(Failure::Violation(error, undo)),
+        Err(error) => Err(Failure::After(error)),
     }
-    if event.removes() {
-        actions(session, run, touched, event)?;
-    }
-    if let Some(error) = validate(session, run, verb)? {
-        return Err(Failure::Violation(error, undo));
-    }
-    Ok(execution)
 }
 
 fn set_list(constraint: &Constraint, values: impl Fn(&str) -> String) -> String {
@@ -905,16 +1064,32 @@ fn matches_removed(constraint: &Constraint, removed: &str) -> String {
     )
 }
 
+/// The referencing columns of `constraint` with the (old, new) columns of
+/// `mapping` for the key each one copies.
+fn mapped_pairs(constraint: &Constraint, mapping: &Mapping) -> Vec<(String, (String, String))> {
+    constraint
+        .columns
+        .iter()
+        .zip(&constraint.referenced_columns)
+        .map(|(column, referenced)| {
+            (
+                column.clone(),
+                mapping.columns[&referenced.to_lowercase()].clone(),
+            )
+        })
+        .collect()
+}
+
 /// Referential actions, breadth first from the tables the statement wrote.
 fn actions(
     session: &mut Session,
     run: &mut Run<'_>,
-    touched: &[Table],
+    written: &[Table],
     event: Event,
 ) -> Result<()> {
     let constraints = run.constraints;
     let mut queue: std::collections::VecDeque<(i32, Event)> =
-        touched.iter().map(|t| (t.id, event)).collect();
+        written.iter().map(|t| (t.id, event)).collect();
     let mut steps = 0usize;
     while let Some((table, event)) = queue.pop_front() {
         steps += 1;
@@ -944,39 +1119,12 @@ fn actions(
             if action == Referential::NoAction {
                 continue;
             }
-            if event == Event::Update && action == Referential::Cascade {
-                let mapping = run
-                    .mappings
-                    .iter()
-                    .find(|m| {
-                        m.table == table
-                            && constraint
-                                .referenced_columns
-                                .iter()
-                                .all(|c| m.columns.contains_key(&c.to_lowercase()))
-                    })
-                    .cloned();
-                let Some(mapping) = mapping else {
-                    // Without old and new key pairs, only unchanged keys are fine.
-                    if run.removed(session, constraint)?.is_some() {
-                        bail!(
-                            "unsupported ON UPDATE CASCADE through foreign key {}",
-                            constraint.name
-                        );
-                    }
-                    continue;
-                };
-                let pairs: Vec<(String, (String, String))> = constraint
-                    .columns
-                    .iter()
-                    .zip(&constraint.referenced_columns)
-                    .map(|(column, referenced)| {
-                        (
-                            column.clone(),
-                            mapping.columns[&referenced.to_lowercase()].clone(),
-                        )
-                    })
-                    .collect();
+            // An updated key: act on the rows of every key whose value
+            // changed, as recorded before the update.
+            if event == Event::Update
+                && let Some(mapping) = run.mapping(table, constraint)
+            {
+                let pairs = mapped_pairs(constraint, &mapping);
                 let changed = pairs
                     .iter()
                     .map(|(_, (old, new))| format!("m.{old} IS DISTINCT FROM m.{new}"))
@@ -985,9 +1133,24 @@ fn actions(
                 let matched = conjunction(pairs.iter().map(|(column, (old, _))| {
                     format!("m.{old} = {}.{}", child.sql(), quote(column))
                 }));
+                let defaults = if action == Referential::SetDefault {
+                    catalog::native_defaults(&session.db, &child)?
+                } else {
+                    HashMap::new()
+                };
                 let assignments = pairs
                     .iter()
-                    .map(|(column, (_, new))| format!("{} = m.{new}", quote(column)))
+                    .map(|(column, (_, new))| {
+                        let value = match action {
+                            Referential::Cascade => format!("m.{new}"),
+                            Referential::SetDefault => defaults
+                                .get(&column.to_lowercase())
+                                .cloned()
+                                .unwrap_or_else(|| "NULL".into()),
+                            _ => "NULL".into(),
+                        };
+                        format!("{} = {value}", quote(column))
+                    })
                     .collect::<Vec<_>>()
                     .join(", ");
                 run.snapshot_keys(session, &child, true)?;
@@ -996,16 +1159,17 @@ fn actions(
                     child.sql(),
                     mapping.relation
                 ))?;
-                // Keys of the referencing table that were copied from the
-                // referenced key move the same way.
-                run.mappings.push(Mapping {
-                    table: child.id,
-                    relation: mapping.relation.clone(),
-                    columns: pairs
-                        .iter()
-                        .map(|(column, pair)| (column.to_lowercase(), pair.clone()))
-                        .collect(),
-                });
+                if action == Referential::Cascade {
+                    // Referencing columns copied from the key move the same way.
+                    run.mappings.push(Mapping {
+                        table: child.id,
+                        relation: mapping.relation.clone(),
+                        columns: pairs
+                            .iter()
+                            .map(|(column, pair)| (column.to_lowercase(), pair.clone()))
+                            .collect(),
+                    });
+                }
                 run.acted.insert(constraint.id);
                 run.action_tables.insert(child.id);
                 run.written(child.id, Event::Update);
@@ -1015,11 +1179,13 @@ fn actions(
             let Some(removed) = run.removed(session, constraint)? else {
                 continue;
             };
-            if event == Event::Merge
-                && (constraint.on_delete != constraint.on_update || action == Referential::Cascade)
+            if (event == Event::Update && action == Referential::Cascade)
+                || (event == Event::Merge
+                    && (constraint.on_delete != constraint.on_update
+                        || action == Referential::Cascade))
             {
                 bail!(
-                    "unsupported MERGE that removes keys referenced by foreign key {} with different or cascading actions",
+                    "unsupported change of keys referenced by foreign key {} without their old and new values",
                     constraint.name
                 );
             }
@@ -1034,26 +1200,19 @@ fn actions(
                     run.written(child.id, Event::Delete);
                     queue.push_back((child.id, Event::Delete));
                 }
-                Referential::SetNull => {
-                    session.db.execute_batch(&format!(
-                        "UPDATE {} SET {} WHERE {condition}",
-                        child.sql(),
-                        set_list(constraint, |_| "NULL".into())
-                    ))?;
-                    run.acted.insert(constraint.id);
-                    run.action_tables.insert(child.id);
-                    run.written(child.id, Event::Update);
-                    queue.push_back((child.id, Event::Update));
-                }
-                Referential::SetDefault => {
+                Referential::SetNull | Referential::SetDefault => {
                     let defaults = catalog::native_defaults(&session.db, &child)?;
                     session.db.execute_batch(&format!(
                         "UPDATE {} SET {} WHERE {condition}",
                         child.sql(),
-                        set_list(constraint, |c| defaults
-                            .get(&c.to_lowercase())
-                            .cloned()
-                            .unwrap_or_else(|| "NULL".into()))
+                        set_list(constraint, |c| if action == Referential::SetDefault {
+                            defaults
+                                .get(&c.to_lowercase())
+                                .cloned()
+                                .unwrap_or_else(|| "NULL".into())
+                        } else {
+                            "NULL".into()
+                        })
                     ))?;
                     run.acted.insert(constraint.id);
                     run.action_tables.insert(child.id);
@@ -1113,8 +1272,8 @@ fn validate(
                 return Ok(Some(errors::check_conflict(verb, constraint, &database)));
             }
             // A violation whose key was removed from the referenced table is
-            // reported against the referencing table.
-            // Rows an action wrote are reported against the referenced table.
+            // reported against the referencing table; rows an action wrote
+            // are reported against the referenced table.
             let reference = parent_changed
                 && !run.acted.contains(&constraint.id)
                 && (!child_written

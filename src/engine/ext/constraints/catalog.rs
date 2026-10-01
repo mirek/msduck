@@ -383,13 +383,16 @@ pub(crate) struct Column {
     pub precision: i32,
     pub scale: i32,
     pub computed: bool,
+    pub persisted: bool,
     pub identity: bool,
 }
 
 pub(crate) fn columns(db: &Connection, table: &Table) -> Result<Vec<Column>> {
     let mut statement = db.prepare(
-        "SELECT name,column_id,is_nullable,user_type_id,max_length,precision,scale,is_computed,is_identity
-         FROM sys.columns WHERE object_id=? ORDER BY column_id",
+        "SELECT c.name,c.column_id,c.is_nullable,c.user_type_id,c.max_length,c.precision,c.scale,c.is_computed,
+           coalesce((SELECT k.is_persisted FROM main.__msduck_computed_columns k WHERE k.object_id=c.object_id AND k.name_key=lower(c.name)),false),
+           c.is_identity
+         FROM sys.columns c WHERE c.object_id=? ORDER BY c.column_id",
     )?;
     let rows = statement.query_map([table.id], |row| {
         Ok(Column {
@@ -401,7 +404,8 @@ pub(crate) fn columns(db: &Connection, table: &Table) -> Result<Vec<Column>> {
             precision: row.get::<_, i64>(5)? as i32,
             scale: row.get::<_, i64>(6)? as i32,
             computed: row.get(7)?,
-            identity: row.get(8)?,
+            persisted: row.get(8)?,
+            identity: row.get(9)?,
         })
     })?;
     Ok(rows.collect::<duckdb::Result<_>>()?)

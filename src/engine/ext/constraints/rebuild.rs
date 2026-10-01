@@ -167,9 +167,19 @@ pub(crate) fn keys(
         rows.collect::<duckdb::Result<Vec<_>>>()?
     };
     let list = stored.join(",");
+    // Keep the physical row order, unless a user column hides `rowid`.
+    let order = if create
+        .columns
+        .iter()
+        .any(|column| column.name.value.eq_ignore_ascii_case("rowid"))
+    {
+        ""
+    } else {
+        " ORDER BY rowid"
+    };
     db.execute_batch(&create.to_string())?;
     db.execute_batch(&format!(
-        "INSERT INTO {}.{} ({list}) SELECT {list} FROM {} ORDER BY rowid",
+        "INSERT INTO {}.{} ({list}) SELECT {list} FROM {}{order}",
         quote(&table.schema),
         quote(&temporary),
         table.sql()

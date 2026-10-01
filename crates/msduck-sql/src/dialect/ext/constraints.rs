@@ -605,8 +605,75 @@ pub fn parse(parser: &mut Parser) -> Option<Result<Statement, ParserError>> {
     if !(peek_word(parser, "ALTER") && peek_nth_word(parser, 1, "TABLE")) {
         return None;
     }
-    let alter = parser.try_parse(parse_alter).ok()?;
+    let mut alter = parser.try_parse(parse_alter).ok()?;
+    delimit(&mut alter);
     Some(Ok(carrier(KIND, &alter.to_string(), vec![])))
+}
+
+/// sqlparser writes `[name]` without escaping `]`, so the carrier payload
+/// would not parse back to the same name. Write such names as `"name"`,
+/// which escapes, instead.
+fn delimit(alter: &mut Alter) {
+    struct Delimit;
+    impl VisitorMut for Delimit {
+        type Break = ();
+        fn pre_visit_ident(&mut self, ident: &mut Ident) -> std::ops::ControlFlow<()> {
+            fix(ident);
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    fn fix(ident: &mut Ident) {
+        if ident.quote_style == Some('[') && ident.value.contains(']') {
+            ident.quote_style = Some('"');
+        }
+    }
+    fn names(names: &mut [Ident]) {
+        names.iter_mut().for_each(fix);
+    }
+    let _ = VisitMut::visit(&mut alter.table, &mut Delimit);
+    match &mut alter.action {
+        Action::Add(items) => {
+            for item in items {
+                match item {
+                    AddItem::Column(column) => {
+                        let _ = VisitMut::visit(column, &mut Delimit);
+                    }
+                    AddItem::Constraint(constraint) => {
+                        if let Some(name) = &mut constraint.name {
+                            fix(name);
+                        }
+                        match &mut constraint.kind {
+                            Kind::Check(expr) => {
+                                let _ = VisitMut::visit(expr, &mut Delimit);
+                            }
+                            Kind::Default { value, column, .. } => {
+                                let _ = VisitMut::visit(value, &mut Delimit);
+                                fix(column);
+                            }
+                            Kind::PrimaryKey(columns) | Kind::Unique(columns) => names(columns),
+                            Kind::ForeignKey(key) => {
+                                names(&mut key.columns);
+                                names(&mut key.referred);
+                                let _ = VisitMut::visit(&mut key.table, &mut Delimit);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Action::Drop(items) => {
+            for item in items {
+                match item {
+                    DropItem::Constraint { name, .. } | DropItem::Column { name, .. } => fix(name),
+                }
+            }
+        }
+        Action::Toggle { targets, .. } => {
+            if let Targets::Names(list) = targets {
+                names(list);
+            }
+        }
+    }
 }
 
 /// Whether this feature validates `statement` itself. Its statements are

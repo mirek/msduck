@@ -66,11 +66,14 @@ level, including foreign keys with actions.
   SET DEFAULT work for inline, table-level and ALTER TABLE foreign keys,
   through any number of levels. Actions run in breadth-first order from the
   modified table. NO ACTION constraints are checked after all actions, so a
-  cascade that removes the referencing row satisfies them. ON UPDATE
-  CASCADE pairs each updated row's old and new key, so multi-row key updates
-  such as `UPDATE parent SET id = id + 10` cascade row by row. SET DEFAULT
-  uses the column's current default, or NULL; a default that is not a key
-  fails with 547. Definitions that could reach a table along two cascade
+  cascade that removes the referencing row satisfies them. ON UPDATE actions
+  pair each updated row's old and new key, recorded before the UPDATE runs,
+  so multi-row key updates such as `UPDATE parent SET id = id + 10` cascade
+  row by row, and SET NULL / SET DEFAULT apply to the rows of every key that
+  changed, even when another row takes that value (a key swap). Only the
+  UPDATE's target table is mapped, including `UPDATE alias ... FROM table
+  alias` and `UPDATE t ... FROM t JOIN u`. SET DEFAULT uses the column's
+  current default, or NULL; a default that is not a key fails with 547. Definitions that could reach a table along two cascade
   paths, or cascade into their own table, fail with 1785, like SQL Server.
 - **Definition errors.** 1767 (referenced table missing), 1769 and 1770
   (unknown columns), 8139 (column count), 1773 (implicit reference without a
@@ -80,7 +83,8 @@ level, including foreign keys with actions.
   in one statement; CREATE TABLE and CREATE VIEW also fail with 2714 when a
   constraint or named default already uses the name), 1046 (subquery in
   CHECK), 207 (unknown column in CHECK),
-  137 (variable), 4145 (non-boolean CHECK), 1752, 1754, 1781 and 128 for
+  137 (variable), 4145 (non-boolean CHECK), 1764 (CHECK or FOREIGN KEY over
+  a computed column that is not PERSISTED), 1752, 1754, 1781 and 128 for
   DEFAULT, 3728, 3733 and 3725 for DROP, 4917 and 11415 for CHECK/NOCHECK.
   As in SQL Server, these are followed by 1750, 3727 or 4916, and
   `ERROR_NUMBER()` in a CATCH block reports the last one.
@@ -92,11 +96,17 @@ level, including foreign keys with actions.
   with 5074 per object, then 4922. ALTER COLUMN that keeps the type and only
   changes nullability is allowed, including on key columns.
 - **Atomicity.** Each statement is atomic in autocommit mode. In an explicit
-  transaction, a failed INSERT is undone and the transaction stays usable,
-  as in SQL Server. A failed UPDATE, DELETE or MERGE, or an ALTER TABLE that
+  transaction, a failed INSERT is undone (by row id) and the transaction
+  stays usable, as in SQL Server. A failed UPDATE, DELETE or MERGE, an
+  INSERT into a table with a user column named `rowid` (which hides DuckDB's
+  row id), any failure after the statement wrote, or an ALTER TABLE that
   fails after it changed something, invalidates the native transaction: like
-  any native DuckDB constraint error, later statements fail until ROLLBACK.
-  ROLLBACK undoes constraint definitions with the rest of the transaction.
+  any native DuckDB constraint error, later statements fail and COMMIT ends
+  the transaction without its changes. ROLLBACK undoes constraint
+  definitions with the rest of the transaction.
+- **Changed columns.** An UPDATE checks only the constraints over columns it
+  assigns, or over computed columns, as SQL Server does; an INSERT checks
+  only its new rows.
 - **Catalog.** `sys.objects` lists CHECK (`C`), FOREIGN KEY (`F`), PRIMARY KEY
   (`PK`) and UNIQUE (`UQ`) constraints, so `OBJECT_ID` finds them.
   `sys.check_constraints`, `sys.foreign_keys`, `sys.foreign_key_columns` and
@@ -164,12 +174,16 @@ The feature uses the extension hooks (docs/extension-hooks.md):
 - Constraints are checked against the session's snapshot, without locks, so
   concurrent sessions can still race (for example, one deletes a key that
   another inserts a reference to).
-- Validation scans whole tables per statement, and key changes rebuild the
-  table: costs grow with table size.
-- ON UPDATE CASCADE does not support UPDATE with TOP or ORDER BY, MERGE that
-  changes a key referenced with cascading or differing actions, or a cascade
-  through columns that are not a copy of the updated key; these fail with an
-  explicit error.
+- Validation scans whole tables per statement (an INSERT only its new
+  rows), and key changes rebuild the table: costs grow with table size. A
+  rebuild keeps the physical row order except when a user column named
+  `rowid` hides the native row id.
+- ON UPDATE actions do not support UPDATE with TOP or ORDER BY, tuple
+  assignments, nondeterministic new key values (NEWID(), RAND(), current
+  time functions, NEXT VALUE FOR), MERGE that changes a key referenced with
+  cascading or differing actions, or a cascade through columns that are not
+  a copy of the updated key; these fail with an explicit error instead of
+  guessing old and new keys.
 - Rows changed by referential actions do not fire triggers.
 - Bulk loads (INSERT BULK) do not check CHECK and FOREIGN KEY constraints,
   like SQL Server's default without CHECK_CONSTRAINTS, but they do not mark

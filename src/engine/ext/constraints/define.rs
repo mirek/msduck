@@ -234,6 +234,9 @@ fn plan(
 
 /// Validate a CHECK expression over the table's columns; returns the
 /// distinct columns it references, as declared.
+///
+/// Lowering and binding the expression natively then finds names that are
+/// not columns (207).
 fn check_columns(columns: &[String], expr: &Expr) -> Result<Vec<String>> {
     let mut referenced: Vec<String> = Vec::new();
     let mut failure = None;
@@ -256,18 +259,14 @@ fn check_columns(columns: &[String], expr: &Expr) -> Result<Vec<String>> {
             },
             _ => return ControlFlow::Continue(()),
         };
-        match columns.iter().find(|column| same(column, &name.value)) {
-            Some(column) => {
-                if !referenced.iter().any(|c| same(c, column)) {
-                    referenced.push(column.clone());
-                }
-                ControlFlow::Continue(())
-            }
-            None => {
-                failure = Some(errors::invalid_column(&name.value));
-                ControlFlow::Break(())
-            }
+        // Other names, such as the datepart of DATEDIFF, are not columns;
+        // `probe_check` reports names that are neither.
+        if let Some(column) = columns.iter().find(|column| same(column, &name.value))
+            && !referenced.iter().any(|c| same(c, column))
+        {
+            referenced.push(column.clone());
         }
+        ControlFlow::Continue(())
     });
     if let Some(failure) = failure {
         return Err(failure);
@@ -282,6 +281,42 @@ fn check_columns(columns: &[String], expr: &Expr) -> Result<Vec<String>> {
         }
     }
     Ok(referenced)
+}
+
+/// Bind the lowered CHECK expression against the table: unknown columns
+/// fail with 207, like SQL Server.
+fn probe_check(session: &Session, table: &Table, expr: &Expr) -> Result<()> {
+    let native = translate::check(session, table, expr)?;
+    let sql = format!("SELECT 1 FROM {} WHERE NOT ({native}) LIMIT 0", table.sql());
+    if let Err(error) = session.db.prepare(&sql) {
+        let message = error.to_string();
+        if let Some(rest) = message.split("Referenced column \"").nth(1)
+            && let Some(name) = rest.split('"').next()
+        {
+            return Err(errors::invalid_column(name));
+        }
+        return Err(error.into());
+    }
+    Ok(())
+}
+
+/// SQL Server refuses constraints over computed columns that are not
+/// persisted (1764).
+fn persisted(table: &Table, columns: &[&Column], usage: &str, state: u8) -> Result<()> {
+    if let Some(column) = columns.iter().find(|c| c.computed && !c.persisted) {
+        return Err(errors::not_created_in_state(
+            error(
+                1764,
+                1,
+                format!(
+                    "Computed Column '{}' in table '{}' is invalid for use in '{usage}' because it is not persisted.",
+                    column.name, table.name
+                ),
+            ),
+            state,
+        ));
+    }
+    Ok(())
 }
 
 fn find_column<'a>(columns: &'a [Column], name: &str) -> Option<&'a Column> {
@@ -342,6 +377,12 @@ fn resolve_foreign(
         };
         columns.push(found.clone());
     }
+    persisted(
+        child,
+        &columns.iter().collect::<Vec<_>>(),
+        "FOREIGN KEY CONSTRAINT",
+        1,
+    )?;
     let referenced = referenced_table(session, key, name)?;
     let parent_columns = catalog::columns(&session.db, &referenced)?;
     let keys = catalog::native_keys(&session.db, &referenced)?;
@@ -625,6 +666,12 @@ fn resolve(session: &Session, table: &Table, planned: Vec<Planned>) -> Result<Ve
         let entry = match &planned.item.kind {
             Kind::Check(expr) => {
                 let referenced = check_columns(&names, expr)?;
+                let used: Vec<&Column> = referenced
+                    .iter()
+                    .filter_map(|name| find_column(&columns, name))
+                    .collect();
+                persisted(table, &used, "CHECK CONSTRAINT", 0)?;
+                probe_check(session, table, expr)?;
                 let column = match &planned.item.column {
                     Some(owner) => find_column(&columns, &owner.value).map(|c| c.name.clone()),
                     None if referenced.len() == 1 => Some(referenced[0].clone()),

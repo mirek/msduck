@@ -202,3 +202,21 @@ fn carriers_are_owned_and_nest() {
     let statement = carrier(KIND, "ALTER TABLE t NOCHECK CONSTRAINT ALL", vec![]);
     assert!(super::super::owns(&statement));
 }
+
+#[test]
+fn bracketed_names_with_closing_brackets_survive_the_payload() {
+    let alter = claimed("ALTER TABLE [x]]y] DROP CONSTRAINT [x]], CONSTRAINT [y]");
+    let Action::Drop(items) = &alter.action else {
+        panic!()
+    };
+    assert_eq!(alter.table.0[0].as_ident().unwrap().value, "x]y");
+    assert!(
+        matches!(&items[..], [DropItem::Constraint { name, .. }] if name.value == "x], CONSTRAINT [y")
+    );
+    let alter = claimed("ALTER TABLE t ADD CONSTRAINT [c]]k] CHECK ([a]]b] > 0)");
+    assert_eq!(first(&alter).name.as_ref().unwrap().value, "c]k");
+    let Kind::Check(Expr::BinaryOp { left, .. }) = &first(&alter).kind else {
+        panic!()
+    };
+    assert!(matches!(left.as_ref(), Expr::Identifier(ident) if ident.value == "a]b"));
+}

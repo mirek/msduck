@@ -32,6 +32,18 @@ pub(crate) fn not_created(first: SqlError) -> anyhow::Error {
     ])
 }
 
+/// A definition failure followed by 1750 in a given state.
+pub(crate) fn not_created_in_state(first: SqlError, state: u8) -> anyhow::Error {
+    several(vec![
+        first,
+        error(
+            1750,
+            state,
+            "Could not create constraint or index. See previous errors.",
+        ),
+    ])
+}
+
 pub(crate) fn duplicate_object(name: &str) -> anyhow::Error {
     not_created(error(
         2714,
