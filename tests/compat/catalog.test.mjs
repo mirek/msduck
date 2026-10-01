@@ -54,13 +54,13 @@ test('rolled-back DEFAULT definitions leave no catalog objects',async t=>{
 
 test('computed catalog rows match the controlled SQL Server fixture',async t=>{
  const connection=await start(t)
- await query(connection,'CREATE TABLE dbo.catalog_parent(a INT NOT NULL,b INT NOT NULL,label VARCHAR(40),doubled AS a*2 PERSISTED)')
+ await query(connection,'CREATE TABLE dbo.catalog_child(a INT NOT NULL,b INT NOT NULL,label VARCHAR(40),doubled AS a*2 PERSISTED)')
  const capture=reference.runs[0].find(r=>r.name==='computed')
  assert.deepEqual((await query(connection,capture.sql)).rows,capture.result.sets[0].rows)
- await query(connection,'BEGIN TRANSACTION; ALTER TABLE dbo.catalog_parent DROP COLUMN doubled')
+ await query(connection,'BEGIN TRANSACTION; ALTER TABLE dbo.catalog_child DROP COLUMN doubled')
  assert.deepEqual((await query(connection,capture.sql)).rows,[])
  await query(connection,'ROLLBACK')
  assert.deepEqual((await query(connection,capture.sql)).rows,capture.result.sets[0].rows)
- await query(connection,'DROP TABLE dbo.catalog_parent')
+ await query(connection,'DROP TABLE dbo.catalog_child')
  assert.deepEqual((await query(connection,capture.sql)).rows,[])
 })
