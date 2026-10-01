@@ -19,7 +19,13 @@ const PREFIXES: [&str; 3] = ["__msduck_temp_", "__msduck_tv_", "__msduck_global_
 fn readable(name: &str) -> String {
     name.trim_start_matches(['#', '@'])
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -78,9 +84,14 @@ pub(super) fn drop_table(session: &mut Session, backend: &Backend) -> Result<()>
         ))?;
         return Ok(());
     }
-    let statement = parse(&format!("DROP TABLE IF EXISTS dbo.{}", quote(&backend.physical)))?;
+    let statement = parse(&format!(
+        "DROP TABLE IF EXISTS dbo.{}",
+        quote(&backend.physical)
+    ))?;
     let mut parameters = std::collections::HashMap::new();
-    reenter(session, NAME, |session| session.execute(statement, &mut parameters))?;
+    reenter(session, NAME, |session| {
+        session.execute(statement, &mut parameters)
+    })?;
     Ok(())
 }
 
@@ -115,7 +126,9 @@ pub(super) fn restore(
             &sqlparser::ast::Ident::with_quote('"', &backend.physical),
         )?;
         let mut parameters = std::collections::HashMap::new();
-        reenter(session, NAME, |session| session.execute(create, &mut parameters))?;
+        reenter(session, NAME, |session| {
+            session.execute(create, &mut parameters)
+        })?;
     }
     session
         .db

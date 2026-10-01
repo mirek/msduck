@@ -84,8 +84,13 @@ export async function observe(first, open) {
     for (const [name, session, mode, sql] of probes) {
       if (mode === 'close') {
         await close(sessions[session])
-        // A disconnect is processed asynchronously on the server.
-        await new Promise(resolve => setTimeout(resolve, 500))
+        // The server ends the session asynchronously; wait until the global
+        // table it created is gone (at most ten seconds).
+        for (let attempt = 0; attempt < 100; attempt++) {
+          const probe = await capture(sessions.B, "SELECT OBJECT_ID('tempdb..##msduck_gt') AS object_id")
+          if (probe.sets[0]?.rows[0]?.[0] === null) break
+          await new Promise(resolve => setTimeout(resolve, 100))
+        }
         sessions.C = await open(database)
         continue
       }

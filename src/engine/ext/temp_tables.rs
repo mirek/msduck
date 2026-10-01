@@ -224,11 +224,13 @@ impl Feature for Hooks {
             }
             _ => {}
         }
+        let written = syntax::targets(statement);
+        if written.is_empty() && syntax::references(statement).is_empty() {
+            return Ok(None);
+        }
         let mut rewritten = statement.clone();
-        let written = syntax::targets(&rewritten);
-        let changed = syntax::rewrite(&mut rewritten, &mut |name| {
-            resolve(session, name).map(Some)
-        })?;
+        let changed =
+            syntax::rewrite(&mut rewritten, &mut |name| resolve(session, name).map(Some))?;
         if !changed {
             return Ok(None);
         }
@@ -271,9 +273,7 @@ impl Feature for Hooks {
             | Expr::InSubquery {
                 subquery: query, ..
             } => {
-                syntax::rewrite(query.as_mut(), &mut |name| {
-                    lookup(session, name).map(Some)
-                })?;
+                syntax::rewrite(query.as_mut(), &mut |name| lookup(session, name).map(Some))?;
             }
             Expr::Function(function) => object_id(session, function),
             _ => {}
@@ -326,10 +326,7 @@ impl State {
     fn is_empty(&self) -> bool {
         self.locals.is_empty()
             && self.globals.is_empty()
-            && self
-                .frames
-                .iter()
-                .all(|frame| frame.variables.is_empty())
+            && self.frames.iter().all(|frame| frame.variables.is_empty())
     }
 }
 
@@ -502,8 +499,10 @@ fn declare(session: &mut Session, variable: &syntax::TableVariable) -> Result<()
         &Ident::with_quote('"', &backend.physical),
     )?;
     let mut parameters = HashMap::new();
-    reenter(session, NAME, |session| session.execute(create, &mut parameters))
-        .map_err(|error| rename_error(error, &backend.physical, &variable.name.value))?;
+    reenter(session, NAME, |session| {
+        session.execute(create, &mut parameters)
+    })
+    .map_err(|error| rename_error(error, &backend.physical, &variable.name.value))?;
     let saved = (session.transactions > 0).then(Vec::new);
     if let Some(frame) = session.ext.temp_tables.frames.last_mut() {
         frame.variables.push(Variable {
@@ -529,7 +528,10 @@ fn create(
         SqlError::new(
             2714,
             if select_into { 1 } else { 6 },
-            format!("There is already an object named '{}' in the database.", name.name),
+            format!(
+                "There is already an object named '{}' in the database.",
+                name.name
+            ),
         )
     };
     let alias = session.database.alias().to_owned();
@@ -581,7 +583,9 @@ fn create(
         _ => unreachable!("only CREATE TABLE and SELECT INTO create tables"),
     }
     // The definition or query may read other temporary objects.
-    syntax::rewrite(&mut statement, &mut |other| resolve(session, other).map(Some))?;
+    syntax::rewrite(&mut statement, &mut |other| {
+        resolve(session, other).map(Some)
+    })?;
     let execution = reenter(session, NAME, |session| {
         session.execute(statement, parameters)
     })
@@ -595,7 +599,7 @@ fn create(
             name: name.name.clone(),
             backend,
             level,
-        dropped: false,
+            dropped: false,
         }),
         _ => state.globals.push(Global {
             name: name.name.clone(),
@@ -683,7 +687,9 @@ fn drop_tables(
                         }
                     }
                 } else {
-                    state.locals.retain(|local| local.backend.physical != physical);
+                    state
+                        .locals
+                        .retain(|local| local.backend.physical != physical);
                 }
             }
             _ => state
@@ -723,12 +729,12 @@ fn save(session: &mut Session, key: &str) {
         return;
     };
     if let Ok(rows) = storage::snapshot(&session.db, &variable.backend.physical)
-        && let Some(variable) = session
-            .ext
-            .temp_tables
-            .frames
-            .last_mut()
-            .and_then(|frame| frame.variables.iter_mut().find(|variable| variable.key == key))
+        && let Some(variable) = session.ext.temp_tables.frames.last_mut().and_then(|frame| {
+            frame
+                .variables
+                .iter_mut()
+                .find(|variable| variable.key == key)
+        })
     {
         variable.saved = Some(rows);
     }
@@ -748,11 +754,7 @@ fn restore(session: &mut Session) {
             }) else {
                 continue;
             };
-            restores.push((
-                variable.backend.clone(),
-                variable.definition.clone(),
-                rows,
-            ));
+            restores.push((variable.backend.clone(), variable.definition.clone(), rows));
         }
     }
     for (backend, definition, rows) in restores {
@@ -761,7 +763,9 @@ fn restore(session: &mut Session) {
     let db = &session.db;
     let state = &mut session.ext.temp_tables;
     let current = session.database.alias();
-    let live = |backend: &Backend| backend.alias != current || storage::exists(db, &backend.physical).unwrap_or(true);
+    let live = |backend: &Backend| {
+        backend.alias != current || storage::exists(db, &backend.physical).unwrap_or(true)
+    };
     state.locals.retain(|local| live(&local.backend));
     for local in &mut state.locals {
         local.dropped = false;
@@ -790,9 +794,9 @@ fn localize(state: &State, error: anyhow::Error) -> anyhow::Error {
                 .map(|global| (&global.backend.physical, &global.name)),
         )
         .collect::<Vec<_>>();
-    names
-        .into_iter()
-        .fold(error, |error, (physical, name)| rename_error(error, physical, name))
+    names.into_iter().fold(error, |error, (physical, name)| {
+        rename_error(error, physical, name)
+    })
 }
 
 fn rename_error(mut error: anyhow::Error, physical: &str, name: &str) -> anyhow::Error {
@@ -827,7 +831,8 @@ fn object_id(session: &Session, function: &mut Function) {
     let FunctionArguments::List(list) = &mut function.args else {
         return;
     };
-    let Some(FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(value)))) = list.args.first_mut()
+    let Some(FunctionArg::Unnamed(FunctionArgExpr::Expr(Expr::Value(value)))) =
+        list.args.first_mut()
     else {
         return;
     };
@@ -850,4 +855,157 @@ fn object_id(session: &Session, function: &mut Function) {
         // No backend table has a name starting with '#'.
         _ => format!("dbo.[{}]", temp.name.replace(']', "]]")),
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn session() -> (crate::server::Server, Session) {
+        let server = crate::server::Server::open(":memory:").unwrap();
+        let session = Session::new(server.connection().unwrap()).unwrap();
+        (server, session)
+    }
+
+    fn run(session: &mut Session, sql: &str) -> bool {
+        session.batch_response(sql, &HashMap::new(), false, None).1
+    }
+
+    fn backends(session: &Session) -> i64 {
+        session
+            .db
+            .query_row(
+                "SELECT count(*) FROM duckdb_tables() WHERE table_name LIKE '\\_\\_msduck\\_%' ESCAPE '\\' AND (table_name LIKE '%temp%' OR table_name LIKE '%tv%' OR table_name LIKE '%global%')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap()
+    }
+
+    fn name(kind: Kind, name: &str) -> TempName {
+        TempName {
+            kind,
+            name: name.into(),
+        }
+    }
+
+    /// A nested body (such as a procedure) runs through `batch_response_inner`
+    /// while its caller's batch is open.
+    #[test]
+    fn nested_bodies_see_caller_tables_but_not_its_variables_and_drop_their_own() {
+        let (_server, mut session) = session();
+        assert!(run(
+            &mut session,
+            "CREATE TABLE #outer(id INT); INSERT INTO #outer VALUES (1)"
+        ));
+        // The caller's batch, with a table variable of its own.
+        Hooks.batch_begin(&mut session, false);
+        let declare = msduck_sql::batch::parse("DECLARE @v TABLE(id INT)")
+            .unwrap()
+            .remove(0);
+        session.execute(declare, &mut HashMap::new()).unwrap();
+        assert!(lookup(&session, &name(Kind::Variable, "@v")).is_ok());
+        let (_, ok) = session.batch_response_inner(
+            "INSERT INTO #outer VALUES (2); CREATE TABLE #inner(id INT); DECLARE @w TABLE(id INT); INSERT INTO @w VALUES (3)",
+            &HashMap::new(),
+            None,
+            None,
+        );
+        assert!(ok);
+        // The caller's table variable is invisible inside the body.
+        let (out, ok) =
+            session.batch_response_inner("SELECT * FROM @v", &HashMap::new(), None, None);
+        assert!(!ok && !out.is_empty());
+        assert_eq!(session.last_error, 1087);
+        // Back in the caller: its variable is visible again, and the body's
+        // table and variable are gone.
+        assert!(lookup(&session, &name(Kind::Variable, "@v")).is_ok());
+        assert!(lookup(&session, &name(Kind::Variable, "@w")).is_err());
+        assert!(lookup(&session, &name(Kind::Local, "#inner")).is_err());
+        Hooks.batch_end(&mut session);
+        assert!(lookup(&session, &name(Kind::Variable, "@v")).is_err());
+        // The session's own table and the body's write remain.
+        let rows: i64 = session
+            .db
+            .query_row(
+                &format!(
+                    "SELECT count(*) FROM dbo.\"{}\"",
+                    lookup(&session, &name(Kind::Local, "#outer")).unwrap()
+                ),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(rows, 2);
+        assert_eq!(backends(&session), 1);
+    }
+
+    /// A procedure may create a table named like its caller's; references
+    /// inside it see its own, and the caller's table is unchanged after it.
+    #[test]
+    fn nested_bodies_shadow_caller_tables() {
+        let (_server, mut session) = session();
+        assert!(run(
+            &mut session,
+            "CREATE TABLE #t(id INT); INSERT INTO #t VALUES (1)"
+        ));
+        Hooks.batch_begin(&mut session, false);
+        let (_, ok) = session.batch_response_inner(
+            "CREATE TABLE #t(id INT, extra INT); INSERT INTO #t VALUES (2, 3); IF (SELECT extra FROM #t) <> 3 THROW 50000, 'wrong table', 1",
+            &HashMap::new(),
+            None,
+            None,
+        );
+        assert!(ok);
+        Hooks.batch_end(&mut session);
+        let physical = lookup(&session, &name(Kind::Local, "#t")).unwrap();
+        let rows: Vec<i32> = session
+            .db
+            .prepare(&format!("SELECT id FROM dbo.\"{physical}\""))
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<duckdb::Result<_>>()
+            .unwrap();
+        assert_eq!(rows, [1]);
+        // A second CREATE at the session level is a duplicate.
+        assert!(!run(&mut session, "CREATE TABLE #t(id INT)"));
+        assert_eq!(session.last_error, 2714);
+    }
+
+    /// Scope ends inside an open transaction: a later rollback must not
+    /// bring the dropped tables back.
+    #[test]
+    fn tables_dropped_inside_a_transaction_stay_dropped_after_rollback() {
+        let (_server, mut session) = session();
+        assert!(run(&mut session, "BEGIN TRANSACTION"));
+        assert!(run(
+            &mut session,
+            "DECLARE @t TABLE(id INT); INSERT INTO @t VALUES (1)"
+        ));
+        assert!(
+            session
+                .batch_response("CREATE TABLE #r(id INT)", &HashMap::new(), true, None)
+                .1
+        );
+        assert_eq!(session.ext.temp_tables.graveyard.len(), 2);
+        assert!(run(&mut session, "ROLLBACK"));
+        assert_eq!(backends(&session), 0);
+        assert!(session.ext.temp_tables.graveyard.is_empty());
+    }
+
+    #[test]
+    fn session_end_drops_local_global_and_variable_tables() {
+        let (server, mut session) = session();
+        assert!(run(
+            &mut session,
+            "CREATE TABLE #l(id INT); CREATE TABLE ##g(id INT); SELECT 1 AS a INTO #s"
+        ));
+        let mut other = Session::new(server.connection().unwrap()).unwrap();
+        assert_eq!(backends(&other), 3);
+        drop(session);
+        assert_eq!(backends(&other), 0);
+        assert!(!run(&mut other, "SELECT * FROM ##g"));
+        assert_eq!(other.last_error, 208);
+    }
 }

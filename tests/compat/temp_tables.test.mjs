@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { Connection, Request } from 'tedious'
+import { Connection, Request, TYPES } from 'tedious'
 import { start, query } from '../support/client.mjs'
 import { observe } from '../../scripts/capture-gaps-temp_tables.mjs'
 
@@ -38,5 +38,24 @@ test('temporary objects match the SQL Server capture', { timeout: 120000 }, asyn
       const { number, state, class: severity, message } = actual.result.errors[position]
       assert.deepEqual({ number, state, class: severity, message }, { number, state: error.state, class: error.class, message: error.message }, label)
     }
+  }
+})
+
+test('a reset connection drops temporary tables and prepared statements read them', { timeout: 60000 }, async t => {
+  const connection = await start(t)
+  // A SQL batch: tables created by an RPC (execSql) end with it.
+  await new Promise((resolve, reject) => connection.execSqlBatch(new Request('CREATE TABLE #kept(id int); INSERT #kept VALUES (1); CREATE TABLE ##shared_reset(id int)', error => error ? reject(error) : resolve())))
+  const prepared = new Request('SELECT id + @x AS id FROM #kept', error => { if (error) throw error })
+  prepared.addParameter('x', TYPES.Int)
+  const rows = []
+  prepared.on('row', cells => rows.push(cells.map(cell => cell.value)))
+  await new Promise((resolve, reject) => { prepared.once('prepared', resolve); prepared.once('error', reject); connection.prepare(prepared) })
+  for (const x of [10, 20]) await new Promise(resolve => { prepared.once('requestCompleted', resolve); connection.execute(prepared, { x }) })
+  assert.deepEqual(rows, [[11], [21]])
+  await new Promise((resolve, reject) => connection.reset(error => error ? reject(error) : resolve()))
+  for (const name of ['#kept', '##shared_reset']) {
+    const { rows } = await query(connection, `SELECT OBJECT_ID('tempdb..${name}') AS object_id`)
+    assert.deepEqual(rows, [[null]], name)
+    await assert.rejects(query(connection, `SELECT * FROM ${name}`), error => error.number === 208)
   }
 })

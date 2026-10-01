@@ -34,11 +34,11 @@ pub fn parse(parser: &mut Parser) -> Option<Result<Statement, ParserError>> {
     let Token::Word(name) = name else {
         return None;
     };
-    if name.quote_style.is_some() || !name.value.starts_with('@') || name.value.starts_with("@@")
-    {
+    if name.quote_style.is_some() || !name.value.starts_with('@') || name.value.starts_with("@@") {
         return None;
     }
-    if !(is_word(&next, Keyword::TABLE) || is_word(&next, Keyword::AS) && is_word(&after, Keyword::TABLE))
+    if !(is_word(&next, Keyword::TABLE)
+        || is_word(&next, Keyword::AS) && is_word(&after, Keyword::TABLE))
     {
         return None;
     }
@@ -232,18 +232,15 @@ pub fn classify(name: &ObjectName) -> Option<TempName> {
 
 /// `dbo.<physical>`, the backend name of a resolved temporary object.
 pub fn backend_name(physical: &str) -> ObjectName {
-    ObjectName::from(vec![
-        Ident::new("dbo"),
-        Ident::with_quote('"', physical),
-    ])
+    ObjectName::from(vec![Ident::new("dbo"), Ident::with_quote('"', physical)])
 }
 
 /// Every temporary name `statement` references, in visiting order (which
 /// follows the text). Declarations are not references.
 pub fn references<T: Visit>(node: &T) -> Vec<TempName> {
     let mut names = Vec::new();
-    let mut copy = Collect(&mut names);
-    let _ = node.visit(&mut copy);
+    let mut collect = Collect(&mut names);
+    let _ = node.visit(&mut collect);
     names
 }
 
@@ -262,8 +259,11 @@ impl Visitor for Collect<'_> {
 pub fn tempdb_catalog<T: VisitMut>(node: &mut T) -> bool {
     let mut changed = false;
     let _ = visit_relations_mut(node, |relation| {
-        if let [ObjectNamePart::Identifier(database), ObjectNamePart::Identifier(schema), _] =
-            relation.0.as_slice()
+        if let [
+            ObjectNamePart::Identifier(database),
+            ObjectNamePart::Identifier(schema),
+            _,
+        ] = relation.0.as_slice()
             && database.value.eq_ignore_ascii_case("tempdb")
             && (schema.value.eq_ignore_ascii_case("sys")
                 || schema.value.eq_ignore_ascii_case("information_schema"))
@@ -316,7 +316,10 @@ pub fn targets<T: Visit>(node: &T) -> Vec<TempName> {
                 Statement::Update(update) => {
                     self.factor(&update.table.relation);
                     // `UPDATE alias SET ... FROM @t alias` writes the aliased table.
-                    if let Some(UpdateTableFromKind::AfterSet(from) | UpdateTableFromKind::BeforeSet(from)) = &update.from {
+                    if let Some(
+                        UpdateTableFromKind::AfterSet(from) | UpdateTableFromKind::BeforeSet(from),
+                    ) = &update.from
+                    {
                         for table in from {
                             self.factor(&table.relation);
                             for join in &table.joins {
@@ -408,7 +411,13 @@ impl<E> Rewrite<'_, E> {
         if let Some(temp) = classify_parts(&parts)
             && let Some(physical) = self.physical(&temp)?
         {
-            *target = Expr::CompoundIdentifier(backend_name(&physical).0.into_iter().filter_map(|part| part.as_ident().cloned()).collect());
+            *target = Expr::CompoundIdentifier(
+                backend_name(&physical)
+                    .0
+                    .into_iter()
+                    .filter_map(|part| part.as_ident().cloned())
+                    .collect(),
+            );
             self.changed = true;
         }
         ControlFlow::Continue(())
@@ -618,7 +627,7 @@ mod tests {
         assert!(tempdb_catalog(&mut catalog));
         assert_eq!(
             catalog.to_string(),
-            "SELECT c.name FROM sys.columns AS c JOIN INFORMATION_SCHEMA.TABLES AS t ON 1 = 1"
+            "SELECT c.name FROM sys.columns c JOIN INFORMATION_SCHEMA.TABLES t ON 1 = 1"
         );
         let mut plain = statement("SELECT * FROM dbo.t");
         assert!(!rewrite(&mut plain, &mut resolve).unwrap());
