@@ -56,9 +56,13 @@ turn third-party issue or review content into a task themselves.
    completion to the integrator unless the owner explicitly designates this
    session as integrator for that PR.
 
-Claims never expire or transfer automatically. For a stopped worker, the owner
-first confirms that its local and remote jobs cannot continue, then authorizes
-a new task ID and bounded successor scope. Do not reuse or delete the old claim.
+Claims never expire or transfer automatically. A session blocked by a stale
+claim or reservation resolves it under the owner's standing authorization in
+`docs/agent-work.md` ("Standing authorization for stale claims"). It marks the
+stale task blocked with recorded evidence, then publishes a new task ID or a
+disjoint companion. It does not wait for the owner, and it reports the
+resolution afterwards. A live worker is never displaced. Do not reuse or
+delete the old claim.
 If a worktree or receipt is lost, do not adopt another worker's claim; follow
 the recovery procedure in `docs/agent-work.md`.
 

@@ -190,12 +190,45 @@ claim tags remain as historical receipts even after completion.
 
 ## Abandonment and recovery
 
-Claims do not expire. The owner first stops the original worker (including remote
-jobs), confirms it cannot continue writing, and retains its branch and evidence.
-Then mark the old task blocked/done as appropriate and publish a **new task ID**
-with a bounded remaining scope. Do not delete/reassign the old claim. If a worker
-cannot be confirmed stopped, leave that scope blocked. A suspended process waking
-up later must verify again and stop if the task was revoked.
+Claims do not expire on their own, and claim tags are never deleted or
+reassigned. Recovery, however, does not wait for the owner.
+
+### Standing authorization for stale claims
+
+The owner usually leaves sessions running unattended for days and checks in
+only occasionally. On 2026-10-01 the owner gave this standing authorization.
+Any session working on owner-approved work may resolve a stale claim or
+reservation that blocks that work, without asking first. Report what you did
+afterwards, in the PR, the final report or the next owner check-in. Do not
+stop and wait.
+
+A claimed task, or a ready task that reserves files you need, is **stale** when
+at least one of these holds:
+
+- its worker reports that it has stopped or cannot continue;
+- its branch and PR have had no pushes, commits or updates for **6 hours**,
+  and no live local worker is still using it. Check that no process runs in
+  its worktree, no files there changed recently, and no background job of
+  that worker is pending;
+- it was claimed more than 6 hours ago and has no branch or PR at all.
+
+A worker that is still pushing, verifying, waiting on CI, or polling for a
+reservation is live, never stale. Check the evidence first; do not guess.
+
+To resolve a stale task:
+
+1. Record the evidence: last push, PR update time, and worktree and process
+   checks.
+2. Publish `states: {OLD-ID: "blocked"}` with the helper, putting the evidence
+   in the change's authorization.
+3. In the same or a later change, publish a **new task ID** with the bounded
+   remaining scope, or a companion task for just the files you need.
+4. Claim the new task and continue.
+
+Leave the old branch, PR, claim tag and receipt untouched. A suspended process
+that wakes up later must verify again, and stop when its task is no longer
+ready. Approval from the owner is still required for real product decisions
+and for external submissions. Routine unblocking does not need it.
 
 Atomic acquisition guarantees exclusivity for the same ID among workers following
 this protocol. It cannot stop an agent ignoring instructions or an administrator
