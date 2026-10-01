@@ -85,7 +85,14 @@ impl Feature for Hooks {
         statement: &mut Statement,
         _parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Option<Execution>> {
-        dependencies::settle(session)?;
+        // Bookkeeping never fails an unrelated statement (for example a
+        // ROLLBACK of an aborted transaction); it is retried later.
+        if !matches!(
+            statement,
+            Statement::Rollback { .. } | Statement::Commit { .. }
+        ) {
+            let _ = dependencies::settle(session);
+        }
         dependencies::drop_columns(session, statement)?;
         if matches!(statement, Statement::Drop { .. }) {
             dependencies::drop_objects(session, statement)?;

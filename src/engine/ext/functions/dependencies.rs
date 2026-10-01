@@ -116,21 +116,40 @@ fn insert(
 /// it runs, and checked here once a later statement starts.
 pub(super) fn settle(session: &Session) -> Result<()> {
     let pending = std::mem::take(&mut *session.ext.functions.pending.borrow_mut());
+    let mut remaining = Vec::new();
+    let mut failure = None;
     for (schema, table) in pending {
-        let rows: Vec<String> = session
-            .db
-            .prepare(
-                "SELECT DISTINCT column_name FROM main.__msduck_function_references WHERE kind IN ('computed', 'default', 'check') AND lower(schema_name) = lower(?) AND lower(object_name) = lower(?)",
-            )?
-            .query_map(params![schema, table], |row| row.get(0))?
-            .collect::<duckdb::Result<_>>()?;
-        for column in rows {
-            if live_column(session, &schema, &table, &column)?.is_none() {
-                session.db.execute(
-                    "DELETE FROM main.__msduck_function_references WHERE kind IN ('computed', 'default', 'check') AND lower(schema_name) = lower(?) AND lower(object_name) = lower(?) AND lower(column_name) = lower(?)",
-                    params![schema, table, column],
-                )?;
-            }
+        if failure.is_some() {
+            remaining.push((schema, table));
+            continue;
+        }
+        if let Err(error) = settle_table(session, &schema, &table) {
+            failure = Some(error);
+            remaining.push((schema, table));
+        }
+    }
+    // A statement in an aborted transaction cannot query; retry later.
+    session.ext.functions.pending.borrow_mut().extend(remaining);
+    match failure {
+        Some(error) => Err(error),
+        None => Ok(()),
+    }
+}
+
+fn settle_table(session: &Session, schema: &str, table: &str) -> Result<()> {
+    let rows: Vec<String> = session
+        .db
+        .prepare(
+            "SELECT DISTINCT column_name FROM main.__msduck_function_references WHERE kind IN ('computed', 'default', 'check') AND lower(schema_name) = lower(?) AND lower(object_name) = lower(?)",
+        )?
+        .query_map(params![schema, table], |row| row.get(0))?
+        .collect::<duckdb::Result<_>>()?;
+    for column in rows {
+        if live_column(session, schema, table, &column)?.is_none() {
+            session.db.execute(
+                "DELETE FROM main.__msduck_function_references WHERE kind IN ('computed', 'default', 'check') AND lower(schema_name) = lower(?) AND lower(object_name) = lower(?) AND lower(column_name) = lower(?)",
+                params![schema, table, column],
+            )?;
         }
     }
     Ok(())
