@@ -4,20 +4,28 @@ use sqlparser::ast::*;
 use std::ops::ControlFlow;
 
 pub fn canonicalize(statement: &mut Statement) -> Result<()> {
-    struct Resolve;
+    struct Resolve(crate::update::Scopes);
     impl VisitorMut for Resolve {
         // Keep the error value, so SQL Server numbers such as 8154 survive.
         type Break = anyhow::Error;
+        fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<anyhow::Error> {
+            self.0.enter(query);
+            ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &mut Query) -> ControlFlow<anyhow::Error> {
+            self.0.leave();
+            ControlFlow::Continue(())
+        }
         fn pre_visit_statement(&mut self, statement: &mut Statement) -> ControlFlow<anyhow::Error> {
             if let Statement::Delete(delete) = statement
-                && let Err(error) = resolve(delete)
+                && let Err(error) = resolve(delete, &self.0.names())
             {
                 return ControlFlow::Break(error);
             }
             ControlFlow::Continue(())
         }
     }
-    if let ControlFlow::Break(error) = statement.visit(&mut Resolve) {
+    if let ControlFlow::Break(error) = statement.visit(&mut Resolve(Default::default())) {
         return Err(error);
     }
     Ok(())
@@ -25,12 +33,13 @@ pub fn canonicalize(statement: &mut Statement) -> Result<()> {
 
 /// Whether a DELETE names its target inside a FROM tree that needs the
 /// row-identity form: outer joins, APPLY or a nested join around the target.
-pub fn has_outer_target(delete: &Delete) -> bool {
+/// `ctes` are the names of the enclosing WITH (`update::cte_names`).
+pub fn has_outer_target(delete: &Delete, ctes: &[String]) -> bool {
     let (FromTable::WithFromKeyword(targets) | FromTable::WithoutKeyword(targets)) = &delete.from;
     match (targets.as_slice(), &delete.using) {
         ([target], Some(sources)) => {
             matches!(
-                crate::update::outer_target(target, sources, "DELETE"),
+                crate::update::outer_target(target, sources, ctes, "DELETE"),
                 Ok(Some(_))
             )
         }
@@ -38,14 +47,14 @@ pub fn has_outer_target(delete: &Delete) -> bool {
     }
 }
 
-fn resolve(delete: &mut Delete) -> Result<()> {
+fn resolve(delete: &mut Delete, ctes: &[String]) -> Result<()> {
     let (FromTable::WithFromKeyword(targets) | FromTable::WithoutKeyword(targets)) =
         &mut delete.from;
     anyhow::ensure!(targets.len() == 1, "DELETE requires one target");
     let target = &mut targets[0];
     anyhow::ensure!(target.joins.is_empty(), "unsupported joined DELETE target");
     if let Some(sources) = &mut delete.using
-        && let Some(found) = crate::update::outer_target(target, sources, "DELETE")?
+        && let Some(found) = crate::update::outer_target(target, sources, ctes, "DELETE")?
     {
         // DELETE <copy alias> FROM <tree> WHERE <where> becomes
         // DELETE FROM <table> AS __msduck_outer_target WHERE
@@ -82,7 +91,7 @@ fn resolve(delete: &mut Delete) -> Result<()> {
         return Ok(());
     }
     if let Some(sources) = &mut delete.using {
-        crate::update::resolve_from_target(target, sources, &mut delete.selection, "DELETE")?;
+        crate::update::resolve_from_target(target, sources, ctes, &mut delete.selection, "DELETE")?;
         if sources.is_empty() {
             delete.using = None;
         }

@@ -13,33 +13,70 @@ pub const OUTER_TARGET: &str = "__msduck_outer_target";
 /// the tree intact and is matched by row identity instead (see
 /// [`outer_target`]).
 pub fn canonicalize(statement: &mut Statement) -> Result<()> {
-    struct Resolve;
+    struct Resolve(Scopes);
     impl VisitorMut for Resolve {
         // Keep the error value, so SQL Server numbers such as 8154 survive.
         type Break = anyhow::Error;
+        fn pre_visit_query(&mut self, query: &mut Query) -> std::ops::ControlFlow<anyhow::Error> {
+            self.0.enter(query);
+            std::ops::ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &mut Query) -> std::ops::ControlFlow<anyhow::Error> {
+            self.0.leave();
+            std::ops::ControlFlow::Continue(())
+        }
         fn pre_visit_statement(
             &mut self,
             statement: &mut Statement,
         ) -> std::ops::ControlFlow<anyhow::Error> {
             if let Statement::Update(update) = statement
-                && let Err(error) = resolve_alias(update)
+                && let Err(error) = resolve_alias(update, &self.0.names())
             {
                 return std::ops::ControlFlow::Break(error);
             }
             std::ops::ControlFlow::Continue(())
         }
     }
-    if let std::ops::ControlFlow::Break(error) = statement.visit(&mut Resolve) {
+    if let std::ops::ControlFlow::Break(error) = statement.visit(&mut Resolve(Scopes::default())) {
         return Err(error);
     }
     Ok(())
 }
 
-fn resolve_alias(update: &mut Update) -> Result<()> {
+/// Common table expression names visible to the statements a visitor
+/// reaches, innermost last.
+#[derive(Default)]
+pub(crate) struct Scopes(Vec<Vec<String>>);
+
+impl Scopes {
+    pub(crate) fn enter(&mut self, query: &Query) {
+        self.0.push(cte_names(query.with.as_ref()));
+    }
+    pub(crate) fn leave(&mut self) {
+        self.0.pop();
+    }
+    pub(crate) fn names(&self) -> Vec<String> {
+        self.0.iter().flatten().cloned().collect()
+    }
+}
+
+/// The lower-case names a WITH clause defines. A FROM relation with one of
+/// these names is the CTE, never a table that shares its name.
+pub fn cte_names(with: Option<&With>) -> Vec<String> {
+    with.map(|with| {
+        with.cte_tables
+            .iter()
+            .map(|cte| cte.alias.name.value.to_lowercase())
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
+fn resolve_alias(update: &mut Update, ctes: &[String]) -> Result<()> {
     let Some(UpdateTableFromKind::AfterSet(sources)) = &mut update.from else {
         return Ok(());
     };
-    if let Some(found) = outer_target(&update.table, sources, "UPDATE")? {
+    if let Some(found) = outer_target(&update.table, sources, ctes, "UPDATE")? {
         // UPDATE <copy alias> ... FROM <tree> becomes
         // UPDATE <table> AS __msduck_outer_target ... FROM <tree>
         // WHERE __msduck_outer_target.rowid = <copy>.rowid AND (<where>).
@@ -53,7 +90,13 @@ fn resolve_alias(update: &mut Update) -> Result<()> {
         update.selection = Some(conjoin(identity, update.selection.take()));
         return Ok(());
     }
-    resolve_from_target(&mut update.table, sources, &mut update.selection, "UPDATE")?;
+    resolve_from_target(
+        &mut update.table,
+        sources,
+        ctes,
+        &mut update.selection,
+        "UPDATE",
+    )?;
     if sources.is_empty() {
         update.from = None;
     }
@@ -63,12 +106,16 @@ fn resolve_alias(update: &mut Update) -> Result<()> {
 /// Whether an UPDATE names its target inside a FROM tree that needs the
 /// row-identity form: outer joins, APPLY or a nested join around the target.
 /// Such an UPDATE must choose one joined row per target row, so execution
-/// routes it through the joined image stages.
-pub fn has_outer_target(update: &Update) -> bool {
+/// routes it through the joined image stages. `ctes` are the names of the
+/// enclosing WITH ([`cte_names`]).
+pub fn has_outer_target(update: &Update, ctes: &[String]) -> bool {
     let Some(UpdateTableFromKind::AfterSet(sources)) = &update.from else {
         return false;
     };
-    matches!(outer_target(&update.table, sources, "UPDATE"), Ok(Some(_)))
+    matches!(
+        outer_target(&update.table, sources, ctes, "UPDATE"),
+        Ok(Some(_))
+    )
 }
 
 /// Drop the qualifier of SET columns that name the UPDATE target
@@ -113,9 +160,10 @@ pub fn unqualify_assignments(update: &mut Update) {
 pub(crate) fn outer_target(
     table: &TableWithJoins,
     sources: &[TableWithJoins],
+    ctes: &[String],
     operation: &str,
 ) -> Result<Option<TableFactor>> {
-    let Some(found) = locate(table, sources, operation)? else {
+    let Some(found) = locate(table, sources, ctes, operation)? else {
         return Ok(None);
     };
     let flat = sources[found.tree].joins.iter().all(|join| {
@@ -150,10 +198,12 @@ struct Located {
 /// to the same table under any alias or qualification; among several, the
 /// one unaliased reference, or error 8154. Without a catalog, two names
 /// denote the same table when their last parts match and any schema parts
-/// both give agree, taking `dbo` for a missing schema.
+/// both give agree, taking `dbo` for a missing schema. A one-part name that
+/// names a CTE refers to the CTE, not to a table.
 fn locate(
     table: &TableWithJoins,
     sources: &[TableWithJoins],
+    ctes: &[String],
     operation: &str,
 ) -> Result<Option<Located>> {
     let TableFactor::Table {
@@ -181,7 +231,7 @@ fn locate(
     }
     let same = relations
         .iter()
-        .filter(|found| same_table(target, &found.relation))
+        .filter(|found| !names_cte(&found.relation, ctes) && same_table(target, &found.relation))
         .collect::<Vec<_>>();
     match same.as_slice() {
         [] => Ok(None),
@@ -240,6 +290,12 @@ fn names_target(target: &ObjectName, relation: &TableFactor) -> bool {
                 matches!((a.as_ident(), b.as_ident()), (Some(a), Some(b)) if a.value.eq_ignore_ascii_case(&b.value))
             })
     }
+}
+
+fn names_cte(relation: &TableFactor, ctes: &[String]) -> bool {
+    matches!(relation, TableFactor::Table { name, .. }
+        if name.0.len() == 1
+            && name.0[0].as_ident().is_some_and(|id| ctes.contains(&id.value.to_lowercase())))
 }
 
 /// Whether two table names denote the same table (see [`locate`]).
@@ -333,6 +389,7 @@ fn conjoin(first: Expr, rest: Option<Expr>) -> Expr {
 pub(crate) fn resolve_from_target(
     table: &mut TableWithJoins,
     sources: &mut Vec<TableWithJoins>,
+    ctes: &[String],
     selection: &mut Option<Expr>,
     operation: &str,
 ) -> Result<()> {
@@ -340,7 +397,7 @@ pub(crate) fn resolve_from_target(
         tree: index,
         nested,
         relation,
-    }) = locate(table, sources, operation)?
+    }) = locate(table, sources, ctes, operation)?
     else {
         return Ok(());
     };
@@ -435,19 +492,22 @@ mod tests {
                 .unwrap(),
             "UPDATE items SET value = 1 FROM foo s LEFT JOIN bar b ON b.id = s.id"
         );
-        let update = |sql: &str| match crate::batch::parse(sql).unwrap().remove(0) {
+        let update_of = |sql: &str| match crate::batch::parse(sql).unwrap().remove(0) {
             Statement::Update(update) => update,
             _ => unreachable!(),
         };
-        assert!(has_outer_target(&update(
-            "UPDATE t SET value = 1 FROM items t LEFT JOIN foo s ON s.id = t.id"
-        )));
-        assert!(!has_outer_target(&update(
-            "UPDATE t SET value = 1 FROM items t JOIN foo s ON s.id = t.id"
-        )));
-        assert!(!has_outer_target(&update(
-            "UPDATE items SET value = 1 FROM foo s LEFT JOIN bar b ON b.id = s.id"
-        )));
+        assert!(has_outer_target(
+            &update_of("UPDATE t SET value = 1 FROM items t LEFT JOIN foo s ON s.id = t.id"),
+            &[]
+        ));
+        assert!(!has_outer_target(
+            &update_of("UPDATE t SET value = 1 FROM items t JOIN foo s ON s.id = t.id"),
+            &[]
+        ));
+        assert!(!has_outer_target(
+            &update_of("UPDATE items SET value = 1 FROM foo s LEFT JOIN bar b ON b.id = s.id"),
+            &[]
+        ));
     }
 
     #[test]
@@ -505,6 +565,11 @@ mod tests {
         assert_eq!(
             (error.number, error.message.as_str()),
             (8154, "The table 'items' is ambiguous.")
+        );
+        // A CTE named like the target table is not the target.
+        assert_eq!(
+            canonical("WITH items AS (SELECT * FROM dbo.items WHERE id > 2) UPDATE dbo.items SET value = 0 FROM items c JOIN foo s ON s.id = c.id").unwrap(),
+            "WITH items AS (SELECT * FROM dbo.items WHERE id > 2) UPDATE dbo.items SET value = 0 FROM items c JOIN foo s ON s.id = c.id"
         );
         // Other schemas are other tables.
         assert_eq!(

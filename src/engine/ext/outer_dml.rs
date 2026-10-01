@@ -36,8 +36,12 @@ impl Feature for Hooks {
         statement: &mut Statement,
         _parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Option<Execution>> {
+        let ctes = match &*statement {
+            Statement::Query(query) => msduck_sql::update::cte_names(query.with.as_ref()),
+            _ => vec![],
+        };
         if let Some(update) = target(statement)
-            && msduck_sql::update::has_outer_target(update)
+            && msduck_sql::update::has_outer_target(update, &ctes)
         {
             msduck_sql::update::unqualify_assignments(update);
             if update.output.is_none() {
@@ -48,16 +52,16 @@ impl Feature for Hooks {
                 });
             }
         }
-        if let Some(delete) = removal(statement)
-            && msduck_sql::delete::has_outer_target(delete)
+        if removal(statement)
+            .is_some_and(|delete| msduck_sql::delete::has_outer_target(delete, &ctes))
         {
-            let mut canonical = Statement::Delete(delete.clone());
+            // Canonicalize the whole statement, so its WITH stays in scope.
+            let mut canonical = statement.clone();
             msduck_sql::delete::canonicalize(&mut canonical)?;
-            let Statement::Delete(canonical) = canonical else {
-                unreachable!()
-            };
-            shadows_row_identity(session, &canonical)?;
-            *delete = canonical;
+            if let Some(delete) = removal(&mut canonical) {
+                shadows_row_identity(session, delete)?;
+            }
+            *statement = canonical;
         }
         Ok(None)
     }

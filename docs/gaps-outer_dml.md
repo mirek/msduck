@@ -32,7 +32,11 @@ any of these:
   fails with 8154 when there is none. This rule now also applies to flat
   inner-join trees, which before fell through to a cross join. Without a
   catalog, two names denote the same table when their last parts match and
-  their schemas agree, with `dbo` assumed for a missing schema.
+  their schemas agree, with `dbo` assumed for a missing schema. A one-part
+  name that names a CTE of the statement refers to the CTE, not to a table.
+  A missing database part matches any database. Cross-database DML is
+  rejected elsewhere for now, so this rule needs revisiting when that is
+  supported.
 - **Duplicate matches.** A target row matched by several joined rows changes
   once. UPDATE uses the values of one matching row, which SQL Server leaves
   unspecified. `@@ROWCOUNT` and the DONE count give the number of distinct
