@@ -8814,7 +8814,7 @@
     {
       "id": "gaps-index-catalog-v1",
       "title": "Constraint-backed indexes in sys.indexes and sys.index_columns",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner-approved successor (2026-10-01) of stalled index-catalog-adapter-v1 for src/index_catalog.rs, umbrella #710.",
       "scope": [
         "src/index_catalog.rs",
@@ -8877,7 +8877,7 @@
     {
       "id": "gaps-index-catalog-v1-keys",
       "title": "Record descending index keys for sys.index_columns and add tedious index catalog tests",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner-approved successor (2026-10-01) of stalled index-catalog-adapter-v1 for src/index_catalog.rs, umbrella #710. companion of gaps-index-catalog-v1",
       "scope": [
         "src/engine/ext/keys/create_index.rs",
@@ -8911,7 +8911,7 @@
     {
       "id": "gaps-index-catalog-v1-bootstrap",
       "title": "Publish index catalog views after feature bootstraps",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner-approved successor (2026-10-01) of stalled index-catalog-adapter-v1 for src/index_catalog.rs, umbrella #710. companion of gaps-index-catalog-v1",
       "scope": [
         "src/database_catalog.rs"
@@ -9069,7 +9069,7 @@
     {
       "id": "gaps-index-catalog-v1-keys-test",
       "title": "Drop the keys compat differences that sys.indexes now matches",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner-approved successor (2026-10-01) of stalled index-catalog-adapter-v1 for src/index_catalog.rs, umbrella #710. companion of gaps-index-catalog-v1",
       "scope": [
         "tests/compat/keys.test.mjs"
