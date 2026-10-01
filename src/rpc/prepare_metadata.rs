@@ -787,6 +787,77 @@ fn wire(info: &TypeMetadata) -> Option<tds::Type> {
     })
 }
 
+// Replace only proven numeric series sources in a metadata-only clone. The
+// constant is a declaration carrier: no series argument or row is evaluated.
+// A derived source also retains the captured non-null, non-computed property.
+fn series_declarations(query: &Query, parameters: &HashMap<String, Parameter>) -> Query {
+    use sqlparser::ast::*;
+    struct Declare<'a>(&'a HashMap<String, Parameter>);
+    impl VisitorMut for Declare<'_> {
+        type Break = ();
+        fn post_visit_table_factor(&mut self, factor: &mut TableFactor) -> ControlFlow<()> {
+            let Some(kind) = msduck_sql::generate_series::result_type(factor, self.0) else {
+                return ControlFlow::Continue(());
+            };
+            let TableFactor::Table {
+                args: Some(args),
+                alias,
+                with_hints,
+                ..
+            } = factor
+            else {
+                return ControlFlow::Continue(());
+            };
+            if !(2..=3).contains(&args.args.len())
+                || args.settings.is_some()
+                || !with_hints.is_empty()
+                || !args
+                    .args
+                    .iter()
+                    .all(|arg| matches!(arg, FunctionArg::Unnamed(FunctionArgExpr::Expr(_))))
+            {
+                return ControlFlow::Continue(());
+            }
+            let alias = alias.clone().or_else(|| {
+                Some(TableAlias {
+                    name: Ident::new("generate_series"),
+                    columns: vec![],
+                })
+            });
+            let Ok(mut statements) = msduck_sql::batch::parse("SELECT 0 AS value") else {
+                return ControlFlow::Continue(());
+            };
+            let Statement::Query(mut subquery) = statements.remove(0) else {
+                return ControlFlow::Continue(());
+            };
+            let SetExpr::Select(select) = subquery.body.as_mut() else {
+                return ControlFlow::Continue(());
+            };
+            let SelectItem::ExprWithAlias { expr, .. } = &mut select.projection[0] else {
+                return ControlFlow::Continue(());
+            };
+            *expr = Expr::Convert {
+                is_try: false,
+                expr: Box::new(expr.clone()),
+                data_type: Some(kind),
+                charset: None,
+                target_before_value: true,
+                styles: vec![],
+            };
+            *factor = TableFactor::Derived {
+                lateral: false,
+                subquery,
+                alias,
+                sample: None,
+            };
+            ControlFlow::Continue(())
+        }
+    }
+    let mut declared = query.clone();
+    let _ = declared.visit(&mut Declare(parameters));
+    declared
+}
+
 // Additional captured ORDER shapes use the already-proven output width, while
 // resolving keys against original explicit row scopes. Unknowns remain barriers.
 fn prepared_order(
@@ -822,7 +893,9 @@ fn prepared_order(
             return None;
         }
         let mut expanded = query.clone();
-        projection::expand_stars(catalog, &mut expanded, outer)?;
+        if matches!(expanded.body.as_ref(), SetExpr::Select(_)) {
+            projection::expand_stars(catalog, &mut expanded, outer)?;
+        }
         let SetExpr::Select(select) = expanded.body.as_ref() else {
             // Captured one-column variant UNION/UNION ALL resolves its output
             // alias or position, without borrowing an operand's row scope.
@@ -849,7 +922,8 @@ fn prepared_order(
             }
             return None;
         };
-        let scope = projection::scopes(catalog, &expanded, outer).body;
+        let scope =
+            projection::scopes(catalog, &series_declarations(&expanded, parameters), outer).body;
         let expressions = select
             .projection
             .iter()
@@ -933,9 +1007,14 @@ fn prepared_order(
                     ..
                 } if catalog.cast_info(data_type).is_some_and(|info| {
                     matches!(info.system_type_id, Some(48 | 52 | 56 | 127))
-                }) && column(expr, &scope).is_some_and(|field| {
+                }) && (column(expr, &scope).is_some_and(|field| {
                     field.info.as_ref().and_then(|info| info.system_type_id) == Some(98)
-                }) =>
+                }) || (msduck_sql::expression_metadata::conditional::candidate(
+                    expr,
+                ) && variant_declaration(expr, &scope, parameters)
+                    == Some(true)
+                    && matches!(&select.group_by, GroupByExpr::Expressions(keys, _) if keys.iter().any(|key|
+                        projection::order::expression_identity(expr, key, &[], &scope) == Some(true))))) =>
                 {
                     true
                 }
@@ -1066,8 +1145,8 @@ fn prepared_order(
 }
 
 // The shared numeric/character set merger leaves variants unresolved.
-// Preserve only an identical catalog variant declaration on both branches;
-// mixed families and aliases remain unknown. Properties still come from the
+// Preserve captured variant/integral promotion over explicit built-in
+// declarations. Approximate, unknown and alias families remain barriers. Properties still come from the
 // shared operator-specific inference over the original query.
 fn prepared_fields(
     catalog: &CatalogSnapshot,
@@ -1095,13 +1174,16 @@ fn prepared_fields(
     for ((field, left), right) in fields.iter_mut().zip(left).zip(right) {
         if field.info.is_none()
             && let (Some(a), Some(b)) = (left.info, right.info)
-            && a.system_type_id == Some(98)
-            && b.system_type_id == Some(98)
-            && a.user_type_id == Some(98)
-            && b.user_type_id == Some(98)
-            && a == b
+            && a.user_type_id == a.system_type_id.map(i32::from)
+            && b.user_type_id == b.system_type_id.map(i32::from)
         {
-            field.info = Some(a);
+            let integral =
+                |info: &TypeMetadata| matches!(info.system_type_id, Some(48 | 52 | 56 | 127 | 104));
+            if a.system_type_id == Some(98) && (a == b || integral(&b)) {
+                field.info = Some(a);
+            } else if b.system_type_id == Some(98) && integral(&a) {
+                field.info = Some(b);
+            }
         }
     }
     Some(fields)
@@ -1131,6 +1213,7 @@ fn query_description(
         .map_err(anyhow::Error::msg)?;
     let json_query = json_declarations(query, &catalog, &scope);
     for candidate in [
+        series_declarations(query, parameters),
         original_declarations,
         json_query.clone(),
         expression_declarations(&json_query, parameters, &catalog, &scope),
@@ -1992,7 +2075,7 @@ mod tests {
             );
         }
         for sql in [
-            "SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap UNION ALL SELECT b FROM dbo.prepare_heap",
+            "SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap UNION ALL SELECT missing FROM dbo.prepare_heap",
             "SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap UNION ALL SELECT CAST(b AS FLOAT) FROM dbo.prepare_heap",
         ] {
             let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
