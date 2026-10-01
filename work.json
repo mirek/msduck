@@ -8723,6 +8723,24 @@
       "dependencies": [],
       "issue": 717,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQqi"
+    },
+    {
+      "id": "gaps-rowversion-identity-v1-types",
+      "title": "timestamp (189) column metadata as binary(8) and numeric sql_variant payloads for decimal identity catalogs",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-rowversion-identity-v1",
+      "scope": [
+        "crates/msduck-core/src/catalog.rs",
+        "src/variant.rs"
+      ],
+      "acceptance": [
+        "Declared timestamp/rowversion columns (system type 189) bind as binary(8) for result metadata, so sys.columns can report timestamp while clients receive BINARY(8) descriptors.",
+        "sql_variant values tagged decimal/numeric (106/108) with integer payloads decode and encode as numeric sql_variant values, so sys.identity_columns works for decimal identity columns.",
+        "Delivered in the same PR as gaps-rowversion-identity-v1 (issue #717), with its tests and verification."
+      ],
+      "dependencies": [],
+      "issue": 717,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQqi"
     }
   ]
 }
