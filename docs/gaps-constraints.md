@@ -41,6 +41,16 @@ ALTER TABLE, with or without `WITH CHECK` / `WITH NOCHECK`:
 CREATE TABLE accepts the same constraints inline (column level) and at table
 level, including foreign keys with actions.
 
+A column-level foreign key, in CREATE TABLE or in a column added by ALTER
+TABLE, may be written `[CONSTRAINT name] [FOREIGN KEY] REFERENCES table
+[(column)] [ON DELETE action] [ON UPDATE action] [NOT FOR REPLICATION]`. The
+`FOREIGN KEY` words change nothing: the key is enforced, acts, is named
+(`FK__table__column__hex` when unnamed) and appears in `sys.foreign_keys` and
+`sys.foreign_key_columns` exactly like the plain REFERENCES form. Because the
+shared dialect owns the column option parser, the feature's statement hook
+parses such CREATE TABLE and ALTER TABLE statements again from their tokens
+without those words (`column_keys.rs`).
+
 ## Semantics
 
 - **Validation.** ADD of a CHECK or FOREIGN KEY validates existing rows unless
@@ -158,6 +168,15 @@ The feature uses the extension hooks (docs/extension-hooks.md):
   - `guard.rs`: DROP TABLE, TRUNCATE TABLE and column changes.
 
 ## Remaining limits
+
+- `NOT FOR REPLICATION` is accepted after table-level CHECK and FOREIGN KEY
+  constraints and after column-level REFERENCES clauses, and
+  ignored: `is_not_for_replication` is always 0 in `sys.foreign_keys` and
+  `sys.check_constraints`, where SQL Server reports 1.
+- A table-level `FOREIGN KEY` without a column list, such as
+  `CONSTRAINT fk FOREIGN KEY REFERENCES p(id)` after a comma or ADD, is a
+  syntax error (102) here; SQL Server reports 8139 ("Number of referencing
+  columns in foreign key differs from number of referenced columns").
 
 - Two ADD COLUMN forms are still refused (40515) by the built-in path,
   because tests owned by other tasks expect that refusal:

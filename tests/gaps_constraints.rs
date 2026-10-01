@@ -493,3 +493,97 @@ fn foreign_keys_reference_keys_of_every_storage() {
         ["pk_u"]
     );
 }
+
+/// `name, delete action, update action, is_system_named` of `table`'s keys.
+fn foreign_keys(session: &Session, table: &str) -> Vec<String> {
+    texts(
+        session,
+        &format!(
+            "SELECT concat_ws(',', CASE WHEN is_system_named THEN 'system' ELSE f.name END, delete_referential_action_desc, update_referential_action_desc, pc.name || '->' || rc.name) FROM sys.foreign_keys f JOIN sys.foreign_key_columns k ON k.constraint_object_id = f.object_id JOIN sys.columns pc ON pc.object_id = k.parent_object_id AND pc.column_id = k.parent_column_id JOIN sys.columns rc ON rc.object_id = k.referenced_object_id AND rc.column_id = k.referenced_column_id WHERE f.parent_object_id = __msduck_object_id('{table}','U') ORDER BY 1"
+        ),
+    )
+}
+
+#[test]
+fn column_foreign_key_words_behave_like_references() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    ok(&mut session, "CREATE TABLE p(id INT PRIMARY KEY)");
+    ok(
+        &mut session,
+        "CREATE TABLE c(id INT PRIMARY KEY, pid INT FOREIGN KEY REFERENCES p(id) ON UPDATE CASCADE ON DELETE CASCADE)",
+    );
+    ok(
+        &mut session,
+        "CREATE TABLE d(id INT PRIMARY KEY, pid INT CONSTRAINT fk2 FOREIGN KEY REFERENCES p(id) ON DELETE SET NULL NOT FOR REPLICATION)",
+    );
+    ok(
+        &mut session,
+        "CREATE TABLE r(id INT PRIMARY KEY, pid INT REFERENCES p(id) ON UPDATE CASCADE ON DELETE CASCADE)",
+    );
+    assert_eq!(
+        foreign_keys(&session, "c"),
+        ["system,CASCADE,CASCADE,pid->id"]
+    );
+    assert_eq!(foreign_keys(&session, "c"), foreign_keys(&session, "r"));
+    assert_eq!(
+        foreign_keys(&session, "d"),
+        ["fk2,SET_NULL,NO_ACTION,pid->id"]
+    );
+    ok(
+        &mut session,
+        "INSERT p VALUES (1), (2); INSERT c VALUES (10, 1), (20, 2); INSERT d VALUES (10, 2), (20, NULL)",
+    );
+    let (number, message) = caught(&mut session, "INSERT d VALUES (30, 7)");
+    assert_eq!(number, 547);
+    assert_eq!(
+        message,
+        "The INSERT statement conflicted with the FOREIGN KEY constraint \"fk2\". The conflict occurred in database \"master\", table \"dbo.p\", column 'id'."
+    );
+    assert_eq!(caught(&mut session, "INSERT c VALUES (30, 7)").0, 547);
+    ok(&mut session, "UPDATE p SET id = 101 WHERE id = 1");
+    assert_eq!(
+        ints(&session, "SELECT id, pid FROM c ORDER BY id"),
+        [[Some(10), Some(101)], [Some(20), Some(2)]]
+    );
+    // d's key has no update action.
+    assert_eq!(
+        caught(&mut session, "UPDATE p SET id = 102 WHERE id = 2").0,
+        547
+    );
+    ok(&mut session, "DELETE p WHERE id = 2");
+    assert_eq!(
+        ints(&session, "SELECT id, pid FROM d ORDER BY id"),
+        [[Some(10), None], [Some(20), None]]
+    );
+    assert_eq!(
+        ints(&session, "SELECT id, pid FROM c ORDER BY id"),
+        [[Some(10), Some(101)]]
+    );
+
+    // ALTER TABLE ADD column, with and without a name.
+    ok(&mut session, "CREATE TABLE a(id INT PRIMARY KEY)");
+    ok(&mut session, "INSERT a VALUES (1)");
+    ok(
+        &mut session,
+        "ALTER TABLE a ADD pid INT CONSTRAINT fk_a FOREIGN KEY REFERENCES p(id) ON DELETE CASCADE, qid INT FOREIGN KEY REFERENCES p NOT FOR REPLICATION",
+    );
+    assert_eq!(
+        foreign_keys(&session, "a"),
+        [
+            "fk_a,CASCADE,NO_ACTION,pid->id",
+            "system,NO_ACTION,NO_ACTION,qid->id"
+        ]
+    );
+    ok(&mut session, "UPDATE a SET pid = 101, qid = 101");
+    assert_eq!(caught(&mut session, "UPDATE a SET qid = 9").0, 547);
+    ok(&mut session, "UPDATE a SET pid = NULL");
+    assert_eq!(caught(&mut session, "DELETE p WHERE id = 101").0, 547);
+    assert_eq!(ints(&session, "SELECT count(*) FROM c"), [[Some(1)]]);
+    ok(
+        &mut session,
+        "UPDATE a SET pid = 101, qid = NULL; DELETE p WHERE id = 101",
+    );
+    assert_eq!(ints(&session, "SELECT count(*) FROM a"), [[Some(0)]]);
+    assert_eq!(ints(&session, "SELECT count(*) FROM c"), [[Some(0)]]);
+}

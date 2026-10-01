@@ -11,6 +11,10 @@
 //! - `ALTER TABLE t DROP [CONSTRAINT] [IF EXISTS] name [, ...]`, optionally
 //!   mixed with `COLUMN [IF EXISTS] name` items.
 //!
+//! Column definitions in CREATE TABLE and ALTER TABLE also accept `FOREIGN
+//! KEY` before REFERENCES and `NOT FOR REPLICATION` after it; see
+//! [`column_keys`].
+//!
 //! Plain column additions and drops that need no constraint handling are left
 //! to the built-in parser. A claimed statement travels as a carrier whose
 //! payload is the canonical text of [`Alter`]; [`decode`] parses it again at
@@ -22,6 +26,8 @@ use sqlparser::{
     tokenizer::Token,
 };
 use std::fmt;
+
+mod column_keys;
 
 /// Carrier kind of claimed statements.
 pub const KIND: &str = "constraints";
@@ -602,6 +608,9 @@ pub fn parse_alter(parser: &mut Parser) -> Result<Alter, ParserError> {
 
 /// Parse a statement this feature owns, or decline without consuming tokens.
 pub fn parse(parser: &mut Parser) -> Option<Result<Statement, ParserError>> {
+    if let Some(statement) = column_keys::parse(parser) {
+        return Some(statement);
+    }
     if !(peek_word(parser, "ALTER") && peek_nth_word(parser, 1, "TABLE")) {
         return None;
     }
