@@ -1521,10 +1521,21 @@ mod tests {
 
     #[test]
     fn json_declarations_retain_input_collation_without_evaluation() {
-        let catalog = CatalogSnapshot {
+        let mut catalog = CatalogSnapshot {
             default_collation: Some("SQL_Latin1_General_CP1_CI_AS".into()),
             ..Default::default()
         };
+        for (name, id, length) in [("int", 56, 4), ("nvarchar", 231, 8000)] {
+            catalog.types.insert(
+                name.into(),
+                TypeMetadata {
+                    system_type_id: Some(id),
+                    user_type_id: Some(i32::from(id)),
+                    max_length: Some(length),
+                    ..Default::default()
+                },
+            );
+        }
         for (sql, length, collation) in [
             (
                 "SELECT JSON_QUERY(CAST(@p AS NVARCHAR(MAX)), 'strict $.a')",
