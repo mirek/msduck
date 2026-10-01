@@ -275,8 +275,6 @@ const known = {
   'executesql caller scope': failedCall,
   'executesql missing table status': failedCall,
   'executesql return value': failedCall,
-  // A duplicate key ends the batch in msduck (not yet a statement error).
-  'p_dup status': { sets: [], statuses: [] },
   // @@ERROR after a call is 0, not the called scope's last error.
   'exec string raiserror': { sets: [[[0]]] },
   // RPC OUTPUT parameters need RETURNVALUE support in src/rpc.rs.
@@ -290,7 +288,7 @@ const known = {
 // and SET statements complete with CurCmd 0; NOCOUNT clears the batch-level
 // SELECT row count.
 const doneDifferences = new Set([
-  'server version', 'too many arguments', 'positional after named', 'output constant', 'p_dup status',
+  'server version', 'too many arguments', 'positional after named', 'output constant',
   'p_throw aborts batch', 'p_trycatch nocount', 'xact_abort raiserror', 'p_outer_throw', 'p_rec over limit',
   'p_tran mismatch', 'executesql extra name', 'rpc output parameter', 'not first in batch', 'drop missing',
   'drop table name', 'drop list continues', 'exec string transaction mismatch',
