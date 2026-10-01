@@ -380,8 +380,6 @@ pub struct Scan {
 }
 
 // client_version is omitted: the value SQL Server reports was not captured.
-// transaction_isolation_level is last, after the columns the catalog
-// descriptors list (see src/query_catalog.rs).
 const COLUMNS: [(&str, LogicalTypeId); 12] = [
     ("session_id", LogicalTypeId::Smallint),
     ("login_time", LogicalTypeId::Timestamp),
@@ -392,9 +390,9 @@ const COLUMNS: [(&str, LogicalTypeId); 12] = [
     ("login_name", LogicalTypeId::Varchar),
     ("status", LogicalTypeId::Varchar),
     ("is_user_process", LogicalTypeId::Boolean),
+    ("transaction_isolation_level", LogicalTypeId::Smallint),
     ("original_login_name", LogicalTypeId::Varchar),
     ("database_id", LogicalTypeId::Smallint),
-    ("transaction_isolation_level", LogicalTypeId::Smallint),
 ];
 
 impl VTab for SessionsTable {
@@ -456,7 +454,7 @@ impl VTab for SessionsTable {
         );
         text(6, &mut rows.iter().map(|r| Some(r.login_name.as_str())));
         text(7, &mut rows.iter().map(|r| Some(r.status)));
-        text(9, &mut rows.iter().map(|r| Some(r.login_name.as_str())));
+        text(10, &mut rows.iter().map(|r| Some(r.login_name.as_str())));
         let integers = |column: usize, values: &mut dyn Iterator<Item = Option<i32>>| {
             let mut vector = output.flat_vector(column);
             for (row, value) in values.enumerate() {
@@ -490,12 +488,12 @@ impl VTab for SessionsTable {
             let mut vector = output.flat_vector(8);
             let user = vector.as_mut_slice_with_len::<bool>(rows.len());
             user.fill(true);
-            let mut vector = output.flat_vector(10);
+            let mut vector = output.flat_vector(11);
             let databases = vector.as_mut_slice_with_len::<i16>(rows.len());
             for (slot, row) in databases.iter_mut().zip(rows) {
                 *slot = row.database_id;
             }
-            let mut vector = output.flat_vector(11);
+            let mut vector = output.flat_vector(9);
             let levels = vector.as_mut_slice_with_len::<i16>(rows.len());
             for (slot, row) in levels.iter_mut().zip(rows) {
                 *slot = row.isolation;

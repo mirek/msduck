@@ -47,10 +47,8 @@ and 1-5. As captured:
 - A level set inside an RPC (`sp_executesql`, prepared execution) reverts
   when the RPC returns.
 - `sys.dm_exec_sessions.transaction_isolation_level` reports 1-5 (2 for a
-  new session). The column is last, after the columns msduck already
-  provided, and its descriptor is a nullable `smallint` because the catalog
-  descriptors in `src/query_catalog.rs` belong to another task. SQL Server
-  sends a non-nullable `smallint`.
+  new session) as a non-nullable `smallint`, in SQL Server's column position
+  (after `is_user_process`).
 - `DBCC USEROPTIONS [WITH NO_INFOMSGS]` returns SQL Server's rows in its
   order: `textsize`, `language`, `dateformat`, `datefirst`, `lock_timeout`,
   `quoted_identifier`, `arithabort`, `nocount` (when ON),
