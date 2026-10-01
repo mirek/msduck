@@ -277,8 +277,6 @@ const known = {
   'executesql return value': failedCall,
   // @@ERROR after a call is 0, not the called scope's last error.
   'exec string raiserror': { sets: [[[0]]] },
-  // RPC OUTPUT parameters need RETURNVALUE support in src/rpc.rs.
-  'rpc output parameter': { errors: [40515], statuses: [], returnValues: [] },
   // A failed DROP ends the batch instead of the statement.
   'drop list continues': { sets: [] },
 }
@@ -290,7 +288,7 @@ const known = {
 const doneDifferences = new Set([
   'server version', 'too many arguments', 'positional after named', 'output constant',
   'p_throw aborts batch', 'p_trycatch nocount', 'xact_abort raiserror', 'p_outer_throw', 'p_rec over limit',
-  'p_tran mismatch', 'executesql extra name', 'rpc output parameter', 'not first in batch', 'drop missing',
+  'p_tran mismatch', 'executesql extra name', 'not first in batch', 'drop missing',
   'drop table name', 'drop list continues', 'exec string transaction mismatch',
   'executesql transaction mismatch', 'output overflow', 'positional expression',
 ])

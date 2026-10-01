@@ -276,14 +276,15 @@ through a separate connection.
 - **Transactions.** A duplicate key inside an explicit transaction still
   aborts DuckDB's transaction, so later statements fail until ROLLBACK. That
   is existing engine behavior.
-- **RPC requests and MERGE.** A duplicate key in an RPC request
-  (sp_executesql, sp_prepexec) or in MERGE gets SQL Server's error but
-  still ends the request, as before. SQL Server ends only the statement. A
-  probe on the pinned image shows that sp_prepexec with a duplicate INSERT
-  returns 2627, 3621, a DONEINPROC with the error flag, RETURNSTATUS 2627,
-  the prepared handle, and a DONEPROC without the error flag.
-  `rpc::tests::failed_prepexec_does_not_leak_a_handle` (src/rpc.rs, held by
-  the prepared RPC work) still expects the ended request.
+- **RPC requests.** A duplicate key in an RPC request (sp_executesql,
+  sp_prepexec, sp_execute) ends only the statement, as in a SQL batch:
+  2627, 3621 and a DONEINPROC with the error flag. sp_prepexec then sends
+  RETURNSTATUS 2627, the prepared handle and a DONEPROC without the error
+  flag (captured in reference/gaps-rpc-procedures.json; see
+  docs/gaps-rpc-procedures.md). The keys batch hook still records whether a
+  batch is an RPC request, but the flag no longer changes the outcome.
+- **MERGE.** A duplicate key in MERGE gets SQL Server's error but still
+  ends the request. SQL Server ends only the statement.
 - **1505** is not followed by 3621.
 
 ## References
