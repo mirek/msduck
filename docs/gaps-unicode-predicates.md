@@ -68,9 +68,14 @@ The first stage runs before translation, in `rewrite_statement` and, for
 subqueries of scalar evaluations, `rewrite_expr`. It finds the carrier columns among the
 relations the statement reads with `pragma_table_info`, then:
 
-- **marks** comparison, LIKE, IN and BETWEEN operands that are carrier
-  columns, or character functions or scalar subqueries over them, and
-  `IN (subquery)` tests with a carrier on either side (`mark.rs`);
+- **marks** comparison, LIKE, IN, BETWEEN and simple-CASE operands that
+  are Unicode text: carrier columns, character functions, ISNULL/COALESCE
+  or CASE over them, and scalar subqueries selecting them. It also marks
+  the second argument of `NULLIF(column, …)` and `IN (subquery)` tests
+  with a carrier on either side. Column references it cannot type
+  (derived-table, CTE and outer columns) get a weaker marker that asks the
+  backend to check their type (`mark.rs`). Names may be bracket-quoted;
+  derived-table qualifiers never resolve to a base table;
 - **pins** carrier columns that ISNULL, COALESCE, IIF, CASE or a set
   operation mix with other values, as `CAST(column AS <declaration>)`
   (`pin.rs`). The cast keeps the logical type, and so the result metadata,
@@ -81,12 +86,20 @@ relations the statement reads with `pragma_table_info`, then:
 The second stage runs last on the backend AST, in `lower_expr` (`lower.rs`):
 
 - Marked operations compare byte keys built by
-  `__msduck_unicode_order_key`.
-- Other operations that may involve a carrier dispatch on `typeof`, which
-  DuckDB folds while binding. Each rewrite keeps the original expression as
-  the branch for operands that are not carriers, so other types keep their
-  exact behavior. Operands with subqueries are never dispatched, because
-  DuckDB would plan the subquery once per branch.
+  `__msduck_unicode_order_key`. An operand that is not text then fails
+  ("Comparing nvarchar with a value of DuckDB type … is not supported")
+  instead of comparing silently.
+- Operations over weakly marked columns, and over values that can produce
+  carriers (JSON functions, the engine's Unicode functions, CASE or
+  COALESCE over them), dispatch on `typeof`, which DuckDB folds while
+  binding. Each rewrite keeps the original expression as the branch for
+  operands that are not carriers. Plain column references of known
+  non-carrier columns are never rewritten, so join conditions stay
+  comparisons and keep DuckDB's hash joins, outer joins included.
+  Operands with subqueries are not dispatched, because DuckDB would plan
+  the subquery once per branch, and dispatches are not nested.
+- The translator lowers bottom-up, so the lowering looks only a few levels
+  below each node, which keeps it linear in the expression size.
 - The character cast macros, `CAST(… AS VARCHAR)` and CONCAT read a carrier's
   code units instead of its STRUCT text. A carrier conversion that feeds a
   carrier consumer (concatenation, storage) stays a carrier, so isolated
@@ -163,8 +176,10 @@ LIKE case and the backend rewrites.
   and names that a select-list alias or derived column shadows, go through
   the `typeof` dispatch instead. That dispatch cannot bind an ordering
   comparison, IN or LIKE between a carrier and a VARCHAR expression other
-  than a literal, and it does not apply to operands with subqueries. Those
-  combinations still fail.
+  than a literal (for example `d.n < @p` over a derived table `d`), and it
+  does not apply to operands with subqueries. Those combinations still
+  fail. In statements that read no carrier column at all, carriers made by
+  functions inside derived tables are not recognized either.
 - **Nested conversions.** A dispatch is not repeated over an operand that
   already contains one, so that nesting does not copy expressions
   exponentially. A comparison of a converted value that the first stage
