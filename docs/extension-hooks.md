@@ -72,6 +72,7 @@ declare the scalar variable".
 
 | Hook | Runs | Use |
 | --- | --- | --- |
+| `batch_begin`, `batch_end` | Around every SQL batch, RPC batch and nested body run through the engine's batch loop, including batches a `batch` hook claims. Every feature sees both; ends run in reverse feature order | Batch and module scope, such as table variables and temporary tables dropped when a procedure or RPC request ends. Batches nest strictly, so the calls pair up like brackets |
 | `batch` | At the start of every SQL batch and RPC batch, before parsing | Statements that must be alone in their batch and keep their source text, such as CREATE PROCEDURE, FUNCTION or TRIGGER. Return the whole token stream, including the final DONE |
 | `exec` | For `EXEC` leaf statements, after preflight, in place of the built-in "unsupported" path | System and user procedures. The engine appends `Exec.tokens`, then RETURNSTATUS and DONEPROC, as it does for `sp_set_session_context`. An error becomes the call's error, with status 1 |
 | `statement` | At the start of `Session::execute` for every other leaf statement, before database qualification and catalog bookkeeping | Custom carriers, or intercepting DML and DDL. `Ok(None)` continues with the possibly modified statement |

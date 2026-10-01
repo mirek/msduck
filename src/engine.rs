@@ -1334,7 +1334,23 @@ impl Session {
         Ok(())
     }
 
+    /// Run one batch: a SQL batch, an RPC request or a nested body such as a
+    /// procedure. Features observe its scope through `batch_begin` and
+    /// `batch_end`, which also surround batches claimed by a batch hook.
     fn batch_response_inner(
+        &mut self,
+        sql: &str,
+        parameters: &HashMap<String, Parameter>,
+        rpc_execution: Option<RpcExecution>,
+        handle: Option<(&str, i32)>,
+    ) -> (Vec<u8>, bool) {
+        ext::batch_begin(self, rpc_execution.is_some());
+        let response = self.batch_response_body(sql, parameters, rpc_execution, handle);
+        ext::batch_end(self);
+        response
+    }
+
+    fn batch_response_body(
         &mut self,
         sql: &str,
         parameters: &HashMap<String, Parameter>,
