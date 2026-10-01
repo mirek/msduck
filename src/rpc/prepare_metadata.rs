@@ -1111,24 +1111,23 @@ fn prepared_order(
                     ..
                 } if catalog.cast_info(data_type).is_some_and(|info| {
                     matches!(info.system_type_id, Some(48 | 52 | 56 | 127))
-                }) && (column(expr, &scope).is_some_and(|field| {
-                    field.info.as_ref().and_then(|info| info.system_type_id) == Some(98)
-                }) || (msduck_sql::expression_metadata::conditional::candidate(
-                    expr,
-                ) && variant_declaration(expr, &scope, parameters)
-                    == Some(true)
-                    && sqlparser::ast::visit_expressions(expr.as_ref(), |node| {
-                        if column(node, &scope).is_some() {
-                            ControlFlow::Break(())
-                        } else {
-                            ControlFlow::Continue(())
-                        }
-                    })
-                    .is_break()
-                    && matches!(&select.group_by, GroupByExpr::Expressions(keys, _) if keys.iter().any(|key|
-                        projection::order::expression_identity(expr, key, &[], &scope) == Some(true))))) =>
+                }) =>
                 {
-                    true
+                    let source = msduck_sql::variant_cast::source(expr).unwrap_or(expr);
+                    column(source, &scope).is_some_and(|field| {
+                        field.info.as_ref().and_then(|info| info.system_type_id) == Some(98)
+                    }) || (msduck_sql::expression_metadata::conditional::candidate(source)
+                        && variant_declaration(source, &scope, parameters) == Some(true)
+                        && sqlparser::ast::visit_expressions(source, |node| {
+                            if column(node, &scope).is_some() {
+                                ControlFlow::Break(())
+                            } else {
+                                ControlFlow::Continue(())
+                            }
+                        })
+                        .is_break()
+                        && matches!(&select.group_by, GroupByExpr::Expressions(keys, _) if keys.iter().any(|key|
+                        projection::order::expression_identity(source, key, &[], &scope) == Some(true))))
                 }
                 Expr::Cast {
                     expr, data_type, ..
@@ -2219,9 +2218,10 @@ mod tests {
         let sqlparser::ast::GroupByExpr::Expressions(keys, _) = &select.group_by else {
             panic!("group")
         };
-        assert_eq!(variant_declaration(expr, &scope, &parameters), Some(true));
+        let source = msduck_sql::variant_cast::source(expr).unwrap_or(expr);
+        assert_eq!(variant_declaration(source, &scope, &parameters), Some(true));
         assert_eq!(
-            projection::order::expression_identity(expr, &keys[0], &[], &scope),
+            projection::order::expression_identity(source, &keys[0], &[], &scope),
             Some(true)
         );
         let fields = prepared_fields(&catalog, &query, &outer).unwrap();
