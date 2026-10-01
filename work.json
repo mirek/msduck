@@ -9109,6 +9109,28 @@
       "dependencies": [],
       "issue": 728,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQvA"
+    },
+    {
+      "id": "gaps-inline-fk-v1",
+      "title": "Column-level FOREIGN KEY REFERENCES syntax",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01), issue #768, umbrella #710.",
+      "scope": [
+        "src/engine/ext/constraints.rs",
+        "src/engine/ext/constraints/",
+        "crates/msduck-sql/src/dialect/ext/constraints.rs",
+        "crates/msduck-sql/src/dialect/ext/constraints/",
+        "tests/gaps_constraints.rs",
+        "tests/compat/constraints.test.mjs",
+        "docs/gaps-constraints.md"
+      ],
+      "acceptance": [
+        "Column definitions accept [CONSTRAINT name] FOREIGN KEY REFERENCES t[(col)] with ON DELETE/ON UPDATE actions and NOT FOR REPLICATION, in CREATE TABLE and ALTER TABLE ADD column, behaving exactly like the existing REFERENCES form (enforcement, actions, catalog rows, constraint name).",
+        "Tests assert enforcement and cascade results; AGENTS.md checks; PR, review or fallback, merge, completion."
+      ],
+      "dependencies": [],
+      "issue": 768,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PfrMy"
     }
   ]
 }
