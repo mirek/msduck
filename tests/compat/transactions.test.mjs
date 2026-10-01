@@ -19,6 +19,17 @@ async function another(t, c) {
   return connection
 }
 
+// A plain SQL batch; `query` uses sp_executesql, whose SET options revert
+// when it returns, as in SQL Server.
+function batch(connection, sql) {
+  return new Promise((resolve, reject) => {
+    const rows = []
+    const request = new Request(sql, error => error ? reject(error) : resolve({ rows }))
+    request.on('row', cells => rows.push(cells.map(cell => cell.value)))
+    connection.execSqlBatch(request)
+  })
+}
+
 const level = async c => (await query(c, 'SELECT transaction_isolation_level FROM sys.dm_exec_sessions WHERE session_id = @@SPID')).rows[0][0]
 
 test('the driver begins SERIALIZABLE and every other isolation level', async t => {
@@ -40,7 +51,7 @@ test('SET TRANSACTION ISOLATION LEVEL is accepted, reported and scoped to sp_exe
     ['READ UNCOMMITTED', 1, 'read uncommitted'], ['REPEATABLE READ', 3, 'repeatable read'],
     ['SNAPSHOT', 5, 'snapshot'], ['SERIALIZABLE', 4, 'serializable'], ['READ COMMITTED', 2, 'read committed']
   ]) {
-    await query(c, `SET TRANSACTION ISOLATION LEVEL ${sql}`)
+    await batch(c, `SET TRANSACTION ISOLATION LEVEL ${sql}`)
     assert.equal(await level(c), value, sql)
     const options = await query(c, 'DBCC USEROPTIONS')
     assert.deepEqual(options.rows.at(-1), ['isolation level', label], sql)
@@ -53,14 +64,17 @@ test('SET TRANSACTION ISOLATION LEVEL is accepted, reported and scoped to sp_exe
     ['isolation level', 'read committed']
   ])
   // A level set inside sp_executesql applies inside it and reverts after.
-  const inner = await query(c, 'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SELECT transaction_isolation_level FROM sys.dm_exec_sessions WHERE session_id = @@SPID AND @p = 1', [['p', TYPES.Int, 1]])
-  assert.deepEqual(inner.rows, [[4]])
-  assert.equal(await level(c), 2)
+  for (const parameters of [[], [['p', TYPES.Int, 1]]]) {
+    const inner = await query(c, `SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; SELECT transaction_isolation_level FROM sys.dm_exec_sessions WHERE session_id = @@SPID${parameters.length ? ' AND @p = 1' : ''}`, parameters)
+    assert.deepEqual(inner.rows, [[4]])
+    assert.equal(await level(c), 2)
+  }
 })
 
 test('a reset connection returns to READ COMMITTED', async t => {
   const c = await start(t)
-  await query(c, 'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE')
+  await batch(c, 'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE')
+  assert.equal(await level(c), 4)
   await new Promise(resolve => c.reset(resolve))
   assert.equal(await level(c), 2)
   assert.deepEqual((await query(c, 'DBCC USEROPTIONS WITH NO_INFOMSGS')).rows.at(-1), ['isolation level', 'read committed'])
