@@ -20,6 +20,7 @@ use std::collections::HashMap;
 
 mod call;
 mod functions;
+mod namespace;
 mod procedures;
 mod rename;
 pub(super) mod sources;

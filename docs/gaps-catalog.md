@@ -177,13 +177,17 @@ columns (`COLUMN`, or `table.column` without a type) and indexes (`INDEX`,
 including the index of a key constraint, or `table.index` without a type),
 and sends SQL Server's caution (15477, line 801). Object, column and index
 IDs stay. Definitions that name the old object are not changed, as in SQL
-Server. A column that a CHECK constraint or computed column uses fails with
-15336; renaming a computed column sends the caution and fails with 4928.
+Server; the functions feature's record of the objects that call a function
+follows. A column that a CHECK constraint or computed column uses fails
+with 15336, and one that a filtered index's filter uses sends the caution
+and fails with 5074 and 4922; renaming a computed column sends the caution
+and fails with 4928.
 Other errors follow SQL Server's checks and order: unrecognized types
 (15249), NULL names (15223), invalid new names (15004 and 15224), unknown
 items (15225 without a type, 15248 with one), duplicates (15335). Errors are
-raised with severity 11 and status 1; inside TRY, and under XACT_ABORT,
-they go to the caller like SQL Server's.
+raised like SQL Server's RAISERROR: the batch goes on with status 1 and
+`@@ERROR` 0, XACT_ABORT does not apply, and a CATCH block around the call
+receives them. A CATCH block of a calling procedure does not yet.
 
 DuckDB refuses to rename a table, or one of its columns, while indexes
 depend on it, so the table's indexes are dropped, the rename runs, and the
@@ -200,7 +204,7 @@ transaction rolls back with it.
   5e7f21e through fc6221f. Removing `catalogV2Profile` reproduces their
   aggregate SHA-256
   `bd024b56b37216c580e4c4bc6e755aa1ac9f1b1b577d310537ebdca54ab9ae9c`.
-- `catalogV2Profile` (119 responses from each of two fresh pinned
+- `catalogV2Profile` (126 responses from each of two fresh pinned
   containers, which agree completely): definitions, DEFAULT naming, key
   layout, modules and parameters, `OBJECT_DEFINITION`, `sp_pkeys`,
   `sp_fkeys`, the `sp_rename` matrix with return statuses and TRY,
@@ -245,8 +249,9 @@ renames and definitions, and key identities through the keys lifecycle.
   schemas (`db_owner`, ...). ORDER BY on names sorts by code point, not by
   the case-insensitive collation.
 - `sp_rename` of databases, statistics and user data types is unsupported,
-  as are temporary tables. Function references of views that call a renamed
-  function keep the old name.
+  as are temporary tables. Schema-bound views and functions are not recorded
+  as dependencies, so the 15336 SQL Server raises for their tables and
+  columns is not.
 - `OBJECT_DEFINITION` of system objects is NULL.
 - `sys.sql_modules` reports the session's SET options rather than those at
   creation, and `execute_as_principal_id` is NULL.

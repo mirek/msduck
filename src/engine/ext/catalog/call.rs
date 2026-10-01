@@ -265,8 +265,8 @@ pub(super) fn assign(
 /// Finish a call whose body raised `diagnostics` (errors and messages, in
 /// order) after producing `tokens`, returning `status`. SQL Server's system
 /// procedures report errors with RAISERROR and continue to RETURN, so the
-/// batch goes on; a CATCH handler around the call, or XACT_ABORT, receives
-/// the first error instead.
+/// batch goes on (XACT_ABORT does not apply to RAISERROR); a CATCH handler
+/// around the call receives the first error instead.
 pub(super) fn finish(
     session: &Session,
     bound: &Bound,
@@ -276,7 +276,7 @@ pub(super) fn finish(
     variables: &mut HashMap<String, Parameter>,
 ) -> Result<super::super::Exec> {
     if let Some(error) = diagnostics.iter().find(|d| d.severity > 10)
-        && (bound.in_try || session.xact_abort)
+        && bound.in_try
     {
         return Err(super::super::Partial {
             tokens,

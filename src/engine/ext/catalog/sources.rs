@@ -370,13 +370,18 @@ pub(in crate::engine) fn record_layout(db: &duckdb::Connection, tag: i64, key: &
     Ok(())
 }
 
-/// Keep a view's batch text as its definition once the statement succeeds.
+/// Check CREATE TABLE names, and keep a view's batch text as its
+/// definition once the statement succeeds.
 pub(super) fn statement(
     session: &mut Session,
     statement: &mut Statement,
     parameters: &mut HashMap<String, Parameter>,
 ) -> Result<Option<Execution>> {
     let name = match statement {
+        Statement::CreateTable(table) => {
+            super::namespace::create_table(session, table)?;
+            return Ok(None);
+        }
         Statement::CreateView(view) => view.name.clone(),
         Statement::AlterView { name, .. } => name.clone(),
         _ => return Ok(None),

@@ -116,6 +116,21 @@ test('the catalog profile matches SQL Server', { timeout: 300000 }, async t => {
   }
 })
 
+for (const profile of ['definitionProfile', 'namespaceProfile']) {
+  test(`the ${profile} matches SQL Server`, { timeout: 300000 }, async t => {
+    const connection = await database(t)
+    for (const record of reference[profile].runs[0].filter(record => record.name !== 'version')) {
+      const actual = summary(canonical(await captureBatch(connection, record.sql)))
+      const expected = summary(record.result)
+      if (record.name.startsWith('empty schema ')) {
+        assert.deepEqual(actual.columns, expected.columns, record.name)
+        continue
+      }
+      same(actual, expected, record.name)
+    }
+  })
+}
+
 test('CHECK definitions msduck can enforce match SQL Server', { timeout: 300000 }, async t => {
   const connection = await database(t)
   const records = reference.catalogV2Profile.runs[0]
@@ -135,4 +150,26 @@ test('CHECK definitions msduck can enforce match SQL Server', { timeout: 300000 
   }
   // Most CHECKs run; the rest fail in CHECK enforcement, not in the catalog.
   assert.ok(created >= 80, `${created} of ${definitions.size}`)
+})
+
+test('system procedures run as RPC requests', async t => {
+  const connection = await database(t)
+  const { Request, TYPES } = await import('tedious')
+  await query(connection, 'CREATE TABLE dbo.rpc_items(id INT CONSTRAINT pk_rpc_items PRIMARY KEY)')
+  const call = (name, parameters) => new Promise((resolve, reject) => {
+    const rows = []
+    const messages = []
+    let status
+    const request = new Request(name, error => error ? reject(error) : resolve({ rows, messages, status }))
+    for (const [parameter, value] of parameters) request.addParameter(parameter, TYPES.NVarChar, value)
+    request.on('row', cells => rows.push(cells.map(cell => cell.value)))
+    request.on('doneProc', (_count, _more, value) => { status = value })
+    connection.on('infoMessage', message => messages.push(message.number))
+    connection.callProcedure(request)
+  })
+  assert.deepEqual((await call('sp_pkeys', [['table_name', 'rpc_items']])).rows, [['msduck_catalog_reference', 'dbo', 'rpc_items', 'id', 1, 'pk_rpc_items']])
+  const renamed = await call('sp_rename', [['objname', 'dbo.rpc_items'], ['newname', 'rpc_renamed']])
+  assert.equal(renamed.status, 0)
+  assert.ok(renamed.messages.includes(15477))
+  assert.deepEqual((await query(connection, "SELECT name FROM sys.tables WHERE name LIKE 'rpc%'")).rows, [['rpc_renamed']])
 })

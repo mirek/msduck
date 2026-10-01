@@ -456,6 +456,47 @@ pub(super) fn run(
             );
         }
     }
+    if let Target::Column { table, name, .. } = &target {
+        // A filtered index whose filter uses the column (5074, 4922).
+        let filtered: Option<String> = session
+            .db
+            .prepare(
+                "SELECT name FROM main.__msduck_keys WHERE object_id=? AND filter_definition IS NOT NULL
+                   AND list_contains(list_transform(from_json(filter_columns,'[\"VARCHAR\"]'),lambda x: lower(x)),lower(?))
+                 ORDER BY tag LIMIT 1",
+            )?
+            .query_map(duckdb::params![table.id, name], |row| row.get(0))?
+            .next()
+            .transpose()?;
+        if let Some(index) = filtered {
+            return call::finish(
+                session,
+                &bound,
+                Vec::new(),
+                vec![
+                    caution(),
+                    error(
+                        5074,
+                        1,
+                        16,
+                        905,
+                        format!("The index '{index}' is dependent on column '{name}'."),
+                    ),
+                    error(
+                        4922,
+                        9,
+                        16,
+                        905,
+                        format!(
+                            "RENAME COLUMN {name} failed because one or more objects access this column."
+                        ),
+                    ),
+                ],
+                1,
+                variables,
+            );
+        }
+    }
     atomically(session, |session| apply(session, &target, &newname))?;
     call::finish(session, &bound, Vec::new(), vec![caution()], 0, variables)
 }
@@ -775,8 +816,59 @@ fn apply(session: &mut Session, target: &Target, newname: &str) -> Result<()> {
             }
         },
     }
+    follow_references(db, target, newname)?;
     crate::object_catalog::sync(db)?;
     crate::index_catalog::sync(db)?;
+    Ok(())
+}
+
+/// The functions feature records the objects that call a function by name
+/// (`main.__msduck_function_references`); they follow the rename.
+fn follow_references(db: &duckdb::Connection, target: &Target, newname: &str) -> Result<()> {
+    let (set, filter, values): (&str, &str, Vec<String>) = match target {
+        Target::Object(object) => match object.kind.as_str() {
+            "U" => (
+                "object_name",
+                "kind IN ('default','computed','check') AND lower(object_name)=lower(?)",
+                vec![object.name.clone()],
+            ),
+            "V" => (
+                "object_name",
+                "kind='view' AND lower(object_name)=lower(?)",
+                vec![object.name.clone()],
+            ),
+            "FN" | "IF" | "TF" => (
+                "object_name",
+                "kind='function' AND lower(object_name)=lower(?)",
+                vec![object.name.clone()],
+            ),
+            "C" => (
+                "constraint_name",
+                "kind='check' AND lower(constraint_name)=lower(?)",
+                vec![object.name.clone()],
+            ),
+            _ => return Ok(()),
+        },
+        Target::Column { table, name, .. } => (
+            "column_name",
+            "kind IN ('default','computed') AND lower(object_name)=lower(?) AND lower(column_name)=lower(?)",
+            vec![table.name.clone(), name.clone()],
+        ),
+        Target::Index { .. } => return Ok(()),
+    };
+    let schema = match target {
+        Target::Object(object) => &object.schema,
+        Target::Column { table, .. } => &table.schema,
+        Target::Index { .. } => return Ok(()),
+    };
+    let mut parameters: Vec<&dyn duckdb::ToSql> = vec![&newname, schema];
+    parameters.extend(values.iter().map(|value| value as &dyn duckdb::ToSql));
+    db.execute(
+        &format!(
+            "UPDATE main.__msduck_function_references SET {set}=? WHERE lower(schema_name)=lower(?) AND {filter}"
+        ),
+        parameters.as_slice(),
+    )?;
     Ok(())
 }
 

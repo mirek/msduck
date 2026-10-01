@@ -262,6 +262,9 @@ export const v2Statements=[
  ['rename other database',"EXEC sp_rename 'other.dbo.v2_rp3', 'v2_x'"],
  ['rename in try',"BEGIN TRY EXEC sp_rename 'dbo.v2_missing', 'v2_x' END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS number END CATCH"],
  ['rename error count',"EXEC sp_rename 'dbo.v2_missing', 'v2_x'; SELECT @@ERROR AS error"],
+ ['setup filtered index','CREATE TABLE dbo.v2_fi(id INT, v INT, code INT); CREATE INDEX ix_v2_fi ON dbo.v2_fi(code) WHERE v > 0'],
+ ['rename filtered column',"DECLARE @r INT; EXEC @r = sp_rename 'dbo.v2_fi.v', 'v2', 'COLUMN'; SELECT @r AS status"],
+ ['filtered index after rename',"SELECT name,filter_definition FROM sys.indexes WHERE name='ix_v2_fi'"],
  ['rename view',"EXEC sp_rename 'dbo.v2_view', 'v2_view2'"],
  ['renamed view definition',"SELECT OBJECT_DEFINITION(OBJECT_ID('dbo.v2_view2')) AS definition"],
  ['rename function',"EXEC sp_rename 'dbo.v2_scalar', 'v2_scalar2'"],
@@ -281,13 +284,18 @@ export const v2Statements=[
  ['information schema schemata',"SELECT * FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME IN ('dbo','guest','INFORMATION_SCHEMA','sys') ORDER BY LOWER(SCHEMA_NAME)"],
  ['information schema routines',"SELECT SPECIFIC_SCHEMA,SPECIFIC_NAME,ROUTINE_SCHEMA,ROUTINE_NAME,ROUTINE_TYPE,DATA_TYPE,CHARACTER_MAXIMUM_LENGTH,NUMERIC_PRECISION,NUMERIC_PRECISION_RADIX,NUMERIC_SCALE,DATETIME_PRECISION,ROUTINE_BODY,ROUTINE_DEFINITION,IS_DETERMINISTIC,SQL_DATA_ACCESS,IS_NULL_CALL,SCHEMA_LEVEL_ROUTINE,MAX_DYNAMIC_RESULT_SETS,IS_USER_DEFINED_CAST,IS_IMPLICITLY_INVOCABLE FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_NAME IN ('v2_proc','v2_scalar2','v2_inline','v2_table') ORDER BY ROUTINE_NAME"],
  ['information schema parameters',"SELECT * FROM INFORMATION_SCHEMA.PARAMETERS WHERE SPECIFIC_NAME IN ('v2_proc','v2_scalar2','v2_inline') ORDER BY SPECIFIC_NAME,ORDINAL_POSITION"],
+ // Altered modules keep CREATE in their text.
+ ['alter view','ALTER VIEW dbo.v2_view2 AS SELECT id FROM dbo.v2_tt WHERE id > 0'],
+ ['altered view definition',"SELECT OBJECT_DEFINITION(OBJECT_ID('dbo.v2_view2')) AS definition"],
+ ['create or alter procedure','CREATE OR ALTER PROCEDURE dbo.v2_proc AS SELECT 1 AS one'],
+ ['altered procedure definition',"SELECT definition FROM sys.sql_modules WHERE object_id=OBJECT_ID('dbo.v2_proc')"],
  // Temporary objects stay in tempdb.
  ['temporary objects',"CREATE TABLE #v2_temp(a INT CONSTRAINT DF_v2_temp DEFAULT 1, b INT CHECK (b > 0)); CREATE TABLE ##v2_global(a INT); DECLARE @v TABLE(a INT PRIMARY KEY); SELECT (SELECT COUNT(*) FROM sys.tables WHERE name LIKE '%v2_temp%' OR name LIKE '%v2_global%' OR name LIKE '%msduck%') AS tables,(SELECT COUNT(*) FROM sys.objects WHERE name LIKE '%v2_temp%' OR name LIKE '%v2_global%' OR name LIKE '%msduck%') AS objects,(SELECT COUNT(*) FROM sys.all_objects WHERE name LIKE '%v2_temp%' OR name LIKE '%v2_global%' OR name LIKE '%msduck%') AS all_objects,(SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME LIKE '%v2_temp%' OR TABLE_NAME LIKE '%v2_global%' OR TABLE_NAME LIKE '%msduck%') AS information_schema,(SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME LIKE '%msduck%') AS information_schema_columns,(SELECT COUNT(*) FROM sys.default_constraints WHERE name = 'DF_v2_temp') AS defaults,(SELECT COUNT(*) FROM sys.check_constraints WHERE OBJECT_NAME(parent_object_id) LIKE '%v2_temp%') AS checks; DROP TABLE #v2_temp; DROP TABLE ##v2_global"],
 ]
 export const v2Failures=new Set(['pkeys other database','pkeys bogus parameter','pkeys too many','fkeys nulls','fkeys other database',
  'rename checked column','rename computed source column','rename computed column','rename duplicate column','rename missing column','rename duplicate table',
  'rename index without table','rename null objname','rename null newname','rename empty newname','rename missing','rename lower objtype','rename bogus parameter',
- 'rename missing newname','rename other database','rename error count'])
+ 'rename missing newname','rename other database','rename error count','rename filtered column'])
 
 export async function observeV2(connection){
  const records=[]
