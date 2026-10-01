@@ -7894,6 +7894,26 @@
         "Fixture-backed pure tests and complete public preparation comparisons in parent scope, exact-head formatting/strict workspaceClippy/workspace/alltargets build/default and dedicated clients/audit, independent review or owner-authorized availability fallback and required CI. Same worker owns final merge and completion of every companion task/project/issue."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84ParYi"
+    },
+    {
+      "id": "prepared-order-identity-v1",
+      "title": "Expose scoped deterministic ORDER expression identity",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility goal; first-party prepared grouping ORDER mismatch and two fresh pinned SQL Server captures in PR703. Same worker/worktree/PR703. No external input or engine.rs changes.",
+      "issue": 708,
+      "dependencies": [
+        "order-token-expanded-plan-v1"
+      ],
+      "scope": [
+        "crates/msduck-sql/src/projection/order.rs",
+        "crates/msduck-sql/tests/order_expression_identity.rs"
+      ],
+      "acceptance": [
+        "Expose bounded expression identity over explicit sources and parameter declarations without evaluation or input mutation. Preserve unknown/ambiguous name barriers, nested query boundaries and opaque/volatile function barriers; identity is not type inference or constant folding. Existing logical ORDER planner behavior remains unchanged.",
+        "Test qualifier/parentheses/parameter case equivalence, distinct bound fields/parameters, unknown declarations, ambiguity, shadowing, volatile/opaque functions and nested subqueries. Integrate only captured preparation shapes in already-owned parent scope; preserve complete raw reference responses.",
+        "Same worker owns PR703 final exact-head workspace/client/audit verification, required CI, independent review or owner-authorized availability fallback, merge and prompt completion of every companion task/project/issue."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdG0t"
     }
   ]
 }
