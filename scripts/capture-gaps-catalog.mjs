@@ -10,7 +10,7 @@ import {captureBatch} from './capture-order-token.mjs'
 
 export const catalogViews=['foreign_keys','foreign_key_columns','key_constraints','default_constraints','check_constraints','computed_columns','triggers','sql_modules','procedures','database_files']
 export const catalogSetup=`CREATE TABLE dbo.catalog_parent(a INT NOT NULL,b INT NOT NULL,label NVARCHAR(40),CONSTRAINT PK_catalog_parent PRIMARY KEY(a,b),CONSTRAINT UQ_catalog_parent_label UNIQUE(label));
-CREATE TABLE dbo.catalog_child(a INT NOT NULL,b INT NOT NULL,state BIT CONSTRAINT DF_catalog_child_state DEFAULT(1),doubled AS(a*2) PERSISTED,CONSTRAINT PK_catalog_child PRIMARY KEY(a,b),CONSTRAINT FK_catalog_child_parent FOREIGN KEY(a,b) REFERENCES dbo.catalog_parent(a,b) ON DELETE CASCADE ON UPDATE CASCADE,CONSTRAINT CK_catalog_child_a CHECK(a>0));`
+CREATE TABLE dbo.catalog_child(a INT NOT NULL,b INT NOT NULL,state BIT CONSTRAINT DF_catalog_child_state DEFAULT(1),doubled AS(a*2) PERSISTED,CONSTRAINT PK_catalog_child PRIMARY KEY(a,b),CONSTRAINT FK_catalog_child_parent FOREIGN KEY(a,b) REFERENCES dbo.catalog_parent(a,b) ON DELETE CASCADE ON UPDATE CASCADE,CONSTRAINT CK_catalog_child_a CHECK(a>0)); CREATE INDEX IX_catalog_parent_label ON dbo.catalog_parent(label);`
 export const catalogQueries=[
  ...catalogViews.map(view=>['empty schema '+view,`SELECT TOP(0) * FROM sys.${view}`]),
  ['constraint objects',"SELECT name,RTRIM(type) AS type,type_desc,OBJECT_NAME(parent_object_id) AS parent FROM sys.objects WHERE parent_object_id IN(OBJECT_ID('dbo.catalog_parent'),OBJECT_ID('dbo.catalog_child')) ORDER BY name"],
@@ -30,6 +30,12 @@ export const catalogQueries=[
  ['fkeys named',"EXEC sys.sp_fkeys @pktable_name=N'catalog_parent',@pktable_owner=N'dbo',@fktable_name=N'catalog_child',@fktable_owner=N'dbo'"],
  ['fkeys positional',"EXEC sys.sp_fkeys N'catalog_parent',N'dbo',NULL,N'catalog_child',N'dbo'"],
  ['database files',"SELECT file_id,type,type_desc,data_space_id,name,state,state_desc,max_size,growth,is_percent_growth FROM sys.database_files ORDER BY file_id"],
+ ['pkeys missing parameter','EXEC sys.sp_pkeys'],
+ ['fkeys missing parameters','EXEC sys.sp_fkeys'],
+ ['rename missing object',"EXEC sys.sp_rename N'dbo.absent',N'renamed',N'OBJECT'"],
+ ['rename invalid object type',"EXEC sys.sp_rename N'dbo.catalog_parent',N'renamed',N'INVALID'"],
+ ['rename index',"EXEC sys.sp_rename N'dbo.catalog_parent.IX_catalog_parent_label',N'IX_catalog_parent_renamed',N'INDEX'"],
+ ['renamed index',"SELECT name,index_id,is_unique,is_primary_key,is_unique_constraint FROM sys.indexes WHERE object_id=OBJECT_ID('dbo.catalog_parent') ORDER BY index_id"],
  ['rename table',"EXEC sys.sp_rename N'dbo.catalog_child',N'catalog_renamed'"],
  ['rename column',"EXEC sys.sp_rename N'dbo.catalog_renamed.a',N'new_a',N'COLUMN'"],
  ['rename constraint',"EXEC sys.sp_rename N'dbo.PK_catalog_child',N'PK_catalog_renamed',N'OBJECT'"],
