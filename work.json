@@ -3620,7 +3620,7 @@
     {
       "id": "codex-review-policy-v1",
       "title": "Recognize owner-enabled Codex review in CLAUDE.md and collaboration roles",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner instruction of 2026-09-26: Codex review enabled on all owner repos; use @codex review on existing PRs and add the procedure to skills. First-party repository policy files; no external submission is input.",
       "scope": [
         "CLAUDE.md",
@@ -8941,6 +8941,26 @@
       "dependencies": [],
       "issue": 727,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQur"
+    },
+    {
+      "id": "gaps-stale-claims-policy-v1",
+      "title": "Standing policy: resolve stale claims and reservations without owner approval",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01), issue #761, umbrella #710.",
+      "scope": [
+        "AGENTS.md",
+        ".agents/skills/contribute/SKILL.md",
+        "docs/agent-work.md",
+        "docs/parallel-collaboration.md"
+      ],
+      "acceptance": [
+        "The contributor instructions grant standing owner authorization for any session working on owner-approved work to resolve a stale claim or reservation that blocks it without asking: mark the stale task blocked and publish a bounded successor or companion task, recording the staleness evidence in the authorization.",
+        "Staleness is evidence-based (no pushes or PR updates to the task's branch for a stated period, no live local worker process or recently modified worktree, or a worker that reports itself stopped) and never applies to a live worker; the successor never reuses or deletes the old claim tag.",
+        "Sessions are told the owner is usually away for long periods and must keep progressing, reporting resolutions afterwards instead of asking; owner approval stays required only for real product decisions and external submissions."
+      ],
+      "dependencies": [],
+      "issue": 761,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pe8Ux"
     }
   ]
 }
