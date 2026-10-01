@@ -152,6 +152,12 @@ pub(super) fn run(session: &mut Session, statement: &Statement) -> Result<Option
     let Some(keys) = key_names(index) else {
         anyhow::bail!("index expressions are unsupported");
     };
+    // Key order is not stored; sys.index_columns reports it.
+    let descending = keys
+        .iter()
+        .zip(1..)
+        .filter_map(|((_, descending), ordinal)| descending.then_some(ordinal))
+        .collect::<Vec<i32>>();
     let mut columns: Vec<Column> = vec![];
     for (key, _) in &keys {
         let Some(column) = table.column(key) else {
@@ -295,6 +301,12 @@ pub(super) fn run(session: &mut Session, statement: &Statement) -> Result<Option
             &backend,
             &columns,
         )?;
+        for ordinal in &descending {
+            db.execute(
+                "INSERT INTO main.__msduck_index_descending VALUES(?,?)",
+                params![incarnation, ordinal],
+            )?;
+        }
         catalog::insert(
             db,
             &catalog::Key {
