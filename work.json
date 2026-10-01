@@ -8275,7 +8275,7 @@
     {
       "id": "gaps-merge-v1",
       "title": "MERGE statements, including table hints",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
       "scope": [
         "src/engine/ext/merge.rs",
@@ -8775,7 +8775,7 @@
     {
       "id": "gaps-tedious-expectations-v1",
       "title": "Update obsolete tests/tedious.test.mjs expectations for newly supported features",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner-approved successor (2026-10-01) of stalled column-catalog-client-expectations-v1 for tests/tedious.test.mjs, umbrella #710.",
       "scope": [
         "tests/tedious.test.mjs"
