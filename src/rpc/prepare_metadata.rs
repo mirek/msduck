@@ -524,6 +524,29 @@ fn prepared_order(
         let mut expanded = query.clone();
         projection::expand_stars(catalog, &mut expanded, outer)?;
         let SetExpr::Select(select) = expanded.body.as_ref() else {
+            // Captured one-column variant UNION/UNION ALL resolves its output
+            // alias or position, without borrowing an operand's row scope.
+            if matches!(
+                expanded.body.as_ref(),
+                SetExpr::SetOperation {
+                    op: SetOperator::Union,
+                    ..
+                }
+            ) && fields.len() == 1
+                && fields[0].info.as_ref().is_some_and(|info| {
+                    info.system_type_id == Some(98) && info.user_type_id == Some(98)
+                })
+                && keys.len() == 1
+                && match &keys[0].expr {
+                    Expr::Identifier(id) => id.value.eq_ignore_ascii_case(&fields[0].name),
+                    Expr::Value(value) => {
+                        matches!(&value.value, Value::Number(n, false) if n == "1")
+                    }
+                    _ => false,
+                }
+            {
+                return Some(vec![1]);
+            }
             return None;
         };
         let scope = projection::scopes(catalog, &expanded, outer).body;
@@ -676,6 +699,48 @@ fn prepared_order(
     infer().map_or(original, projection::order::Plan::Token)
 }
 
+// The shared numeric/character set merger leaves variants unresolved.
+// Preserve only an identical catalog variant declaration on both branches;
+// mixed families and aliases remain unknown. Properties still come from the
+// shared operator-specific inference over the original query.
+fn prepared_fields(
+    catalog: &CatalogSnapshot,
+    query: &Query,
+    scope: &Scope,
+) -> Option<Vec<msduck_sql::binding_scope::Field>> {
+    let mut fields = projection::query_fields(catalog, query, scope)?;
+    let sqlparser::ast::SetExpr::SetOperation {
+        left,
+        right,
+        op: sqlparser::ast::SetOperator::Union,
+        ..
+    } = query.body.as_ref()
+    else {
+        return Some(fields);
+    };
+    let mut branch = query.clone();
+    branch.body = left.clone();
+    let left = prepared_fields(catalog, &branch, scope)?;
+    branch.body = right.clone();
+    let right = prepared_fields(catalog, &branch, scope)?;
+    if fields.len() != left.len() || left.len() != right.len() {
+        return None;
+    }
+    for ((field, left), right) in fields.iter_mut().zip(left).zip(right) {
+        if field.info.is_none()
+            && let (Some(a), Some(b)) = (left.info, right.info)
+            && a.system_type_id == Some(98)
+            && b.system_type_id == Some(98)
+            && a.user_type_id == Some(98)
+            && b.user_type_id == Some(98)
+            && a == b
+        {
+            field.info = Some(a);
+        }
+    }
+    Some(fields)
+}
+
 fn query_description(
     session: &Session,
     query: &Query,
@@ -689,7 +754,7 @@ fn query_description(
             scope.parameters.insert(name.to_lowercase(), info);
         }
     }
-    let mut fields = projection::query_fields(&catalog, query, &scope)
+    let mut fields = prepared_fields(&catalog, query, &scope)
         .ok_or_else(|| anyhow::anyhow!("unsupported prepared result declarations"))?;
     // Preserve original explicit VALUES declarations before operand annotation
     // lowers temporal sources into native helper calls. The annotated candidate
@@ -1099,6 +1164,90 @@ pub(super) fn handle(out: &mut Vec<u8>, name: &str, value: Option<i32>) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prepared_order_uses_original_cast_sources_and_proven_variant_sets() {
+        use msduck_sql::binding_scope::Field;
+        let mut catalog = CatalogSnapshot::default();
+        for (name, id) in [
+            ("int", 56),
+            ("bigint", 127),
+            ("sql_variant", 98),
+            ("float", 62),
+        ] {
+            catalog.types.insert(
+                name.into(),
+                TypeMetadata {
+                    system_type_id: Some(id),
+                    user_type_id: Some(i32::from(id)),
+                    ..Default::default()
+                },
+            );
+        }
+        catalog.tables.insert(
+            "dbo.prepare_heap".into(),
+            ["a", "b"]
+                .into_iter()
+                .map(|name| Field {
+                    name: name.into(),
+                    info: catalog.cast_info(&DataType::Int(None)),
+                    properties: msduck_core::result::Properties {
+                        nullable: Some(true),
+                        origin: msduck_core::result::Origin::Stored,
+                    },
+                    collation: None,
+                    json_fragment: false,
+                })
+                .collect(),
+        );
+        let scope = Scope::default();
+        for (sql, expected) in [
+            (
+                "SELECT CAST(v AS INT) AS n FROM (SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap) q ORDER BY n",
+                vec![1],
+            ),
+            (
+                "SELECT CAST(v AS BIGINT) AS n FROM (SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap) q ORDER BY 1 DESC",
+                vec![1],
+            ),
+            (
+                "SELECT CAST(b AS SQL_VARIANT) AS v FROM dbo.prepare_heap ORDER BY v,a+1",
+                vec![1, 0],
+            ),
+            (
+                "SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap UNION ALL SELECT CAST(b AS SQL_VARIANT) FROM dbo.prepare_heap ORDER BY 1",
+                vec![1],
+            ),
+            (
+                "SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap UNION SELECT CAST(b AS SQL_VARIANT) FROM dbo.prepare_heap ORDER BY v",
+                vec![1],
+            ),
+        ] {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            let fields = prepared_fields(&catalog, &query, &scope).unwrap();
+            assert_eq!(
+                prepared_order(&catalog, &query, &scope, &fields, &HashMap::new()),
+                projection::order::Plan::Token(expected),
+                "{sql}"
+            );
+        }
+        for sql in [
+            "SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap UNION ALL SELECT b FROM dbo.prepare_heap",
+            "SELECT CAST(a AS SQL_VARIANT) AS v FROM dbo.prepare_heap UNION ALL SELECT CAST(b AS FLOAT) FROM dbo.prepare_heap",
+        ] {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            assert!(
+                prepared_fields(&catalog, &query, &scope).unwrap()[0]
+                    .info
+                    .is_none(),
+                "{sql}"
+            );
+        }
+    }
 
     #[test]
     fn declaration_enrichment_preserves_count_null_barriers_in_outer_expressions() {
