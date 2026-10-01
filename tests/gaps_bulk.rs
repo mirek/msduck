@@ -350,6 +350,17 @@ fn statement_errors_and_protocol_order_match_sql_server() {
         15,
         "Incorrect syntax near 'KEEP_IDENTITY'."
     ));
+    // Other captured INSERT BULK syntax errors complete the same way.
+    for (sql, message) in [
+        (
+            "insert bulk t ([id] int) WITH (FOO)",
+            "Incorrect syntax near 'FOO'.",
+        ),
+        ("insert bulk t", "Incorrect syntax near 't'."),
+    ] {
+        let response = run(&mut session, sql);
+        assert!(has_error(&response, 102, 1, 15, message), "{sql}");
+    }
     for sql in [
         "SELECT 1; insert bulk t ([id] int)",
         "insert bulk t ([id] int); SELECT 1",
