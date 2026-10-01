@@ -35,8 +35,63 @@ pub fn definition(expr: &Expr) -> Option<String> {
         nodes: 4096,
         bytes: 1 << 20,
     };
-    let (text, _) = render(expr, &mut budget, 0)?;
+    let mut expr = expr.clone();
+    let _ = VisitMut::visit(&mut expr, &mut Associate);
+    let (text, _) = render(&expr, &mut budget, 0)?;
     Some(format!("({text})"))
+}
+
+/// T-SQL gives `+ - & | ^` one precedence, applied left to right, while
+/// the parser binds `^` and `+` tighter than `|` and `&`. An unparenthesized
+/// right operand of one of these operators is therefore reassociated to
+/// the left, as SQL Server reads it: `a | b ^ c` is `(a | b) ^ c`.
+struct Associate;
+
+fn additive(op: &BinaryOperator) -> bool {
+    matches!(arithmetic(op), Some((_, Class::Additive)))
+}
+
+impl VisitorMut for Associate {
+    type Break = ();
+    fn post_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<()> {
+        loop {
+            let Expr::BinaryOp { op, right, .. } = expr else {
+                break;
+            };
+            if !additive(op) {
+                break;
+            }
+            let Expr::BinaryOp { op: inner, .. } = right.as_ref() else {
+                break;
+            };
+            if !additive(inner) {
+                break;
+            }
+            let Expr::BinaryOp { left, op, right } =
+                std::mem::replace(expr, Expr::value(Value::Null))
+            else {
+                unreachable!()
+            };
+            let Expr::BinaryOp {
+                left: middle,
+                op: inner,
+                right: last,
+            } = *right
+            else {
+                unreachable!()
+            };
+            *expr = Expr::BinaryOp {
+                left: Box::new(Expr::BinaryOp {
+                    left,
+                    op,
+                    right: middle,
+                }),
+                op: inner,
+                right: last,
+            };
+        }
+        std::ops::ControlFlow::Continue(())
+    }
 }
 
 /// The catalog definition of an expression stored as T-SQL text.
@@ -65,7 +120,7 @@ pub fn parse_expression(source: &str) -> Option<Expr> {
         return None;
     }
     match select.projection.remove(0) {
-        SelectItem::UnnamedExpr(expr) => Some(expr),
+        SelectItem::UnnamedExpr(Expr::Nested(expr)) => Some(*expr),
         _ => None,
     }
 }
@@ -568,6 +623,20 @@ fn render(expr: &Expr, budget: &mut Budget, depth: usize) -> Option<(String, Cla
             )
         }
         Expr::Function(function) => (function_call(function, budget, depth)?, Class::Atom),
+        Expr::Substring {
+            expr: inner,
+            substring_from: Some(from),
+            substring_for: Some(length),
+            ..
+        } => (
+            format!(
+                "substring({},{},{})",
+                value(inner, budget, depth)?,
+                value(from, budget, depth)?,
+                value(length, budget, depth)?
+            ),
+            Class::Atom,
+        ),
         _ => return None,
     };
     budget.bytes = budget.bytes.checked_sub(result.0.len())?;
@@ -736,6 +805,9 @@ mod tests {
             ("~(a + b) = 0", "(~([a]+[b])=(0))"),
             ("a - -1 > 0", "(([a]-(-1))>(0))"),
             ("a & 1 = 0", "(([a]&(1))=(0))"),
+            ("a | b ^ c > 0", "((([a]|[b])^[c])>(0))"),
+            ("a & b + c > 0", "((([a]&[b])+[c])>(0))"),
+            ("a | (b ^ c) > 0", "(([a]|([b]^[c]))>(0))"),
             ("s + 'x' <> 'yx'", "(([s]+'x')<>'yx')"),
             ("a != 4", "([a]<>(4))"),
             ("1 + 2 * 3", "((1)+(2)*(3))"),
@@ -879,9 +951,138 @@ mod tests {
                 "(CONVERT([int],CONVERT([bigint],[a]))>(0))",
             ),
             ("len(s + 'x') > 0", "(len([s]+'x')>(0))"),
+            ("substring(s, 1, 2) = 'ab'", "(substring([s],(1),(2))='ab')"),
         ] {
             assert_eq!(check(source).as_deref(), Some(expected), "{source}");
         }
+    }
+
+    fn reference() -> serde_json::Value {
+        serde_json::from_str(include_str!(
+            "../../../../../../reference/gaps-catalog.json"
+        ))
+        .unwrap()
+    }
+
+    fn record<'a>(records: &'a [serde_json::Value], name: &str) -> &'a serde_json::Value {
+        records
+            .iter()
+            .find(|record| record["name"] == name)
+            .unwrap_or_else(|| panic!("missing record {name}"))
+    }
+
+    fn rows(record: &serde_json::Value) -> &Vec<serde_json::Value> {
+        record["result"]["sets"][0]["rows"].as_array().unwrap()
+    }
+
+    fn table(sql: &str) -> CreateTable {
+        let statement = super::super::declarations::parse(sql)
+            .unwrap()
+            .into_iter()
+            .find(|statement| matches!(statement, Statement::CreateTable(_)))
+            .unwrap();
+        let Statement::CreateTable(table) = statement else {
+            unreachable!()
+        };
+        table
+    }
+
+    /// Every captured CHECK, DEFAULT and computed definition, from SQL
+    /// Server's own text of the declaring statements.
+    #[test]
+    fn definitions_match_every_captured_declaration() {
+        let reference = reference();
+        let mut checked = 0;
+        // CHECK constraints: name -> captured definition.
+        let v2 = reference["catalogV2Profile"]["runs"][0].as_array().unwrap();
+        let expected: std::collections::HashMap<String, String> =
+            rows(record(v2, "check definitions"))
+                .iter()
+                .map(|row| {
+                    (
+                        row[0].as_str().unwrap().to_owned(),
+                        row[1].as_str().unwrap().to_owned(),
+                    )
+                })
+                .collect();
+        for setup in ["setup checks one", "setup checks two", "setup checks three"] {
+            let table = table(record(v2, setup)["sql"].as_str().unwrap());
+            for constraint in &table.constraints {
+                let TableConstraint::Check(check) = constraint else {
+                    continue;
+                };
+                let name = &check.name.as_ref().unwrap().value;
+                assert_eq!(
+                    definition(&check.expr).as_deref(),
+                    Some(expected[name].as_str()),
+                    "{name}"
+                );
+                checked += 1;
+            }
+        }
+        assert_eq!(checked, expected.len());
+        // DEFAULTs and computed columns: column -> captured definition.
+        let columns = |records: &[serde_json::Value], setup: &str, query: &str, column: usize| {
+            let table = table(record(records, setup)["sql"].as_str().unwrap());
+            let mut count = 0;
+            for row in rows(record(records, query)) {
+                let name = row[0].as_str().unwrap();
+                let definition_text = row[column].as_str().unwrap();
+                let declared = table
+                    .columns
+                    .iter()
+                    .find(|c| c.name.value == name)
+                    .unwrap_or_else(|| panic!("{name}"));
+                let expr = declared
+                    .options
+                    .iter()
+                    .find_map(|o| match &o.option {
+                        ColumnOption::Default(expr) => Some(expr),
+                        _ => None,
+                    })
+                    .or_else(|| crate::dialect::computed_column::computed(declared).map(|(e, _)| e))
+                    .unwrap();
+                assert_eq!(definition(expr).as_deref(), Some(definition_text), "{name}");
+                count += 1;
+            }
+            count
+        };
+        checked += columns(v2, "setup defaults", "default definitions", 2);
+        checked += columns(v2, "setup computed", "computed definitions", 7);
+        checked += columns(v2, "setup computed text", "computed text definitions", 5);
+        let v1 = reference["definitionProfile"]["runs"][0]
+            .as_array()
+            .unwrap();
+        let named = |records: &[serde_json::Value], setup: &str, query: &str| {
+            let table = table(record(records, setup)["sql"].as_str().unwrap());
+            let mut count = 0;
+            for row in rows(record(records, query)) {
+                let row = row.as_array().unwrap();
+                let index = row[1].as_u64().unwrap() as usize - 1;
+                let text = if row.len() == 4 { &row[2] } else { &row[8] };
+                let declared = &table.columns[index];
+                let expr = declared
+                    .options
+                    .iter()
+                    .find_map(|o| match &o.option {
+                        ColumnOption::Default(expr) => Some(expr),
+                        _ => None,
+                    })
+                    .or_else(|| crate::dialect::computed_column::computed(declared).map(|(e, _)| e))
+                    .unwrap();
+                assert_eq!(
+                    definition(expr).as_deref(),
+                    text.as_str(),
+                    "{}",
+                    declared.name
+                );
+                count += 1;
+            }
+            count
+        };
+        checked += named(v1, "setup default definitions", "default definitions");
+        checked += named(v1, "setup computed definitions", "computed definitions");
+        assert!(checked > 150, "{checked}");
     }
 
     #[test]

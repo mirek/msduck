@@ -523,8 +523,9 @@ fn indexes(db: &duckdb::Connection, table: &Object) -> Result<Vec<(String, Strin
         .collect::<duckdb::Result<_>>()?)
 }
 
-/// An index definition for the renamed table or column.
-fn redefine(sql: &str, table: &str, column: Option<(&str, &str)>) -> Result<String> {
+/// An index definition under a new backend name, for the renamed table or
+/// column.
+fn redefine(sql: &str, name: &str, table: &str, column: Option<(&str, &str)>) -> Result<String> {
     let mut statements =
         sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::GenericDialect {}, sql)?;
     anyhow::ensure!(statements.len() == 1, "unexpected index definition");
@@ -534,6 +535,9 @@ fn redefine(sql: &str, table: &str, column: Option<(&str, &str)>) -> Result<Stri
     if let Some(ObjectNamePart::Identifier(last)) = index.table_name.0.last_mut() {
         *last = Ident::with_quote('"', table);
     }
+    index.name = Some(sqlparser::ast::ObjectName::from(vec![Ident::with_quote(
+        '"', name,
+    )]));
     if let Some((old, new)) = column {
         struct Rename<'a>(&'a str, &'a str);
         impl VisitorMut for Rename<'_> {
@@ -581,8 +585,26 @@ fn rename_backend(
         ))?;
     }
     db.execute_batch(statement)?;
-    for (_, sql) in &saved {
-        db.execute_batch(&redefine(sql, new_table, column)?)?;
+    // DuckDB cannot reuse a name dropped in the same transaction, so the
+    // indexes come back under new backend names, which the catalogs follow.
+    for (name, sql) in &saved {
+        let base = match name.rsplit_once("_r") {
+            Some((base, suffix)) if suffix.bytes().all(|b| b.is_ascii_digit()) => base,
+            _ => name.as_str(),
+        };
+        let tag: i64 = db.query_row("SELECT nextval('main.__msduck_key_tags')", [], |row| {
+            row.get(0)
+        })?;
+        let renamed = format!("{base}_r{tag}");
+        db.execute_batch(&redefine(sql, &renamed, new_table, column)?)?;
+        db.execute(
+            "UPDATE main.__msduck_keys SET backend_name=? WHERE backend_name=? AND object_id=?",
+            duckdb::params![renamed, name, table.id],
+        )?;
+        db.execute(
+            "UPDATE main.__msduck_index_catalog SET backend_name=? WHERE backend_schema=? AND backend_name=?",
+            duckdb::params![renamed, table.schema, name],
+        )?;
     }
     // The table-owned index catalog keeps the backend table's OID.
     db.execute(

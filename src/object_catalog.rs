@@ -37,7 +37,7 @@ pub fn register(db: &Connection) -> Result<()> {
     // the catalog views (src/engine/ext/catalog). A NULL source is unknown.
     db.execute_batch(
         "CREATE TABLE IF NOT EXISTS main.__msduck_default_sources(object_id INTEGER NOT NULL,source VARCHAR,is_system_named BOOLEAN);
-        CREATE TABLE IF NOT EXISTS main.__msduck_computed_sources(object_id INTEGER NOT NULL,column_id INTEGER NOT NULL,source VARCHAR)",
+        CREATE TABLE IF NOT EXISTS main.__msduck_computed_sources(object_id INTEGER NOT NULL,column_id INTEGER NOT NULL,source VARCHAR,is_nullable BOOLEAN)",
     )?;
     crate::column_catalog::register(db)?;
     db.execute_batch(include_str!("table_catalog.sql"))?;
@@ -238,15 +238,12 @@ fn record_computed(db: &Connection, statement: &Statement) -> Result<()> {
         ),
         _ => return Ok(()),
     };
-    let computed: Vec<(&ColumnDef, Option<String>)> = columns
+    use msduck_sql::dialect::ext::catalog::declarations;
+    let computed: Vec<(&ColumnDef, &Expr)> = columns
         .into_iter()
         .filter_map(|column| {
-            msduck_sql::dialect::computed_column::computed(column).map(|(expression, _)| {
-                (
-                    column,
-                    msduck_sql::dialect::ext::catalog::declarations::declared_source(expression),
-                )
-            })
+            msduck_sql::dialect::computed_column::computed(column)
+                .map(|(expression, _)| (column, expression))
         })
         .collect();
     if computed.is_empty() {
@@ -260,7 +257,24 @@ fn record_computed(db: &Connection, statement: &Statement) -> Result<()> {
     let Some(object_id) = object_id else {
         return Ok(());
     };
-    for (column, source) in computed {
+    let nullability: std::collections::HashMap<String, bool> = db
+        .prepare("SELECT lower(name),is_nullable FROM main.__msduck_column_info WHERE object_id=?")?
+        .query_map([object_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<duckdb::Result<_>>()?;
+    for (column, expression) in computed {
+        let source = declarations::declared_source(expression);
+        let nullable = source.as_ref().map(|_| {
+            !column
+                .options
+                .iter()
+                .any(|option| matches!(option.option, ColumnOption::NotNull))
+                && declarations::computed_nullable(expression, &|name| {
+                    nullability
+                        .get(&name.to_lowercase())
+                        .copied()
+                        .unwrap_or(true)
+                })
+        });
         let column_id: Option<i32> = db.query_row(
             "SELECT column_id FROM main.__msduck_column_info WHERE object_id=? AND lower(name)=lower(?)",
             duckdb::params![object_id, column.name.value],
@@ -274,8 +288,8 @@ fn record_computed(db: &Connection, statement: &Statement) -> Result<()> {
             duckdb::params![object_id, column_id],
         )?;
         db.execute(
-            "INSERT INTO main.__msduck_computed_sources VALUES(?,?,?)",
-            duckdb::params![object_id, column_id, source],
+            "INSERT INTO main.__msduck_computed_sources VALUES(?,?,?,?)",
+            duckdb::params![object_id, column_id, source, nullable],
         )?;
     }
     Ok(())

@@ -33,6 +33,8 @@ pub struct Column {
     pub default: Option<Default>,
     /// The computed column expression's source text.
     pub computed: Option<String>,
+    /// The column is declared NOT NULL.
+    pub not_null: bool,
 }
 
 /// `ALTER TABLE ... ADD [CONSTRAINT name] DEFAULT value FOR column`.
@@ -43,16 +45,45 @@ pub struct DefaultFor {
     pub default: Default,
 }
 
+/// A named CHECK constraint of CREATE TABLE or ALTER TABLE ... ADD.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Check {
+    pub table: Vec<String>,
+    pub name: String,
+    pub source: String,
+}
+
 /// A batch's declarations.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Declarations {
     pub columns: Vec<Column>,
     pub defaults: Vec<DefaultFor>,
+    pub checks: Vec<Check>,
 }
 
 impl Declarations {
     pub fn is_empty(&self) -> bool {
-        self.columns.is_empty() && self.defaults.is_empty()
+        self.columns.is_empty() && self.defaults.is_empty() && self.checks.is_empty()
+    }
+}
+
+/// The statements of a batch as written: without the normalizations the
+/// batch parser applies for execution (such as the default length 30 of
+/// `CAST(x AS VARCHAR)`), which SQL Server's catalog text does not show.
+pub fn parse(sql: &str) -> Option<Vec<Statement>> {
+    let tokens = crate::dialect::tokenize(sql).ok()?;
+    let mut parser = sqlparser::parser::Parser::new(&crate::dialect::ServerDialect)
+        .with_tokens_with_locations(tokens);
+    let mut statements = Vec::new();
+    loop {
+        while parser.consume_token(&Token::SemiColon) {}
+        if parser.peek_token().token == Token::EOF {
+            return Some(statements);
+        }
+        if statements.len() >= 10000 {
+            return None;
+        }
+        statements.push(parser.parse_statement().ok()?);
     }
 }
 
@@ -88,6 +119,10 @@ fn column(table: &[String], create: bool, column: &ColumnDef) -> Option<Column> 
         column: column.name.value.clone(),
         default,
         computed,
+        not_null: column
+            .options
+            .iter()
+            .any(|option| matches!(option.option, ColumnOption::NotNull)),
     })
 }
 
@@ -95,7 +130,7 @@ fn column(table: &[String], create: bool, column: &ColumnDef) -> Option<Column> 
 /// `sql`, including those nested in blocks. A batch that does not parse
 /// declares nothing.
 pub fn declarations(sql: &str) -> Declarations {
-    let Ok(statements) = crate::batch::parse(sql) else {
+    let Some(statements) = parse(sql) else {
         return Declarations::default();
     };
     struct Collect(Declarations);
@@ -111,6 +146,35 @@ pub fn declarations(sql: &str) -> Declarations {
                                 .iter()
                                 .filter_map(|definition| column(&name, true, definition)),
                         );
+                        let column_checks = table.columns.iter().flat_map(|column| {
+                            column
+                                .options
+                                .iter()
+                                .filter_map(|option| match &option.option {
+                                    ColumnOption::Check(check) => Some((
+                                        option.name.as_ref().or(check.name.as_ref())?,
+                                        &*check.expr,
+                                    )),
+                                    _ => None,
+                                })
+                        });
+                        let table_checks =
+                            table
+                                .constraints
+                                .iter()
+                                .filter_map(|constraint| match constraint {
+                                    TableConstraint::Check(check) => {
+                                        Some((check.name.as_ref()?, &*check.expr))
+                                    }
+                                    _ => None,
+                                });
+                        for (check, expr) in column_checks.chain(table_checks) {
+                            self.0.checks.push(Check {
+                                table: name.clone(),
+                                name: check.value.clone(),
+                                source: source(expr),
+                            });
+                        }
                     }
                 }
                 Statement::AlterTable(table) => {
@@ -135,8 +199,31 @@ pub fn declarations(sql: &str) -> Declarations {
                                     if let Some(column) = column(&name, false, definition) {
                                         self.0.columns.push(column);
                                     }
+                                    for option in &definition.options {
+                                        if let ColumnOption::Check(check) = &option.option
+                                            && let Some(check_name) =
+                                                option.name.as_ref().or(check.name.as_ref())
+                                        {
+                                            self.0.checks.push(Check {
+                                                table: name.clone(),
+                                                name: check_name.value.clone(),
+                                                source: source(&check.expr),
+                                            });
+                                        }
+                                    }
                                 }
                                 super::super::constraints::AddItem::Constraint(constraint) => {
+                                    if let (
+                                        Some(check),
+                                        super::super::constraints::Kind::Check(expr),
+                                    ) = (&constraint.name, &constraint.kind)
+                                    {
+                                        self.0.checks.push(Check {
+                                            table: name.clone(),
+                                            name: check.value.clone(),
+                                            source: source(expr),
+                                        });
+                                    }
                                     if let super::super::constraints::Kind::Default {
                                         value,
                                         column,
@@ -584,11 +671,82 @@ pub fn allocator(expr: &Expr) -> bool {
     find.0
 }
 
-/// SQL Server's generated name of an unnamed DEFAULT constraint.
+/// SQL Server's generated name of an unnamed DEFAULT constraint:
+/// `DF__table__column__XXXXXXXX`, with the object ID in hexadecimal. The
+/// table and column parts share 14 characters; when both are longer, the
+/// table keeps at least nine and the column at least five.
 pub fn default_name(table: &str, column: &str, id: i32) -> String {
-    let table: String = table.chars().take(9).collect();
-    let column: String = column.chars().take(5).collect();
+    let table: Vec<char> = table.chars().collect();
+    let column: Vec<char> = column.chars().collect();
+    let (mut kept_table, mut kept_column) = (table.len(), column.len());
+    if kept_table + kept_column > 14 {
+        kept_table = kept_table.min(9.max(14usize.saturating_sub(kept_column)));
+        kept_column = kept_column.min(5.max(14 - kept_table.min(14)));
+    }
+    let table: String = table[..kept_table].iter().collect();
+    let column: String = column[..kept_column].iter().collect();
     format!("DF__{table}__{column}__{:08X}", id as u32)
+}
+
+/// Whether a computed column over `expr` is nullable, as SQL Server infers
+/// it: only columns declared NOT NULL, constants other than NULL, ISNULL
+/// with a non-null operand and CASE whose branches (including an ELSE) are
+/// all non-null are known to be non-null. Arithmetic, conversions and
+/// other functions may yield NULL (for example on overflow).
+pub fn computed_nullable(expr: &Expr, nullable: &dyn Fn(&str) -> bool) -> bool {
+    fn unnest(mut expr: &Expr) -> &Expr {
+        loop {
+            match expr {
+                Expr::Nested(inner) => expr = inner,
+                _ => match crate::variant_cast::source(expr) {
+                    Some(source) => expr = source,
+                    None => return expr,
+                },
+            }
+        }
+    }
+    match unnest(expr) {
+        Expr::Identifier(ident) => nullable(&ident.value),
+        Expr::CompoundIdentifier(parts) => parts.last().is_none_or(|ident| nullable(&ident.value)),
+        Expr::Value(value) => matches!(value.value, Value::Null),
+        Expr::UnaryOp {
+            op: UnaryOperator::Plus | UnaryOperator::Minus,
+            expr: inner,
+        } if matches!(unnest(inner), Expr::Value(value) if matches!(value.value, Value::Number(..))) => {
+            false
+        }
+        Expr::Case {
+            conditions,
+            else_result: Some(else_result),
+            ..
+        } => {
+            conditions
+                .iter()
+                .any(|when| computed_nullable(&when.result, nullable))
+                || computed_nullable(else_result, nullable)
+        }
+        Expr::Function(function)
+            if function.name.to_string().eq_ignore_ascii_case("ISNULL")
+                && function.over.is_none() =>
+        {
+            let FunctionArguments::List(list) = &function.args else {
+                return true;
+            };
+            let arguments: Vec<&Expr> = list
+                .args
+                .iter()
+                .filter_map(|argument| match argument {
+                    FunctionArg::Unnamed(FunctionArgExpr::Expr(expr)) => Some(expr),
+                    _ => None,
+                })
+                .collect();
+            arguments.len() != 2
+                || arguments
+                    .iter()
+                    .all(|argument| computed_nullable(argument, nullable))
+        }
+        _ => true,
+    }
 }
 
 /// Whether `source` has known catalog text.
@@ -659,6 +817,22 @@ mod tests {
             }]
         );
         assert!(declarations("SELECT 1").is_empty());
+        let checks = declarations(
+            "CREATE TABLE t(a INT CONSTRAINT ck_a CHECK (CAST(a AS VARCHAR) <> ''), b INT CHECK (b > 0), CONSTRAINT ck_t CHECK (a < b));
+             ALTER TABLE t ADD CONSTRAINT ck_add CHECK (a <> 3)",
+        )
+        .checks;
+        assert_eq!(
+            checks
+                .iter()
+                .map(|c| (c.name.as_str(), c.source.as_str()))
+                .collect::<Vec<_>>(),
+            [
+                ("ck_a", "CAST(a AS VARCHAR) <> ''"),
+                ("ck_t", "a < b"),
+                ("ck_add", "a <> 3")
+            ]
+        );
         assert!(declarations("CREATE TABLE (").is_empty());
     }
 
@@ -726,6 +900,63 @@ mod tests {
         );
         assert_eq!(found[0].table, ["dbo", "t"]);
         assert_eq!(found[2].descending, [true, false]);
+    }
+
+    #[test]
+    fn default_names_share_fourteen_characters() {
+        for (table, column, expected) in [
+            (
+                "abcdefghijklmnopqrstuvwxyz",
+                "colabcdefghij",
+                "DF__abcdefghi__colab__0000002A",
+            ),
+            (
+                "abcdefghijklmnopqrstuvwxyz",
+                "c",
+                "DF__abcdefghijklm__c__0000002A",
+            ),
+            (
+                "abcdefghijklmnopqrstuvwxyz",
+                "cccccc",
+                "DF__abcdefghi__ccccc__0000002A",
+            ),
+            ("t", "colabcdefghij", "DF__t__colabcdefghij__0000002A"),
+            (
+                "tabletwelve",
+                "colabcdefghij",
+                "DF__tabletwel__colab__0000002A",
+            ),
+            ("v2_defaults", "a1", "DF__v2_defaults__a1__0000002A"),
+        ] {
+            assert_eq!(default_name(table, column, 42), expected);
+        }
+    }
+
+    #[test]
+    fn computed_nullability_follows_sql_server() {
+        let nullable = |name: &str| name != "a";
+        for (source, expected) in [
+            ("a + b", true),
+            ("a * 2", true),
+            ("CAST(a AS VARCHAR(10))", true),
+            ("-a", true),
+            ("a", false),
+            ("(1)", false),
+            ("-1", false),
+            ("NULL", true),
+            ("year(d)", true),
+            ("ISNULL(b, a)", false),
+            ("ISNULL(b, 0)", false),
+            ("ISNULL(b, c)", true),
+            ("COALESCE(b, 0)", true),
+            ("CASE WHEN a > 0 THEN a ELSE 0 END", false),
+            ("CASE WHEN a IN (1,2) THEN 1 END", true),
+            ("CASE WHEN a > 0 THEN b ELSE 0 END", true),
+            ("lower(s)", true),
+        ] {
+            let expr = definition::parse_expression(source).unwrap();
+            assert_eq!(computed_nullable(&expr, &nullable), expected, "{source}");
+        }
     }
 
     #[test]

@@ -14,7 +14,14 @@ use duckdb::Connection;
 const TEMPORARY: &str = "CREATE OR REPLACE MACRO main.__msduck_temporary(name) AS
   starts_with(name,'__msduck_temp_') OR starts_with(name,'__msduck_tv_') OR starts_with(name,'__msduck_global_')";
 
-const STORES: &str = "CREATE TABLE IF NOT EXISTS main.__msduck_view_sources(object_id INTEGER NOT NULL,definition VARCHAR NOT NULL)";
+/// View text, and the expressions of named CHECK constraints as written
+/// (the constraints feature keeps them normalized for enforcement).
+const STORES: &str = "CREATE TABLE IF NOT EXISTS main.__msduck_view_sources(object_id INTEGER NOT NULL,definition VARCHAR NOT NULL);
+  CREATE TABLE IF NOT EXISTS main.__msduck_check_sources(object_id INTEGER NOT NULL,source VARCHAR NOT NULL);
+  CREATE OR REPLACE VIEW main.__msduck_check_definitions AS
+    SELECT c.object_id,main.__msduck_catalog_definition(coalesce(
+      (SELECT max(s.source) FROM main.__msduck_check_sources s WHERE s.object_id=c.object_id),c.definition)) AS definition
+    FROM main.__msduck_constraints c WHERE c.type_code='C'";
 
 /// The user tables that are not temporary objects.
 const TABLES: &str = "CREATE OR REPLACE VIEW main.__msduck_catalog_tables AS
@@ -27,10 +34,10 @@ const CHECK_CONSTRAINTS: &str = "CREATE OR REPLACE VIEW sys.check_constraints AS
     false AS is_published,false AS is_schema_published,c.is_disabled,false AS is_not_for_replication,
     c.is_not_trusted,
     CAST(coalesce((SELECT k.column_id FROM main.__msduck_column_info k WHERE k.object_id=c.parent_object_id AND lower(k.name)=lower(c.parent_column)),0) AS INTEGER) AS parent_column_id,
-    main.__msduck_catalog_definition(c.definition) AS definition,
-    true AS uses_database_collation,c.is_system_named
+    d.definition,true AS uses_database_collation,c.is_system_named
   FROM main.__msduck_live_constraints c
   JOIN main.__msduck_catalog_tables t ON t.object_id=c.parent_object_id
+  LEFT JOIN main.__msduck_check_definitions d ON d.object_id=c.object_id
   WHERE c.type_code='C'";
 
 /// The index of a PRIMARY KEY or UNIQUE constraint, by its tag (object IDs
@@ -81,7 +88,7 @@ const DEFAULT_CONSTRAINTS: &str = "CREATE OR REPLACE VIEW sys.default_constraint
 
 const COMPUTED_COLUMNS: &str = "CREATE OR REPLACE VIEW sys.computed_columns AS
   SELECT c.object_id,c.name,c.column_id,c.system_type_id,c.user_type_id,c.max_length,
-    c.precision,c.scale,c.collation_name,c.is_nullable,c.is_ansi_padded,
+    c.precision,c.scale,c.collation_name,coalesce(d.is_nullable,c.is_nullable) AS is_nullable,c.is_ansi_padded,
     c.is_rowguidcol,c.is_identity,c.is_filestream,c.is_replicated,
     c.is_non_sql_subscribed,c.is_merge_published,c.is_dts_replicated,
     c.is_xml_document,c.xml_collection_id,c.default_object_id,c.rule_object_id,
@@ -96,7 +103,8 @@ const COMPUTED_COLUMNS: &str = "CREATE OR REPLACE VIEW sys.computed_columns AS
   FROM sys.columns c
   JOIN main.__msduck_catalog_tables t ON t.object_id=c.object_id
   JOIN main.__msduck_computed_columns k ON k.object_id=c.object_id AND k.name_key=lower(c.name)
-  LEFT JOIN (SELECT object_id,column_id,main.__msduck_catalog_definition(max(source)) AS definition
+  LEFT JOIN (SELECT object_id,column_id,main.__msduck_catalog_definition(max(source)) AS definition,
+      bool_and(is_nullable) AS is_nullable
     FROM main.__msduck_computed_sources GROUP BY object_id,column_id) d
     ON d.object_id=c.object_id AND d.column_id=c.column_id";
 

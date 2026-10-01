@@ -109,9 +109,9 @@ CREATE OR REPLACE VIEW main.__msduck_is_referential_constraints AS
       =list_sort(list_transform(f.referenced_columns,lambda x: lower(x)))
   WHERE f.type_code='F';
 CREATE OR REPLACE VIEW main.__msduck_is_check_constraints AS
-  SELECT schema_name AS CONSTRAINT_SCHEMA,name AS CONSTRAINT_NAME,
-    main.__msduck_catalog_definition(definition) AS CHECK_CLAUSE
-  FROM main.__msduck_is_constraints WHERE type_code='C';
+  SELECT c.schema_name AS CONSTRAINT_SCHEMA,c.name AS CONSTRAINT_NAME,d.definition AS CHECK_CLAUSE
+  FROM main.__msduck_is_constraints c LEFT JOIN main.__msduck_check_definitions d ON d.object_id=c.object_id
+  WHERE c.type_code='C';
 CREATE OR REPLACE VIEW main.__msduck_is_routine_parameters AS
   SELECT p.object_id,p.parameter_id,p.name,p.is_output,b.name AS data_type,p.max_length,p.precision,p.scale,
     t.is_user_defined,t.name AS type_name,ts.name AS type_schema
@@ -120,7 +120,7 @@ CREATE OR REPLACE VIEW main.__msduck_is_routine_parameters AS
   LEFT JOIN sys.schemas ts ON ts.schema_id=t.schema_id
   LEFT JOIN sys.types b ON b.user_type_id=p.system_type_id;
 CREATE OR REPLACE VIEW main.__msduck_is_routines AS
-  SELECT s.name AS ROUTINE_SCHEMA,m.name AS ROUTINE_NAME,
+  SELECT s.name AS SPECIFIC_SCHEMA,m.name AS SPECIFIC_NAME,s.name AS ROUTINE_SCHEMA,m.name AS ROUTINE_NAME,
     CASE m.type_code WHEN 'P' THEN 'PROCEDURE' ELSE 'FUNCTION' END AS ROUTINE_TYPE,
     CASE WHEN m.type_code IN ('IF','TF') THEN 'TABLE' ELSE r.data_type END AS DATA_TYPE,
     f.character_maximum_length AS CHARACTER_MAXIMUM_LENGTH,f.character_octet_length AS CHARACTER_OCTET_LENGTH,
@@ -456,8 +456,16 @@ fn information_schema(
 /// The derived table that replaces `sys.objects`, `sys.all_objects` or
 /// `sys.tables`: the system view without temporary objects.
 fn filtered(view: &str, alias: Option<TableAlias>) -> Option<TableFactor> {
+    let temporary = |column: &str| {
+        format!(
+            "({column} LIKE '\\_\\_msduck\\_temp\\_%' ESCAPE '\\' OR {column} LIKE '\\_\\_msduck\\_tv\\_%' ESCAPE '\\' OR {column} LIKE '\\_\\_msduck\\_global\\_%' ESCAPE '\\')"
+        )
+    };
+    // Constraints and triggers of a temporary table are in tempdb too.
     let sql = format!(
-        "SELECT * FROM sys.{view} AS {FILTERED} WHERE name NOT LIKE '\\_\\_msduck\\_temp\\_%' ESCAPE '\\' AND name NOT LIKE '\\_\\_msduck\\_tv\\_%' ESCAPE '\\' AND name NOT LIKE '\\_\\_msduck\\_global\\_%' ESCAPE '\\'"
+        "SELECT * FROM sys.{view} AS {FILTERED} WHERE NOT {} AND parent_object_id NOT IN (SELECT object_id FROM sys.objects AS {FILTERED} WHERE {})",
+        temporary("name"),
+        temporary("name")
     );
     let mut statements = msduck_sql::batch::parse(&sql).ok()?;
     let Statement::Query(query) = statements.pop()? else {

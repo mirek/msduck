@@ -212,17 +212,20 @@ pub(super) fn fkeys(
     }
     let database = session.database.name.clone();
     let order = if primary.is_some() {
-        "fs.name,f.name,k.ordinal"
+        "fs.name,f.name,k.ordinal,c.name"
     } else {
-        "ps.name,p.name,k.ordinal"
+        "ps.name,p.name,k.ordinal,c.name"
     };
+    // SQL Server reports both rules as 1 (NO ACTION) when only the foreign
+    // key table is given.
+    let rules = primary.is_some();
     let rows: Vec<Vec<Cell>> = session
         .db
         .prepare(&format!(
             "SELECT ?,ps.name,p.name,coalesce(pc.name,k.referenced),?,fs.name,f.name,coalesce(fc.name,k.referencing),
                CAST(k.ordinal AS BIGINT),
-               CAST(CASE c.update_action WHEN 1 THEN 0 WHEN 0 THEN 1 ELSE c.update_action END AS BIGINT),
-               CAST(CASE c.delete_action WHEN 1 THEN 0 WHEN 0 THEN 1 ELSE c.delete_action END AS BIGINT),
+               CAST(CASE WHEN NOT ? THEN 1 WHEN c.update_action=1 THEN 0 WHEN c.update_action=0 THEN 1 ELSE c.update_action END AS BIGINT),
+               CAST(CASE WHEN NOT ? THEN 1 WHEN c.delete_action=1 THEN 0 WHEN c.delete_action=0 THEN 1 ELSE c.delete_action END AS BIGINT),
                c.name,
                (SELECT mk.name FROM main.__msduck_keys mk WHERE mk.object_id=c.referenced_object_id AND mk.kind IN ('PK','UQ')
                   AND list_sort(list_transform(from_json(mk.key_columns,'[\"VARCHAR\"]'),lambda x: lower(x)))
@@ -247,6 +250,8 @@ pub(super) fn fkeys(
             duckdb::params![
                 database,
                 database,
+                rules,
+                rules,
                 primary,
                 primary,
                 argument("@pktable_owner"),

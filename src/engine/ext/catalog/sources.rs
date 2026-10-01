@@ -134,7 +134,9 @@ pub(super) fn batch(session: &mut Session, sql: &str) {
 fn watermark(db: &duckdb::Connection) -> Result<(i64, i64)> {
     Ok(db.query_row(
         "SELECT (SELECT coalesce(max(object_id),0) FROM (SELECT object_id FROM main.__msduck_objects
-           UNION ALL SELECT object_id FROM main.__msduck_default_constraints)),
+           UNION ALL SELECT object_id FROM main.__msduck_default_constraints
+           UNION ALL SELECT object_id FROM main.__msduck_constraints
+           UNION ALL SELECT object_id FROM main.__msduck_modules)),
          (SELECT coalesce(max(tag),0) FROM main.__msduck_keys)",
         [],
         |row| Ok((row.get(0)?, row.get(1)?)),
@@ -213,14 +215,30 @@ fn set_computed_source(
     object_id: i32,
     column_id: i32,
     source: &str,
+    not_null: bool,
 ) -> Result<()> {
+    let nullability: HashMap<String, bool> = db
+        .prepare("SELECT lower(name),is_nullable FROM main.__msduck_column_info WHERE object_id=?")?
+        .query_map([object_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<duckdb::Result<_>>()?;
+    let nullable = !not_null
+        && msduck_sql::dialect::ext::catalog::definition::parse_expression(source).is_none_or(
+            |expr| {
+                declarations::computed_nullable(&expr, &|name| {
+                    nullability
+                        .get(&name.to_lowercase())
+                        .copied()
+                        .unwrap_or(true)
+                })
+            },
+        );
     db.execute(
         "DELETE FROM main.__msduck_computed_sources WHERE object_id=? AND column_id=?",
         [object_id, column_id],
     )?;
     db.execute(
-        "INSERT INTO main.__msduck_computed_sources VALUES(?,?,?)",
-        duckdb::params![object_id, column_id, source],
+        "INSERT INTO main.__msduck_computed_sources VALUES(?,?,?,?)",
+        duckdb::params![object_id, column_id, source, nullable],
     )?;
     Ok(())
 }
@@ -279,7 +297,7 @@ fn attach(db: &duckdb::Connection, frame: &Frame, (objects, tags): (i64, i64)) -
             }
         }
         if let Some(computed) = &column.computed {
-            set_computed_source(db, table, column_id, computed)?;
+            set_computed_source(db, table, column_id, computed, column.not_null)?;
         }
     }
     for default in &frame.declarations.defaults {
@@ -295,6 +313,30 @@ fn attach(db: &duckdb::Connection, frame: &Frame, (objects, tags): (i64, i64)) -
                 id,
                 &default.default.source,
                 default.default.name.is_none(),
+            )?;
+        }
+    }
+    // Named CHECK constraints: their expressions as written.
+    for check in &frame.declarations.checks {
+        let Some(table) = object_id(db, &check.table) else {
+            continue;
+        };
+        let id: Option<i32> = db
+            .query_row(
+                "SELECT max(object_id) FROM main.__msduck_constraints WHERE parent_object_id=? AND type_code='C' AND lower(name)=lower(?)",
+                duckdb::params![table, check.name],
+                |row| row.get(0),
+            )
+            .ok()
+            .flatten();
+        if let Some(id) = id.filter(|id| new(*id)) {
+            db.execute(
+                "DELETE FROM main.__msduck_check_sources WHERE object_id=?",
+                [id],
+            )?;
+            db.execute(
+                "INSERT INTO main.__msduck_check_sources VALUES(?,?)",
+                duckdb::params![id, check.source],
             )?;
         }
     }
