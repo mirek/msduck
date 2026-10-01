@@ -132,3 +132,47 @@ fn explicit_scope_shadowing_and_distinct_sources_are_preserved() {
         Some(true)
     );
 }
+
+#[test]
+fn variant_conversion_identity_preserves_casts_and_unknown_barriers() {
+    let sources = [source("h")];
+    let scope = scope();
+    for (a, b, expected) in [
+        (
+            "COALESCE(h.a,CAST(@P AS SQL_VARIANT))",
+            "coalesce((a),CAST(@p AS sql_variant))",
+            true,
+        ),
+        (
+            "COALESCE(h.a,CAST(@p AS SQL_VARIANT))",
+            "COALESCE(a,@p)",
+            false,
+        ),
+        (
+            "COALESCE(h.a,CAST(@p AS SQL_VARIANT))",
+            "COALESCE(b,CAST(@p AS SQL_VARIANT))",
+            false,
+        ),
+    ] {
+        let a = expr(a);
+        let b = expr(b);
+        let original = (a.clone(), b.clone());
+        assert_eq!(
+            expression_identity(&a, &b, &sources, &scope),
+            Some(expected)
+        );
+        assert_eq!((a, b), original);
+    }
+    for sql in [
+        "CAST(RAND() AS SQL_VARIANT)",
+        "CAST(unknown_function() AS SQL_VARIANT)",
+        "CAST((SELECT 1) AS SQL_VARIANT)",
+    ] {
+        let e = expr(sql);
+        assert_eq!(expression_identity(&e, &e, &sources, &scope), None, "{sql}");
+    }
+    let e = expr("CAST(h.a AS SQL_VARIANT)");
+    let mut alias = source("h");
+    alias.fields[0].info.as_mut().unwrap().user_type_id = Some(500);
+    assert_eq!(expression_identity(&e, &e, &[alias], &scope), None);
+}

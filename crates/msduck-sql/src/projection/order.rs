@@ -173,7 +173,7 @@ pub fn expression_identity(
                             | DataType::SmallInt(None)
                             | DataType::TinyInt(None)
                             | DataType::Bit(None)
-                    )
+                    ) || crate::variant_pack::is_variant(data_type)
                 }
                 Expr::Value(value) => matches!(
                     value.value,
@@ -204,6 +204,12 @@ pub fn expression_identity(
         }
         let mut copy = expr.clone();
         let _ = visit_expressions_mut(&mut copy, |expr| {
+            if let Expr::Cast { data_type, .. } = expr
+                && crate::variant_pack::is_variant(data_type)
+            {
+                *data_type =
+                    DataType::Custom(ObjectName::from(vec![Ident::new("SQL_VARIANT")]), vec![]);
+            }
             if let Expr::Function(function) = expr {
                 for part in &mut function.name.0 {
                     if let ObjectNamePart::Identifier(name) = part {

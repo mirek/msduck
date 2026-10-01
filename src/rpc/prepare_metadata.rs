@@ -826,26 +826,20 @@ fn series_declarations(query: &Query, parameters: &HashMap<String, Parameter>) -
                     explicit: false,
                 })
             });
-            let Ok(mut statements) = msduck_sql::batch::parse("SELECT 0 AS value") else {
+            let Ok(mut statements) =
+                msduck_sql::batch::parse("SELECT ISNULL(CAST(0 AS INT),0) AS value")
+            else {
                 return ControlFlow::Continue(());
             };
             let Statement::Query(mut subquery) = statements.remove(0) else {
                 return ControlFlow::Continue(());
             };
-            let SetExpr::Select(select) = subquery.body.as_mut() else {
-                return ControlFlow::Continue(());
-            };
-            let SelectItem::ExprWithAlias { expr, .. } = &mut select.projection[0] else {
-                return ControlFlow::Continue(());
-            };
-            *expr = Expr::Convert {
-                is_try: false,
-                expr: Box::new(expr.clone()),
-                data_type: Some(kind),
-                charset: None,
-                target_before_value: true,
-                styles: vec![],
-            };
+            let _ = visit_expressions_mut(subquery.as_mut(), |expression| {
+                if let Expr::Cast { data_type, .. } = expression {
+                    *data_type = kind.clone();
+                }
+                ControlFlow::<()>::Continue(())
+            });
             *factor = TableFactor::Derived {
                 lateral: false,
                 subquery,
@@ -1015,6 +1009,14 @@ fn prepared_order(
                     expr,
                 ) && variant_declaration(expr, &scope, parameters)
                     == Some(true)
+                    && sqlparser::ast::visit_expressions(expr.as_ref(), |node| {
+                        if column(node, &scope).is_some() {
+                            ControlFlow::Break(())
+                        } else {
+                            ControlFlow::Continue(())
+                        }
+                    })
+                    .is_break()
                     && matches!(&select.group_by, GroupByExpr::Expressions(keys, _) if keys.iter().any(|key|
                         projection::order::expression_identity(expr, key, &[], &scope) == Some(true))))) =>
                 {
@@ -1979,6 +1981,79 @@ mod tests {
                 expected,
                 "{expression}"
             );
+        }
+    }
+
+    #[test]
+    fn series_metadata_preserves_names_and_ignores_parameter_values() {
+        let mut catalog = CatalogSnapshot::default();
+        catalog.types.insert(
+            "int".into(),
+            TypeMetadata {
+                system_type_id: Some(56),
+                user_type_id: Some(56),
+                max_length: Some(4),
+                precision: Some(10),
+                scale: Some(0),
+            },
+        );
+        for sql in [
+            "SELECT value FROM GENERATE_SERIES(@p,@p+2,1) ORDER BY value",
+            "SELECT [n value] FROM GENERATE_SERIES(@p,3) AS [s alias]([n value]) ORDER BY [n value]",
+        ] {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            let original = query.clone();
+            let mut prior = None;
+            for value in [Value::Null, Value::Int(-9), Value::Int(42)] {
+                let parameters = HashMap::from([(
+                    "@p".into(),
+                    Parameter {
+                        value,
+                        data_type: SqlType::Int,
+                    },
+                )]);
+                let described = series_declarations(&query, &parameters);
+                let fields =
+                    projection::query_fields(&catalog, &described, &Scope::default()).unwrap();
+                assert_eq!(fields.len(), 1);
+                assert_eq!(fields[0].info.as_ref().unwrap().system_type_id, Some(56));
+                assert_eq!(fields[0].properties.nullable, Some(false));
+                assert_eq!(
+                    fields[0].name,
+                    if sql.contains("n value") {
+                        "n value"
+                    } else {
+                        "value"
+                    }
+                );
+                if let Some(prior) = &prior {
+                    assert_eq!(
+                        &described, prior,
+                        "declarations cannot depend on parameter values"
+                    );
+                }
+                prior = Some(described);
+                assert_eq!(query, original, "execution AST must remain unchanged");
+            }
+        }
+        let parameters = HashMap::from([(
+            "@p".into(),
+            Parameter {
+                value: Value::Null,
+                data_type: SqlType::Float,
+            },
+        )]);
+        for sql in [
+            "SELECT value FROM GENERATE_SERIES(@p,3)",
+            "SELECT value FROM GENERATE_SERIES(missing(),3)",
+            "SELECT value FROM GENERATE_SERIES(1)",
+        ] {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            assert_eq!(series_declarations(&query, &parameters), *query, "{sql}");
         }
     }
 
