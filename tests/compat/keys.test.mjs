@@ -417,15 +417,12 @@ const differences = {
     2: 'the message shows the UTC instant, not the inserted offset',
     6: 'a column named at is a DuckDB keyword (identifiers)', 7: 'follows step 6', 8: 'follows step 6', 9: 'follows step 6', 10: 'follows step 6',
   },
-  'column-level-list': { 11: 'sys.indexes does not yet model key constraints (index catalog)' },
   'unique-index-null': {
     5: 'keys compare with BIN2 equality, not the case-insensitive default collation',
     6: 'follows step 5',
   },
-  'filtered-unique': { 13: 'sys.indexes does not yet model filters (index catalog)' },
   'clustered-include-options': {
     7: 'sys.indexes does not yet model clustered, included or filtered indexes (index catalog)',
-    12: 'sys.indexes does not yet model key constraints (index catalog)',
   },
   'clustered-conflicts': {
     1: 'the clustering of PRIMARY KEY and UNIQUE constraints is not recorded',

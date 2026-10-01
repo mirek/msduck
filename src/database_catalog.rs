@@ -232,6 +232,9 @@ pub fn bootstrap_objects(db: &Connection) -> Result<()> {
     crate::index_catalog::sync(db)?;
     crate::index_catalog::publish_views(db)?;
     crate::engine::ext::bootstrap_database(db)?;
+    // The index views read the keys feature's record, which exists only
+    // after the features bootstrap.
+    crate::index_catalog::publish_views(db)?;
     Ok(())
 }
 

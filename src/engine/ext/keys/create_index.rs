@@ -152,6 +152,12 @@ pub(super) fn run(session: &mut Session, statement: &Statement) -> Result<Option
     let Some(keys) = key_names(index) else {
         anyhow::bail!("index expressions are unsupported");
     };
+    // Key order is not stored; sys.index_columns reports it.
+    let descending = keys
+        .iter()
+        .zip(1..)
+        .filter_map(|((_, descending), ordinal)| descending.then_some(ordinal))
+        .collect::<Vec<i32>>();
     let mut columns: Vec<Column> = vec![];
     for (key, _) in &keys {
         let Some(column) = table.column(key) else {
@@ -258,7 +264,14 @@ pub(super) fn run(session: &mut Session, statement: &Statement) -> Result<Option
         if index.unique {
             check_duplicates(db, &table, &name, &columns, lowered.as_deref())?;
         }
+        // DROP_EXISTING rebuilds the same index, which keeps its ID.
+        let mut kept_id: Option<i32> = None;
         if let Some(existing) = existing.filter(|_| drop_existing) {
+            kept_id = db.query_row(
+                "SELECT min(index_id) FROM main.__msduck_index_ids WHERE incarnation=?",
+                [existing.incarnation],
+                |r| r.get(0),
+            )?;
             crate::index_catalog::drop_index(
                 db,
                 existing,
@@ -295,6 +308,12 @@ pub(super) fn run(session: &mut Session, statement: &Statement) -> Result<Option
             &backend,
             &columns,
         )?;
+        for ordinal in &descending {
+            db.execute(
+                "INSERT INTO main.__msduck_index_descending VALUES(?,?)",
+                params![incarnation, ordinal],
+            )?;
+        }
         catalog::insert(
             db,
             &catalog::Key {
@@ -317,6 +336,14 @@ pub(super) fn run(session: &mut Session, statement: &Statement) -> Result<Option
                     .unwrap_or_default(),
             },
         )?;
+        if let Some(id) = kept_id {
+            db.execute(
+                "INSERT INTO main.__msduck_index_ids VALUES(?,NULL,?,?,NULL,NULL)",
+                params![table.object_id, incarnation, id],
+            )?;
+        }
+        // Record the index's sys.indexes ID now.
+        crate::index_catalog::sync(db)?;
         Ok(Some(Execution::statement(vec![], None, 200)))
     })
 }
