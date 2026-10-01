@@ -145,6 +145,7 @@ fn render(expr: &Expr, group: bool, depth: usize, budget: &mut Budget) -> Option
             format: None,
         } => format!("CONVERT({},{})", type_name(data_type)?, child(expr, true)?),
         Expr::Convert {
+            is_try: false,
             expr,
             data_type: Some(kind),
             charset: None,
@@ -180,6 +181,21 @@ fn render(expr: &Expr, group: bool, depth: usize, budget: &mut Budget) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn try_conversion_is_unknown_instead_of_changing_failure_semantics() {
+        let Statement::CreateTable(table) =
+            crate::batch::parse("CREATE TABLE t(a INT DEFAULT(TRY_CONVERT(INT,'x')))")
+                .unwrap()
+                .remove(0)
+        else {
+            panic!()
+        };
+        let ColumnOption::Default(expr) = &table.columns[0].options[0].option else {
+            panic!()
+        };
+        assert_eq!(expression_definition(expr), None);
+    }
 
     #[test]
     fn defaults_and_computed_expressions_match_complete_retained_profile() {

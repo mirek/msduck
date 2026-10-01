@@ -198,11 +198,19 @@ fn default_expression_families_match_sql_server_catalog_text() {
             )
             .1
     );
+    let object_id: i32 = session
+        .db
+        .query_row(
+            "SELECT main.__msduck_object_id(?,'U')",
+            ["dbo.definition_defaults"],
+            |r| r.get(0),
+        )
+        .unwrap();
     let rows = session
         .db
-        .prepare(record("default definitions")["sql"].as_str().unwrap())
+        .prepare("SELECT name,parent_column_id,definition,is_system_named FROM sys.default_constraints WHERE parent_object_id=? ORDER BY parent_column_id")
         .unwrap()
-        .query_map([], |r| {
+        .query_map([object_id], |r| {
             Ok((
                 r.get::<_, String>(0)?,
                 r.get::<_, i32>(1)?,
