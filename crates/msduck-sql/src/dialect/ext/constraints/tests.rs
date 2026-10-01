@@ -220,3 +220,22 @@ fn bracketed_names_with_closing_brackets_survive_the_payload() {
     };
     assert!(matches!(left.as_ref(), Expr::Identifier(ident) if ident.value == "a]b"));
 }
+
+#[test]
+fn stored_expressions_round_trip_bracketed_names() {
+    let mut expr = Parser::new(&crate::dialect::ServerDialect)
+        .try_with_sql("[a]]b] > 0")
+        .unwrap()
+        .parse_expr()
+        .unwrap();
+    delimit_expr(&mut expr);
+    let again = Parser::new(&crate::dialect::ServerDialect)
+        .try_with_sql(&expr.to_string())
+        .unwrap()
+        .parse_expr()
+        .unwrap();
+    let Expr::BinaryOp { left, .. } = again else {
+        panic!()
+    };
+    assert!(matches!(left.as_ref(), Expr::Identifier(ident) if ident.value == "a]b"));
+}

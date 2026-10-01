@@ -200,13 +200,20 @@ export const groups = [
       'UPDATE t SET a = -100',
       'SELECT a, b, s FROM t',
       'CREATE TABLE fc(id int, x AS id, CONSTRAINT fk_fc FOREIGN KEY (x) REFERENCES p(id))',
+      'CREATE TABLE fu(id int, x AS id PERSISTED, CONSTRAINT fk_fu FOREIGN KEY (x) REFERENCES p(id) ON UPDATE CASCADE)',
+      'CREATE TABLE fd(id int, x AS id PERSISTED, CONSTRAINT fk_fd FOREIGN KEY (x) REFERENCES p(id) ON DELETE SET NULL)',
+      'CREATE TABLE fk(id int, x AS id PERSISTED, CONSTRAINT fk_fk FOREIGN KEY (x) REFERENCES p(id) ON DELETE CASCADE); INSERT fk(id) VALUES (3)',
+      'DELETE p WHERE id = 3; SELECT count(*) FROM fk',
       'CREATE TABLE w(s date, e date, CONSTRAINT ck_w CHECK (DATEDIFF(day, s, e) <= 30))',
       "INSERT w VALUES ('2020-01-01', '2020-01-15')",
       "INSERT w VALUES ('2020-01-01', '2020-03-01')",
       'CREATE TABLE [x]]y] (id int CONSTRAINT [ck]]z] CHECK (id > 0))',
       'INSERT [x]]y] VALUES (0)',
       'ALTER TABLE [x]]y] DROP CONSTRAINT [ck]]z]',
-      'INSERT [x]]y] VALUES (0); SELECT count(*) FROM [x]]y]'
+      'INSERT [x]]y] VALUES (0); SELECT count(*) FROM [x]]y]',
+      'CREATE TABLE [t]]q]([a]]b] int CONSTRAINT [ck]]2] CHECK ([a]]b] > 0))',
+      'INSERT [t]]q] VALUES (0)',
+      'INSERT [t]]q] VALUES (1); SELECT [a]]b] FROM [t]]q]'
     ]
   },
   {

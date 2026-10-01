@@ -1323,7 +1323,7 @@
         "number": 2627,
         "state": 1,
         "class": 14,
-        "message": "Violation of PRIMARY KEY constraint 'PK__k__2792E7E8ADF54006'. Cannot insert duplicate key in object 'dbo.k'. The duplicate key value is (1, 1)."
+        "message": "Violation of PRIMARY KEY constraint 'PK__k__2792E7E8DF9F3E08'. Cannot insert duplicate key in object 'dbo.k'. The duplicate key value is (1, 1)."
        }
       ],
       "info": [
@@ -2557,6 +2557,70 @@
      }
     },
     {
+     "sql": "CREATE TABLE fu(id int, x AS id PERSISTED, CONSTRAINT fk_fu FOREIGN KEY (x) REFERENCES p(id) ON UPDATE CASCADE)",
+     "result": {
+      "errors": [
+       {
+        "number": 1715,
+        "state": 1,
+        "class": 16,
+        "message": "Foreign key 'fk_fu' creation failed. Only NO ACTION referential update action is allowed for referencing computed column 'x'."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE fd(id int, x AS id PERSISTED, CONSTRAINT fk_fd FOREIGN KEY (x) REFERENCES p(id) ON DELETE SET NULL)",
+     "result": {
+      "errors": [
+       {
+        "number": 1765,
+        "state": 1,
+        "class": 16,
+        "message": "Foreign key 'fk_fd' creation failed. Only NO ACTION and CASCADE referential delete actions are allowed for referencing computed column 'x'."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE fk(id int, x AS id PERSISTED, CONSTRAINT fk_fk FOREIGN KEY (x) REFERENCES p(id) ON DELETE CASCADE); INSERT fk(id) VALUES (3)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DELETE p WHERE id = 3; SELECT count(*) FROM fk",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         0
+        ]
+       ]
+      ]
+     }
+    },
+    {
      "sql": "CREATE TABLE w(s date, e date, CONSTRAINT ck_w CHECK (DATEDIFF(day, s, e) <= 30))",
      "result": {
       "errors": [],
@@ -2630,6 +2694,48 @@
     },
     {
      "sql": "INSERT [x]]y] VALUES (0); SELECT count(*) FROM [x]]y]",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE [t]]q]([a]]b] int CONSTRAINT [ck]]2] CHECK ([a]]b] > 0))",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT [t]]q] VALUES (0)",
+     "result": {
+      "errors": [
+       {
+        "number": 547,
+        "state": 0,
+        "class": 16,
+        "message": "The INSERT statement conflicted with the CHECK constraint \"ck]2\". The conflict occurred in database \"gaps_constraints\", table \"dbo.t]q\", column 'a]b'."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT [t]]q] VALUES (1); SELECT [a]]b] FROM [t]]q]",
      "result": {
       "errors": [],
       "info": [],

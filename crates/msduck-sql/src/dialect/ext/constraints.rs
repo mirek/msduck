@@ -610,23 +610,33 @@ pub fn parse(parser: &mut Parser) -> Option<Result<Statement, ParserError>> {
     Some(Ok(carrier(KIND, &alter.to_string(), vec![])))
 }
 
-/// sqlparser writes `[name]` without escaping `]`, so the carrier payload
-/// would not parse back to the same name. Write such names as `"name"`,
+/// sqlparser writes `[name]` without escaping `]`, so text it writes would
+/// not parse back to the same name. Such names are written as `"name"`,
 /// which escapes, instead.
+struct Delimit;
+
+impl VisitorMut for Delimit {
+    type Break = ();
+    fn pre_visit_ident(&mut self, ident: &mut Ident) -> std::ops::ControlFlow<()> {
+        fix(ident);
+        std::ops::ControlFlow::Continue(())
+    }
+}
+
+fn fix(ident: &mut Ident) {
+    if ident.quote_style == Some('[') && ident.value.contains(']') {
+        ident.quote_style = Some('"');
+    }
+}
+
+/// Make `expr` write text that parses back to the same expression, for
+/// stored definitions.
+pub fn delimit_expr(expr: &mut Expr) {
+    let _ = VisitMut::visit(expr, &mut Delimit);
+}
+
+/// The carrier payload must parse back to the same statement.
 fn delimit(alter: &mut Alter) {
-    struct Delimit;
-    impl VisitorMut for Delimit {
-        type Break = ();
-        fn pre_visit_ident(&mut self, ident: &mut Ident) -> std::ops::ControlFlow<()> {
-            fix(ident);
-            std::ops::ControlFlow::Continue(())
-        }
-    }
-    fn fix(ident: &mut Ident) {
-        if ident.quote_style == Some('[') && ident.value.contains(']') {
-            ident.quote_style = Some('"');
-        }
-    }
     fn names(names: &mut [Ident]) {
         names.iter_mut().for_each(fix);
     }

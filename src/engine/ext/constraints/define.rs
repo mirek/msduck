@@ -271,7 +271,9 @@ fn check_columns(columns: &[String], expr: &Expr) -> Result<Vec<String>> {
     if let Some(failure) = failure {
         return Err(failure);
     }
-    let probe = format!("CREATE TABLE __msduck_check_probe (CHECK ({expr}))");
+    let mut written = expr.clone();
+    msduck_sql::dialect::ext::constraints::delimit_expr(&mut written);
+    let probe = format!("CREATE TABLE __msduck_check_probe (CHECK ({written}))");
     let statements = msduck_sql::batch::parse(&probe)?;
     for statement in &statements {
         if let Err(error) = msduck_sql::predicate::validate(statement) {
@@ -383,6 +385,29 @@ fn resolve_foreign(
         "FOREIGN KEY CONSTRAINT",
         1,
     )?;
+    // A computed referencing column cannot be updated by an action.
+    if let Some(column) = columns.iter().find(|c| c.computed) {
+        if key.on_update != Referential::NoAction {
+            return Err(errors::not_created(error(
+                1715,
+                1,
+                format!(
+                    "Foreign key '{name}' creation failed. Only NO ACTION referential update action is allowed for referencing computed column '{}'.",
+                    column.name
+                ),
+            )));
+        }
+        if !matches!(key.on_delete, Referential::NoAction | Referential::Cascade) {
+            return Err(errors::not_created(error(
+                1765,
+                1,
+                format!(
+                    "Foreign key '{name}' creation failed. Only NO ACTION and CASCADE referential delete actions are allowed for referencing computed column '{}'.",
+                    column.name
+                ),
+            )));
+        }
+    }
     let referenced = referenced_table(session, key, name)?;
     let parent_columns = catalog::columns(&session.db, &referenced)?;
     let keys = catalog::native_keys(&session.db, &referenced)?;
@@ -680,7 +705,11 @@ fn resolve(session: &Session, table: &Table, planned: Vec<Planned>) -> Result<Ve
                 Stored {
                     columns: referenced,
                     column,
-                    definition: Some(expr.to_string()),
+                    definition: Some({
+                        let mut stored = expr.clone();
+                        msduck_sql::dialect::ext::constraints::delimit_expr(&mut stored);
+                        stored.to_string()
+                    }),
                     foreign: None,
                     planned,
                 }

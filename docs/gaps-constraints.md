@@ -84,7 +84,8 @@ level, including foreign keys with actions.
   constraint or named default already uses the name), 1046 (subquery in
   CHECK), 207 (unknown column in CHECK),
   137 (variable), 4145 (non-boolean CHECK), 1764 (CHECK or FOREIGN KEY over
-  a computed column that is not PERSISTED), 1752, 1754, 1781 and 128 for
+  a computed column that is not PERSISTED; 1715 and 1765 for update, SET NULL
+  and SET DEFAULT actions on computed referencing columns), 1752, 1754, 1781 and 128 for
   DEFAULT, 3728, 3733 and 3725 for DROP, 4917 and 11415 for CHECK/NOCHECK.
   As in SQL Server, these are followed by 1750, 3727 or 4916, and
   `ERROR_NUMBER()` in a CATCH block reports the last one.
