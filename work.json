@@ -8999,6 +8999,21 @@
       "dependencies": [],
       "issue": 753,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PeNMc"
+    },
+    {
+      "id": "gaps-outer-dml-v1-tedious",
+      "title": "Replace pinned outer-join rejections in tedious tests (companion of gaps-outer-dml-v1)",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-outer-dml-v1",
+      "scope": [
+        "tests/tedious.test.mjs"
+      ],
+      "acceptance": [
+        "Replace only the two assertions that pin the removed 'unsupported outer/lateral join' rejection (UPDATE FROM alias test and DELETE optional FROM test) with SQL Server results: the LEFT JOIN UPDATE changes 3 rows to [[1,null],[2,20],[3,30]], and the LEFT JOIN DELETE with WHERE s.id IS NOT NULL deletes 0 rows. Merged in the gaps-outer-dml-v1 PR with npm test passing on the exact head."
+      ],
+      "dependencies": [],
+      "issue": 723,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQsr"
     }
   ]
 }
