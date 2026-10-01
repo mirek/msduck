@@ -1,8 +1,14 @@
 # Constraint and module catalogs
 
-Task #728 is in progress. This checkpoint captures SQL Server ground truth;
-it does not implement the catalog extension or establish msduck compatibility.
-`src/engine/ext/catalog.rs` remains a stub.
+Task #728 is in progress. `sys.procedures` now projects the shared persistent
+module store, and `OBJECT_DEFINITION` reads original stored module text. Module
+rename preserves that text; alter, drop and transaction rollback are observed
+without a separate cache. Procedures are isolated by database and survive
+restart. Startup execution and replication are unsupported and their flags are
+false. Procedure creation/execution belongs to its separate extension, which
+is still a stub on this branch; tests exercise the shared store directly.
+View/default/check definitions and complete wire descriptor parity remain
+unimplemented. This checkpoint does not establish full catalog compatibility.
 
 `reference/gaps-catalog.json` retains all46 responses from each of two fresh
 SQL Server17.0.4065.4 containers, including descriptors, rows, diagnostics,
