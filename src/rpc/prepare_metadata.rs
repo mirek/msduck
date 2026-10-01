@@ -1530,6 +1530,46 @@ pub(super) fn describe(
             complete_error: None,
         });
     }
+    if let [statement] = statements.as_slice() {
+        if let Some((update, with)) = msduck_sql::output::joined_update(statement) {
+            let Some(sqlparser::ast::OutputClause::Output {
+                select_items,
+                into_table: None,
+                ..
+            }) = &update.output
+            else {
+                bail!("unsupported prepared joined OUTPUT destination");
+            };
+            // Native binding already validated the original statement. This
+            // existing catalog adapter acquires explicit target/source fields;
+            // it neither captures images nor executes assignments or OUTPUT.
+            let binding =
+                crate::output_join::bind(&session.db, update, with.cloned(), &parameters)?;
+            let fields = binding.output_fields(select_items)?;
+            return Ok(Description {
+                prefix: fields_description(&fields, projection::order::Plan::NoToken, 0xc5)?,
+                status: 0,
+                accepted: true,
+                complete_error: None,
+            });
+        }
+        let mut logical = statement.clone();
+        if let Some(plan) = msduck_sql::output::lower_native(&mut logical)?
+            && plan.sink.is_none()
+        {
+            let command = match plan.operation {
+                msduck_sql::output::Operation::Insert => 0xc3,
+                msduck_sql::output::Operation::Update => 0xc5,
+                msduck_sql::output::Operation::Delete => 0xc4,
+            };
+            return Ok(Description {
+                prefix: query_description(session, &plan.projection, &parameters, command)?,
+                status: 0,
+                accepted: true,
+                complete_error: None,
+            });
+        }
+    }
     let prefix = match statements.as_slice() {
         [Statement::Query(query)]
             if matches!(query.body.as_ref(), sqlparser::ast::SetExpr::Delete(statement)
