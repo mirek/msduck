@@ -9032,6 +9032,21 @@
       "dependencies": [],
       "issue": 764,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PfD7I"
+    },
+    {
+      "id": "gaps-conversion-v1-tedious",
+      "title": "Update the tedious expectations that gaps-conversion-v1 changes",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-conversion-v1",
+      "scope": [
+        "tests/tedious.test.mjs"
+      ],
+      "acceptance": [
+        "tests/tedious.test.mjs updates only two expectations that gaps-conversion-v1 changes: the server identity entry of topPercentKnownDifferences (SERVERPROPERTY and DATABASEPROPERTYEX now succeed with msduck values) and the CAST(datetime AS VARCHAR) assertion in the legacy datetime RPC test (now SQL Server style 0 text); ships in the gaps-conversion-v1 PR."
+      ],
+      "dependencies": [],
+      "issue": 725,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQtr"
     }
   ]
 }
