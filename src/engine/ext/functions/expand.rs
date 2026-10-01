@@ -60,9 +60,42 @@ pub(super) fn statement(
 ) -> Result<()> {
     let expansions = std::cell::Cell::new(0);
     let mut expander = Expander::new(session, parameters, &expansions);
-    match VisitMut::visit(statement, &mut expander) {
+    // `OUTPUT ... INTO schema.table(columns)` parses its target as a call;
+    // it names a table, never a function.
+    let target = output_into(statement).and_then(Option::take);
+    let result = VisitMut::visit(statement, &mut expander);
+    if let Some(slot) = output_into(statement) {
+        *slot = target;
+    }
+    // The per-expression rewrite that follows must skip the target too.
+    let targets = output_into(statement)
+        .and_then(|slot| slot.as_ref())
+        .map(|into| {
+            into.targets
+                .iter()
+                .map(|e| e as *const Expr as usize)
+                .collect()
+        })
+        .unwrap_or_default();
+    *session.ext.functions.output_targets.borrow_mut() = targets;
+    match result {
         ControlFlow::Continue(()) => Ok(()),
         ControlFlow::Break(error) => Err(error),
+    }
+}
+
+/// The INTO target of a DML statement's OUTPUT clause.
+fn output_into(statement: &mut Statement) -> Option<&mut Option<SelectInto>> {
+    let output = match statement {
+        Statement::Insert(insert) => &mut insert.output,
+        Statement::Update(update) => &mut update.output,
+        Statement::Delete(delete) => &mut delete.output,
+        Statement::Merge(merge) => &mut merge.output,
+        _ => return None,
+    };
+    match output {
+        Some(OutputClause::Output { into_table, .. }) => Some(into_table),
+        _ => None,
     }
 }
 
@@ -73,6 +106,15 @@ pub(super) fn expression(
     expr: &mut Expr,
     parameters: &HashMap<String, Parameter>,
 ) -> Result<()> {
+    if session
+        .ext
+        .functions
+        .output_targets
+        .borrow()
+        .contains(&(expr as *const Expr as usize))
+    {
+        return Ok(());
+    }
     let expansions = std::cell::Cell::new(0);
     let mut expander = Expander::new(session, parameters, &expansions);
     match expr {

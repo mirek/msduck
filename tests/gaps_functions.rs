@@ -478,3 +478,47 @@ fn procedures_call_functions() {
         text(&[&[Some("5"), Some("5")], &[Some("5"), Some("10")]])
     );
 }
+
+#[test]
+fn output_into_targets_with_columns_are_tables_not_functions() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    ok(
+        &mut s,
+        "CREATE FUNCTION dbo.inc(@x int) RETURNS int AS BEGIN RETURN @x + 1 END",
+    );
+    ok(
+        &mut s,
+        "CREATE TABLE dbo.k(id int, v int); INSERT dbo.k VALUES (4, 10)",
+    );
+    ok(&mut s, "CREATE TABLE dbo.audit(id int, v int)");
+    ok(
+        &mut s,
+        "UPDATE dbo.k SET v = dbo.inc(v) OUTPUT inserted.id, inserted.v INTO dbo.audit(id, v) WHERE id = 4",
+    );
+    ok(
+        &mut s,
+        "INSERT dbo.k(id, v) OUTPUT inserted.id, dbo.inc(inserted.v) INTO dbo.audit(id, v) VALUES (5, 20)",
+    );
+    ok(
+        &mut s,
+        "DELETE dbo.k OUTPUT deleted.id, deleted.v INTO dbo.audit(id, v) WHERE id = 5",
+    );
+    assert_eq!(
+        rows(
+            &s,
+            "SELECT CAST(id AS VARCHAR), CAST(v AS VARCHAR) FROM dbo.audit ORDER BY id, v"
+        ),
+        text(&[
+            &[Some("4"), Some("11")],
+            &[Some("5"), Some("20")],
+            &[Some("5"), Some("21")],
+        ])
+    );
+    // A missing function in the OUTPUT list itself is still reported.
+    fails(
+        &mut s,
+        "UPDATE dbo.k SET v = 1 OUTPUT dbo.nope(inserted.v) INTO dbo.audit(v)",
+        4121,
+    );
+}
