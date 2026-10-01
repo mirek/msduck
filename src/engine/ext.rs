@@ -39,6 +39,38 @@ pub(crate) struct Exec {
     pub status: i32,
 }
 
+/// An error raised after a hook already produced output (for example, a
+/// procedure whose first statement returned rows and whose second failed).
+/// The engine writes `tokens` first, then handles `error` exactly like any
+/// other statement error (TRY/CATCH, @@ERROR, XACT_ABORT, doomed
+/// transactions). Return it with `Err(Partial { .. }.into())`.
+#[derive(Debug)]
+#[allow(dead_code)] // Constructed by feature modules as their tasks land.
+pub(crate) struct Partial {
+    pub tokens: Vec<u8>,
+    pub error: anyhow::Error,
+}
+
+impl std::fmt::Display for Partial {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.error.fmt(f)
+    }
+}
+
+impl std::error::Error for Partial {}
+
+/// Write a [`Partial`]'s tokens and return its error; other errors pass
+/// through unchanged.
+pub(super) fn take_partial(error: anyhow::Error, out: &mut Vec<u8>) -> anyhow::Error {
+    match error.downcast::<Partial>() {
+        Ok(partial) => {
+            out.extend(partial.tokens);
+            partial.error
+        }
+        Err(error) => error,
+    }
+}
+
 impl Exec {
     pub fn status(status: i32) -> Self {
         Self {
@@ -91,7 +123,9 @@ pub(super) trait Feature: Sync {
         Ok(None)
     }
 
-    /// Session-aware rewrite of a statement about to be translated.
+    /// Session-aware rewrite of a statement about to be translated. Rewrites
+    /// can see the same tree more than once (for example a SET statement and
+    /// then its value expression), so they must be idempotent.
     fn rewrite_statement(
         &self,
         _session: &Session,
@@ -152,12 +186,19 @@ pub(super) trait Feature: Sync {
         Ok(())
     }
 
-    /// A new session (including after RESETCONNECTION).
+    /// A new session (including the replacement created by
+    /// RESETCONNECTION). It runs before the login database is entered and
+    /// before the SPID is final, so do not depend on either; use
+    /// `session.ext.token`.
     fn session_start(&self, _session: &mut Session) -> Result<()> {
         Ok(())
     }
 
-    /// The session is closing or being reset.
+    /// The session is dropped: disconnect, or replacement by RESETCONNECTION
+    /// (after the replacement's `session_start`). It also runs when
+    /// `session_start` of any feature failed, so it must tolerate state that
+    /// was never set up. The SPID may already belong to another session; use
+    /// `session.ext.token`.
     fn session_end(&self, _session: &mut Session) {}
 }
 
@@ -185,11 +226,14 @@ static FEATURES: &[&dyn Feature] = &[
 ];
 
 /// Per-session feature state.
-#[derive(Default)]
 #[allow(dead_code)] // Read by feature modules as their tasks land.
 pub(crate) struct State {
     /// Features whose hooks are suspended by [`reenter`].
     skip: Vec<&'static str>,
+    /// Unique for the life of the process; unlike the SPID it never changes
+    /// or repeats (RESETCONNECTION swaps SPIDs). Key cross-session state
+    /// such as lock tables or temporary object names by it.
+    pub(super) token: u64,
     pub(super) applock: applock::State,
     pub(super) backup: backup::State,
     pub(super) bulk: bulk::State,
@@ -208,6 +252,34 @@ pub(crate) struct State {
     pub(super) temp_tables: temp_tables::State,
     pub(super) transactions: transactions::State,
     pub(super) triggers: triggers::State,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        Self {
+            skip: Vec::new(),
+            token: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            applock: Default::default(),
+            backup: Default::default(),
+            bulk: Default::default(),
+            catalog: Default::default(),
+            computed: Default::default(),
+            constraints: Default::default(),
+            conversion: Default::default(),
+            functions: Default::default(),
+            identifiers: Default::default(),
+            json_string: Default::default(),
+            keys: Default::default(),
+            merge: Default::default(),
+            outer_dml: Default::default(),
+            procedures: Default::default(),
+            rowversion_identity: Default::default(),
+            temp_tables: Default::default(),
+            transactions: Default::default(),
+            triggers: Default::default(),
+        }
+    }
 }
 
 fn active(session: &Session) -> impl Iterator<Item = &'static dyn Feature> + '_ {

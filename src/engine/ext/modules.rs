@@ -17,6 +17,48 @@ impl Feature for Hooks {
     fn name(&self) -> &'static str {
         "modules"
     }
+    /// Tables and views share the module namespace: a clash would make
+    /// OBJECT_ID's name map ambiguous, so refuse it like SQL Server (2714).
+    fn statement(
+        &self,
+        session: &mut super::Session,
+        statement: &mut sqlparser::ast::Statement,
+        _parameters: &mut std::collections::HashMap<String, super::Parameter>,
+    ) -> Result<Option<super::Execution>> {
+        use sqlparser::ast::Statement;
+        let name = match statement {
+            Statement::CreateTable(table) => &table.name,
+            Statement::CreateView(view) if !view.or_replace => &view.name,
+            _ => return Ok(None),
+        };
+        let parts: Vec<String> = name
+            .0
+            .iter()
+            .filter_map(|part| part.as_ident().map(|ident| ident.value.clone()))
+            .collect();
+        let (schema, object) = match parts.as_slice() {
+            [object] => (None, object),
+            [schema, object] => (Some(schema.as_str()), object),
+            _ => return Ok(None),
+        };
+        if object.starts_with('#') {
+            return Ok(None);
+        }
+        let exists = schema_id(&session.db, schema)
+            .ok()
+            .map(|_| find(&session.db, schema, object))
+            .transpose()?
+            .flatten()
+            .is_some();
+        if exists {
+            bail!(SqlError::new(
+                2714,
+                6,
+                format!("There is already an object named '{object}' in the database.")
+            ));
+        }
+        Ok(None)
+    }
     fn bootstrap_database(&self, db: &Connection) -> Result<()> {
         // object_catalog::register has just (re)defined sys.objects over
         // tables, views, table types and default constraints. Keep that
@@ -274,5 +316,24 @@ mod tests {
         assert!(list(db, &[kind::TRIGGER]).unwrap().is_empty());
         remove(db, id).unwrap();
         assert!(find(db, None, "p1").unwrap().is_none());
+    }
+
+    #[test]
+    fn tables_and_views_cannot_reuse_a_module_name() {
+        let mut session = session();
+        create(&session.db, None, "clash", kind::PROCEDURE, 0, "", "{}").unwrap();
+        for sql in [
+            "CREATE TABLE dbo.clash(id INT)",
+            "CREATE VIEW clash AS SELECT 1 AS one",
+        ] {
+            let (out, ok) = session.batch_response(sql, &Default::default(), false, None);
+            assert!(!ok, "{sql}");
+            assert!(out.windows(4).any(|w| w == 2714i32.to_le_bytes()), "{sql}");
+        }
+        let id: Option<i32> = session
+            .db
+            .query_row("SELECT __msduck_object_id('clash', NULL)", [], |r| r.get(0))
+            .unwrap();
+        assert!(id.is_some());
     }
 }

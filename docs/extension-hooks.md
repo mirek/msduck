@@ -36,12 +36,20 @@ Dispatch follows the order of the `FEATURES` lists in both `ext.rs` files.
   any built-in statement parsing. A feature claims the next statement by
   returning `Some`. Otherwise it returns `None` without consuming tokens; use
   `parser.try_parse` or peek ahead before committing.
-- **`owns(statement)`** marks a statement the feature validates itself. The
-  batch parser then skips the UPDATE/DELETE target-shape canonicalization
-  checks for it. Preflight still checks its variable references, but skips
-  the other validators: window placement, grouping, predicates, OUTPUT,
-  aggregates in UPDATE, session functions, REPLICATE, LEFT/RIGHT, unary
-  operators and RAISERROR.
+- **`owns(statement)`** marks a statement the feature validates itself.
+  - The batch parser skips the UPDATE/DELETE target-shape canonicalization
+    checks for a top-level owned statement.
+  - Preflight still checks variable references. It skips the DDL shape checks
+    (protected names, TRUNCATE, schema and view placement, ALTER TABLE forms)
+    for owned statements at any depth.
+  - For top-level owned statements only, preflight also skips the separate
+    validators: window placement, grouping, predicates, OUTPUT, aggregates in
+    UPDATE, session functions, REPLICATE, LEFT/RIGHT, unary operators and
+    RAISERROR.
+  - Those validators still see an owned native statement nested inside IF,
+    WHILE, BEGIN...END or TRY. A feature whose statements those validators
+    would reject, and which can appear nested, should parse them into a
+    carrier.
 - **`carrier(kind, payload, args)`** wraps a statement that has no sqlparser
   equivalent, such as BACKUP or WAITFOR.
   - `kind` names the feature's statement.
@@ -76,6 +84,16 @@ declare the scalar variable".
 | `bootstrap_database` | For every database at startup, creation and attach, after the built-in catalogs | Idempotent catalog tables and views |
 | `session_start`, `session_end` | When a session is created; when it is dropped, including RESETCONNECTION and disconnect | Session-owned resources |
 
+When a hook fails after producing output (for example, a procedure whose
+first statement returned rows), return `Err(ext::Partial { tokens, error
+}.into())`. The engine writes the tokens and then handles the error like any
+other statement error: TRY/CATCH, `@@ERROR`, XACT_ABORT and doomed
+transactions. A successful `Exec` with a non-zero `status` is not an error.
+Its DONEPROC carries no error flag.
+
+Rewrites can see the same tree more than once, for example a SET statement
+and then its value expression, so they must be idempotent.
+
 Feature modules are children of `engine`, so they may use `Session`'s private
 fields and methods. Typical examples are `db`, `transactions`,
 `batch_response_inner` (to run procedure bodies) and `execute`.
@@ -88,7 +106,14 @@ foreign-key actions compose.
 
 Per-session state lives in the feature's `State` type, reachable as
 `session.ext.<feature>`. State shared across sessions, such as lock tables,
-belongs in the feature module, keyed by database.
+belongs in the feature module, keyed by database and by `session.ext.token`.
+
+The token is unique for the life of the process. Do not key on the SPID:
+RESETCONNECTION creates the replacement session (running its
+`session_start`) under a temporary SPID and in `master`, then swaps SPIDs and
+enters the login database, and only then drops the old session (running its
+`session_end`). `session_end` also runs when a `session_start` failed, so it
+must tolerate missing state.
 
 ## Module store
 
@@ -107,6 +132,10 @@ appends its rows to `sys.objects` by renaming the built-in view to
 `sys.__msduck_core_objects` at bootstrap. As a result, `OBJECT_ID`,
 `OBJECT_NAME`, `sys.all_objects` and the existence checks that later
 `CREATE` statements use all see modules.
+
+`CREATE TABLE` and `CREATE VIEW` also fail with 2714 when a module of that
+name exists, because a duplicate name would make the `OBJECT_ID` name map
+ambiguous.
 
 The API is `create` (which fails with 2714 for a duplicate name), `alter`,
 `rename`, `set_disabled`, `remove`, `find`, `by_id` and `list`.

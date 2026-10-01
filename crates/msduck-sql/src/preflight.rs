@@ -143,6 +143,9 @@ pub fn variables(
         /// `@name` targets of `EXEC proc @name = value` arguments: procedure
         /// parameter names, not references to the caller's variables.
         argument_names: Vec<*const Expr>,
+        /// Depth of extension-owned statements being visited; their DDL
+        /// shape checks belong to the owning feature.
+        owned: usize,
         loop_depth: usize,
         allow_view: bool,
         allow_schema: bool,
@@ -184,42 +187,48 @@ pub fn variables(
                     }
                 }
             }
-            if let Err(error) = crate::ddl_syntax::protect(statement) {
-                return ControlFlow::Break(error.to_string());
+            if crate::dialect::ext::owns(statement) {
+                self.owned += 1;
             }
-            if let Statement::Truncate(truncate) = statement
-                && let Err(error) = crate::ddl_syntax::truncate(truncate)
-            {
-                return ControlFlow::Break(error.to_string());
-            }
-
-            if let Err(error) = validate_schema_statement(statement, self.allow_schema) {
-                return ControlFlow::Break(error.to_string());
-            }
-
-            if let Statement::AlterTable(table) = statement
-                && let Err(error) = crate::ddl_syntax::alter_table(table)
-            {
-                return ControlFlow::Break(error.to_string());
-            }
-            if matches!(statement, Statement::AlterView { .. }) {
-                if !self.allow_view {
-                    return ControlFlow::Break(
-                        "ALTER VIEW must be the only statement in a batch".into(),
-                    );
-                }
-                if let Err(error) = crate::view_definition::alter_definition(statement) {
+            // DDL shape checks belong to the feature owning the statement.
+            if self.owned == 0 {
+                if let Err(error) = crate::ddl_syntax::protect(statement) {
                     return ControlFlow::Break(error.to_string());
                 }
-            }
-            if let Statement::CreateView(view) = statement {
-                if !self.allow_view {
-                    return ControlFlow::Break(
-                        "CREATE VIEW must be the only statement in a batch".into(),
-                    );
-                }
-                if let Err(error) = crate::view_definition::validate(view) {
+                if let Statement::Truncate(truncate) = statement
+                    && let Err(error) = crate::ddl_syntax::truncate(truncate)
+                {
                     return ControlFlow::Break(error.to_string());
+                }
+
+                if let Err(error) = validate_schema_statement(statement, self.allow_schema) {
+                    return ControlFlow::Break(error.to_string());
+                }
+
+                if let Statement::AlterTable(table) = statement
+                    && let Err(error) = crate::ddl_syntax::alter_table(table)
+                {
+                    return ControlFlow::Break(error.to_string());
+                }
+                if matches!(statement, Statement::AlterView { .. }) {
+                    if !self.allow_view {
+                        return ControlFlow::Break(
+                            "ALTER VIEW must be the only statement in a batch".into(),
+                        );
+                    }
+                    if let Err(error) = crate::view_definition::alter_definition(statement) {
+                        return ControlFlow::Break(error.to_string());
+                    }
+                }
+                if let Statement::CreateView(view) = statement {
+                    if !self.allow_view {
+                        return ControlFlow::Break(
+                            "CREATE VIEW must be the only statement in a batch".into(),
+                        );
+                    }
+                    if let Err(error) = crate::view_definition::validate(view) {
+                        return ControlFlow::Break(error.to_string());
+                    }
                 }
             }
             if let Err(error) = validate_transaction_syntax(statement) {
@@ -272,6 +281,9 @@ pub fn variables(
             ControlFlow::Continue(())
         }
         fn post_visit_statement(&mut self, statement: &Statement) -> ControlFlow<String> {
+            if crate::dialect::ext::owns(statement) {
+                self.owned -= 1;
+            }
             if matches!(statement, Statement::While(_)) {
                 self.loop_depth -= 1;
             }
@@ -312,6 +324,7 @@ pub fn variables(
     let mut visitor = Variables {
         values: parameters.clone(),
         argument_names: Vec::new(),
+        owned: 0,
         loop_depth: 0,
         allow_schema: matches!(statements, [Statement::CreateSchema { .. }]),
         allow_view: matches!(

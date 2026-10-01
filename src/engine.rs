@@ -1081,6 +1081,7 @@ impl Session {
             self.lower_database_functions(&mut statement)?;
             self.qualify_databases(&mut statement)?;
             self.lower_session_functions(&mut statement, &mut parameters)?;
+            ext::rewrite(self, &mut statement, &parameters)?;
             select_assignments(&mut statement, &parameters)?;
             let into = crate::select_into::take(&mut statement)?;
             let money_columns = crate::insert::money_columns(&statement, &parameters);
@@ -1668,6 +1669,7 @@ impl Session {
                 // EXEC keeps @@ROWCOUNT. A batch reports RETURNSTATUS (0, or 1
                 // after a failure) and DONEPROC; inside sp_executesql the call
                 // ends with DONEINPROC and a failure becomes the RPC status.
+                let mut failed = false;
                 let status: i32 = match result {
                     Ok(ext::Exec { tokens, status }) => {
                         out.extend(tokens);
@@ -1675,6 +1677,8 @@ impl Session {
                         status
                     }
                     Err(error) => {
+                        failed = true;
+                        let error = ext::take_partial(error, &mut out);
                         if self.catch_error(&mut pending, &error) {
                             // A caught failure's DONEPROC has no RETURNSTATUS.
                             if !(rpc && self.nocount) {
@@ -1698,25 +1702,13 @@ impl Session {
                 if rpc {
                     if !self.nocount {
                         last_done = Some(out.len());
-                        tds::done(
-                            &mut out,
-                            0xff,
-                            more | if status == 0 { 0 } else { 2 },
-                            224,
-                            0,
-                        );
+                        tds::done(&mut out, 0xff, more | if failed { 2 } else { 0 }, 224, 0);
                     }
                 } else {
                     out.push(0x79);
                     out.extend(status.to_le_bytes());
                     last_done = Some(out.len());
-                    tds::done(
-                        &mut out,
-                        0xfe,
-                        more | if status == 0 { 0 } else { 2 },
-                        224,
-                        0,
-                    );
+                    tds::done(&mut out, 0xfe, more | if failed { 2 } else { 0 }, 224, 0);
                 }
                 continue;
             }
@@ -1786,6 +1778,7 @@ impl Session {
                     );
                 }
                 Err(e) => {
+                    let e = ext::take_partial(e, &mut out);
                     if e.downcast_ref::<crate::read_cancellation::UnusableRead>()
                         .is_some()
                     {
@@ -3692,6 +3685,7 @@ impl Session {
         self.qualify_databases(&mut expression)?;
         let lowered = self.lower_session_functions_shared(&mut expression, parameters)?;
         let parameters = &*lowered;
+        ext::rewrite(self, &mut expression, parameters)?;
         crate::query_catalog::lower_recursion(&self.db, &mut expression)?;
         crate::aggregate_columns::annotate(&self.db, &mut expression, parameters)
             .map_err(anyhow::Error::msg)?;
