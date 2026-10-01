@@ -18,25 +18,28 @@ Implemented wire operations:
 The decoder validates lengths, names, isolation bytes, flags, trailing bytes,
 and all optional restart data before execution. Restart isolation validation
 also precedes mutation of the existing transaction. Unknown rollback names
-return 6401; unmatched commit/rollback return 3902/3903. Declared savepoints and
-distributed transaction requests fail explicitly instead of becoming no-ops.
+return 6401; unmatched commit/rollback return 3902/3903. Distributed
+transaction requests fail explicitly instead of becoming no-ops. Begin requests
+accept isolation levels 0-5 and set the session's level, and save and named
+rollback requests use the savepoints of the `transactions` extension (see
+[gaps-transactions.md](gaps-transactions.md)).
 
 Verification added:
 
 - Real tedious driver begin/commit/rollback combined with SQL BEGIN and RPC
   queries, nested counts, transaction descriptors and connection reuse.
 - Stale descriptor requests rejected before an INSERT; unknown rollback names
-  and unsupported savepoints leave the active transaction usable.
+  leave the active transaction usable.
 - Decoder malformed/truncated input tests and exact ENVCHANGE byte vectors.
 - Commit/rollback restart retains or removes actual rows as appropriate and
-  generates a fresh descriptor. Unsupported restart isolation preserves state.
+  generates a fresh descriptor. An invalid restart isolation preserves state.
 - Dropping a session rolls back uncommitted writes in shared DuckDB storage.
 
-Remaining requirements: full SQL Server isolation and transaction-error
-semantics, savepoints, distributed transactions, named SQL BEGIN parser
-coverage, aborted-transaction XACT_STATE behavior, reset, and live differential
-validation against SQL Server. Current/read-committed/snapshot requests run on
-DuckDB snapshot isolation; this is not proof of READ COMMITTED equivalence.
+Remaining requirements: full SQL Server transaction-error semantics,
+distributed transactions, aborted-transaction XACT_STATE behavior, reset, and
+live differential validation against SQL Server. Every isolation level runs on
+DuckDB snapshot isolation; [gaps-transactions.md](gaps-transactions.md) maps
+what each level means.
 
 Primary contract:
 [MS-TDS Transaction Manager Request](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-tds/0fb28ba5-ddcb-4d02-95c3-aa5b05ec6092).

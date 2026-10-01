@@ -133,16 +133,17 @@ pub(super) fn save_request(session: &mut Session, name: &str) -> Result<Vec<u8>>
         return Err(no_transaction());
     }
     if name.is_empty() {
-        let mut tokens = session.rollback_transaction("")?;
-        crate::tds::sql_error(
-            &mut tokens,
-            &SqlError::new(
+        let tokens = session.rollback_transaction("")?;
+        return Err(super::super::Partial {
+            tokens,
+            error: SqlError::new(
                 3977,
                 1,
                 "The savepoint name cannot be NULL. The batch has been aborted.",
-            ),
-        );
-        return Ok(tokens);
+            )
+            .into(),
+        }
+        .into());
     }
     if name.chars().count() > msduck_sql::dialect::ext::transactions::NAME_LIMIT {
         return Err(msduck_sql::dialect::ext::transactions::name_too_long(name, 30).into());
