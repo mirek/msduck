@@ -689,6 +689,14 @@ fn backup(
             ),
         )
     };
+    // msdb exists from its first use, a backup of it included.
+    if backup
+        .database
+        .eq_ignore_ascii_case(crate::database_catalog::MSDB)
+        && session.transactions == 0
+    {
+        msdb::ensure(session)?;
+    }
     if catalog.resolve(&session.db, &backup.database)?.is_none() {
         bail!(missing());
     }
@@ -733,6 +741,12 @@ fn backup(
             )
         ));
     }
+    // One BACKUP writes media at a time, so a concurrent append never
+    // copies stale sets or loses its own.
+    static DEVICES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _device = DEVICES
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let format = request.has("FORMAT");
     let init = request.has("INIT");
     let existing = match media::read(device) {

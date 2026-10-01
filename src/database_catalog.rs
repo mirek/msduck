@@ -861,7 +861,13 @@ impl Catalog {
     ) -> Result<()> {
         let _change = self.lock();
         let name_key = key(name);
-        if RESERVED.contains(&name_key.as_str()) {
+        // A published system database cannot be dropped. An msdb whose
+        // creation or recovery failed can, so that it can be created again.
+        let unavailable_msdb = name_key == MSDB
+            && self
+                .lookup(db, &name_key)?
+                .is_some_and(|(row, attached)| !(row.published && attached));
+        if RESERVED.contains(&name_key.as_str()) && !unavailable_msdb {
             bail!(SqlError::new(
                 3708,
                 4,
@@ -1634,6 +1640,9 @@ impl Catalog {
         };
         let path = self.path(&row)?;
         deletable(&path)?;
+        // Open and bootstrap the staged file first, so a backup this build
+        // cannot open never costs the existing database.
+        bootstrap_file(restore.staging)?;
         // Hide the database, detach it and replace its file. A failure
         // after the old file is gone leaves the database hidden, as SQL
         // Server leaves a failed restore in the RESTORING state; DROP can

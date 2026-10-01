@@ -565,6 +565,48 @@ fn noinit_appends_backup_sets_that_restore_by_position() {
 }
 
 #[test]
+fn concurrent_appends_keep_every_backup_set() {
+    let backups = directory("concurrent");
+    let device = path(&backups, "foo.bak");
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    fixture(&mut session, "foo");
+    // msdb exists before the concurrent backups start.
+    ok(&mut session, "USE msdb; USE master");
+    std::thread::scope(|scope| {
+        for _ in 0..3 {
+            let mut other = Session::new(server.connection().unwrap()).unwrap();
+            let device = device.clone();
+            scope.spawn(move || {
+                ok(
+                    &mut other,
+                    &format!("BACKUP DATABASE foo TO DISK=N'{device}'"),
+                )
+            });
+        }
+    });
+    let (tokens, success) = run(
+        &mut session,
+        &format!("RESTORE HEADERONLY FROM DISK=N'{device}'"),
+    );
+    assert!(success, "{:?}", diagnostics(&tokens));
+    assert_eq!(
+        rows(
+            &session,
+            "SELECT CAST(count(*) AS VARCHAR), CAST(max(position) AS VARCHAR), CAST(count(DISTINCT position) AS VARCHAR) FROM msdb.dbo.backupset"
+        ),
+        [row(&["3", "3", "3"])]
+    );
+    for file in 1..=3 {
+        ok(
+            &mut session,
+            &format!("RESTORE VERIFYONLY FROM DISK=N'{device}' WITH FILE={file}"),
+        );
+    }
+    std::fs::remove_dir_all(&backups).unwrap();
+}
+
+#[test]
 fn backups_are_transactionally_consistent() {
     let backups = directory("consistent");
     let device = path(&backups, "foo.bak");

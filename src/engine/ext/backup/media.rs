@@ -107,7 +107,12 @@ impl Header {
                 Some(FileEntry {
                     logical: file.get("logical")?.as_str()?.to_owned(),
                     physical: file.get("physical")?.as_str()?.to_owned(),
-                    kind: file.get("kind")?.as_str()?.chars().next()?,
+                    // Only data and log files; anything else is malformed.
+                    kind: match file.get("kind")?.as_str()? {
+                        "D" => 'D',
+                        "L" => 'L',
+                        _ => return None,
+                    },
                     size: file.get("size")?.as_u64()?,
                 })
             })
@@ -423,6 +428,12 @@ mod tests {
         std::fs::write(&path, &bytes[..bytes.len() - 1]).unwrap();
         assert!(matches!(read(&path).unwrap(), Media::Malformed));
         std::fs::write(&path, b"not a backup file at all").unwrap();
+        assert!(matches!(read(&path).unwrap(), Media::Malformed));
+        // A header naming a file kind other than data or log is malformed,
+        // so its values never reach generated SQL.
+        let mut crafted = header("x");
+        crafted.files[0].kind = '\'';
+        write(&path, None, &crafted, &payload).unwrap();
         assert!(matches!(read(&path).unwrap(), Media::Malformed));
         std::fs::write(&path, b"short").unwrap();
         assert!(matches!(read(&path).unwrap(), Media::Empty));

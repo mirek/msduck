@@ -41,7 +41,8 @@ After a restore, declared metadata, IDENTITY and views work as they did in the
 source.
 
 A new file is written next to the device and then renamed over it. A failed
-BACKUP therefore leaves an existing device unchanged. The payload is staged as
+BACKUP therefore leaves an existing device unchanged. Backups write their media
+one at a time, so concurrent appends to the same device each keep their set. The payload is staged as
 a hidden `.<primary>.backup-*.duckdb` file in the database directory and is
 deleted afterwards.
 
@@ -117,8 +118,10 @@ with 377.
   SHA-256.
 - A new database gets the next database ID and is attached from the staged
   file.
-- An existing database is replaced in place and keeps its database ID: it is
-  hidden, detached and its files deleted, then the staged file takes its
+- An existing database is replaced in place and keeps its database ID. The
+  staged file is first opened and bootstrapped on its own, so a payload this
+  build cannot open leaves the existing database untouched. Then the database
+  is hidden and detached, its files are deleted, and the staged file takes its
   name. If a step fails after the old file is gone, the database stays hidden,
   as SQL Server leaves a failed restore in the RESTORING state, and DROP
   DATABASE removes it.
@@ -171,7 +174,9 @@ first use:
 
 Once it exists, it is listed in `sys.databases`, `DB_ID('msdb')` returns 4,
 file-backed servers re-attach it on startup, and `DROP DATABASE msdb` fails
-with 3708 (state 4), as for `master`, `model` and `tempdb`.
+with 3708 (state 4), as for `master`, `model` and `tempdb`. The exception is an
+msdb whose creation or recovery failed: it can be dropped, so its next use
+creates it again.
 
 The history tables have SQL Server's columns and declared types:
 

@@ -174,12 +174,24 @@ pub fn in_msdb<T>(session: &mut Session, f: impl FnOnce(&mut Session) -> Result<
     if is_msdb(&original) {
         return reenter(session, "backup", f);
     }
+    // Keep the original database in use while the session is in msdb, so
+    // no other session can drop, restore or take it meanwhile.
+    let catalog = session.database.catalog().clone();
+    let hold = catalog.enter_as(&session.db, &original, &|alias| session.own_uses(alias))?;
     session.use_database(MSDB)?;
     let result = reenter(session, "backup", f);
     let restored = session.use_database(&original);
-    let value = result?;
-    restored?;
-    Ok(value)
+    drop(hold);
+    match (result, restored) {
+        (Ok(value), Ok(())) => Ok(value),
+        (Ok(_), Err(error)) => {
+            Err(error.context(format!("could not return to database {original}")))
+        }
+        (Err(error), Ok(())) => Err(error),
+        (Err(error), Err(back)) => {
+            Err(error.context(format!("could not return to database {original}: {back:#}")))
+        }
+    }
 }
 
 /// Execute T-SQL statements through the ordinary engine path.
