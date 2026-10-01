@@ -9,6 +9,9 @@ use sqlparser::ast::{Expr, ObjectName, SetExpr, Statement, TableObject, Value};
 pub struct ResolvedTarget<'a, K> {
     /// Stable catalog identity, shared by alternate names of the same table.
     pub key: &'a K,
+    /// The resolved schema. Diagnostics name the table as the INSERT spells
+    /// it, so the gate itself no longer reads this.
+    #[allow(dead_code)]
     pub schema: &'a str,
     pub table: &'a str,
     pub column_count: usize,
@@ -122,13 +125,23 @@ pub fn preflight<K: Eq>(
             ));
         }
         // The captured single-row numeric VALUES report 8101, even with
-        // DEFAULT in the identity slot or IDENTITY_INSERT OFF.
+        // DEFAULT in the identity slot or IDENTITY_INSERT OFF. The table is
+        // named as the INSERT spells it, without delimiters.
+        let TableObject::TableName(name) = &insert.table else {
+            return Err(GateError::Unsupported("unsupported INSERT target shape"));
+        };
+        let written = name
+            .0
+            .iter()
+            .map(|part| part.as_ident().map(|id| id.value.as_str()))
+            .collect::<Option<Vec<_>>>()
+            .ok_or(GateError::Unsupported("unsupported INSERT target part"))?
+            .join(".");
         return Err(GateError::diagnostic(
             8101,
             253,
             format!(
-                "An explicit value for the identity column in table '{}.{}' can only be specified when a column list is used and IDENTITY_INSERT is ON.",
-                target.schema, target.table
+                "An explicit value for the identity column in table '{written}' can only be specified when a column list is used and IDENTITY_INSERT is ON."
             ),
         ));
     }
