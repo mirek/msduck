@@ -28,6 +28,9 @@ pub(crate) struct State {
     depth: std::cell::Cell<usize>,
     /// The source of the current batch when it defines a view.
     view_source: std::cell::RefCell<Option<String>>,
+    /// Addresses of the OUTPUT INTO target of the statement being rewritten,
+    /// which parse as calls but name tables.
+    output_targets: std::cell::RefCell<Vec<usize>>,
     /// Tables whose recorded references wait for their statement to finish.
     pending: std::cell::RefCell<Vec<(String, String)>>,
 }
