@@ -329,6 +329,8 @@ pub(super) fn run(session: &mut Session, statement: &Statement) -> Result<Option
                     .unwrap_or_default(),
             },
         )?;
+        // Record the index's sys.indexes ID now.
+        crate::index_catalog::sync(db)?;
         Ok(Some(Execution::statement(vec![], None, 200)))
     })
 }

@@ -80,11 +80,28 @@ pub fn register(db: &Connection) -> Result<()> {
         -- The sys.indexes index_id of each constraint (tag) and registered
         -- index (incarnation), once assigned. A PRIMARY KEY assumed
         -- clustered also keeps the ID it takes if it turns out not to be.
-        -- txn is the transaction that assigned the ID.
+        -- txn names the transaction that assigned the ID: this process's run
+        -- of the database and its transaction ID, which restarts with it.
         CREATE TABLE IF NOT EXISTS main.__msduck_index_ids(
-          object_id INTEGER NOT NULL,tag BIGINT,incarnation BIGINT,index_id INTEGER NOT NULL,fallback INTEGER,txn BIGINT);
+          object_id INTEGER NOT NULL,tag BIGINT,incarnation BIGINT,index_id INTEGER NOT NULL,fallback INTEGER,txn VARCHAR);
         CREATE TABLE IF NOT EXISTS main.__msduck_index_descending(
           incarnation BIGINT NOT NULL,ordinal INTEGER NOT NULL,PRIMARY KEY(incarnation,ordinal))")?;
+    // A value of this run, so transaction IDs of earlier runs never match.
+    let run = {
+        use std::hash::{BuildHasher, Hasher};
+        let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+        hasher.write_u128(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or_default(),
+        );
+        hasher.write_u32(std::process::id());
+        format!("{:016x}", hasher.finish())
+    };
+    db.execute_batch(&format!(
+        "CREATE OR REPLACE MACRO main.__msduck_index_transaction() AS '{run}:'||txid_current()"
+    ))?;
     // Functions are instance-wide; every database of an instance shares one.
     let registered: bool = db.query_row(
         "SELECT EXISTS(SELECT 1 FROM duckdb_functions() WHERE function_name=?)",
@@ -121,9 +138,10 @@ pub fn sync(db: &Connection) -> Result<()> {
 }
 
 /// Persist the sys.indexes ID of every index that has none, and drop the IDs
-/// of indexes that are gone. A PRIMARY KEY that held ID 1 while the table had
-/// no clustered index gets a nonclustered ID once it has one. An index the
-/// keys feature is rebuilding around an ALTER TABLE keeps its ID.
+/// of constraints and tables that are gone ([`drop_index`] drops an index's).
+/// A PRIMARY KEY that held ID 1 while the table had no clustered index gets
+/// a nonclustered ID once it has one. An index the keys feature rebuilds
+/// around an ALTER TABLE is briefly missing from the catalog and keeps its ID.
 fn allocate(db: &Connection) -> Result<()> {
     let published: bool = db.query_row(
         "SELECT EXISTS(SELECT 1 FROM duckdb_views() WHERE database_name=current_database()
@@ -137,12 +155,13 @@ fn allocate(db: &Connection) -> Result<()> {
     // The assignments are computed from the stored ones, so they are
     // materialized before the stored ones change.
     db.execute_batch(
-        "DELETE FROM main.__msduck_index_ids p WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_key_indexes k
-           WHERE k.object_id=p.object_id AND (k.tag=p.tag OR k.incarnation=p.incarnation))
-         AND NOT EXISTS(SELECT 1 FROM main.__msduck_index_catalog c
-           WHERE c.object_id=p.object_id AND c.incarnation=p.incarnation);
+        "DELETE FROM main.__msduck_index_ids p
+         WHERE NOT EXISTS(SELECT 1 FROM sys.objects o WHERE o.object_id=p.object_id AND rtrim(o.type)='U')
+           OR (p.tag IS NOT NULL AND NOT EXISTS(SELECT 1 FROM main.__msduck_key_indexes k
+             WHERE k.object_id=p.object_id AND k.tag=p.tag));
          CREATE OR REPLACE TEMP TABLE __msduck_index_ids_next AS
-           SELECT object_id,tag,incarnation,index_id,fallback,txid_current() AS txn FROM main.__msduck_index_entries;
+           SELECT object_id,tag,incarnation,index_id,fallback,main.__msduck_index_transaction() AS txn
+           FROM main.__msduck_index_entries;
          DELETE FROM main.__msduck_index_ids p WHERE EXISTS(SELECT 1 FROM __msduck_index_ids_next n
            WHERE n.object_id=p.object_id AND n.tag IS NOT DISTINCT FROM p.tag
              AND n.incarnation IS NOT DISTINCT FROM p.incarnation
@@ -350,6 +369,11 @@ pub fn drop_index(db: &Connection, expected: &Index, owner: Transaction) -> Resu
             "DELETE FROM main.__msduck_index_catalog WHERE incarnation=?",
             [expected.incarnation],
         )?;
+        db.execute(
+            "DELETE FROM main.__msduck_index_ids WHERE incarnation=?",
+            [expected.incarnation],
+        )?;
+        allocate(db)?;
         Ok(())
     })
 }
@@ -519,6 +543,9 @@ pub fn publish_views(db: &Connection) -> Result<()> {
           FROM main.__msduck_live_indexes l
           LEFT JOIN main.__msduck_key_indexes k ON k.kind='IX' AND k.incarnation=l.incarnation AND k.object_id=l.object_id),
         cx AS (SELECT DISTINCT object_id FROM ix WHERE clustered),
+        -- Concurrent transactions can each record the same assignment.
+        ids AS (SELECT object_id,tag,incarnation,min(index_id) AS index_id,min(fallback) AS fallback,max(txn) AS txn
+          FROM main.__msduck_index_ids GROUP BY object_id,tag,incarnation),
         e AS (
           SELECT k.object_id,k.tag,CAST(NULL AS BIGINT) AS incarnation,CAST(NULL AS INTEGER) AS stored_id,
             k.name,k.kind,true AS is_unique,k.key_columns,CAST(NULL AS VARCHAR) AS filter,
@@ -529,13 +556,13 @@ pub fn publish_views(db: &Connection) -> Result<()> {
           -- Constraints given IDs by this transaction may belong to the same
           -- statement as later ones (ALTER TABLE ADD of several constraints
           -- synchronizes between them), so they are numbered again together.
-          LEFT JOIN main.__msduck_index_ids p ON p.object_id=k.object_id AND p.tag=k.tag
-            AND p.txn IS DISTINCT FROM txid_current()
+          LEFT JOIN ids p ON p.object_id=k.object_id AND p.tag=k.tag
+            AND p.txn IS DISTINCT FROM main.__msduck_index_transaction()
           WHERE k.kind IN ('PK','UQ')
           UNION ALL
           SELECT ix.object_id,NULL,ix.incarnation,ix.stored_id,ix.name,'IX',ix.is_unique,NULL,ix.filter,ix.included,
             p.index_id,p.fallback,ix.clustered
-          FROM ix LEFT JOIN main.__msduck_index_ids p ON p.object_id=ix.object_id AND p.incarnation=ix.incarnation),
+          FROM ix LEFT JOIN ids p ON p.object_id=ix.object_id AND p.incarnation=ix.incarnation),
         -- A PRIMARY KEY that held ID 1 on a table that now has a clustered
         -- index was nonclustered: it takes its fallback ID, and the IDs
         -- assigned after it move up by one, as SQL Server would have
@@ -615,6 +642,7 @@ pub fn publish_views(db: &Connection) -> Result<()> {
           CAST(0 AS UTINYINT) AS column_store_order_ordinal,CAST(0 AS UTINYINT) AS data_clustering_ordinal
         FROM members
         WHERE main.__msduck_index_catalog_ready()")?;
+    allocate(db)?;
     Ok(())
 }
 

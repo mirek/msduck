@@ -500,3 +500,108 @@ fn first_transaction_of_a_new_database_reads_constraints() {
         );
     }
 }
+
+/// Assigned IDs are recorded by the statement that creates or drops an index,
+/// survive the keys feature's rebuild around ALTER TABLE, and keep a primary
+/// key nonclustered once it has had a clustered index beside it.
+#[test]
+fn index_ids_are_recorded_by_every_index_statement() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    for sql in [
+        "CREATE TABLE t (id int, a int, b int)",
+        "CREATE INDEX i1 ON t(a)",
+        "CREATE INDEX i2 ON t(b)",
+        "DROP INDEX i1 ON t",
+        "ALTER TABLE t ADD c int NULL",
+        "CREATE TABLE p (id int NOT NULL CONSTRAINT pk_p PRIMARY KEY, v int, w int)",
+        "CREATE CLUSTERED INDEX cx ON p(v)",
+        "DROP INDEX cx ON p",
+        "CREATE INDEX kx ON p(v) INCLUDE (w)",
+    ] {
+        run(&mut s, sql);
+    }
+    // SQL Server: the same rows.
+    assert_eq!(
+        rows(
+            &s,
+            "SELECT o.name,i.name,i.index_id,i.type_desc FROM sys.indexes i JOIN sys.objects o ON o.object_id=i.object_id
+             WHERE rtrim(o.type)='U' ORDER BY o.name,i.index_id"
+        ),
+        [
+            "p|NULL|0|HEAP",
+            "p|pk_p|2|NONCLUSTERED",
+            "p|kx|3|NONCLUSTERED",
+            "t|NULL|0|HEAP",
+            "t|i2|3|NONCLUSTERED",
+        ]
+    );
+    // Every index has its ID recorded.
+    assert_eq!(
+        rows(
+            &s,
+            "SELECT count(*) FROM main.__msduck_index_entries e WHERE e.persisted IS NULL"
+        ),
+        ["0"]
+    );
+}
+
+/// Constraints numbered in an earlier run keep their IDs, whatever
+/// transaction IDs a later run of the server hands out.
+#[test]
+fn index_ids_survive_restarts_with_reused_transaction_ids() {
+    let directory = std::env::temp_dir().join(format!(
+        "msduck-gaps-index-catalog-ids-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("ids.duckdb");
+    let path = path.to_str().unwrap();
+    let query =
+        "SELECT i.name,i.index_id FROM sys.indexes i JOIN sys.objects o ON o.object_id=i.object_id
+        WHERE o.name='g' ORDER BY i.index_id";
+    let transactions: Vec<String> = {
+        let server = Server::open(path).unwrap();
+        let mut s = session(&server);
+        for sql in [
+            "CREATE TABLE g (a int CONSTRAINT g1 UNIQUE, b int, c int)",
+            "CREATE INDEX gx ON g(c)",
+            "ALTER TABLE g ADD CONSTRAINT g2 UNIQUE(b)",
+            "ALTER TABLE g DROP CONSTRAINT g1",
+            "CREATE INDEX gy ON g(a)",
+        ] {
+            run(&mut s, sql);
+        }
+        // SQL Server: gy 2, gx 3, g2 4.
+        assert_eq!(rows(&s, query), ["NULL|0", "gy|2", "gx|3", "g2|4"]);
+        rows(
+            &s,
+            "SELECT DISTINCT split_part(txn,':',2) FROM main.__msduck_index_ids",
+        )
+    };
+    let server = Server::open(path).unwrap();
+    let s = session(&server);
+    let highest = transactions
+        .iter()
+        .filter_map(|t| t.parse::<u64>().ok())
+        .max()
+        .unwrap();
+    // Step through this run's transaction IDs past every recorded one.
+    loop {
+        let current: u64 =
+            s.db.query_row("SELECT txid_current()", [], |r| r.get(0))
+                .unwrap();
+        assert_eq!(
+            rows(&s, query),
+            ["NULL|0", "gy|2", "gx|3", "g2|4"],
+            "{current}"
+        );
+        if current > highest {
+            break;
+        }
+    }
+    drop(s);
+    drop(server);
+    let _ = std::fs::remove_dir_all(&directory);
+}
