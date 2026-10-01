@@ -322,8 +322,30 @@ fn style_argument(style: &Expr) -> Expr {
     }
 }
 
+/// Route the built-in character conversions through variants that write
+/// bit values as 1 and 0.
+fn bit_text(expr: &mut Expr) {
+    if let Expr::Function(function) = expr {
+        let name = function.name.to_string();
+        if matches!(
+            name.as_str(),
+            "__msduck_cast_varchar"
+                | "__msduck_try_varchar"
+                | "__msduck_cast_char"
+                | "__msduck_try_char"
+                | "__msduck_cast_nvarchar"
+                | "__msduck_try_nvarchar"
+        ) {
+            function.name = sqlparser::ast::ObjectName::from(vec![sqlparser::ast::Ident::new(
+                name.replacen("__msduck_", "__msduck_conversion_", 1),
+            )]);
+        }
+    }
+}
+
 /// Lower a styled conversion the built-in rules left in place.
 pub(super) fn lower(expr: &mut Expr) -> Result<(), String> {
+    bit_text(expr);
     let Expr::Convert {
         is_try,
         expr: value,

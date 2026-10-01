@@ -797,6 +797,31 @@ pub(super) fn register(db: &duckdb::Connection) -> anyhow::Result<()> {
     db.register_scalar_function::<Collation<1>>("__msduck_collation_key")?;
     db.register_scalar_function::<Collation<2>>("__msduck_collation_upper")?;
     db.register_scalar_function::<Format>("__msduck_format")?;
+    // The built-in character conversions with bit values as 1 and 0 (DuckDB
+    // casts BOOLEAN to 'true' and 'false'). typeof() is resolved when the
+    // macro binds, and CASE evaluates the value once per row.
+    let text = "CASE WHEN typeof(value) = 'BOOLEAN' THEN CASE {cast}(value AS VARCHAR) WHEN 'true' THEN '1' WHEN 'false' THEN '0' END ELSE {cast}(value AS VARCHAR) END";
+    for (family, flags) in [
+        (
+            "varchar",
+            "CASE WHEN typeof(value) IN ('TINYINT','UTINYINT','SMALLINT','INTEGER') THEN 1 WHEN starts_with(typeof(value),'DECIMAL(') THEN 3 WHEN typeof(value) IN ('BIGINT','FLOAT','DOUBLE') THEN 2 ELSE 0 END",
+        ),
+        (
+            "char",
+            "CASE WHEN typeof(value) IN ('TINYINT','UTINYINT','SMALLINT','INTEGER') THEN 1 WHEN starts_with(typeof(value),'DECIMAL(') THEN 3 WHEN typeof(value) IN ('BIGINT','FLOAT','DOUBLE') THEN 2 ELSE 0 END",
+        ),
+        (
+            "nvarchar",
+            "CASE WHEN starts_with(typeof(value),'DECIMAL(') THEN 2 WHEN typeof(value) IN ('TINYINT','UTINYINT','SMALLINT','INTEGER','BIGINT','FLOAT','DOUBLE') THEN 1 ELSE 0 END",
+        ),
+    ] {
+        for (mode, cast, limit) in [("cast", "CAST", ""), ("try", "TRY_CAST", "try_")] {
+            let text = text.replace("{cast}", cast);
+            db.execute_batch(&format!(
+                "CREATE OR REPLACE MACRO main.__msduck_conversion_{mode}_{family}(value, width) AS __msduck_{family}_{limit}limit({text}, width, {flags})"
+            ))?;
+        }
+    }
     db.execute_batch(
         "CREATE OR REPLACE MACRO main.__msduck_conversion_variant(tag, value, text) AS
         CASE WHEN tag IS NULL THEN NULL ELSE struct_pack(

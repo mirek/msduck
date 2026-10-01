@@ -144,3 +144,9 @@ test('styled conversions bind RPC parameters', async t => {
   assert.equal(rows[0][4], '1,234.00')
   assert.match(rows[0][0], /^2024-01-02 03:04:05\.123/)
 })
+
+test('bit converts to 1 and 0 text', async t => {
+  const connection = await start(t)
+  const { rows } = await query(connection, 'SELECT CONVERT(nvarchar, CAST(1 AS bit)), CAST(CAST(0 AS bit) AS varchar), CONVERT(varchar(1), @b)', [['b', TYPES.Bit, true]])
+  assert.deepEqual(rows, [['1', '0', '1']])
+})

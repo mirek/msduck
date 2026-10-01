@@ -101,6 +101,9 @@ binary styles, 241 (295 for smalldatetime) for text that does not parse, 242
 for an out-of-range field and 8114 for invalid hexadecimal. TRY_CONVERT
 returns NULL instead.
 
+Unstyled CAST and CONVERT of bit values to character types give `1` and
+`0` (DuckDB writes BOOLEAN as `true` and `false`).
+
 ## FORMAT
 
 FORMAT becomes a native function typed nvarchar(4000), implementing .NET

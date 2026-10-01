@@ -425,3 +425,45 @@ async fn properties_are_typed_like_sql_server() {
     let last = rows.last().unwrap();
     assert_eq!(last[0].get::<i64, _>(0), Some(3));
 }
+
+#[tokio::test]
+async fn bit_converts_to_one_and_zero_text() {
+    let server = Server::open(":memory:").unwrap();
+    let mut client = connect(&server).await;
+    assert_eq!(
+        texts(
+            &mut client,
+            "SELECT CONVERT(nvarchar, CAST(1 AS bit)), CONVERT(varchar(5), CAST(0 AS bit)), CAST(CAST(1 AS bit) AS varchar), CAST(CAST(1 AS bit) AS char(3)), TRY_CAST(CAST(0 AS bit) AS nvarchar(2)), CAST(CAST(NULL AS bit) AS varchar(2))"
+        )
+        .await,
+        vec![
+            Some("1".into()),
+            Some("0".into()),
+            Some("1".into()),
+            Some("1  ".into()),
+            Some("0".into()),
+            None
+        ]
+    );
+    client
+        .simple_query("CREATE TABLE dbo.flags (b bit); INSERT dbo.flags VALUES (1),(0)")
+        .await
+        .unwrap()
+        .into_results()
+        .await
+        .unwrap();
+    let rows = client
+        .simple_query(
+            "SELECT CAST(b AS varchar(3)), CONVERT(nvarchar(3), b) FROM dbo.flags ORDER BY b DESC",
+        )
+        .await
+        .unwrap()
+        .into_first_result()
+        .await
+        .unwrap();
+    let got: Vec<(&str, &str)> = rows
+        .iter()
+        .map(|r| (r.get::<&str, _>(0).unwrap(), r.get::<&str, _>(1).unwrap()))
+        .collect();
+    assert_eq!(got, [("1", "1"), ("0", "0")]);
+}
