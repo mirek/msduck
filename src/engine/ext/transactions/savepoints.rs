@@ -213,12 +213,16 @@ pub(super) fn before_statement(session: &mut Session, statement: &Statement) -> 
         return Ok(());
     }
     match statement {
-        Statement::Query(query) => {
-            if selects_into(&query.body) {
-                return Err(unsupported("SELECT INTO"));
-            }
-            Ok(())
-        }
+        Statement::Query(query) => match query.body.as_ref() {
+            // `WITH ... INSERT/UPDATE/DELETE/MERGE` writes like the inner
+            // statement.
+            SetExpr::Insert(inner)
+            | SetExpr::Update(inner)
+            | SetExpr::Delete(inner)
+            | SetExpr::Merge(inner) => before_statement(session, inner),
+            body if selects_into(body) => Err(unsupported("SELECT INTO")),
+            _ => Ok(()),
+        },
         Statement::Insert(_)
         | Statement::Update(_)
         | Statement::Delete(_)
@@ -547,6 +551,10 @@ fn restore(session: &mut Session, index: usize) -> Result<()> {
     Ok(())
 }
 
+/// Aliases of the live table and its copy in restore statements.
+const LIVE: &str = "__msduck_live";
+const SAVED: &str = "__msduck_saved";
+
 /// The columns a restore writes and the primary key that matches rows.
 struct Shape {
     /// Stored (not computed) columns, in table order.
@@ -606,6 +614,18 @@ impl Shape {
             .join(" AND ")
     }
 
+    /// A whole stored row as one comparable value, whatever its column
+    /// names (a column may be named like the alias) or collations.
+    fn row(&self, alias: &str) -> String {
+        let values = self
+            .columns
+            .iter()
+            .map(|column| format!("to_json({alias}.{})", quote(column)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("to_json([{values}])")
+    }
+
     /// Delete the rows that are not in the copy: by key, or the surplus of
     /// each distinct whole row.
     fn delete(&self, table: &Table, copy: &str) -> String {
@@ -613,12 +633,14 @@ impl Shape {
         let copy = format!("temp.main.{}", quote(copy));
         if self.key.is_empty() {
             format!(
-                "DELETE FROM {target} WHERE rowid IN (SELECT r FROM (SELECT t.rowid AS r, to_json(t) AS k, row_number() OVER (PARTITION BY to_json(t) ORDER BY t.rowid) AS n FROM {target} t) live LEFT JOIN (SELECT to_json(c) AS k, count(*) AS m FROM {copy} c GROUP BY 1) saved USING (k) WHERE live.n > coalesce(saved.m, 0))"
+                "DELETE FROM {target} WHERE rowid IN (SELECT __msduck_r FROM (SELECT {LIVE}.rowid AS __msduck_r, {live_row} AS __msduck_k, row_number() OVER (PARTITION BY {live_row} ORDER BY {LIVE}.rowid) AS __msduck_n FROM {target} {LIVE}) l LEFT JOIN (SELECT {saved_row} AS __msduck_k, count(*) AS __msduck_m FROM {copy} {SAVED} GROUP BY 1) s USING (__msduck_k) WHERE l.__msduck_n > coalesce(s.__msduck_m, 0))",
+                live_row = self.row(LIVE),
+                saved_row = self.row(SAVED),
             )
         } else {
             format!(
-                "DELETE FROM {target} WHERE rowid IN (SELECT t.rowid FROM {target} t WHERE NOT EXISTS (SELECT 1 FROM {copy} c WHERE {}))",
-                self.key_match("c", "t")
+                "DELETE FROM {target} WHERE rowid IN (SELECT {LIVE}.rowid FROM {target} {LIVE} WHERE NOT EXISTS (SELECT 1 FROM {copy} {SAVED} WHERE {}))",
+                self.key_match(SAVED, LIVE)
             )
         }
     }
@@ -637,12 +659,14 @@ impl Shape {
         let copy = format!("temp.main.{}", quote(copy));
         let assignments = values
             .iter()
-            .map(|column| format!("{q} = d.{q}", q = quote(column)))
+            .map(|column| format!("{q} = __msduck_d.{q}", q = quote(column)))
             .collect::<Vec<_>>()
             .join(", ");
         Some(format!(
-            "UPDATE {target} SET {assignments} FROM (SELECT t.rowid AS __msduck_rid, c.* FROM {target} t JOIN {copy} c ON {} WHERE to_json(t) IS DISTINCT FROM to_json(c)) d WHERE {target}.rowid = d.__msduck_rid",
-            self.key_match("c", "t")
+            "UPDATE {target} SET {assignments} FROM (SELECT {LIVE}.rowid AS __msduck_rid, {SAVED}.* FROM {target} {LIVE} JOIN {copy} {SAVED} ON {} WHERE {} IS DISTINCT FROM {}) __msduck_d WHERE {target}.rowid = __msduck_d.__msduck_rid",
+            self.key_match(SAVED, LIVE),
+            self.row(LIVE),
+            self.row(SAVED),
         ))
     }
 
@@ -653,14 +677,16 @@ impl Shape {
         let columns = self.list("");
         if self.key.is_empty() {
             format!(
-                "INSERT INTO {target} ({columns}) SELECT {} FROM (SELECT c.*, to_json(c) AS __msduck_k, row_number() OVER (PARTITION BY to_json(c)) AS __msduck_n FROM {copy} c) saved LEFT JOIN (SELECT to_json(t) AS __msduck_k, count(*) AS __msduck_m FROM {target} t GROUP BY 1) live USING (__msduck_k) WHERE saved.__msduck_n > coalesce(live.__msduck_m, 0)",
-                self.list("saved.")
+                "INSERT INTO {target} ({columns}) SELECT {} FROM (SELECT {SAVED}.*, {saved_row} AS __msduck_k, row_number() OVER (PARTITION BY {saved_row}) AS __msduck_n FROM {copy} {SAVED}) s LEFT JOIN (SELECT {live_row} AS __msduck_k, count(*) AS __msduck_m FROM {target} {LIVE} GROUP BY 1) l USING (__msduck_k) WHERE s.__msduck_n > coalesce(l.__msduck_m, 0)",
+                self.list("s."),
+                live_row = self.row(LIVE),
+                saved_row = self.row(SAVED),
             )
         } else {
             format!(
-                "INSERT INTO {target} ({columns}) SELECT {} FROM {copy} c WHERE NOT EXISTS (SELECT 1 FROM {target} t WHERE {})",
-                self.list("c."),
-                self.key_match("t", "c")
+                "INSERT INTO {target} ({columns}) SELECT {} FROM {copy} {SAVED} WHERE NOT EXISTS (SELECT 1 FROM {target} {LIVE} WHERE {})",
+                self.list(&format!("{SAVED}.")),
+                self.key_match(LIVE, SAVED)
             )
         }
     }
