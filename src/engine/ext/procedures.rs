@@ -28,6 +28,16 @@ struct Frame {
     name: Option<String>,
     /// A caller's CATCH handler receives this frame's errors.
     in_try: bool,
+    /// Nesting levels the call adds: sp_executesql counts itself and its
+    /// batch (captured `@@NESTLEVEL` 2).
+    levels: usize,
+}
+
+impl State {
+    /// `@@NESTLEVEL`.
+    fn level(&self) -> usize {
+        self.frames.iter().map(|frame| frame.levels).sum()
+    }
 }
 
 #[derive(Default)]
@@ -56,6 +66,10 @@ impl Feature for Hooks {
         parameters: &HashMap<String, Parameter>,
         rpc: bool,
     ) -> Option<(Vec<u8>, bool)> {
+        // ERROR_PROCEDURE() refers to errors caught in this batch.
+        if session.ext.procedures.frames.is_empty() {
+            session.ext.procedures.error_procedure = None;
+        }
         if let Some(definition) = msduck_sql::dialect::ext::procedures::definition(sql) {
             // sp_executesql prefixes its parameter declarations, so the
             // definition no longer starts the batch (captured: 156).
@@ -88,6 +102,11 @@ impl Feature for Hooks {
         statement: &mut Statement,
         _parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Option<Execution>> {
+        // A batch statement outside CATCH starts a new error context, so
+        // ERROR_PROCEDURE() cannot name a procedure from an earlier error.
+        if session.ext.procedures.frames.is_empty() && session.caught_error.is_none() {
+            session.ext.procedures.error_procedure = None;
+        }
         match statement {
             Statement::DropProcedure {
                 if_exists,
@@ -110,7 +129,7 @@ impl Feature for Hooks {
                 if ident.quote_style.is_none()
                     && ident.value.eq_ignore_ascii_case("@@NESTLEVEL") =>
             {
-                *expr = msduck_sql::expr::number(session.ext.procedures.frames.len());
+                *expr = msduck_sql::expr::number(session.ext.procedures.level());
             }
             Expr::Function(function)
                 if function

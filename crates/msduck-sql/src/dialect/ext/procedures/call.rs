@@ -423,7 +423,8 @@ fn parse_execute(parser: &mut Parser) -> Result<Statement, ParserError> {
     if starts_argument(&parser.peek_token().token) {
         loop {
             let argument = parse_argument(parser)?;
-            let is_named = matches!(argument, Expr::BinaryOp { .. });
+            let is_named = matches!(&argument, Expr::BinaryOp { left, op: BinaryOperator::Eq, .. }
+                if matches!(left.as_ref(), Expr::Identifier(id) if id.value.starts_with('@')));
             if named && !is_named {
                 return Err(ParserError::ParserError(super::named_then_positional(
                     parameters.len() + 1,
@@ -433,6 +434,34 @@ fn parse_execute(parser: &mut Parser) -> Result<Statement, ParserError> {
             parameters.push(argument);
             if !parser.consume_token(&Token::Comma) {
                 break;
+            }
+        }
+    }
+    // Arguments are constants and variables: an expression is a syntax
+    // error while compiling the batch. sp_set_session_context's binder
+    // reports its own.
+    let set_context = name.as_ref().is_some_and(|name| {
+        name.0.last().is_some_and(|part| {
+            part.as_ident()
+                .is_some_and(|ident| ident.value.eq_ignore_ascii_case("sp_set_session_context"))
+        })
+    });
+    if !set_context {
+        for argument in &parameters {
+            let value = match argument {
+                Expr::BinaryOp {
+                    left,
+                    op: BinaryOperator::Eq,
+                    right,
+                } if matches!(left.as_ref(), Expr::Identifier(id) if id.value.starts_with('@')) => {
+                    right.as_ref()
+                }
+                value => value,
+            };
+            if let Expr::BinaryOp { op, .. } = value {
+                return Err(ParserError::ParserError(format!(
+                    "Incorrect syntax near '{op}'."
+                )));
             }
         }
     }
@@ -497,7 +526,7 @@ fn parse_argument(parser: &mut Parser) -> Result<Expr, ParserError> {
         };
     let token = parser.next_token();
     let mut variable = false;
-    let value = match &token.token {
+    let primary = match &token.token {
         Token::Word(word) if word.quote_style.is_none() && word.value.starts_with('@') => {
             variable = true;
             Expr::Identifier(Ident::new(word.value.clone()))
@@ -534,6 +563,26 @@ fn parse_argument(parser: &mut Parser) -> Result<Expr, ParserError> {
         }
         other => return Err(syntax(other)),
     };
+    // SQL Server accepts only constants and variables. An operator after one
+    // still parses, so the callee reports it (102) like
+    // sp_set_session_context's binder does.
+    let mut value = primary;
+    while matches!(
+        parser.peek_token().token,
+        Token::Plus
+            | Token::Minus
+            | Token::Mul
+            | Token::Div
+            | Token::Mod
+            | Token::Ampersand
+            | Token::Pipe
+            | Token::Caret
+            | Token::StringConcat
+    ) {
+        variable = false;
+        let precedence = parser.get_next_precedence()?;
+        value = parser.parse_infix(value, precedence)?;
+    }
     let next = parser.peek_token().token;
     let value = if is_word(&next, "OUTPUT") || is_word(&next, "OUT") {
         parser.next_token();
@@ -673,6 +722,8 @@ mod tests {
             ("EXEC p 1 OUTPUT", 179),
             ("SELECT 1; CREATE PROCEDURE p AS SELECT 1", 111),
             ("SELECT 1; CREATE OR ALTER PROC p AS SELECT 1", 111),
+            ("EXEC p 1 + 1, 2", 102),
+            ("EXEC p @a = 1 + 1", 102),
         ] {
             let error = crate::batch::parse(sql).unwrap_err();
             let error = error
