@@ -1,4 +1,5 @@
 {
+ "image": "mcr.microsoft.com/mssql/server:2022-latest",
  "version": "16.0.4236.2",
  "groups": [
   {
@@ -1233,6 +1234,105 @@
         ]
        ]
       ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE ck_a(id int)",
+     "result": {
+      "errors": [
+       {
+        "number": 2714,
+        "state": 6,
+        "class": 16,
+        "message": "There is already an object named 'ck_a' in the database."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE VIEW ck_b AS SELECT 1 AS one",
+     "result": {
+      "errors": [
+       {
+        "number": 2714,
+        "state": 3,
+        "class": 16,
+        "message": "There is already an object named 'ck_b' in the database."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT name, type FROM sys.objects WHERE name IN ('ck_a', 'ck_b') ORDER BY name",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         "ck_a",
+         "C "
+        ],
+        [
+         "ck_b",
+         "C "
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE k(a int NOT NULL, b int NOT NULL); INSERT k VALUES (1,1),(1,2)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE k ADD PRIMARY KEY NONCLUSTERED (a, b DESC)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT type FROM sys.key_constraints WHERE parent_object_id = OBJECT_ID('k')",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         "PK"
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "INSERT k VALUES (1,1)",
+     "result": {
+      "errors": [
+       {
+        "number": 2627,
+        "state": 1,
+        "class": 14,
+        "message": "Violation of PRIMARY KEY constraint 'PK__k__2792E7E8F6817AA5'. Cannot insert duplicate key in object 'dbo.k'. The duplicate key value is (1, 1)."
+       }
+      ],
+      "info": [
+       {
+        "number": 3621,
+        "message": "The statement has been terminated."
+       }
+      ],
+      "sets": []
      }
     },
     {

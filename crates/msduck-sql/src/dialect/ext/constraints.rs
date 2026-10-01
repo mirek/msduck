@@ -531,7 +531,12 @@ fn parse_body(parser: &mut Parser, table: ObjectName) -> Result<Alter, ParserErr
                 AddItem::Constraint(_) => true,
                 AddItem::Column(column) => column_has_constraints(column),
             });
-        if !claimed {
+        // A lone unnamed PRIMARY KEY parses natively (the key index syntax
+        // tests pin that shape); `owns` and the runtime take it from there.
+        let native_key = with_check.is_none()
+            && matches!(items.as_slice(), [AddItem::Constraint(constraint)]
+                if constraint.name.is_none() && matches!(constraint.kind, Kind::PrimaryKey(_)));
+        if !claimed || native_key {
             return Err(decline());
         }
         Action::Add(items)
@@ -608,6 +613,43 @@ pub fn parse(parser: &mut Parser) -> Option<Result<Statement, ParserError>> {
 /// carriers, which are always owned.
 pub fn owns(_statement: &Statement) -> bool {
     false
+}
+
+/// The key columns of `ALTER TABLE t ADD PRIMARY KEY (columns)` as the
+/// built-in parser reads it: one added column named `PRIMARY` of type
+/// `KEY(columns)`.
+pub fn native_primary_key(alter: &AlterTable) -> Option<Vec<Ident>> {
+    let [AlterTableOperation::AddColumn { column_def, .. }] = alter.operations.as_slice() else {
+        return None;
+    };
+    if column_def.name.quote_style.is_some()
+        || !column_def.name.value.eq_ignore_ascii_case("PRIMARY")
+        || !column_def.options.is_empty()
+    {
+        return None;
+    }
+    let DataType::Custom(name, modifiers) = &column_def.data_type else {
+        return None;
+    };
+    if name.to_string().to_ascii_uppercase() != "KEY" || modifiers.is_empty() {
+        return None;
+    }
+    // Modifiers are the tokens between the parentheses: ASC and DESC
+    // follow their column.
+    modifiers
+        .iter()
+        .filter(|modifier| {
+            !modifier.eq_ignore_ascii_case("ASC") && !modifier.eq_ignore_ascii_case("DESC")
+        })
+        .map(|modifier| {
+            let mut parser = Parser::new(&crate::dialect::ServerDialect)
+                .try_with_sql(modifier)
+                .ok()?;
+            let column = parser.parse_identifier().ok()?;
+            let _ = take_word(&mut parser, "ASC") || take_word(&mut parser, "DESC");
+            (parser.peek_token_ref().token == Token::EOF).then_some(column)
+        })
+        .collect()
 }
 
 /// The claimed statement carried by `statement`, parsed again from its

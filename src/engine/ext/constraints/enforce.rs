@@ -143,10 +143,15 @@ fn violation(session: &Session, constraint: &Constraint) -> Result<(Vec<String>,
     })
 }
 
-fn violations_query(session: &Session, constraint: &Constraint) -> Result<String> {
+fn violations_query(
+    session: &Session,
+    constraint: &Constraint,
+    restriction: Option<String>,
+) -> Result<String> {
     let (columns, condition) = violation(session, constraint)?;
+    let restriction = restriction.map_or(String::new(), |r| format!(" AND {r}"));
     Ok(format!(
-        "SELECT {} FROM {} __msduck_c WHERE {condition}",
+        "SELECT {} FROM {} __msduck_c WHERE ({condition}){restriction}",
         columns.join(","),
         constraint.table.sql()
     ))
@@ -160,7 +165,7 @@ fn exists(session: &Session, sql: &str) -> Result<bool> {
 
 /// Whether existing rows violate `constraint` (WITH CHECK validation).
 pub(crate) fn violates(session: &Session, constraint: &Constraint) -> Result<Option<()>> {
-    let sql = violations_query(session, constraint)?;
+    let sql = violations_query(session, constraint, None)?;
     Ok(exists(session, &sql)?.then_some(()))
 }
 
@@ -231,9 +236,37 @@ struct Run<'a> {
     events: HashMap<i32, HashSet<Event>>,
     /// Foreign keys whose actions wrote referencing rows.
     acted: HashSet<i32>,
+    /// Tables written by referential actions.
+    action_tables: HashSet<i32>,
+    /// Columns the statement's UPDATE assigns, when known.
+    assigned: Option<HashSet<String>>,
+    /// The INSERT target and its largest row id before the statement: rows
+    /// above it are the new ones.
+    inserted: Option<(Table, i64)>,
 }
 
 impl Run<'_> {
+    /// Whether `columns` of `table` may have changed. Only referential
+    /// actions and the assigned columns of the statement's UPDATE change
+    /// values; constraints over other columns keep their results.
+    fn may_change(&self, table: i32, columns: &[String]) -> bool {
+        match &self.assigned {
+            Some(assigned) if !self.action_tables.contains(&table) => columns
+                .iter()
+                .any(|column| assigned.contains(&column.to_lowercase())),
+            _ => true,
+        }
+    }
+
+    /// A condition restricting the rows of `table` to check, if only some can
+    /// be new.
+    fn restriction(&self, table: i32) -> Option<String> {
+        self.inserted
+            .as_ref()
+            .filter(|(target, _)| target.id == table && !self.action_tables.contains(&table))
+            .map(|(_, rowid)| format!("__msduck_c.rowid > {rowid}"))
+    }
+
     fn keys_of(&self, table: i32, columns: &[String]) -> Option<&Keys> {
         let wanted: Vec<String> = columns.iter().map(|c| c.to_lowercase()).collect();
         self.keys
@@ -242,8 +275,9 @@ impl Run<'_> {
     }
 
     /// Record the referenced key values of every enabled foreign key into
-    /// `table`, before the table changes.
-    fn snapshot_keys(&mut self, session: &Session, table: &Table) -> Result<()> {
+    /// `table`, before the table changes. Keys the statement cannot change
+    /// are skipped unless `all`.
+    fn snapshot_keys(&mut self, session: &Session, table: &Table, all: bool) -> Result<()> {
         for constraint in self.constraints {
             if constraint.kind != Type::Foreign
                 || !constraint.enabled()
@@ -251,6 +285,7 @@ impl Run<'_> {
                 || self
                     .keys_of(table.id, &constraint.referenced_columns)
                     .is_some()
+                || (!all && !self.may_change(table.id, &constraint.referenced_columns))
             {
                 continue;
             }
@@ -542,6 +577,19 @@ fn map_update(
     Ok(pairs)
 }
 
+/// Lower-cased columns a top-level UPDATE assigns; None when unknown.
+fn assigned_columns(statement: &Statement) -> Option<HashSet<String>> {
+    let (update, _) = update_of(statement)?;
+    let mut columns = HashSet::new();
+    for assignment in &update.assignments {
+        let AssignmentTarget::ColumnName(name) = &assignment.target else {
+            return None;
+        };
+        columns.insert(name.0.last()?.as_ident()?.value.to_lowercase());
+    }
+    Some(columns)
+}
+
 fn assigns_any(statement: &Statement, columns: &[String]) -> bool {
     let Some((update, _)) = update_of(statement) else {
         return true;
@@ -664,6 +712,9 @@ pub(crate) fn dml(
         untrusted: HashMap::new(),
         events: HashMap::new(),
         acted: HashSet::new(),
+        action_tables: HashSet::new(),
+        assigned: assigned_columns(statement),
+        inserted: None,
     };
     let result = execute(
         session,
@@ -716,6 +767,12 @@ impl From<anyhow::Error> for Failure {
     }
 }
 
+impl From<duckdb::Error> for Failure {
+    fn from(error: duckdb::Error) -> Self {
+        Self::Engine(error.into())
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn execute(
     session: &mut Session,
@@ -729,17 +786,35 @@ fn execute(
 ) -> Result<Execution, Failure> {
     let event = Event::of(verb);
     let constraints = run.constraints;
+    let target = match statement {
+        Statement::Insert(insert) if verb == Verb::Insert => match &insert.table {
+            TableObject::TableName(name) => resolve(session, std::slice::from_ref(name))?
+                .into_iter()
+                .next(),
+            _ => None,
+        },
+        _ => None,
+    };
+    if let Some(table) = target {
+        let rowid: i64 = session.db.query_row(
+            &format!("SELECT coalesce(max(rowid),-1) FROM {}", table.sql()),
+            [],
+            |row| row.get(0),
+        )?;
+        run.inserted = Some((table, rowid));
+    }
     // Old violations of untrusted constraints stay acceptable.
+    // An INSERT checks only its new rows, so it needs no record of them.
     for constraint in constraints {
-        if constraint.untrusted && relevant(constraint, scope) {
-            let query = violations_query(session, constraint)?;
+        if constraint.untrusted && run.inserted.is_none() && relevant(constraint, scope) {
+            let query = violations_query(session, constraint, None)?;
             let name = run.scratch.create(session, &query)?;
             run.untrusted.insert(constraint.id, name);
         }
     }
     if event.removes() {
         for table in touched {
-            run.snapshot_keys(session, table)?;
+            run.snapshot_keys(session, table, false)?;
         }
     }
     // ON UPDATE CASCADE needs each updated row's old and new key.
@@ -777,35 +852,26 @@ fn execute(
             });
         }
     }
-    let undo = if verb == Verb::Insert && !transaction.owned {
-        match statement {
-            Statement::Insert(insert) if output_targets(statement).is_empty() => {
-                match &insert.table {
-                    TableObject::TableName(name) => resolve(session, std::slice::from_ref(name))?
-                        .into_iter()
-                        .next()
-                        .map(|table| -> Result<(Table, i64)> {
-                            let rowid: i64 = session.db.query_row(
-                                &format!("SELECT coalesce(max(rowid),-1) FROM {}", table.sql()),
-                                [],
-                                |row| row.get(0),
-                            )?;
-                            Ok((table, rowid))
-                        })
-                        .transpose()?,
-                    _ => None,
-                }
-            }
-            _ => None,
-        }
-    } else {
-        None
-    };
+    // Rows above the old largest row id are this INSERT's: deleting them
+    // undoes it inside the caller's transaction.
+    let undo = run
+        .inserted
+        .clone()
+        .filter(|_| !transaction.owned && output_targets(statement).is_empty());
     let execution = ext::reenter(session, "constraints", |session| {
         session.execute(statement.clone(), parameters)
     })?;
-    for table in touched {
-        run.written(table.id, event);
+    // An INSERT writes only its target; other named tables are read.
+    match &run.inserted {
+        Some((target, _)) => {
+            let id = target.id;
+            run.written(id, event);
+        }
+        None => {
+            for table in touched {
+                run.written(table.id, event);
+            }
+        }
     }
     if event.removes() {
         actions(session, run, touched, event)?;
@@ -924,7 +990,7 @@ fn actions(
                     .map(|(column, (_, new))| format!("{} = m.{new}", quote(column)))
                     .collect::<Vec<_>>()
                     .join(", ");
-                run.snapshot_keys(session, &child)?;
+                run.snapshot_keys(session, &child, true)?;
                 session.db.execute_batch(&format!(
                     "UPDATE {} SET {assignments} FROM {} m WHERE {matched} AND ({changed})",
                     child.sql(),
@@ -941,6 +1007,7 @@ fn actions(
                         .collect(),
                 });
                 run.acted.insert(constraint.id);
+                run.action_tables.insert(child.id);
                 run.written(child.id, Event::Update);
                 queue.push_back((child.id, Event::Update));
                 continue;
@@ -956,13 +1023,14 @@ fn actions(
                     constraint.name
                 );
             }
-            run.snapshot_keys(session, &child)?;
+            run.snapshot_keys(session, &child, true)?;
             let condition = matches_removed(constraint, &removed);
             match action {
                 Referential::Cascade => {
                     session
                         .db
                         .execute_batch(&format!("DELETE FROM {} WHERE {condition}", child.sql()))?;
+                    run.action_tables.insert(child.id);
                     run.written(child.id, Event::Delete);
                     queue.push_back((child.id, Event::Delete));
                 }
@@ -973,6 +1041,7 @@ fn actions(
                         set_list(constraint, |_| "NULL".into())
                     ))?;
                     run.acted.insert(constraint.id);
+                    run.action_tables.insert(child.id);
                     run.written(child.id, Event::Update);
                     queue.push_back((child.id, Event::Update));
                 }
@@ -987,6 +1056,7 @@ fn actions(
                             .unwrap_or_else(|| "NULL".into()))
                     ))?;
                     run.acted.insert(constraint.id);
+                    run.action_tables.insert(child.id);
                     run.written(child.id, Event::Update);
                     queue.push_back((child.id, Event::Update));
                 }
@@ -1011,11 +1081,12 @@ fn validate(
             if constraint.kind != pass || !constraint.enabled() {
                 continue;
             }
-            let child_written = run.wrote(constraint.table.id, Event::writes);
-            let parent_changed = constraint
-                .referenced
-                .as_ref()
-                .is_some_and(|r| run.wrote(r.id, Event::removes));
+            let child_written = run.wrote(constraint.table.id, Event::writes)
+                && run.may_change(constraint.table.id, &constraint.columns);
+            let parent_changed = constraint.referenced.as_ref().is_some_and(|r| {
+                run.wrote(r.id, Event::removes)
+                    && run.may_change(r.id, &constraint.referenced_columns)
+            });
             let affected = match pass {
                 Type::Check => child_written,
                 _ => child_written || parent_changed,
@@ -1023,8 +1094,16 @@ fn validate(
             if !affected {
                 continue;
             }
-            let mut query = violations_query(session, constraint)?;
-            if let Some(old) = run.untrusted.get(&constraint.id) {
+            let restriction = if parent_changed {
+                None
+            } else {
+                run.restriction(constraint.table.id)
+            };
+            // Old violations of untrusted constraints stay acceptable; when
+            // only new rows are checked, every violation is new.
+            let tolerated = restriction.is_none();
+            let mut query = violations_query(session, constraint, restriction)?;
+            if let Some(old) = run.untrusted.get(&constraint.id).filter(|_| tolerated) {
                 query = format!("{query} EXCEPT ALL SELECT * FROM temp.main.{}", quote(old));
             }
             if !exists(session, &query)? {

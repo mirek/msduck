@@ -47,9 +47,10 @@ fn table_constraints_are_claimed() {
     );
     assert!(matches!(&first(&alter).kind, Kind::Unique(columns) if columns.len() == 2));
 
-    let alter = claimed("ALTER TABLE items ADD PRIMARY KEY CLUSTERED (id)");
-    assert!(first(&alter).name.is_none());
+    let alter = claimed("ALTER TABLE items ADD CONSTRAINT pk PRIMARY KEY CLUSTERED (id)");
     assert!(matches!(first(&alter).kind, Kind::PrimaryKey(_)));
+    let alter = claimed("ALTER TABLE items WITH CHECK ADD PRIMARY KEY (id)");
+    assert!(first(&alter).name.is_none());
 
     let alter = claimed(
         "ALTER TABLE items WITH NOCHECK ADD CONSTRAINT fk_items FOREIGN KEY(parent_id) REFERENCES dbo.parent(id) ON UPDATE CASCADE ON DELETE SET NULL",
@@ -143,6 +144,28 @@ fn toggles_and_drops_are_claimed() {
     assert!(
         matches!(&alter.action, Action::Drop(items) if matches!(&items[0], DropItem::Constraint { .. }))
     );
+}
+
+#[test]
+fn a_lone_unnamed_primary_key_keeps_its_native_shape() {
+    // The built-in parser reads it as a column `PRIMARY` of type `KEY(a)`,
+    // which the key index syntax tests pin; `native_primary_key` recovers it.
+    let statements =
+        crate::batch::parse("ALTER TABLE T ADD PRIMARY KEY NONCLUSTERED (a, b DESC)").unwrap();
+    assert!(decode(&statements[0]).is_none());
+    let Statement::AlterTable(alter) = &statements[0] else {
+        panic!()
+    };
+    let columns = native_primary_key(alter).unwrap();
+    assert_eq!(
+        columns.iter().map(|c| c.value.as_str()).collect::<Vec<_>>(),
+        ["a", "b"]
+    );
+    let statements = crate::batch::parse("ALTER TABLE T ADD c INT NULL").unwrap();
+    let Statement::AlterTable(alter) = &statements[0] else {
+        panic!()
+    };
+    assert!(native_primary_key(alter).is_none());
 }
 
 #[test]

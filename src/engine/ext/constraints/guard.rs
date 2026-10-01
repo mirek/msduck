@@ -38,6 +38,32 @@ fn referenced_by_other(constraints: &[Constraint], table: i32, gone: &[i32]) -> 
     })
 }
 
+/// A table or view cannot take the name of a constraint or named default in
+/// its schema (2714); object names are unique per schema.
+pub(crate) fn new_object(session: &Session, name: &ObjectName, state: u8) -> Result<()> {
+    let Some((schema, object)) = catalog::split_name(name, &session.database.name) else {
+        return Ok(());
+    };
+    if object.starts_with('#') {
+        return Ok(());
+    }
+    let taken: bool = session.db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sys.objects o JOIN main.__msduck_schemas s USING(schema_id)
+         WHERE lower(s.name)=lower(?) AND lower(o.name)=lower(?) AND rtrim(o.type) IN ('C','F','PK','UQ','D'))",
+        [&schema, &object],
+        |row| row.get(0),
+    )?;
+    if taken {
+        return Err(errors::error(
+            2714,
+            state,
+            format!("There is already an object named '{object}' in the database."),
+        )
+        .into());
+    }
+    Ok(())
+}
+
 /// DROP TABLE: refuse referenced tables (3726), forget dropped constraints.
 pub(crate) fn drop_tables(
     session: &mut Session,

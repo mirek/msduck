@@ -77,7 +77,9 @@ level, including foreign keys with actions.
   primary key), 1776 (no matching key), 1778 and 1753 (type, length or scale
   mismatch), 1761 and 1762 (SET NULL / SET DEFAULT on columns that cannot
   take them), 2714 (name already used in the schema), 8168 (duplicate name
-  in one statement), 1046 (subquery in CHECK), 207 (unknown column in CHECK),
+  in one statement; CREATE TABLE and CREATE VIEW also fail with 2714 when a
+  constraint or named default already uses the name), 1046 (subquery in
+  CHECK), 207 (unknown column in CHECK),
   137 (variable), 4145 (non-boolean CHECK), 1752, 1754, 1781 and 128 for
   DEFAULT, 3728, 3733 and 3725 for DROP, 4917 and 11415 for CHECK/NOCHECK.
   As in SQL Server, these are followed by 1750, 3727 or 4916, and

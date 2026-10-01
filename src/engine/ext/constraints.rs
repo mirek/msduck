@@ -118,7 +118,15 @@ impl Feature for Hooks {
             return define::alter(session, alter?, parameters).map(Some);
         }
         match statement {
-            Statement::CreateTable(_) => define::create_table(session, statement, parameters),
+            Statement::CreateTable(create) => {
+                // SQL Server's states for tables and views.
+                guard::new_object(session, &create.name, 6)?;
+                define::create_table(session, statement, parameters)
+            }
+            Statement::CreateView(view) => {
+                guard::new_object(session, &view.name, 3)?;
+                Ok(None)
+            }
             Statement::Drop {
                 object_type: ObjectType::Table,
                 ..
@@ -127,7 +135,21 @@ impl Feature for Hooks {
                 guard::truncate(session, statement)?;
                 Ok(None)
             }
-            Statement::AlterTable(_) => {
+            Statement::AlterTable(alter) => {
+                use msduck_sql::dialect::ext::constraints as syntax;
+                if let Some(columns) = syntax::native_primary_key(alter) {
+                    let alter = syntax::Alter {
+                        table: alter.name.clone(),
+                        with_check: None,
+                        action: syntax::Action::Add(vec![syntax::AddItem::Constraint(Box::new(
+                            syntax::Constraint {
+                                name: None,
+                                kind: syntax::Kind::PrimaryKey(columns),
+                            },
+                        ))]),
+                    };
+                    return define::alter(session, alter, parameters).map(Some);
+                }
                 guard::alter_table(session, statement)?;
                 Ok(None)
             }
