@@ -3,6 +3,8 @@
 //! - `__msduck_catalog_definition(source)`: SQL Server's catalog text of a
 //!   stored T-SQL expression (`msduck_sql::dialect::ext::catalog::definition`),
 //!   or NULL when it is not known.
+//! - `__msduck_module_text(text)`: a module's stored text as SQL Server keeps
+//!   it (`ALTER` becomes `CREATE`).
 //! - `__msduck_type_shape(type)`: the `sys.types` name and the declared
 //!   length, precision and scale of a type as written, separated by `|`
 //!   (empty when the type's own value applies).
@@ -64,6 +66,13 @@ impl Function for Definition {
     }
 }
 
+struct Module;
+impl Function for Module {
+    fn apply(input: &str) -> Option<String> {
+        Some(definition::module_text(input))
+    }
+}
+
 struct Shape;
 impl Function for Shape {
     fn apply(input: &str) -> Option<String> {
@@ -104,6 +113,7 @@ fn data_type(text: &str) -> Option<DataType> {
 pub(super) fn register(db: &duckdb::Connection) -> anyhow::Result<()> {
     db.register_scalar_function::<Text<Definition>>("__msduck_catalog_definition")?;
     db.register_scalar_function::<Text<Shape>>("__msduck_type_shape")?;
+    db.register_scalar_function::<Text<Module>>("__msduck_module_text")?;
     Ok(())
 }
 

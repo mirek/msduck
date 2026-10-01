@@ -54,19 +54,9 @@ fn additive(op: &BinaryOperator) -> bool {
 impl VisitorMut for Associate {
     type Break = ();
     fn post_visit_expr(&mut self, expr: &mut Expr) -> std::ops::ControlFlow<()> {
-        loop {
-            let Expr::BinaryOp { op, right, .. } = expr else {
-                break;
-            };
-            if !additive(op) {
-                break;
-            }
-            let Expr::BinaryOp { op: inner, .. } = right.as_ref() else {
-                break;
-            };
-            if !additive(inner) {
-                break;
-            }
+        while matches!(expr, Expr::BinaryOp { op, right, .. }
+            if additive(op) && matches!(right.as_ref(), Expr::BinaryOp { op, .. } if additive(op)))
+        {
             let Expr::BinaryOp { left, op, right } =
                 std::mem::replace(expr, Expr::value(Value::Null))
             else {
@@ -99,13 +89,78 @@ pub fn source_definition(source: &str) -> Option<String> {
     definition(&parse_expression(source)?)
 }
 
+/// A module's text as SQL Server keeps it: the batch as written, with a
+/// leading `ALTER` replaced by `CREATE` and the `OR ALTER` of
+/// `CREATE OR ALTER` removed (its surrounding whitespace stays).
+pub fn module_text(text: &str) -> String {
+    let bytes = text.as_bytes();
+    // Skip whitespace and comments (block comments nest).
+    let skip = |mut at: usize| -> usize {
+        loop {
+            while at < bytes.len() && bytes[at].is_ascii_whitespace() {
+                at += 1;
+            }
+            if bytes[at..].starts_with(b"--") {
+                while at < bytes.len() && bytes[at] != b'\n' {
+                    at += 1;
+                }
+            } else if bytes[at..].starts_with(b"/*") {
+                let mut depth = 0usize;
+                while at < bytes.len() {
+                    if bytes[at..].starts_with(b"/*") {
+                        depth += 1;
+                        at += 2;
+                    } else if bytes[at..].starts_with(b"*/") {
+                        depth -= 1;
+                        at += 2;
+                        if depth == 0 {
+                            break;
+                        }
+                    } else {
+                        at += 1;
+                    }
+                }
+            } else {
+                return at;
+            }
+        }
+    };
+    let word = |at: usize, word: &str| {
+        bytes.len() >= at + word.len()
+            && bytes[at..at + word.len()].eq_ignore_ascii_case(word.as_bytes())
+            && bytes
+                .get(at + word.len())
+                .is_none_or(|next| !(next.is_ascii_alphanumeric() || *next == b'_'))
+    };
+    let first = skip(0);
+    if word(first, "ALTER") {
+        return format!("{}CREATE{}", &text[..first], &text[first + 5..]);
+    }
+    if word(first, "CREATE") {
+        let or = skip(first + 6);
+        if word(or, "OR") {
+            let alter = skip(or + 2);
+            if word(alter, "ALTER") {
+                return format!(
+                    "{}{}{}",
+                    &text[..or],
+                    &text[or + 2..alter],
+                    &text[alter + 5..]
+                );
+            }
+        }
+    }
+    text.to_owned()
+}
+
 /// Parse a scalar expression written in T-SQL.
 pub fn parse_expression(source: &str) -> Option<Expr> {
     if source.len() > 1 << 20 {
         return None;
     }
-    // Parenthesized, so that `a = b` is not read as a column alias.
-    let mut statements = crate::batch::parse(&format!("SELECT ({source})")).ok()?;
+    // Parenthesized, so that `a = b` is not read as a column alias, and
+    // as written: `CAST(x AS VARCHAR)` keeps its missing length.
+    let mut statements = super::declarations::parse(&format!("SELECT ({source})"))?;
     if statements.len() != 1 {
         return None;
     }
@@ -116,7 +171,7 @@ pub fn parse_expression(source: &str) -> Option<Expr> {
         return None;
     };
     let mut select = *select;
-    if select.projection.len() != 1 || select.from.len() != 0 {
+    if select.projection.len() != 1 || !select.from.is_empty() {
         return None;
     }
     match select.projection.remove(0) {
@@ -1083,6 +1138,34 @@ mod tests {
         checked += named(v1, "setup default definitions", "default definitions");
         checked += named(v1, "setup computed definitions", "computed definitions");
         assert!(checked > 150, "{checked}");
+    }
+
+    #[test]
+    fn module_text_is_kept_as_created() {
+        for (text, expected) in [
+            (
+                "ALTER PROCEDURE dbo.ap AS SELECT 2",
+                "CREATE PROCEDURE dbo.ap AS SELECT 2",
+            ),
+            (
+                "CREATE OR ALTER PROCEDURE dbo.ap AS SELECT 3",
+                "CREATE   PROCEDURE dbo.ap AS SELECT 3",
+            ),
+            (
+                "/* block */ ALTER PROCEDURE dbo.ap AS SELECT 4",
+                "/* block */ CREATE PROCEDURE dbo.ap AS SELECT 4",
+            ),
+            (
+                "-- comment\nalter view v AS SELECT 1",
+                "-- comment\nCREATE view v AS SELECT 1",
+            ),
+            ("CREATE VIEW v AS SELECT 1", "CREATE VIEW v AS SELECT 1"),
+            ("CREATE OR REPLACE x", "CREATE OR REPLACE x"),
+            ("ALTERED", "ALTERED"),
+            ("", ""),
+        ] {
+            assert_eq!(module_text(text), expected, "{text}");
+        }
     }
 
     #[test]

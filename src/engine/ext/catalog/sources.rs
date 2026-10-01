@@ -273,28 +273,10 @@ fn attach(db: &duckdb::Connection, frame: &Frame, (objects, tags): (i64, i64)) -
         let Some(column_id) = column_id(db, table, &column.column) else {
             continue;
         };
-        if let Some(default) = &column.default {
-            match default_of(db, table, column_id) {
-                Some(id) if new(id) => {
-                    set_default_source(db, id, &default.source, default.name.is_none())?
-                }
-                Some(_) => {}
-                // An unnamed DEFAULT of ALTER TABLE ... ADD.
-                None if !column.create && default.name.is_none() => {
-                    let (name, id): (String, i32) = db.query_row(
-                        "SELECT name,CAST(nextval('main.__msduck_object_ids') AS INTEGER) FROM main.__msduck_objects WHERE object_id=?",
-                        [table],
-                        |row| Ok((row.get(0)?, row.get(1)?)),
-                    )?;
-                    let name = declarations::default_name(&name, &column.column, id);
-                    db.execute(
-                        "INSERT INTO main.__msduck_default_constraints(object_id,parent_object_id,column_id,name,create_date,modify_date) VALUES(?,?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP))",
-                        duckdb::params![id, table, column_id, name],
-                    )?;
-                    set_default_source(db, id, &default.source, true)?;
-                }
-                None => {}
-            }
+        if let Some(default) = &column.default
+            && let Some(id) = default_of(db, table, column_id).filter(|id| new(*id))
+        {
+            set_default_source(db, id, &default.source, default.name.is_none())?;
         }
         if let Some(computed) = &column.computed {
             set_computed_source(db, table, column_id, computed, column.not_null)?;

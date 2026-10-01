@@ -174,8 +174,11 @@ use Source::{Catalog, CatalogIf, Column, Null};
 
 const SYSNAME: &str = "NVARCHAR(128)";
 
-/// SQL Server's columns of each view: name, declared type and source.
-fn columns(view: &str) -> Option<(&'static str, Vec<(&'static str, &'static str, Source)>)> {
+/// A view column: name, declared type and source.
+type Declared = (&'static str, &'static str, Source);
+
+/// SQL Server's columns of each view, and the base view providing them.
+fn columns(view: &str) -> Option<(&'static str, Vec<Declared>)> {
     let name = |column: &'static str| (column, SYSNAME, Column);
     let catalog = |column: &'static str| (column, SYSNAME, Catalog);
     let null = |column: &'static str, kind: &'static str| (column, kind, Null);

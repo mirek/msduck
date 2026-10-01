@@ -122,7 +122,7 @@ const TRIGGERS: &str = "CREATE OR REPLACE VIEW sys.triggers AS
 /// QUOTED_IDENTIFIER on). A scalar function is reported inlineable when
 /// inlining is on; SQL Server also checks its body.
 const SQL_MODULES: &str = "CREATE OR REPLACE VIEW sys.sql_modules AS
-  SELECT m.object_id,m.definition,true AS uses_ansi_nulls,true AS uses_quoted_identifier,
+  SELECT m.object_id,main.__msduck_module_text(m.definition) AS definition,true AS uses_ansi_nulls,true AS uses_quoted_identifier,
     coalesce(TRY_CAST(json_extract(m.properties,'$.options.schemabinding') AS BOOLEAN),false) AS is_schema_bound,
     false AS uses_database_collation,false AS is_recompiled,
     coalesce(TRY_CAST(json_extract(m.properties,'$.options.returns_null_on_null_input') AS BOOLEAN),false) AS null_on_null_input,
@@ -137,7 +137,7 @@ const SQL_MODULES: &str = "CREATE OR REPLACE VIEW sys.sql_modules AS
   FROM main.__msduck_modules m
   WHERE m.type_code<>'TR' OR m.parent_object_id IN (SELECT object_id FROM main.__msduck_catalog_tables)
   UNION ALL
-  SELECT o.object_id,v.definition,true,true,false,false,false,false,CAST(NULL AS INTEGER),false,false,false
+  SELECT o.object_id,main.__msduck_module_text(v.definition),true,true,false,false,false,false,CAST(NULL AS INTEGER),false,false,false
   FROM main.__msduck_objects o
   LEFT JOIN (SELECT object_id,max(definition) AS definition FROM main.__msduck_view_sources GROUP BY object_id) v
     ON v.object_id=o.object_id
@@ -182,8 +182,7 @@ const PARAMETERS: &str = "CREATE OR REPLACE VIEW main.__msduck_module_parameters
 /// OBJECT_DEFINITION: module and view text, and the definitions of
 /// DEFAULT and CHECK constraints.
 const DEFINITIONS: &str = "CREATE OR REPLACE VIEW main.__msduck_object_definitions AS
-  SELECT object_id,definition FROM main.__msduck_modules
-  UNION ALL SELECT object_id,definition FROM sys.sql_modules WHERE object_id IN (SELECT object_id FROM main.__msduck_objects WHERE type_code='V')
+  SELECT object_id,definition FROM sys.sql_modules
   UNION ALL SELECT object_id,definition FROM sys.default_constraints
   UNION ALL SELECT object_id,definition FROM sys.check_constraints;
   CREATE OR REPLACE MACRO main.__msduck_object_definition(value) AS

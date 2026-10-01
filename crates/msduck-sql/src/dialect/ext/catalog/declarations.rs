@@ -650,27 +650,6 @@ pub fn declared_source(expr: &Expr) -> Option<String> {
     (!generated(expr)).then(|| source(expr))
 }
 
-/// Whether a DEFAULT is a backend allocator another feature added for an
-/// identity or rowversion column (it calls `nextval`, which T-SQL lacks).
-pub fn allocator(expr: &Expr) -> bool {
-    struct Find(bool);
-    impl Visitor for Find {
-        type Break = ();
-        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
-            if let Expr::Function(function) = expr
-                && function.name.to_string().eq_ignore_ascii_case("nextval")
-            {
-                self.0 = true;
-                return ControlFlow::Break(());
-            }
-            ControlFlow::Continue(())
-        }
-    }
-    let mut find = Find(false);
-    let _ = expr.visit(&mut find);
-    find.0
-}
-
 /// SQL Server's generated name of an unnamed DEFAULT constraint:
 /// `DF__table__column__XXXXXXXX`, with the object ID in hexadecimal. The
 /// table and column parts share 14 characters; when both are longer, the
