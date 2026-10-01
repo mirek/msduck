@@ -302,9 +302,30 @@ fn serve_login(
     session.original_login = authenticated_name;
     let mut rpc = crate::rpc::State::default();
     tds::write_message(&mut stream, &tds::login_response(&login), 4096)?;
-    while let Some(message) = tds::read_message(&mut stream, login.packet_size)? {
+    loop {
+        // After INSERT BULK, the BulkLoadBCP message streams packet by
+        // packet into the session instead of being assembled first.
+        let message = if session.bulk_load_expected() {
+            match read_bulk_load(&mut stream, login.packet_size, &mut session)? {
+                Incoming::Response(response) => {
+                    tds::write_message(&mut stream, &response, login.packet_size)?;
+                    continue;
+                }
+                Incoming::Message(message) => message,
+                Incoming::Closed => break,
+            }
+        } else {
+            match tds::read_message(&mut stream, login.packet_size)? {
+                Some(message) => message,
+                None => break,
+            }
+        };
         let mut acknowledgement = vec![];
-        let response = if message.status & 2 != 0 {
+        let response = if session.bulk_load_expected() && matches!(message.kind, 1 | 3 | 14) {
+            // SQL Server terminates a request that arrives instead of the
+            // bulk data (4022).
+            Ok(session.bulk_load_missing())
+        } else if message.status & 2 != 0 {
             let mut out = vec![];
             tds::done(&mut out, 0xfd, 2, 0, 0);
             Ok(out)
@@ -342,10 +363,13 @@ fn serve_login(
                     14 => tds::transaction_request(&message.payload)
                         .and_then(|request| session.transaction_request(request)),
                     6 => {
+                        session.bulk_load_cancel();
                         let mut out = vec![];
                         tds::done(&mut out, 0xfd, 0x20, 253, 0);
                         Ok(out)
                     }
+                    // A BulkLoadBCP message without INSERT BULK before it.
+                    7 => Ok(session.bulk_load_finish(false)),
                     _ => Err(anyhow::anyhow!(
                         "unsupported TDS message type {}",
                         message.kind
@@ -371,6 +395,78 @@ fn serve_login(
     }
     // Dropping the connection rolls back any outstanding DuckDB transaction.
     Ok(())
+}
+
+/// What arrived while a BulkLoadBCP message was expected.
+enum Incoming {
+    /// The bulk-load message was received and loaded: its response.
+    Response(Vec<u8>),
+    /// Another message, read whole.
+    Message(tds::Message),
+    /// The client closed the connection before another message.
+    Closed,
+}
+
+/// Read 8 bytes of a packet header; `false` on a clean end of stream before
+/// the first byte.
+fn read_header(stream: &mut impl std::io::Read, header: &mut [u8; 8]) -> Result<bool> {
+    let mut filled = 0;
+    while filled < header.len() {
+        match stream.read(&mut header[filled..]) {
+            Ok(0) if filled == 0 => return Ok(false),
+            Ok(0) => anyhow::bail!("invalid TDS framing: IncompleteEof"),
+            Ok(count) => filled += count,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(true)
+}
+
+/// Read the message that follows INSERT BULK. A BulkLoadBCP message (type 7)
+/// is handed to the session packet by packet, so its size is bounded only by
+/// the rows the session keeps buffered; any other message is read whole.
+fn read_bulk_load(
+    stream: &mut (impl std::io::Read + std::io::Write),
+    packet_size: usize,
+    session: &mut Session,
+) -> Result<Incoming> {
+    use std::io::Read;
+    let mut header = [0u8; 8];
+    if !read_header(stream, &mut header)? {
+        return Ok(Incoming::Closed);
+    }
+    if header[0] != 7 {
+        let mut whole = (&header[..]).chain(&mut *stream);
+        return Ok(match tds::read_message(&mut whole, packet_size)? {
+            Some(message) => Incoming::Message(message),
+            None => Incoming::Closed,
+        });
+    }
+    session.process().set_running(true);
+    let mut body = Vec::with_capacity(packet_size);
+    let ignored = loop {
+        let length = usize::from(u16::from_be_bytes([header[2], header[3]]));
+        let last = header[1] & 1 != 0;
+        ensure!(header[0] == 7, "invalid TDS framing: ChangedType");
+        ensure!(
+            (8..=packet_size).contains(&length) && (last || length == packet_size),
+            "invalid TDS framing: PacketLength"
+        );
+        body.resize(length - 8, 0);
+        stream.read_exact(&mut body)?;
+        session.bulk_load_packet(&body, last);
+        if last {
+            break header[1] & 2 != 0;
+        }
+        ensure!(
+            read_header(stream, &mut header)?,
+            "invalid TDS framing: IncompleteEof"
+        );
+    };
+    let response = session.bulk_load_finish(ignored);
+    session.process().set_running(false);
+    Ok(Incoming::Response(response))
 }
 
 /// Whether a message asks for RESETCONNECTION (0x08). MS-TDS defines the bit
