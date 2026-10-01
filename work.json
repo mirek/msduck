@@ -8307,7 +8307,7 @@
     {
       "id": "gaps-outer-dml-v1",
       "title": "UPDATE and DELETE with outer joins in the target tree",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
       "scope": [
         "src/engine/ext/outer_dml.rs",
@@ -8578,7 +8578,7 @@
     {
       "id": "gaps-outer-dml-v1-bind",
       "title": "Nested joins in joined UPDATE assignment binding (companion of gaps-outer-dml-v1)",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-outer-dml-v1",
       "scope": [
         "crates/msduck-sql/src/output_bind.rs"
@@ -9003,7 +9003,7 @@
     {
       "id": "gaps-outer-dml-v1-tedious",
       "title": "Replace pinned outer-join rejections in tedious tests (companion of gaps-outer-dml-v1)",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-outer-dml-v1",
       "scope": [
         "tests/tedious.test.mjs"
