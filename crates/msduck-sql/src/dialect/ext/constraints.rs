@@ -631,7 +631,7 @@ pub fn native_primary_key(alter: &AlterTable) -> Option<Vec<Ident>> {
     let DataType::Custom(name, modifiers) = &column_def.data_type else {
         return None;
     };
-    if name.to_string().to_ascii_uppercase() != "KEY" || modifiers.is_empty() {
+    if !name.to_string().eq_ignore_ascii_case("KEY") || modifiers.is_empty() {
         return None;
     }
     // Modifiers are the tokens between the parentheses: ASC and DESC

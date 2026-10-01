@@ -62,6 +62,9 @@ test('ALTER TABLE ADD COLUMN with a named DEFAULT WITH VALUES fills existing row
   await query(c, 'INSERT items(id, value) VALUES (4, 40)')
   assert.deepEqual(await rows(c, 'SELECT added FROM items WHERE id = 4'), [[7]])
   assert.deepEqual(await rows(c, "SELECT name, type FROM sys.objects WHERE name = 'df_added'"), [['df_added', 'D ']])
+  // A NOT NULL column takes its default in existing rows even without WITH VALUES.
+  await query(c, 'ALTER TABLE items ADD required int NOT NULL CONSTRAINT df_required DEFAULT 3')
+  assert.deepEqual(await rows(c, 'SELECT id, required FROM items ORDER BY id'), [[1, 3], [2, 3], [3, 3], [4, 3]])
   await query(c, 'ALTER TABLE items ADD nullable_added int NULL CONSTRAINT df_nullable DEFAULT 8 WITH VALUES')
   assert.deepEqual(await rows(c, 'SELECT nullable_added FROM items WHERE id = 1'), [[8]])
   await fails(c, 'ALTER TABLE items ADD other int NOT NULL CONSTRAINT df_added DEFAULT 1', [2714, 1750])
