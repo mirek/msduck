@@ -42,7 +42,9 @@ pub(super) fn register(db: &duckdb::Connection) -> Result<()> {
     db.register_scalar_function::<native::Like>(lower::LIKE)?;
     // Markers are consumed by the lowering; one that some other lowering
     // moved out of reach stays the plain value.
-    db.execute_batch(&format!("CREATE OR REPLACE MACRO {}(v) AS v", lower::MARK))?;
+    for marker in [lower::MARK, lower::MAYBE, lower::MEMBER] {
+        db.execute_batch(&format!("CREATE OR REPLACE MACRO {marker}(v) AS v"))?;
+    }
     Ok(())
 }
 
@@ -114,7 +116,7 @@ fn predicates<T: Visit>(node: &T) -> bool {
                 Expr::Function(f)
                     if matches!(
                         f.name.to_string().to_ascii_uppercase().as_str(),
-                        "ISNULL" | "COALESCE" | "IIF"
+                        "ISNULL" | "COALESCE" | "IIF" | "NULLIF"
                     ) =>
                 {
                     ControlFlow::Break(())
