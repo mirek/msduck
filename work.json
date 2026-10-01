@@ -8692,6 +8692,21 @@
       "dependencies": [],
       "issue": 727,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQur"
+    },
+    {
+      "id": "gaps-computed-v1-context",
+      "title": "Expose session context entries for session-dependent column defaults (companion of gaps-computed-v1)",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-computed-v1",
+      "scope": [
+        "crates/msduck-sql/src/session_function/session_context.rs"
+      ],
+      "acceptance": [
+        "SessionContext exposes its stored keys and values, and the key identity used by keys_match, so column DEFAULT expressions using SESSION_CONTEXT can read the inserting session's values (gaps-computed-v1, issue #718). Existing behavior is unchanged and covered by tests."
+      ],
+      "dependencies": [],
+      "issue": 718,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQq1"
     }
   ]
 }
