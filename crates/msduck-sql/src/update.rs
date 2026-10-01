@@ -177,7 +177,7 @@ fn locate(
         .collect::<Vec<_>>();
     if !named.is_empty() {
         anyhow::ensure!(named.len() == 1, "ambiguous {operation} target in FROM");
-        return Ok(named.into_iter().next().map(Located::clone));
+        return Ok(named.into_iter().next().cloned());
     }
     let same = relations
         .iter()
