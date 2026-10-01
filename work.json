@@ -8945,7 +8945,7 @@
     {
       "id": "gaps-stale-claims-policy-v1",
       "title": "Standing policy: resolve stale claims and reservations without owner approval",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01), issue #761, umbrella #710.",
       "scope": [
         "AGENTS.md",
