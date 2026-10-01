@@ -337,8 +337,9 @@ pub(super) fn exec(
                 format!("Must declare the scalar variable \"{variable}\".")
             )));
         }
+        let database = database(session, name)?;
         let arguments = bind(session, procedure, parameters, variables)?;
-        let (tokens, status, failure) = run(session, procedure, &arguments);
+        let (tokens, status, failure) = run(session, procedure, &arguments, &database);
         // RETURN is the body's last statement.
         session.rowcount = 1;
         if let Some(variable) = status_variable {
@@ -357,20 +358,58 @@ pub(super) fn exec(
     })())
 }
 
+/// The database whose context the procedure runs in: the current one, or
+/// the database that qualifies the name (`other..sp_getapplock`), as for any
+/// system procedure.
+fn database(session: &Session, name: &sqlparser::ast::ObjectName) -> Result<String> {
+    let parts: Vec<String> = name
+        .0
+        .iter()
+        .map(|part| {
+            part.as_ident()
+                .map_or(String::new(), |ident| ident.value.clone())
+        })
+        .collect();
+    let qualifier = match parts.len() {
+        3.. => parts[parts.len() - 3].as_str(),
+        _ => "",
+    };
+    if qualifier.is_empty() {
+        return Ok(session.database().name.clone());
+    }
+    session
+        .database()
+        .catalog()
+        .list(&session.db)?
+        .into_iter()
+        .find(|database| database.name.eq_ignore_ascii_case(qualifier))
+        .map(|database| database.name)
+        .ok_or_else(|| {
+            anyhow!(SqlError::new(
+                911,
+                1,
+                format!(
+                    "Database '{qualifier}' does not exist. Make sure that the name is entered correctly."
+                )
+            ))
+        })
+}
+
 /// The procedure body. Returns its tokens, the return status and the
 /// xp_userlock error, if one was raised.
 fn run(
     session: &mut Session,
     procedure: Procedure,
     arguments: &Arguments,
+    database: &str,
 ) -> (Vec<u8>, i32, Option<Diagnostic>) {
     let mut body = Body {
         tokens: Vec::new(),
         nocount: session.nocount,
     };
     let (status, failure) = match procedure {
-        Procedure::Get => get(session, arguments, &mut body),
-        Procedure::Release => release(session, arguments, &mut body),
+        Procedure::Get => get(session, arguments, database, &mut body),
+        Procedure::Release => release(session, arguments, database, &mut body),
     };
     if let Some(failure) = &failure {
         if session.xact_abort {
@@ -395,6 +434,7 @@ fn failure_owned(failure: &Diagnostic) -> Diagnostic {
 fn target(
     session: &Session,
     arguments: &Arguments,
+    database: &str,
     transaction: bool,
 ) -> Result<(Key, Owner, String, Vec<u16>), Diagnostic> {
     let resource = match arguments.get("@Resource") {
@@ -425,7 +465,7 @@ fn target(
             format!("The database-principal '{principal}' does not exist or user is not a member."),
         )
     })?;
-    let key = Key::new(&session.database().name, canonical, &resource);
+    let key = Key::new(database, canonical, &resource);
     let owner = Owner {
         session: session.ext.token,
         transaction,
@@ -433,7 +473,12 @@ fn target(
     Ok((key, owner, principal, resource))
 }
 
-fn get(session: &mut Session, arguments: &Arguments, body: &mut Body) -> (i32, Option<Diagnostic>) {
+fn get(
+    session: &mut Session,
+    arguments: &Arguments,
+    database: &str,
+    body: &mut Body,
+) -> (i32, Option<Diagnostic>) {
     // select @mode = CASE @LockMode ...; if @mode = -1
     body.select();
     body.condition();
@@ -486,7 +531,7 @@ fn get(session: &mut Session, arguments: &Arguments, body: &mut Body) -> (i32, O
             )),
         );
     }
-    let (key, owner, _, _) = match target(session, arguments, transaction) {
+    let (key, owner, _, _) = match target(session, arguments, database, transaction) {
         Ok(target) => target,
         Err(diagnostic) => return (-999, Some(diagnostic)),
     };
@@ -505,6 +550,7 @@ fn get(session: &mut Session, arguments: &Arguments, body: &mut Body) -> (i32, O
 fn release(
     session: &mut Session,
     arguments: &Arguments,
+    database: &str,
     body: &mut Body,
 ) -> (i32, Option<Diagnostic>) {
     // select @owner = CASE @LockOwner ...; if @owner = -1
@@ -523,7 +569,8 @@ fn release(
     // select @dbid = db_id ()
     body.select();
     // exec @result = sys.xp_userlock 1, @dbid, @DbPrincipal, @Resource, 0, @owner
-    let (key, owner, principal, resource) = match target(session, arguments, transaction) {
+    let (key, owner, principal, resource) = match target(session, arguments, database, transaction)
+    {
         Ok(target) => target,
         Err(diagnostic) => return (-999, Some(diagnostic)),
     };

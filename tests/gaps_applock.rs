@@ -318,6 +318,28 @@ fn contention_timeouts_and_waits() {
     ] {
         assert_eq!(run(&mut b, &sql).printed()[0], "0", "{sql}");
     }
+    // A database-qualified call runs in that database's context.
+    let qualified = run(
+        &mut b,
+        "DECLARE @rc int; EXEC @rc = master..sp_getapplock N'foo', 'Exclusive', 'Session', 0; PRINT CAST(@rc AS varchar(10)); USE master; PRINT APPLOCK_MODE('public', 'foo', 'Session'); EXEC @rc = sp_releaseapplock N'foo', 'Session'; USE applock_contention",
+    );
+    assert_eq!(qualified.printed(), ["0", "Exclusive"]);
+    assert_eq!(
+        run(
+            &mut b,
+            "EXEC missing..sp_getapplock N'foo', 'Exclusive', 'Session', 0"
+        )
+        .numbers(),
+        [911]
+    );
+    // A decimal timeout converts to int like any int parameter.
+    assert_eq!(
+        status(
+            &mut b,
+            "DECLARE @rc int; EXEC @rc = sp_getapplock N'foo', 'Exclusive', 'Session', 1.9; PRINT CAST(@rc AS varchar(10))"
+        ),
+        -1
+    );
     let outcome = run(
         &mut b,
         "PRINT CAST(APPLOCK_TEST('public', 'foo', 'IntentShared', 'Session') AS varchar(1)) + APPLOCK_MODE('public', 'foo', 'Session')",

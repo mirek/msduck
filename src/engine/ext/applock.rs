@@ -124,6 +124,18 @@ fn from_backend(value: duckdb::types::Value) -> Result<Value> {
         Backend::UTinyInt(v) => Value::Int(v.into()),
         Backend::USmallInt(v) => Value::Int(v.into()),
         Backend::UInt(v) => Value::Int(v.into()),
+        // int parameters truncate exact and approximate numbers.
+        Backend::Float(v) => Value::Int(v.trunc() as i64),
+        Backend::Double(v) => Value::Int(v.trunc() as i64),
+        Backend::Decimal(v) => {
+            let text = v.to_string();
+            Value::Int(
+                text.split('.')
+                    .next()
+                    .and_then(|whole| whole.parse().ok())
+                    .ok_or_else(|| anyhow!("unsupported application lock argument value {text}"))?,
+            )
+        }
         Backend::Text(text) => Value::Text {
             units: text.encode_utf16().collect(),
             unicode: false,

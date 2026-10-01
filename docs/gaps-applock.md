@@ -47,12 +47,14 @@ tedious reports a row count of 4 for a successful `sp_getapplock`.
   be literals, variables or scalar expressions.
   - `EXEC @rc = sp_getapplock ...` assigns the return status, converted to
     the variable's type.
-  - The procedure name can be qualified (`dbo.`, `sys.`, `master..`).
+  - The procedure name can be qualified (`dbo.`, `sys.`, `master..`). A
+    database qualifier runs the call in that database's context, as for any
+    system procedure. An unknown database fails with 911.
   - `@Resource` is `nvarchar(255)`, so longer names are truncated. Lock
     modes and owners are matched case-insensitively, ignoring trailing
     spaces.
-  - `@LockTimeout` converts strings such as `'0'`. Text that is not a number
-    fails with 8114.
+  - `@LockTimeout` converts strings such as `'0'` and truncates decimals.
+    Text that is not a number fails with 8114.
 - **Return status.**
 
   | Status | Meaning |
@@ -119,7 +121,9 @@ tedious reports a row count of 4 for a successful `sp_getapplock`.
     modes, such as `SharedIntentExclusive` or `UpdateIntentExclusive`. That
     mode never weakens before the final release.
   - Locks held by the same session never conflict, whichever owner holds
-    them.
+    them. A request from a session that already holds the resource under
+    either owner is a conversion, so it never queues behind other sessions'
+    waiters.
 - **Compatibility.** Conflicts between sessions follow SQL Server's matrix
   for IS, S, U, IX, SIX, UIX and X. The captured matrix is asserted in Rust
   and tedious tests.
@@ -179,6 +183,10 @@ tedious reports a row count of 4 for a successful `sp_getapplock`.
   - A client that gives up and disconnects while waiting leaves its request
     queued until it would be granted. Then the session ends and releases the
     lock.
+  - `ALTER DATABASE ... WITH ROLLBACK IMMEDIATE` closes a waiting session's
+    connection but cannot interrupt the wait. If the session that runs the
+    ALTER holds the lock being waited for, the ALTER times out because the
+    waiting session does not end.
 - **TRY...CATCH.** A severity-16 `xp_userlock` error (for example 1223)
   does not transfer control to CATCH. The exec hook cannot tell whether a
   TRY block is active, so the error follows the uncaught form: -999, and
@@ -191,6 +199,11 @@ tedious reports a row count of 4 for a successful `sp_getapplock`.
   - The arguments must be constants, variables or expressions over them. A
     column reference fails with an explicit "unsupported" error.
   - A value in a persisted definition (view, default) would be frozen.
+  - `sp_prepare` validates a statement with NULL parameter values and no
+    transaction. So preparing an `APPLOCK_MODE` or `APPLOCK_TEST` call whose
+    resource or principal is a parameter, or whose owner is `Transaction`
+    outside a transaction, fails with the runtime error (1225, 1230 or
+    3918). SQL Server compiles these. `sp_executesql` is not affected.
 - **Compile-time errors.** In SQL Server, 8144, 119, 137 and 8116 are
   compile-time errors, so the batch does not run. msduck raises them when the
   statement runs, after earlier statements.

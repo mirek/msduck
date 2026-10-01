@@ -163,6 +163,15 @@ struct Resource {
 }
 
 impl Resource {
+    /// Whether any owner of `session` holds this resource. Such a request
+    /// is a conversion: it does not queue behind other sessions' waiters,
+    /// whichever of the session's owners asks.
+    fn holds(&self, session: u64) -> bool {
+        self.granted
+            .iter()
+            .any(|grant| grant.owner.session == session)
+    }
+
     fn held(&self, owner: Owner) -> Option<&Grant> {
         self.granted.iter().find(|grant| grant.owner == owner)
     }
@@ -353,7 +362,7 @@ pub(crate) fn acquire(
     let resource = table.resources.entry(key.clone()).or_default();
     let held = resource.held(owner).map(|grant| grant.mode);
     let target = held.map_or(requested, |mode| mode.union(requested));
-    let conversion = held.is_some();
+    let conversion = resource.holds(owner.session);
     if held == Some(target) || !resource.blocked(owner, target, conversion, &resource.queue) {
         resource.grant(owner, requested);
         return Acquired::Granted;
@@ -466,7 +475,13 @@ pub(crate) fn test(key: &Key, owner: Owner, requested: Mode) -> bool {
     };
     let held = resource.held(owner).map(|grant| grant.mode);
     let target = held.map_or(requested, |mode| mode.union(requested));
-    held == Some(target) || !resource.blocked(owner, target, held.is_some(), &resource.queue)
+    held == Some(target)
+        || !resource.blocked(
+            owner,
+            target,
+            resource.holds(owner.session),
+            &resource.queue,
+        )
 }
 
 #[cfg(test)]
@@ -675,6 +690,29 @@ mod tests {
         assert!(release(&key, a));
         assert_eq!(mode(&key, a), Some(Exclusive));
         assert!(release(&key, a));
+    }
+
+    #[test]
+    fn a_session_holding_the_resource_does_not_queue_behind_waiters() {
+        let (key, a, b) = (key("owners"), session(), session());
+        let a_transaction = Owner {
+            transaction: true,
+            ..a
+        };
+        assert_eq!(acquire(&key, a, Shared, None, NEVER), Acquired::Granted);
+        let waiter = {
+            let key = key.clone();
+            thread::spawn(move || acquire(&key, b, Exclusive, Some(Duration::from_secs(10)), NEVER))
+        };
+        thread::sleep(Duration::from_millis(100));
+        // Without the conversion rule this would be a false deadlock.
+        assert_eq!(
+            acquire(&key, a_transaction, Shared, Some(Duration::ZERO), NEVER),
+            Acquired::Granted
+        );
+        release_all(|owner| owner.session == a.session);
+        assert_eq!(waiter.join().unwrap(), Acquired::GrantedAfterWait);
+        release_all(|owner| owner.session == b.session);
     }
 
     #[test]
