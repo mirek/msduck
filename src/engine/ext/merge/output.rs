@@ -275,7 +275,7 @@ impl Output {
         let [insert, update, delete] = actions.as_slice() else {
             bail!("MERGE OUTPUT action shape changed during lowering")
         };
-        let source_columns = {
+        let (internal, source_columns): (Vec<_>, Vec<_>) = {
             let mut statement = session
                 .db
                 .prepare(&format!("SELECT * FROM {images} LIMIT 0"))?;
@@ -283,9 +283,24 @@ impl Output {
             statement
                 .column_names()
                 .into_iter()
-                .filter(|name| !name.starts_with("__msduck_"))
-                .collect::<Vec<_>>()
+                .partition(|name| name.starts_with("__msduck_"))
         };
+        // Source columns get internal names in `__o`, so an unqualified
+        // source column in OUTPUT resolves only through the source alias.
+        let images = format!(
+            "(SELECT {} FROM {images})",
+            internal
+                .iter()
+                .map(|name| quoted(name))
+                .chain(
+                    source_columns
+                        .iter()
+                        .enumerate()
+                        .map(|(index, name)| format!("{} AS \"__msduck_s{index}\"", quoted(name)))
+                )
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
         let image = |prefix: &str| {
             self.columns
                 .iter()
@@ -301,7 +316,8 @@ impl Output {
         } else {
             source_columns
                 .iter()
-                .map(|name| format!("__o.{} AS {}", quoted(name), quoted(name)))
+                .enumerate()
+                .map(|(index, name)| format!("__o.\"__msduck_s{index}\" AS {}", quoted(name)))
                 .collect::<Vec<_>>()
                 .join(", ")
         };

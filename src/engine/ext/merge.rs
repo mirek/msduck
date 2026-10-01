@@ -80,6 +80,9 @@ enum Family {
     BySource,
 }
 
+/// The WHEN families, in `__msduck_f{n}` order.
+const FAMILIES: [Family; 3] = [Family::Matched, Family::ByTarget, Family::BySource];
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Kind {
     Insert = 1,
@@ -98,8 +101,8 @@ enum Assigned {
 
 struct Arm {
     family: Family,
-    /// Index of the `__msduck_p{n}` predicate column.
-    predicate: Option<usize>,
+    /// The clause's AND condition, in T-SQL.
+    predicate: Option<Expr>,
     kind: Kind,
     /// Target column index and value, in statement order.
     values: Vec<(usize, Assigned)>,
@@ -191,14 +194,16 @@ struct Plan {
     arms: Vec<Arm>,
     /// Candidate query in T-SQL, before lowering.
     candidates: Query,
-    /// Number of `__msduck_p{n}` and `__msduck_v{n}` columns.
-    predicates: usize,
+    /// Number of `__msduck_v{n}` columns.
     values: usize,
     /// Whether each staged value is money, which changes its conversion.
     money: Vec<bool>,
     output: Option<output::Output>,
     /// Set once the first write starts.
     written: std::cell::Cell<bool>,
+    /// For each staged value, whether it is a checked character conversion
+    /// (and whether Unicode), as `stage_sql` produced it.
+    checked: std::cell::RefCell<Vec<Option<bool>>>,
 }
 
 impl Plan {
@@ -262,21 +267,16 @@ impl Plan {
             .into());
         }
 
-        // Candidate projection: clause predicates, then action values, then
-        // the target pre-image, then (for OUTPUT) every source column.
+        // Candidate projection: the clause chosen within each WHEN family,
+        // then action values, then the target pre-image, then (for OUTPUT)
+        // every source column.
         let mut projection = Vec::new();
-        let mut predicates = 0;
-        let mut values = 0;
         let mut arms = Vec::new();
-        let mut money = Vec::new();
-        let mut stage = |expr: Expr, projection: &mut Vec<SelectItem>| {
-            money.push(crate::engine::money_expr(&expr, parameters));
-            projection.push(SelectItem::ExprWithAlias {
-                expr,
-                alias: ident(&format!("__msduck_v{values}")),
-            });
-            values += 1;
-            values - 1
+        // Values in slot order, with the clause they belong to.
+        let mut staged: Vec<(usize, Expr)> = Vec::new();
+        let stage = |staged: &mut Vec<(usize, Expr)>, expr: Expr| {
+            staged.push((usize::MAX, expr));
+            staged.len() - 1
         };
         let default = |expr: &Expr| matches!(expr, Expr::Identifier(id) if id.quote_style.is_none() && id.value.eq_ignore_ascii_case("DEFAULT"));
         for clause in &merge.clauses {
@@ -287,23 +287,7 @@ impl Plan {
                 }
                 MergeClauseKind::NotMatchedBySource => Family::BySource,
             };
-            let predicate = clause.predicate.as_ref().map(|predicate| {
-                projection.push(SelectItem::ExprWithAlias {
-                    expr: Expr::Case {
-                        case_token: sqlparser::ast::helpers::attached_token::AttachedToken::empty(),
-                        end_token: sqlparser::ast::helpers::attached_token::AttachedToken::empty(),
-                        operand: None,
-                        conditions: vec![CaseWhen {
-                            condition: predicate.clone(),
-                            result: Expr::value(Value::Number("1".into(), false)),
-                        }],
-                        else_result: Some(Box::new(Expr::value(Value::Number("0".into(), false)))),
-                    },
-                    alias: ident(&format!("__msduck_p{predicates}")),
-                });
-                predicates += 1;
-                predicates - 1
-            });
+            let predicate = clause.predicate.clone();
             let (kind, assignments) = match &clause.action {
                 MergeAction::Delete { .. } => (Kind::Delete, vec![]),
                 MergeAction::Update(update) => {
@@ -334,7 +318,7 @@ impl Plan {
                         let value = if default(&assignment.value) {
                             Assigned::Default
                         } else {
-                            Assigned::Stage(stage(assignment.value.clone(), &mut projection))
+                            Assigned::Stage(stage(&mut staged, assignment.value.clone()))
                         };
                         columns.push((index, value));
                     }
@@ -376,7 +360,7 @@ impl Plan {
                             let value = if default(expr) {
                                 Assigned::Default
                             } else {
-                                Assigned::Stage(stage(expr.clone(), &mut projection))
+                                Assigned::Stage(stage(&mut staged, expr.clone()))
                             };
                             assigned.push((index, value));
                         }
@@ -391,11 +375,77 @@ impl Plan {
                 kind,
                 values: assignments,
             });
+            for (arm, _) in staged.iter_mut().filter(|(arm, _)| *arm == usize::MAX) {
+                *arm = arms.len() - 1;
+            }
         }
         ensure!(
             !arms.is_empty(),
             "A MERGE statement must have at least one WHEN clause"
         );
+        // Within a family the first clause whose condition holds applies, so
+        // later conditions are evaluated only for rows earlier ones decline.
+        let number = |n: usize| Expr::value(Value::Number(n.to_string(), false));
+        let choice = |family: Family| {
+            let conditions = arms
+                .iter()
+                .enumerate()
+                .filter(|(_, arm)| arm.family == family)
+                .map(|(index, arm)| CaseWhen {
+                    condition: arm.predicate.clone().unwrap_or_else(|| Expr::BinaryOp {
+                        left: Box::new(number(1)),
+                        op: BinaryOperator::Eq,
+                        right: Box::new(number(1)),
+                    }),
+                    result: number(index + 1),
+                })
+                .collect::<Vec<_>>();
+            if conditions.is_empty() {
+                Expr::Cast {
+                    kind: CastKind::Cast,
+                    expr: Box::new(Expr::value(Value::Null)),
+                    data_type: DataType::Int(None),
+                    format: None,
+                }
+            } else {
+                Expr::Case {
+                    case_token: sqlparser::ast::helpers::attached_token::AttachedToken::empty(),
+                    end_token: sqlparser::ast::helpers::attached_token::AttachedToken::empty(),
+                    operand: None,
+                    conditions,
+                    else_result: None,
+                }
+            }
+        };
+        for (index, family) in FAMILIES.iter().enumerate() {
+            projection.push(SelectItem::ExprWithAlias {
+                expr: choice(*family),
+                alias: ident(&format!("__msduck_f{index}")),
+            });
+        }
+        // A value is computed only for rows its clause applies to.
+        let values = staged.len();
+        let mut money = Vec::new();
+        for (slot, (arm, expr)) in staged.into_iter().enumerate() {
+            money.push(crate::engine::money_expr(&expr, parameters));
+            projection.push(SelectItem::ExprWithAlias {
+                expr: Expr::Case {
+                    case_token: sqlparser::ast::helpers::attached_token::AttachedToken::empty(),
+                    end_token: sqlparser::ast::helpers::attached_token::AttachedToken::empty(),
+                    operand: None,
+                    conditions: vec![CaseWhen {
+                        condition: Expr::BinaryOp {
+                            left: Box::new(Expr::Nested(Box::new(choice(arms[arm].family)))),
+                            op: BinaryOperator::Eq,
+                            right: Box::new(number(arm + 1)),
+                        },
+                        result: expr,
+                    }],
+                    else_result: None,
+                },
+                alias: ident(&format!("__msduck_v{slot}")),
+            });
+        }
         for (index, column) in target.columns.iter().enumerate() {
             projection.push(SelectItem::ExprWithAlias {
                 expr: Expr::CompoundIdentifier(vec![
@@ -461,11 +511,11 @@ impl Plan {
             source_qualifier,
             arms,
             candidates: *candidates,
-            predicates,
             values,
             money,
             output,
             written: std::cell::Cell::new(false),
+            checked: Default::default(),
         })
     }
 
@@ -517,6 +567,7 @@ impl Plan {
             None => eligible as u64,
             Some(top) => session.top(top, eligible as u64, parameters)?,
         };
+        self.storage_errors(session, stage, take)?;
         // A target row matched by several source rows fails when one of its
         // actions is an UPDATE; repeated DELETEs remove it once.
         let updates = self
@@ -633,32 +684,7 @@ impl Plan {
     }
 
     fn arm_case(&self) -> String {
-        let family = |family: Family| {
-            let arms = self
-                .arms
-                .iter()
-                .enumerate()
-                .filter(|(_, arm)| arm.family == family)
-                .map(|(index, arm)| {
-                    let condition = arm.predicate.map_or_else(
-                        || "TRUE".to_owned(),
-                        |p| format!("{} = 1", quoted(&format!("__msduck_p{p}"))),
-                    );
-                    format!("WHEN {condition} THEN {}", index + 1)
-                })
-                .collect::<Vec<_>>();
-            if arms.is_empty() {
-                "NULL".to_owned()
-            } else {
-                format!("CASE {} END", arms.join(" "))
-            }
-        };
-        format!(
-            "CASE WHEN __msduck_tid IS NOT NULL AND __msduck_seq IS NOT NULL THEN {} WHEN __msduck_tid IS NOT NULL THEN {} WHEN __msduck_seq IS NOT NULL THEN {} END",
-            family(Family::Matched),
-            family(Family::BySource),
-            family(Family::ByTarget)
-        )
+        "CASE WHEN __msduck_tid IS NOT NULL AND __msduck_seq IS NOT NULL THEN \"__msduck_f0\" WHEN __msduck_tid IS NOT NULL THEN \"__msduck_f2\" WHEN __msduck_seq IS NOT NULL THEN \"__msduck_f1\" END".to_owned()
     }
 
     /// Classify and convert every candidate once.
@@ -677,22 +703,31 @@ impl Plan {
                 }
             }
         }
+        let mut checked = vec![None; self.values];
         for (slot, conversion) in converted.into_iter().enumerate() {
             let (arm, column) = conversion.expect("every staged value belongs to an arm");
             let value = Expr::Identifier(ident(&format!("__msduck_v{slot}")));
-            let value = self
+            let value = match self
                 .target
-                .convert(column, value, self.money[slot], database)?;
+                .convert(column, value, self.money[slot], database)?
+            {
+                target::Converted::Value(value) => value,
+                target::Converted::Checked { value, unicode } => {
+                    checked[slot] = Some(unicode);
+                    value
+                }
+            };
             columns.push(format!(
                 "CASE WHEN __msduck_arm = {arm} THEN {value} END AS \"__msduck_v{slot}\""
             ));
         }
+        *self.checked.borrow_mut() = checked;
         for index in 0..self.target.columns.len() {
             columns.push(format!("\"__msduck_d{index}\""));
         }
         if self.output.is_some() {
-            let internal = (0..self.predicates)
-                .map(|p| format!("\"__msduck_p{p}\""))
+            let internal = (0..FAMILIES.len())
+                .map(|f| format!("\"__msduck_f{f}\""))
                 .chain((0..self.values).map(|v| format!("\"__msduck_v{v}\"")))
                 .chain((0..self.target.columns.len()).map(|d| format!("\"__msduck_d{d}\"")))
                 .chain(
@@ -713,6 +748,46 @@ impl Plan {
             columns.join(", "),
             self.arm_case()
         ))
+    }
+
+    /// A staged value, decoding a checked character conversion.
+    fn staged(&self, slot: usize) -> String {
+        let column = format!("\"__msduck_v{slot}\"");
+        match self.checked.borrow()[slot] {
+            None => column,
+            Some(true) => format!("__msduck_unicode_from_le(struct_extract({column}, 'value'))"),
+            Some(false) => format!("decode(struct_extract({column}, 'value'))"),
+        }
+    }
+
+    /// Raise the first storage diagnostic a checked conversion reported.
+    fn storage_errors(&self, session: &Session, stage: &str, take: u64) -> Result<()> {
+        let checked = self.checked.borrow();
+        for slot in (0..checked.len()).filter(|slot| checked[*slot].is_some()) {
+            let error: Option<String> = match session.db.query_row(
+                &format!(
+                    "SELECT struct_extract(\"__msduck_v{slot}\", 'error') FROM {stage} WHERE __msduck_row <= {take} AND struct_extract(\"__msduck_v{slot}\", 'error') IS NOT NULL ORDER BY __msduck_row LIMIT 1"
+                ),
+                [],
+                |r| r.get(0),
+            ) {
+                Ok(error) => Some(error),
+                Err(duckdb::Error::QueryReturnedNoRows) => None,
+                Err(error) => return Err(error.into()),
+            };
+            if let Some(encoded) = error {
+                let diagnostic = crate::storage_diagnostic::diagnostic(&format!(
+                    "Invalid Input Error: {encoded}"
+                ))
+                .ok_or_else(|| anyhow!("invalid staged storage diagnostic"))?;
+                return Err(crate::query_error::attach_context(
+                    diagnostic.into(),
+                    vec![],
+                    0xc5,
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// The selected rows with their complete new images.
@@ -739,12 +814,12 @@ impl Plan {
                 let value = match arm.kind {
                     Kind::Delete => continue,
                     Kind::Update => match arm.values.iter().find(|(c, _)| *c == index) {
-                        Some((_, Assigned::Stage(slot))) => format!("\"__msduck_v{slot}\""),
+                        Some((_, Assigned::Stage(slot))) => self.staged(*slot),
                         Some((_, Assigned::Default)) => self.target.default(index)?,
                         None => format!("\"__msduck_d{index}\""),
                     },
                     Kind::Insert => match arm.values.iter().find(|(c, _)| *c == index) {
-                        Some((_, Assigned::Stage(slot))) => format!("\"__msduck_v{slot}\""),
+                        Some((_, Assigned::Stage(slot))) => self.staged(*slot),
                         Some((_, Assigned::Default)) | None => self.target.default(index)?,
                     },
                 };
@@ -814,14 +889,21 @@ impl Plan {
                 )
                 .map_err(write_failure)? as u64;
         }
-        for (index, arm) in self.arms.iter().enumerate() {
-            if arm.kind != Kind::Update {
-                continue;
-            }
-            let set = arm
-                .values
+        // One statement for every UPDATE clause, so values moving between
+        // rows (a key swap) are checked against the final state only. Each
+        // image holds the row's complete new values.
+        let mut assigned = self
+            .arms
+            .iter()
+            .filter(|arm| arm.kind == Kind::Update)
+            .flat_map(|arm| arm.values.iter().map(|(column, _)| *column))
+            .collect::<Vec<_>>();
+        assigned.sort_unstable();
+        assigned.dedup();
+        if !assigned.is_empty() {
+            let set = assigned
                 .iter()
-                .map(|(column, _)| {
+                .map(|column| {
                     format!(
                         "{} = __msduck_image.\"__msduck_n{column}\"",
                         quoted(&self.target.columns[*column].name)
@@ -832,8 +914,7 @@ impl Plan {
             count += db
                 .execute(
                     &format!(
-                        "UPDATE {table} AS {alias} SET {set} FROM {images} AS __msduck_image WHERE {alias}.rowid = __msduck_image.__msduck_tid AND __msduck_image.__msduck_arm = {}",
-                        index + 1
+                        "UPDATE {table} AS {alias} SET {set} FROM {images} AS __msduck_image WHERE {alias}.rowid = __msduck_image.__msduck_tid AND __msduck_image.__msduck_kind = 2"
                     ),
                     [],
                 )

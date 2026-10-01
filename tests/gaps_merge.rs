@@ -627,3 +627,91 @@ fn insert_default_values() {
         [[Some(1), Some(7), None], [Some(2), Some(7), None]]
     );
 }
+
+#[test]
+fn key_swap_across_update_clauses() {
+    for transaction in [false, true] {
+        let (_server, mut session) = open();
+        ok(
+            &mut session,
+            "CREATE TABLE dbo.k(id INT PRIMARY KEY, n INT); INSERT dbo.k VALUES (1,10),(2,20)",
+        );
+        if transaction {
+            ok(&mut session, "BEGIN TRANSACTION");
+        }
+        ok(
+            &mut session,
+            "MERGE dbo.k AS t USING (VALUES (1)) AS s(id) ON t.id=s.id WHEN MATCHED THEN UPDATE SET id=2 WHEN NOT MATCHED BY SOURCE THEN UPDATE SET id=1;",
+        );
+        assert_eq!(rowcount(&mut session), 2);
+        if transaction {
+            ok(&mut session, "COMMIT TRANSACTION");
+        }
+        assert_eq!(pairs(&session, "k"), [(1, Some(20)), (2, Some(10))]);
+    }
+}
+
+#[test]
+fn truncation_inside_a_transaction_ends_only_the_statement() {
+    let (_server, mut session) = open();
+    ok(
+        &mut session,
+        "CREATE TABLE dbo.t(id INT, v VARCHAR(3)); CREATE TABLE dbo.prior(id INT); INSERT dbo.t VALUES (1,'a')",
+    );
+    let (_, error) = run(
+        &mut session,
+        "BEGIN TRAN; INSERT dbo.prior VALUES (1); MERGE dbo.t AS t USING (VALUES (1,'abcdef')) AS s(id,v) ON t.id=s.id WHEN MATCHED THEN UPDATE SET v=s.v; INSERT dbo.prior VALUES (2)",
+    );
+    assert_eq!(error, 0);
+    assert_eq!(session.transactions, 1);
+    ok(&mut session, "COMMIT");
+    assert_eq!(
+        rows(&session, "SELECT id FROM dbo.prior ORDER BY id"),
+        [[Some(1)], [Some(2)]]
+    );
+    // The truncation is still reported.
+    assert_eq!(
+        run(
+            &mut session,
+            "MERGE dbo.t AS t USING (VALUES (1,'abcdef')) AS s(id,v) ON t.id=s.id WHEN MATCHED THEN UPDATE SET v=s.v;"
+        ),
+        (false, 2628)
+    );
+}
+
+#[test]
+fn conditions_and_values_follow_the_chosen_clause() {
+    let (_server, mut session) = open();
+    ok(
+        &mut session,
+        "CREATE TABLE dbo.c(id INT, n INT, v VARCHAR(10)); INSERT dbo.c VALUES (1,0,''),(2,0,'')",
+    );
+    // Row 1 takes the first clause, so the second condition and the value
+    // never convert 'abc'.
+    ok(
+        &mut session,
+        "MERGE dbo.c AS t USING (VALUES (1,'abc'),(2,'5')) AS s(id,v) ON t.id=s.id WHEN MATCHED AND s.v='abc' THEN DELETE WHEN MATCHED AND CAST(s.v AS INT) > 0 THEN UPDATE SET n = CAST(s.v AS INT);",
+    );
+    assert_eq!(rowcount(&mut session), 2);
+    assert_eq!(
+        rows(&session, "SELECT id, n FROM dbo.c ORDER BY id"),
+        [[Some(2), Some(5)]]
+    );
+}
+
+#[test]
+fn unqualified_source_columns_in_output() {
+    let (_server, mut session) = open();
+    ok(
+        &mut session,
+        "CREATE TABLE dbo.t(id INT PRIMARY KEY, n INT); CREATE TABLE dbo.log(extra INT, n INT); INSERT dbo.t VALUES (1,1)",
+    );
+    ok(
+        &mut session,
+        "MERGE dbo.t AS t USING (VALUES (1,5,7)) AS s(id,n,extra) ON t.id=s.id WHEN MATCHED THEN UPDATE SET n=s.n OUTPUT extra, inserted.n INTO dbo.log(extra, n);",
+    );
+    assert_eq!(
+        rows(&session, "SELECT extra, n FROM dbo.log"),
+        [[Some(7), Some(5)]]
+    );
+}

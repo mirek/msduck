@@ -60,10 +60,14 @@ extension hooks in docs/extension-hooks.md.
    in a SELECT. Unknown names fail with 207, 208 or 4104.
 
    Each joined row takes the first clause, in statement order, whose family
-   and condition match. Rows that match no clause take no action. SET and
-   VALUES expressions are converted to the target column's storage type,
-   exactly as INSERT and UPDATE convert them, so a value too long for its
-   column fails with 2628.
+   and condition match. Conditions within a family are evaluated in order,
+   as one CASE, so a later condition never sees a row an earlier clause took.
+   A SET or VALUES expression is evaluated only for rows its clause applies
+   to. Rows that match no clause take no action.
+
+   The values are converted to the target column's storage type, exactly as
+   INSERT and UPDATE convert them. A value too long for its column fails
+   with 2628, which ends only the statement, inside a transaction too.
 
    Everything is materialized once, before any write. A later action
    therefore never changes how another row is classified. For example, an
@@ -104,8 +108,9 @@ extension hooks in docs/extension-hooks.md.
    as SQL Server keeps it with XACT_ABORT OFF. With XACT_ABORT ON, the
    engine's usual rule rolls the transaction back. A statement that swaps
    key values between rows is not a violation.
-6. **Writes.** DELETEs run first, then one UPDATE per UPDATE clause, then
-   one INSERT per INSERT clause. Each is keyed by the target row ids captured
+6. **Writes.** DELETEs run first, then one UPDATE for all UPDATE clauses
+   (so a key swap between clauses is valid), then one INSERT per INSERT
+   clause. Each is keyed by the target row ids captured
    in step 1. Without a caller's transaction, the statement runs in its own
    backend transaction, so a failure leaves no partial change.
 7. **Results.**
@@ -191,6 +196,9 @@ extension hooks in docs/extension-hooks.md.
 - **Prepared statements.** `sp_prepare` and `sp_prepexec` still reject
   MERGE during preparation, because preparation has no extension hook.
   `sp_executesql` and plain batches work.
+- **Qualified source names.** In ON and SET, refer to a table source by
+  its name or alias (`src.id`). A schema-qualified column (`dbo.src.id`)
+  fails to bind, because the source is wrapped to mark its rows.
 - **Collation.** String comparisons in ON and the clause conditions behave
   as they do in a SELECT with the same operands. msduck's current VARCHAR
   comparisons are case sensitive, unlike SQL Server's default collation.

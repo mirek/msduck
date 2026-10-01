@@ -4,6 +4,15 @@ use anyhow::{Result, anyhow, bail};
 use msduck_core::diagnostic::SqlError;
 use sqlparser::{ast::*, dialect::GenericDialect, parser::Parser};
 
+/// A converted SET or VALUES expression.
+pub(super) enum Converted {
+    /// Native SQL of the stored value.
+    Value(String),
+    /// Native SQL of a `{value, error}` pair from a checked character
+    /// conversion; `unicode` selects the value's decoding.
+    Checked { value: String, unicode: bool },
+}
+
 pub(super) struct Column {
     pub name: String,
     /// The backend type, as `information_schema` reports it.
@@ -409,20 +418,43 @@ impl Target {
         value: Expr,
         money: bool,
         database: &str,
-    ) -> Result<String> {
+    ) -> Result<Converted> {
         let column = &self.columns[index];
-        let value = match crate::assignment::storage_kind(&column.declared) {
-            Some(kind) => crate::storage_diagnostic::contextualize(
-                crate::assignment::convert_for_storage(value, &kind, money, column.utf16),
-                database,
-                &self.schema,
-                &self.table,
-                &column.name,
-            )
-            .to_string(),
-            None => value.to_string(),
+        let Some(kind) = crate::assignment::storage_kind(&column.declared) else {
+            return Ok(Converted::Value(format!(
+                "CAST({value} AS {})",
+                column.physical
+            )));
         };
-        Ok(format!("CAST({value} AS {})", column.physical))
+        let mut value = crate::storage_diagnostic::contextualize(
+            crate::assignment::convert_for_storage(value, &kind, money, column.utf16),
+            database,
+            &self.schema,
+            &self.table,
+            &column.name,
+        );
+        // Character storage reports truncation (2628) as data, which keeps
+        // the backend transaction usable; the caller raises it.
+        if let Expr::Function(function) = &mut value {
+            let checked = match function.name.to_string().as_str() {
+                "__msduck_store_context_varchar" => Some(("__msduck_check_store_varchar", false)),
+                "__msduck_store_context_char" => Some(("__msduck_check_store_char", false)),
+                "__msduck_store_context_nvarchar" => Some(("__msduck_check_store_nvarchar", true)),
+                "__msduck_store_context_nchar" => Some(("__msduck_check_store_nchar", true)),
+                _ => None,
+            };
+            if let Some((name, unicode)) = checked {
+                function.name = ObjectName::from(vec![Ident::new(name)]);
+                return Ok(Converted::Checked {
+                    value: value.to_string(),
+                    unicode,
+                });
+            }
+        }
+        Ok(Converted::Value(format!(
+            "CAST({value} AS {})",
+            column.physical
+        )))
     }
 
     /// Column `index`'s default as native SQL, or NULL.
