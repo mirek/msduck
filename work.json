@@ -8907,6 +8907,22 @@
       "dependencies": [],
       "issue": 727,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQur"
+    },
+    {
+      "id": "gaps-index-catalog-v1-bootstrap",
+      "title": "Publish index catalog views after feature bootstraps",
+      "state": "ready",
+      "authorization": "Owner-approved successor (2026-10-01) of stalled index-catalog-adapter-v1 for src/index_catalog.rs, umbrella #710. companion of gaps-index-catalog-v1",
+      "scope": [
+        "src/database_catalog.rs"
+      ],
+      "acceptance": [
+        "bootstrap_objects publishes the index catalog views again after the extension features bootstrap, so sys.indexes reads the keys feature's constraint record from a database's first transaction instead of a placeholder; no other behavior of database_catalog.rs changes.",
+        "Merged in the same PR as gaps-index-catalog-v1 after its AGENTS.md checks, review or recorded fallback; completion published with it."
+      ],
+      "dependencies": [],
+      "issue": 754,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PeNM8"
     }
   ]
 }
