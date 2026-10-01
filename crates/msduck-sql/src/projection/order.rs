@@ -124,6 +124,99 @@ fn same(left: &Expr, right: &Expr, sources: &[Source], scope: &Scope) -> bool {
     let _ = VisitMut::visit(&mut right, &mut canonical);
     left == right
 }
+/// Compare a bounded scalar expression shape using explicit bound field and
+/// parameter identity. None means the inputs cross an unknown declaration,
+/// ambiguous name, opaque function or nested query boundary. This does not
+/// infer a type, prove equal runtime values, fold constants or validate SQL.
+/// The inputs are never mutated; volatile calls are deliberately excluded.
+pub fn expression_identity(
+    left: &Expr,
+    right: &Expr,
+    sources: &[Source],
+    scope: &Scope,
+) -> Option<bool> {
+    use crate::expression_metadata::conditional;
+    fn declared(info: &msduck_core::catalog::TypeMetadata) -> bool {
+        info.system_type_id
+            .is_some_and(|system| info.user_type_id == Some(i32::from(system)))
+    }
+    let normalize = |expr: &Expr| -> Option<Expr> {
+        let valid = visit_expressions(expr, |expr| {
+            let known = match expr {
+                Expr::Identifier(name) if name.value.starts_with('@') => scope
+                    .parameters
+                    .get(&name.value.to_lowercase())
+                    .is_some_and(declared),
+                Expr::Identifier(_) | Expr::CompoundIdentifier(_) => column(expr, sources, scope)
+                    .and_then(|field| field.info.as_ref())
+                    .is_some_and(declared),
+                Expr::Function(function) => {
+                    !function.uses_odbc_syntax
+                        && (conditional::coalesce_args(function)
+                            .ok()
+                            .flatten()
+                            .is_some()
+                            || conditional::isnull_args(function).ok().flatten().is_some()
+                            || conditional::nullif_args(function).ok().flatten().is_some()
+                            || conditional::iif_args(function).ok().flatten().is_some())
+                }
+                Expr::Cast {
+                    data_type,
+                    kind: CastKind::Cast,
+                    format: None,
+                    ..
+                } => {
+                    matches!(
+                        data_type,
+                        DataType::Int(None)
+                            | DataType::BigInt(None)
+                            | DataType::SmallInt(None)
+                            | DataType::TinyInt(None)
+                            | DataType::Bit(None)
+                    )
+                }
+                Expr::Value(value) => matches!(
+                    value.value,
+                    Value::Number(_, false)
+                        | Value::Null
+                        | Value::Boolean(_)
+                        | Value::SingleQuotedString(_)
+                        | Value::NationalStringLiteral(_)
+                ),
+                Expr::Nested(_)
+                | Expr::Case { .. }
+                | Expr::BinaryOp { .. }
+                | Expr::UnaryOp { .. }
+                | Expr::IsNull(_)
+                | Expr::IsNotNull(_)
+                | Expr::Between { .. }
+                | Expr::InList { .. } => true,
+                _ => false,
+            };
+            if known {
+                std::ops::ControlFlow::Continue(())
+            } else {
+                std::ops::ControlFlow::Break(())
+            }
+        });
+        if valid.is_break() {
+            return None;
+        }
+        let mut copy = expr.clone();
+        let _ = visit_expressions_mut(&mut copy, |expr| {
+            if let Expr::Function(function) = expr {
+                for part in &mut function.name.0 {
+                    if let ObjectNamePart::Identifier(name) = part {
+                        name.value = name.value.to_uppercase();
+                    }
+                }
+            }
+            std::ops::ControlFlow::<()>::Continue(())
+        });
+        Some(copy)
+    };
+    Some(same(&normalize(left)?, &normalize(right)?, sources, scope))
+}
 fn integer_column(expr: &Expr, sources: &[Source], scope: &Scope) -> bool {
     column(expr, sources, scope).is_some_and(|field| {
         field

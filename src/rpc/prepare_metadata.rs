@@ -699,7 +699,7 @@ fn prepared_order(
                 return true;
             }
             if msduck_sql::expression_metadata::conditional::candidate(expr)
-                && variant_declaration(expr, &scope, parameters) == Some(true)
+                && variant_declaration(expr, &scope, parameters).is_some()
             {
                 return true;
             }
@@ -733,6 +733,24 @@ fn prepared_order(
                             Some(48 | 52 | 56 | 127 | 104)
                         )
                     }),
+                Expr::Function(f)
+                    if f.name.to_string().eq_ignore_ascii_case("GROUPING")
+                        && f.parameters == FunctionArguments::None
+                        && f.over.is_none()
+                        && f.filter.is_none()
+                        && f.null_treatment.is_none()
+                        && f.within_group.is_empty()
+                        && !f.uses_odbc_syntax =>
+                {
+                    let FunctionArguments::List(args) = &f.args else {
+                        return false;
+                    };
+                    args.duplicate_treatment.is_none()
+                        && args.clauses.is_empty()
+                        && matches!(args.args.as_slice(), [FunctionArg::Unnamed(FunctionArgExpr::Expr(expr))]
+                            if column(expr, &scope).is_some_and(|field|
+                                field.info.as_ref().and_then(|info| info.system_type_id) == Some(56)))
+                }
                 Expr::Function(f)
                     if f.name.to_string().eq_ignore_ascii_case("SUM")
                         && msduck_sql::aggregate::validate(f).is_ok()
@@ -781,6 +799,18 @@ fn prepared_order(
                 }
                 ordinals.push(u16::try_from(index + 1).ok()?);
             } else {
+                // Captured integral/variant conditional keys retain projected
+                // identity across qualification, parentheses and parameter case.
+                // A pure shape comparison does not authorize an unknown family.
+                if projected_key(&key.expr)
+                    && let Some(index) = expressions.iter().position(|expr| {
+                        projection::order::expression_identity(expr, &key.expr, &[], &scope)
+                            == Some(true)
+                    })
+                {
+                    ordinals.push(u16::try_from(index + 1).ok()?);
+                    continue;
+                }
                 // Captured hidden INT-column-plus-integer keys use ordinal
                 // zero. The original native binding validates arithmetic;
                 // this declaration check neither evaluates nor rewrites it.
