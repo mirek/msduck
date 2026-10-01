@@ -25,8 +25,8 @@ These operations now work over carrier operands:
 
 The other operand can be an N'' or '' literal, an NVARCHAR or VARCHAR
 variable or RPC parameter, another NVARCHAR or VARCHAR column or a
-subquery. This holds in SELECT, UPDATE and DELETE statements, views, procedures and
-scalar conditions such as `IF EXISTS (…)`.
+subquery. This holds in SELECT, UPDATE, DELETE and MERGE statements,
+`sp_executesql`, views and scalar conditions such as `IF EXISTS (…)`.
 
 ## Semantics
 
@@ -117,7 +117,7 @@ Constant patterns are parsed once per vector.
 
 ## Reference evidence
 
-`reference/gaps-unicode-predicates.json` holds 9 programs (111 steps)
+`reference/gaps-unicode-predicates.json` holds 9 programs (114 steps)
 captured twice, identically, by `scripts/capture-gaps-unicode-predicates.mjs`.
 Each program runs in a fresh database created with
 `COLLATE Latin1_General_100_BIN2`. Each step keeps its rows, column types,
@@ -155,8 +155,8 @@ LIKE case and the backend rewrites.
   error instead of 506.
 - **Result lengths.** The lengths of some character results are not
   inferred, and fall back to NVARCHAR(MAX): CONCAT over columns, COALESCE of
-  NVARCHAR and VARCHAR, set operations that mix them, REPLACE, SUBSTRING,
-  REVERSE and STRING_AGG. SQL Server reports, for example, nvarchar(25) for
+  NVARCHAR and VARCHAR, set operations that mix them, REPLACE, SUBSTRING
+  and REVERSE. SQL Server reports, for example, nvarchar(25) for
   CONCAT and nvarchar(4000) for REPLACE.
 - **GROUP BY, DISTINCT and set-operation duplicates** compare carriers by
   their exact units. Values that differ only in trailing spaces (`N'x'` and
@@ -191,8 +191,6 @@ LIKE case and the backend rewrites.
 - **Literals and variables.** N'' literals, NVARCHAR variables and
   parameters are VARCHAR in the backend. Comparisons between them, without
   a carrier column, keep the existing behavior: `N'a' = N'a  '` is false.
-- **MERGE** statements are not supported by msduck yet. The lowering applies
-  to them once they are.
 - **DATALENGTH over concatenation** (`DATALENGTH(n + N'!')`) still fails
   with 40515, as it does for VARCHAR columns.
 - **NCHAR(n) for surrogate code units** is not supported (an existing limit).
