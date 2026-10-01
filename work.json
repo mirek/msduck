@@ -8536,6 +8536,25 @@
       ],
       "issue": 730,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQv4"
+    },
+    {
+      "id": "gaps-temp-tables-v1-hooks",
+      "title": "Batch scope hooks for #temp tables and table variables",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-temp-tables-v1",
+      "scope": [
+        "src/engine.rs",
+        "src/engine/ext.rs",
+        "docs/extension-hooks.md"
+      ],
+      "acceptance": [
+        "Add non-claiming batch_begin/batch_end feature hooks that run around every SQL, RPC and nested batch (including batches claimed by a batch hook), so features can keep batch and module scoped state; document them in docs/extension-hooks.md.",
+        "A DECLARE @t TABLE declaration carried by the temp_tables feature completes like a scalar DECLARE (no DONE token, @@ROWCOUNT unchanged).",
+        "Existing behavior is otherwise unchanged; verified with the AGENTS.md checks in the gaps-temp-tables-v1 PR."
+      ],
+      "dependencies": [],
+      "issue": 726,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQuQ"
     }
   ]
 }
