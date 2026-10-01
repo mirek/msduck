@@ -9065,6 +9065,22 @@
       "dependencies": [],
       "issue": 766,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PfNsb"
+    },
+    {
+      "id": "gaps-index-catalog-v1-keys-test",
+      "title": "Drop the keys compat differences that sys.indexes now matches",
+      "state": "ready",
+      "authorization": "Owner-approved successor (2026-10-01) of stalled index-catalog-adapter-v1 for src/index_catalog.rs, umbrella #710. companion of gaps-index-catalog-v1",
+      "scope": [
+        "tests/compat/keys.test.mjs"
+      ],
+      "acceptance": [
+        "tests/compat/keys.test.mjs no longer lists column-level-list step 11, filtered-unique step 13 and clustered-include-options step 12 as known differences, because gaps-index-catalog-v1 makes those sys.indexes steps match SQL Server; no other entry changes.",
+        "Merged in the same PR as gaps-index-catalog-v1 after its AGENTS.md checks, review or recorded fallback; completion published with it."
+      ],
+      "dependencies": [],
+      "issue": 754,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PeNM8"
     }
   ]
 }
