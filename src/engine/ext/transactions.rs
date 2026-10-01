@@ -1,10 +1,45 @@
-//! Isolation levels, SAVE TRANSACTION and WAITFOR.
+//! Isolation levels, SAVE TRANSACTION, named transactions, WAITFOR and
+//! DBCC USEROPTIONS. Behavior, evidence and limits: docs/gaps-transactions.md.
 //!
-//! Stub until its gap task lands; see docs/extension-hooks.md.
-use super::Feature;
+//! - [`options`]: the session isolation level (SET TRANSACTION ISOLATION
+//!   LEVEL and transaction-manager begin requests), `sys.dm_exec_sessions`
+//!   and DBCC USEROPTIONS.
+//! - [`savepoints`]: SAVE TRANSACTION and ROLLBACK TRANSACTION to a
+//!   savepoint, emulated with before-images because DuckDB has no
+//!   savepoints.
+//! - [`waitfor`]: WAITFOR DELAY and WAITFOR TIME.
+use super::{
+    super::{Execution, Parameter, Session},
+    Feature,
+};
+use anyhow::Result;
+use msduck_core::diagnostic::SqlError;
+use msduck_sql::dialect::ext::transactions::{self as syntax, Name, Request};
+use sqlparser::ast::{Set, Statement};
+use std::collections::HashMap;
 
-#[derive(Default)]
-pub(crate) struct State;
+mod options;
+mod savepoints;
+mod waitfor;
+
+pub(crate) struct State {
+    /// TDS numbering: 1 read uncommitted, 2 read committed, 3 repeatable
+    /// read, 4 serializable, 5 snapshot.
+    isolation: u8,
+    /// Isolation levels to restore when the RPCs running now return.
+    rpc_isolation: Vec<u8>,
+    savepoints: savepoints::Stack,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            isolation: options::READ_COMMITTED,
+            rpc_isolation: Vec::new(),
+            savepoints: Default::default(),
+        }
+    }
+}
 
 pub(super) struct Hooks;
 
@@ -12,4 +47,168 @@ impl Feature for Hooks {
     fn name(&self) -> &'static str {
         "transactions"
     }
+
+    fn batch(
+        &self,
+        session: &mut Session,
+        sql: &str,
+        _parameters: &HashMap<String, Parameter>,
+        rpc: bool,
+    ) -> Option<(Vec<u8>, bool)> {
+        compile_error(session, sql, rpc)
+    }
+
+    fn statement(
+        &self,
+        session: &mut Session,
+        statement: &mut Statement,
+        parameters: &mut HashMap<String, Parameter>,
+    ) -> Result<Option<Execution>> {
+        if let Some(request) = syntax::request(statement) {
+            return execute(session, request, parameters).map(Some);
+        }
+        match statement {
+            Statement::Set(Set::SetTransaction {
+                modes,
+                snapshot: None,
+                session: false,
+            }) => options::set_statement(session, modes).map(Some),
+            Statement::Rollback {
+                chain: false,
+                savepoint: Some(name),
+            } => savepoints::rollback_statement(session, &name.value),
+            _ => {
+                savepoints::before_statement(session, statement)?;
+                Ok(None)
+            }
+        }
+    }
+
+    fn isolation(&self, isolation: u8) -> Option<Result<()>> {
+        // 0 keeps the session's level; 1-5 are SQL Server's levels. DuckDB
+        // runs every one of them as snapshot isolation (see options.rs).
+        (isolation <= 5).then_some(Ok(()))
+    }
+
+    fn save_transaction(&self, session: &mut Session, name: &str) -> Option<Result<Vec<u8>>> {
+        Some(savepoints::save_request(session, name))
+    }
+
+    fn rollback_to(&self, session: &mut Session, name: &str) -> Option<Result<Vec<u8>>> {
+        savepoints::rollback_request(session, name)
+    }
+
+    fn transaction_end(&self, session: &mut Session, _committed: bool) {
+        savepoints::release_all(session);
+    }
+
+    fn session_start(&self, session: &mut Session) -> Result<()> {
+        options::publish(session);
+        Ok(())
+    }
+}
+
+/// Report a compile-time diagnostic of this feature (148, 103) before any
+/// statement of the batch runs, as SQL Server does. Batches that cannot
+/// contain such a statement are not parsed twice.
+fn compile_error(session: &mut Session, sql: &str, rpc: bool) -> Option<(Vec<u8>, bool)> {
+    let upper = sql.to_ascii_uppercase();
+    if !upper.contains("WAITFOR") && !upper.contains("TRAN") {
+        return None;
+    }
+    // A batch that does not parse fails through the engine's own path.
+    let statements = msduck_sql::batch::parse(sql).ok()?;
+    let error = syntax::compile_error(&statements)?;
+    let mut out = Vec::new();
+    crate::tds::sql_error(&mut out, &error);
+    crate::tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
+    session.last_error = error.number;
+    Some((out, false))
+}
+
+fn execute(
+    session: &mut Session,
+    request: Request<'_>,
+    parameters: &mut HashMap<String, Parameter>,
+) -> Result<Execution> {
+    match request {
+        Request::Begin(name) => {
+            let name = transaction_name(&name, parameters)?.unwrap_or_default();
+            let tokens = session.begin_transaction(0, &name)?;
+            Ok(Execution::statement(tokens, None, 0))
+        }
+        Request::Commit(name) => {
+            // SQL Server ignores the name, but still checks its type.
+            transaction_name(&name, parameters)?;
+            let tokens = session.commit_transaction()?;
+            Ok(Execution::statement(tokens, None, 0))
+        }
+        Request::Rollback(name) => match transaction_name(&name, parameters)? {
+            // A NULL name rolls back the whole transaction.
+            None => {
+                let tokens = session.rollback_transaction("")?;
+                Ok(Execution::statement(tokens, None, 0))
+            }
+            Some(name) if name.is_empty() && session.transactions > 0 => Err(SqlError::new(
+                6401,
+                2,
+                "Cannot roll back . No transaction or savepoint of that name was found.",
+            )
+            .into()),
+            Some(name) => match savepoints::rollback_statement(session, &name)? {
+                Some(execution) => Ok(execution),
+                None => {
+                    let tokens = session.rollback_transaction(&name)?;
+                    Ok(Execution::statement(tokens, None, 0))
+                }
+            },
+        },
+        Request::Save(name) => {
+            let name = transaction_name(&name, parameters)?;
+            savepoints::save_statement(session, name)?;
+            Ok(Execution::statement(Vec::new(), None, 0))
+        }
+        Request::WaitFor(wait, value) => waitfor::run(session, wait, value, parameters),
+        Request::UserOptions { no_infomsgs } => options::user_options(session, no_infomsgs),
+        Request::Error(error) => Err(error.into()),
+    }
+}
+
+/// The value of a transaction or savepoint name: a literal, or a character
+/// variable truncated to 32 characters (`None` when it is NULL). Trailing
+/// blanks never matter in comparisons, so they are kept as given.
+fn transaction_name(
+    name: &Name<'_>,
+    parameters: &HashMap<String, Parameter>,
+) -> Result<Option<String>> {
+    use msduck_core::{types::Type, value::Value};
+    let variable = match name {
+        Name::Literal(name) => return Ok(Some((*name).to_owned())),
+        Name::Variable(variable) => variable.to_string(),
+    };
+    let parameter = parameters.get(&variable.to_lowercase()).ok_or_else(|| {
+        SqlError::syntax(
+            137,
+            2,
+            format!("Must declare the scalar variable \"{variable}\"."),
+        )
+    })?;
+    if !matches!(parameter.data_type, Type::Character(_)) {
+        return Err(SqlError::new(
+            3914,
+            0,
+            format!(
+                "The data type \"{}\" is invalid for transaction names or savepoint names. Allowed data types are char, varchar, nchar, varchar(max), nvarchar, and nvarchar(max).",
+                waitfor::type_name(parameter.data_type)
+            ),
+        )
+        .into());
+    }
+    let text = match &parameter.value {
+        Value::Null => return Ok(None),
+        Value::Text(text) => text.clone(),
+        Value::Unicode(units) => String::from_utf16_lossy(units),
+        other => anyhow::bail!("unexpected character variable value {other:?}"),
+    };
+    Ok(Some(text.chars().take(syntax::NAME_LIMIT).collect()))
 }

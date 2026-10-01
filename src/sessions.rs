@@ -1,5 +1,6 @@
-//! Server sessions: SPIDs, LOGIN7 client names, current databases and the
-//! handles that terminate a session for ALTER DATABASE ... WITH ROLLBACK.
+//! Server sessions: SPIDs, LOGIN7 client names, current databases, isolation
+//! levels and the handles that terminate a session for ALTER DATABASE ...
+//! WITH ROLLBACK or cancel its waits.
 //!
 //! `sys.dm_exec_sessions` reads a snapshot through the `__msduck_sessions()`
 //! table function, taken when a query starts executing.
@@ -10,10 +11,10 @@ use duckdb::{
 use std::{
     collections::BTreeMap,
     sync::{
-        Arc, Mutex, MutexGuard,
+        Arc, Condvar, Mutex, MutexGuard,
         atomic::{AtomicUsize, Ordering},
     },
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 /// SQL Server numbers user sessions above the system sessions.
@@ -31,6 +32,47 @@ pub struct Client {
 /// Closes a session's client connection.
 pub type Terminator = Arc<dyn Fn() + Send + Sync>;
 
+/// SQL Server's `transaction_isolation_level` for READ COMMITTED, the
+/// default of a new session.
+pub const READ_COMMITTED: i16 = 2;
+
+/// Why a [`Registration::wait`] ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Wake {
+    /// The full interval passed.
+    Elapsed,
+    /// [`Registration::cancel`] was called, or the caller's poll returned true.
+    Cancelled,
+    /// The session is being terminated (ALTER DATABASE ... WITH ROLLBACK).
+    Terminated,
+}
+
+/// Wakes a session blocked in [`Registration::wait`].
+#[derive(Default)]
+struct Signal {
+    state: Mutex<SignalState>,
+    changed: Condvar,
+}
+
+#[derive(Default)]
+struct SignalState {
+    cancelled: bool,
+    terminated: bool,
+}
+
+impl Signal {
+    fn lock(&self) -> MutexGuard<'_, SignalState> {
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn raise(&self, change: impl FnOnce(&mut SignalState)) {
+        change(&mut self.lock());
+        self.changed.notify_all();
+    }
+}
+
 struct Entry {
     /// Microseconds since the Unix epoch, UTC.
     login_time: i64,
@@ -43,6 +85,11 @@ struct Entry {
     terminator: Option<Terminator>,
     /// Interrupts the statement running on the session's DuckDB connection.
     interrupt: Option<Arc<duckdb::InterruptHandle>>,
+    /// `transaction_isolation_level`: 1 read uncommitted, 2 read committed,
+    /// 3 repeatable read, 4 serializable, 5 snapshot.
+    isolation: i16,
+    /// Wakes the session's waits (WAITFOR).
+    signal: Arc<Signal>,
 }
 
 /// The server's sessions by SPID.
@@ -113,6 +160,8 @@ impl Registry {
                 running: false,
                 terminator: None,
                 interrupt: None,
+                isolation: READ_COMMITTED,
+                signal: Arc::default(),
             },
         );
         Ok(Registration {
@@ -131,12 +180,19 @@ impl Registry {
             .entries()
             .iter()
             .filter(|(spid, entry)| **spid != except && entry.alias == alias)
-            .filter_map(|(_, entry)| Some((entry.terminator.clone()?, entry.interrupt.clone())))
+            .filter_map(|(_, entry)| {
+                Some((
+                    entry.terminator.clone()?,
+                    entry.interrupt.clone(),
+                    entry.signal.clone(),
+                ))
+            })
             .collect::<Vec<_>>();
-        for (terminate, interrupt) in &victims {
+        for (terminate, interrupt, signal) in &victims {
             if let Some(interrupt) = interrupt {
                 interrupt.interrupt();
             }
+            signal.raise(|state| state.terminated = true);
             terminate();
         }
         victims.len()
@@ -152,6 +208,7 @@ impl Registry {
                 login_name: entry.login_name.clone(),
                 status: if entry.running { "running" } else { "sleeping" },
                 database_id: entry.database_id as i16,
+                isolation: entry.isolation,
             })
             .collect()
     }
@@ -208,8 +265,71 @@ impl Registration {
         self.registry.terminate(alias, self.spid)
     }
 
+    /// Mark the start (`true`) or end of a request. A new request starts
+    /// uncancelled.
     pub fn set_running(&self, running: bool) {
-        self.update(|entry| entry.running = running);
+        self.update(|entry| {
+            entry.running = running;
+            if running {
+                entry.signal.lock().cancelled = false;
+            }
+        });
+    }
+
+    /// Record the session's transaction isolation level (1-5).
+    pub fn set_isolation(&self, isolation: i16) {
+        self.update(|entry| entry.isolation = isolation);
+    }
+
+    fn signal(&self) -> Option<Arc<Signal>> {
+        self.registry
+            .entries()
+            .get(&self.spid)
+            .map(|entry| entry.signal.clone())
+    }
+
+    /// Cancel the session's current request, as an Attention does: its
+    /// current and later waits end until the next request starts
+    /// ([`Registration::set_running`]).
+    pub fn cancel(&self) {
+        if let Some(signal) = self.signal() {
+            signal.raise(|state| state.cancelled = true);
+        }
+    }
+
+    /// Block for `interval` unless the session is cancelled or terminated
+    /// first. `poll` is checked at least every `poll_interval` for other
+    /// cancellation sources (an Attention flag owned by the request).
+    pub fn wait(
+        &self,
+        interval: Duration,
+        poll_interval: Duration,
+        poll: &dyn Fn() -> bool,
+    ) -> Wake {
+        let Some(signal) = self.signal() else {
+            return Wake::Terminated;
+        };
+        let deadline = Instant::now().checked_add(interval);
+        let mut state = signal.lock();
+        loop {
+            if state.terminated {
+                return Wake::Terminated;
+            }
+            if state.cancelled || poll() {
+                return Wake::Cancelled;
+            }
+            let now = Instant::now();
+            let remaining = match deadline {
+                Some(deadline) if deadline <= now => return Wake::Elapsed,
+                Some(deadline) => deadline - now,
+                None => poll_interval,
+            };
+            state = signal
+                .changed
+                .wait_timeout(state, remaining.min(poll_interval))
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .0;
+        }
     }
 
     /// Exchange entries with `other`, so this handle takes over `other`'s
@@ -232,6 +352,7 @@ struct Row {
     login_name: String,
     status: &'static str,
     database_id: i16,
+    isolation: i16,
 }
 
 /// `__msduck_sessions()`: the columns of `sys.dm_exec_sessions` that msduck
@@ -244,7 +365,9 @@ pub struct Scan {
 }
 
 // client_version is omitted: the value SQL Server reports was not captured.
-const COLUMNS: [(&str, LogicalTypeId); 11] = [
+// transaction_isolation_level is last, after the columns the catalog
+// descriptors list (see src/query_catalog.rs).
+const COLUMNS: [(&str, LogicalTypeId); 12] = [
     ("session_id", LogicalTypeId::Smallint),
     ("login_time", LogicalTypeId::Timestamp),
     ("host_name", LogicalTypeId::Varchar),
@@ -256,6 +379,7 @@ const COLUMNS: [(&str, LogicalTypeId); 11] = [
     ("is_user_process", LogicalTypeId::Boolean),
     ("original_login_name", LogicalTypeId::Varchar),
     ("database_id", LogicalTypeId::Smallint),
+    ("transaction_isolation_level", LogicalTypeId::Smallint),
 ];
 
 impl VTab for SessionsTable {
@@ -355,6 +479,11 @@ impl VTab for SessionsTable {
             let databases = vector.as_mut_slice_with_len::<i16>(rows.len());
             for (slot, row) in databases.iter_mut().zip(rows) {
                 *slot = row.database_id;
+            }
+            let mut vector = output.flat_vector(11);
+            let levels = vector.as_mut_slice_with_len::<i16>(rows.len());
+            for (slot, row) in levels.iter_mut().zip(rows) {
+                *slot = row.isolation;
             }
         }
         output.set_len(rows.len());
