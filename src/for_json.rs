@@ -9,19 +9,69 @@ use duckdb::{
     types::{TimeUnit, Value},
 };
 use msduck_core::for_json::{
-    self as json, Number, Options, PathPlan, Utf16Fragment as Fragment, Utf16Writer as Writer,
+    self as json, Number, Options, PathPlan, Utf16Fragment as Fragment, Utf16Writer,
 };
 use msduck_sql::for_json as syntax;
 use sqlparser::ast::{SelectItem, Statement};
 use std::collections::{HashMap, HashSet};
 
+mod auto;
 mod native;
-pub use native::register;
+
+pub fn register(db: &Connection) -> duckdb::Result<()> {
+    native::register(db)?;
+    auto::register(db)
+}
 
 pub struct Output {
     options: Options,
     fragments: HashSet<String>,
+    /// FOR JSON AUTO nesting; None for FOR JSON PATH.
+    auto: Option<auto::Spec>,
 }
+
+/// A bound result layout: PATH aliases or the AUTO nesting.
+pub enum Plan {
+    Path(PathPlan),
+    Auto,
+}
+
+pub enum Writer<'a> {
+    Path(Utf16Writer<'a>),
+    Auto(auto::Writer<'a>),
+}
+
+/// A formatted FOR JSON result; `units` is None when no row is returned
+/// (FOR JSON AUTO over no rows, as in SQL Server).
+pub struct Finished {
+    units: Option<Vec<u16>>,
+    error: Option<anyhow::Error>,
+}
+
+impl Writer<'_> {
+    pub fn finish(self) -> Finished {
+        match self {
+            Self::Path(writer) => Finished {
+                units: Some(writer.finish()),
+                error: None,
+            },
+            Self::Auto(writer) => match writer.finish() {
+                Ok(units) => Finished { units, error: None },
+                Err(error) => Finished {
+                    units: None,
+                    error: Some(error),
+                },
+            },
+        }
+    }
+}
+
+impl Finished {
+    fn into_units(self) -> Vec<u16> {
+        self.units.unwrap_or_default()
+    }
+}
+
 impl Output {
     pub fn take(db: &Connection, statement: &mut Statement) -> Result<Option<Self>> {
         Self::take_scoped(db, statement, &crate::query_catalog::Scope::default())
@@ -31,6 +81,17 @@ impl Output {
         statement: &mut Statement,
         scope: &crate::query_catalog::Scope,
     ) -> Result<Option<Self>> {
+        if let Statement::Query(query) = statement
+            && auto::is_auto(query)
+        {
+            let spec = auto::spec(db, query, scope)?;
+            query.for_clause = None;
+            return Ok(Some(Self {
+                options: spec.options().clone(),
+                fragments: HashSet::new(),
+                auto: Some(spec),
+            }));
+        }
         let Some(options) = syntax::take(statement)? else {
             return Ok(None);
         };
@@ -57,7 +118,11 @@ impl Output {
                 }
             }
         }
-        Ok(Some(Self { options, fragments }))
+        Ok(Some(Self {
+            options,
+            fragments,
+            auto: None,
+        }))
     }
     pub fn names(db: &Connection, source: &str, values: &[Value]) -> Result<Vec<String>> {
         let mut describe = db.prepare(&format!("DESCRIBE {source}"))?;
@@ -65,14 +130,27 @@ impl Output {
             .query_map(duckdb::params_from_iter(values.iter()), |row| row.get(0))?
             .collect::<duckdb::Result<Vec<_>>>()?)
     }
-    pub fn plan(&self, names: &[String]) -> Result<PathPlan> {
-        Ok(PathPlan::new(names).map_err(syntax::diagnostic)?)
+    pub fn plan(&self, names: &[String]) -> Result<Plan> {
+        if let Some(spec) = &self.auto {
+            ensure!(
+                names.len() == spec.width(),
+                "FOR JSON AUTO star expansion differs from the bound result"
+            );
+            return Ok(Plan::Auto);
+        }
+        Ok(Plan::Path(
+            PathPlan::new(names).map_err(syntax::diagnostic)?,
+        ))
     }
-    pub fn writer<'a>(&self, plan: &'a PathPlan) -> Result<Writer<'a>> {
-        Ok(
-            Writer::new(plan, self.options.clone(), (tds::MAX_MESSAGE - 256) / 2)
-                .map_err(syntax::diagnostic)?,
-        )
+    pub fn writer<'a>(&'a self, plan: &'a Plan) -> Result<Writer<'a>> {
+        Ok(match (plan, &self.auto) {
+            (Plan::Auto, Some(spec)) => Writer::Auto(auto::Writer::new(spec)),
+            (Plan::Path(plan), None) => Writer::Path(
+                Utf16Writer::new(plan, self.options.clone(), (tds::MAX_MESSAGE - 256) / 2)
+                    .map_err(syntax::diagnostic)?,
+            ),
+            _ => bail!("FOR JSON plan does not match its clause"),
+        })
     }
     pub fn row(
         &self,
@@ -81,6 +159,10 @@ impl Output {
         values: &[Value],
         types: &[Option<Type>],
     ) -> Result<()> {
+        let writer = match writer {
+            Writer::Auto(writer) => return writer.row(values, types),
+            Writer::Path(writer) => writer,
+        };
         let strings = values
             .iter()
             .enumerate()
@@ -141,7 +223,12 @@ impl Output {
         );
         Ok(())
     }
-    pub fn encode(text: Vec<u16>) -> Result<Vec<u8>> {
+    pub fn encode(mut finished: Finished) -> Result<Vec<u8>> {
+        if let Some(error) = finished.error.take() {
+            return Err(error);
+        }
+        let rows = finished.units.is_some();
+        let text = finished.into_units();
         ensure!(
             text.len() <= (tds::MAX_MESSAGE - 256) / 2,
             "result exceeds current 16 MiB response limit"
@@ -156,8 +243,10 @@ impl Output {
                 kind: Type::Text,
             }],
         )?;
-        out.push(0xd1);
-        tds::unicode_value(&mut out, &Type::Text, Some(&text))?;
+        if rows {
+            out.push(0xd1);
+            tds::unicode_value(&mut out, &Type::Text, Some(&text))?;
+        }
         Ok(out)
     }
 }
@@ -275,6 +364,12 @@ pub fn lower_nested<T: sqlparser::ast::VisitMut>(
                 Some(sqlparser::ast::ForClause::Json { .. })
             ) {
                 return ControlFlow::Continue(());
+            }
+            if auto::is_auto(query) {
+                return match auto::lower(self.db, query, &scope.inherited, self.parameters) {
+                    Ok(()) => ControlFlow::Continue(()),
+                    Err(error) => ControlFlow::Break(error),
+                };
             }
             let result = (|| -> Result<()> {
                 let mut statement = Statement::Query(Box::new(query.clone()));

@@ -10,7 +10,7 @@ use duckdb::{
 };
 type Spec = (Vec<String>, Vec<bool>, bool, Vec<Option<u8>>);
 
-fn text(vector: &FlatVector<'_>, row: usize, len: usize) -> Result<String> {
+pub(super) fn text(vector: &FlatVector<'_>, row: usize, len: usize) -> Result<String> {
     ensure!(
         vector.logical_type().id() == Id::Varchar,
         "invalid JSON adapter string input"
@@ -30,7 +30,7 @@ fn text(vector: &FlatVector<'_>, row: usize, len: usize) -> Result<String> {
     Ok(std::str::from_utf8(bytes)?.to_owned())
 }
 
-fn value(
+pub(super) fn value(
     structure: &StructVector<'_>,
     column: usize,
     row: usize,
@@ -267,6 +267,7 @@ impl VScalar for Row {
                             .filter(|(_, f)| **f)
                             .map(|(name, _)| name.clone())
                             .collect(),
+                        auto: None,
                     };
                     let plan = output.plan(&names)?;
                     cached = Some((encoded, names, output, plan, scales));
@@ -284,7 +285,7 @@ impl VScalar for Row {
                 }
                 let mut writer = descriptor.writer(plan)?;
                 descriptor.row(&mut writer, names, &values, &types)?;
-                let units = writer.finish();
+                let units = writer.finish().into_units();
                 let bytes = encoded_units(&units, &mut remaining)?;
                 payload.insert(row, bytes.as_slice());
             }
@@ -315,13 +316,20 @@ impl<const ARRAY: bool> VScalar for Wrap<ARRAY> {
             let carriers = source.struct_child(child_count);
             let bytes = carriers.child(0, child_count);
             let root = input.flat_vector(1);
-            let result = output.struct_vector();
-            let payload = result.child(0, len);
+            let mut result = output.struct_vector();
+            let mut payload = result.child(0, len);
             let mut remaining = crate::unicode_carrier::CHUNK_LIMIT;
             for row in 0..len {
                 let root = text(&root, row, len)?;
                 let mut rows = Vec::new();
-                if !source.row_is_null(row as u64) {
+                // FOR JSON PATH always supplies a list; a NULL list is a
+                // FOR JSON AUTO subquery over no rows, which is NULL.
+                if source.row_is_null(row as u64) {
+                    payload.set_null(row);
+                    result.set_null(row);
+                    continue;
+                }
+                {
                     let (offset, count) = source.try_get_entry(row)?;
                     let end = offset
                         .checked_add(count)
@@ -374,7 +382,7 @@ impl<const ARRAY: bool> VScalar for Wrap<ARRAY> {
         )]
     }
 }
-fn encoded_units(units: &[u16], remaining: &mut usize) -> Result<Vec<u8>> {
+pub(super) fn encoded_units(units: &[u16], remaining: &mut usize) -> Result<Vec<u8>> {
     let size = units
         .len()
         .checked_mul(2)
