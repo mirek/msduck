@@ -285,6 +285,37 @@ test('SET NULL and SET DEFAULT actions, composite keys and ALTER TABLE actions',
   assert.deepEqual(await rows(c, 'SELECT id FROM m2 WHERE x = 2'), [[5]])
 })
 
+test('column-level FOREIGN KEY REFERENCES matches the REFERENCES form', { timeout: 60000 }, async t => {
+  const c = await open(t)
+  await query(c, 'CREATE TABLE p(id int PRIMARY KEY)')
+  await query(c, 'CREATE TABLE c(id int PRIMARY KEY, pid int FOREIGN KEY REFERENCES p(id) ON UPDATE CASCADE ON DELETE CASCADE)')
+  await query(c, 'CREATE TABLE d(id int PRIMARY KEY, pid int CONSTRAINT fk_d FOREIGN KEY REFERENCES p(id) ON DELETE SET NULL NOT FOR REPLICATION)')
+  await query(c, 'CREATE TABLE a(id int PRIMARY KEY); INSERT a VALUES (1)')
+  await query(c, 'ALTER TABLE a ADD pid int CONSTRAINT fk_a FOREIGN KEY REFERENCES p(id) ON DELETE CASCADE, qid int FOREIGN KEY REFERENCES p')
+  const keys = "SELECT CASE WHEN f.is_system_named = 1 THEN OBJECT_NAME(f.parent_object_id) ELSE f.name END, f.is_system_named, f.delete_referential_action_desc, f.update_referential_action_desc, COL_NAME(k.parent_object_id, k.parent_column_id), OBJECT_NAME(k.referenced_object_id), COL_NAME(k.referenced_object_id, k.referenced_column_id) FROM sys.foreign_keys f JOIN sys.foreign_key_columns k ON k.constraint_object_id = f.object_id ORDER BY 1, 5"
+  assert.deepEqual(await rows(c, keys), [
+    ['a', true, 'NO_ACTION', 'NO_ACTION', 'qid', 'p', 'id'],
+    ['c', true, 'CASCADE', 'CASCADE', 'pid', 'p', 'id'],
+    ['fk_a', false, 'CASCADE', 'NO_ACTION', 'pid', 'p', 'id'],
+    ['fk_d', false, 'SET_NULL', 'NO_ACTION', 'pid', 'p', 'id']
+  ])
+  await query(c, 'INSERT p VALUES (1),(2); INSERT c VALUES (10,1),(20,2); INSERT d VALUES (10,2),(20,NULL)')
+  await fails(c, 'INSERT d VALUES (30,7)', [547], /INSERT statement conflicted with the FOREIGN KEY constraint "fk_d"/)
+  await fails(c, 'INSERT c VALUES (30,7)', [547], /INSERT statement conflicted with the FOREIGN KEY constraint "FK__c__pid__/)
+  await query(c, 'UPDATE p SET id = 101 WHERE id = 1')
+  assert.deepEqual(await rows(c, 'SELECT * FROM c ORDER BY id'), [[10, 101], [20, 2]])
+  await fails(c, 'UPDATE p SET id = 102 WHERE id = 2', [547], /UPDATE statement conflicted with the REFERENCE constraint "fk_d"/)
+  await query(c, 'DELETE p WHERE id = 2')
+  assert.deepEqual(await rows(c, 'SELECT * FROM c ORDER BY id'), [[10, 101]])
+  assert.deepEqual(await rows(c, 'SELECT * FROM d ORDER BY id'), [[10, null], [20, null]])
+  await query(c, 'UPDATE a SET qid = 101')
+  await fails(c, 'UPDATE a SET pid = 9', [547], /UPDATE statement conflicted with the FOREIGN KEY constraint "fk_a"/)
+  await fails(c, 'DELETE p WHERE id = 101', [547], /DELETE statement conflicted with the REFERENCE constraint "FK__a__qid__/)
+  await query(c, 'UPDATE a SET pid = 101, qid = NULL; DELETE p WHERE id = 101')
+  assert.deepEqual(await rows(c, 'SELECT count(*) FROM a'), [[0]])
+  assert.deepEqual(await rows(c, 'SELECT count(*) FROM c'), [[0]])
+})
+
 test('constraint failures inside transactions', { timeout: 60000 }, async t => {
   const c = await open(t)
   await query(c, 'CREATE TABLE p(id int PRIMARY KEY); INSERT p VALUES (1)')

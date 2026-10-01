@@ -239,3 +239,69 @@ fn stored_expressions_round_trip_bracketed_names() {
     };
     assert!(matches!(left.as_ref(), Expr::Identifier(ident) if ident.value == "a]b"));
 }
+
+/// The CREATE TABLE statements of `sql`, written back as text.
+fn created(sql: &str) -> Vec<String> {
+    crate::batch::parse(sql)
+        .unwrap_or_else(|error| panic!("{sql}: {error}"))
+        .iter()
+        .map(|statement| statement.to_string())
+        .collect()
+}
+
+#[test]
+fn column_foreign_key_words_match_the_references_form() {
+    let plain = created("CREATE TABLE c(pid int REFERENCES p(id) ON UPDATE CASCADE)");
+    assert_eq!(
+        created("CREATE TABLE c(pid int FOREIGN KEY REFERENCES p(id) ON UPDATE CASCADE)"),
+        plain
+    );
+    assert_eq!(
+        created(
+            "CREATE TABLE c(pid int foreign  /* x */ key\nREFERENCES p(id) ON UPDATE CASCADE NOT FOR REPLICATION)"
+        ),
+        plain
+    );
+    let named = created(
+        "CREATE TABLE c(pid int CONSTRAINT fk2 REFERENCES dbo.p ON DELETE SET NULL, n int NOT NULL)",
+    );
+    assert_eq!(
+        created(
+            "CREATE TABLE c(pid int CONSTRAINT fk2 FOREIGN KEY REFERENCES dbo.p ON DELETE SET NULL NOT FOR REPLICATION, n int NOT NULL)"
+        ),
+        named
+    );
+    // Following statements are parsed as before, including their own uses.
+    let batch = created(
+        "CREATE TABLE c(pid int FOREIGN KEY REFERENCES p(id)) INSERT c VALUES (1) CREATE TABLE d(x int CONSTRAINT fk_d FOREIGN KEY REFERENCES c(pid))",
+    );
+    assert_eq!(batch.len(), 3);
+    assert_eq!(
+        batch[0],
+        created("CREATE TABLE c(pid int REFERENCES p(id))")[0]
+    );
+    assert_eq!(
+        batch[2],
+        created("CREATE TABLE d(x int CONSTRAINT fk_d REFERENCES c(pid))")[0]
+    );
+
+    let alter = claimed(
+        "ALTER TABLE items ADD n int CONSTRAINT fk_n FOREIGN KEY REFERENCES parent(id) ON DELETE CASCADE NOT FOR REPLICATION",
+    );
+    assert_eq!(
+        alter,
+        claimed(
+            "ALTER TABLE items ADD n int CONSTRAINT fk_n REFERENCES parent(id) ON DELETE CASCADE"
+        )
+    );
+    let batch = created("ALTER TABLE items ADD n int FOREIGN KEY REFERENCES parent(id); SELECT 1");
+    assert_eq!(batch.len(), 2);
+    // Table-level constraints still need their column list.
+    for sql in [
+        "CREATE TABLE c(pid int, FOREIGN KEY REFERENCES p(id))",
+        "CREATE TABLE c(pid int, CONSTRAINT fk FOREIGN KEY REFERENCES p(id))",
+        "ALTER TABLE c ADD CONSTRAINT fk FOREIGN KEY REFERENCES p(id)",
+    ] {
+        assert!(crate::batch::parse(sql).is_err(), "{sql}");
+    }
+}
