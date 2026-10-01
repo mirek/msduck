@@ -901,6 +901,16 @@ fn parse_path_utf16_detailed(
                     while at < end && !matches!(syntax[at], b'.' | b'[') {
                         at += 1;
                     }
+                    // A dot requires a property before an array selector.
+                    // Retain SQL Server's bounded offending UTF-16 unit and
+                    // offset instead of replacing this with a generic PATH.
+                    if start == at && syntax.get(at) == Some(&b'[') {
+                        return Err(ExtractionError::Syntax {
+                            character: text[at],
+                            position: at,
+                            state: 14,
+                        });
+                    }
                     let key = String::from_utf16(&text[start..at]).map_err(|_| PATH)?;
                     if key.is_empty()
                         || !key.chars().enumerate().all(|(i, c)| {
