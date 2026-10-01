@@ -5,7 +5,9 @@
 //! lateral joins. Folded bodies are expanded again for the functions they
 //! call, one nesting level deeper. SQL Server allows 32 levels; a call that
 //! would exceed them becomes an expression that raises the nesting error if
-//! it is ever evaluated, so recursion guarded by IF works within the limit.
+//! it is ever evaluated. Loops and recursion cannot fold: the outermost call
+//! then runs statement by statement when its arguments are known
+//! (`interpret`), and its body's own calls expand again from there.
 use super::{Parameter, Session, is_function, modules};
 use anyhow::{Result, anyhow, bail};
 use msduck_core::diagnostic::SqlError;
@@ -106,6 +108,9 @@ impl std::fmt::Display for Recursive {
 
 impl std::error::Error for Recursive {}
 
+/// A function's stored module and parsed definition.
+type Resolved = (modules::Module, Arc<Definition>);
+
 struct Expander<'a> {
     session: &'a Session,
     /// The caller's variables, for arguments of interpreted calls.
@@ -130,11 +135,7 @@ impl<'a> Expander<'a> {
     /// Resolve a function name to its stored module. `None` when no module
     /// matches; `schema_named` reports whether the name was schema-qualified
     /// with a schema of this database (so built-ins cannot be meant).
-    fn resolve(
-        &self,
-        name: &ObjectName,
-        table: bool,
-    ) -> Result<(Option<(modules::Module, Arc<Definition>)>, bool)> {
+    fn resolve(&self, name: &ObjectName, table: bool) -> Result<(Option<Resolved>, bool)> {
         let Some(parts) = parts(name) else {
             return Ok((None, false));
         };
@@ -198,14 +199,14 @@ impl<'a> Expander<'a> {
     }
 
     /// Fold failed for a reason interpretation may overcome: loops or
-    /// recursion. Only the outermost call of an expansion interprets, and
-    /// only when its arguments are known before the statement runs.
-    fn fallback(&self, object_id: i32, error: &anyhow::Error) -> bool {
+    /// recursion, in this function or in one it calls. Only the outermost
+    /// call of an expansion interprets (its body then calls the others with
+    /// known arguments), and only when its own arguments are known before
+    /// the statement runs.
+    fn fallback(&self, error: &anyhow::Error) -> bool {
         self.path.is_empty()
             && (error.downcast_ref::<fold::Unsupported>().is_some()
-                || error
-                    .downcast_ref::<Recursive>()
-                    .is_some_and(|recursive| recursive.0 == object_id))
+                || error.downcast_ref::<Recursive>().is_some())
     }
 
     /// Run a call with literal arguments and return its value or rows.
@@ -323,7 +324,7 @@ impl<'a> Expander<'a> {
         })();
         match folded {
             Ok(folded) => Ok(Some(folded)),
-            Err(error) if self.fallback(module.object_id, &error) => self
+            Err(error) if self.fallback(&error) => self
                 .interpret(&display, &arguments, error, |evaluation| {
                     interpret::scalar(&definition, arguments.clone(), evaluation)
                 })
@@ -415,9 +416,9 @@ impl<'a> Expander<'a> {
         match error.downcast::<fold::Unsupported>() {
             Ok(limit) => anyhow!("unsupported: user-defined function {display}: {}", limit.0),
             Err(error) => match error.downcast::<Recursive>() {
-                Ok(_) => anyhow!(
-                    "unsupported: mutually recursive user-defined functions called from {display}"
-                ),
+                Ok(_) => {
+                    anyhow!("unsupported: recursive user-defined function called from {display}")
+                }
                 Err(error) => error,
             },
         }
@@ -471,8 +472,7 @@ impl<'a> Expander<'a> {
         let query = match folded {
             Ok(query) => query,
             Err(error)
-                if self.fallback(module.object_id, &error)
-                    && matches!(definition.returns, Returns::Table { .. }) =>
+                if self.fallback(&error) && matches!(definition.returns, Returns::Table { .. }) =>
             {
                 self.interpret(&display, &arguments, error, |evaluation| {
                     interpret::table(&definition, arguments.clone(), evaluation)

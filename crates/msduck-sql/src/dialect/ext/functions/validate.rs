@@ -218,11 +218,6 @@ fn check_expressions(statement: &Statement) -> Result<()> {
     struct Find;
     impl Visitor for Find {
         type Break = String;
-        fn pre_visit_statement(&mut self, statement: &Statement) -> ControlFlow<String> {
-            // Nested statements are checked separately.
-            let _ = statement;
-            ControlFlow::Continue(())
-        }
         fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<String> {
             if let Expr::Function(function) = expr
                 && function.name.0.len() == 1

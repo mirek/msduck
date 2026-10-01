@@ -273,9 +273,7 @@ pub fn parse(sql: &str) -> Result<Definition> {
                 bail!(SqlError::new(
                     180,
                     1,
-                    format!(
-                        "There are too many parameters in this CREATE FUNCTION statement. The maximum number is 1024."
-                    )
+                    "There are too many parameters in this CREATE FUNCTION statement. The maximum number is 1024."
                 ));
             }
             parameters.push(Parameter {

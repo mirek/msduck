@@ -176,7 +176,8 @@ fn has_query<T: Visit>(node: &T) -> bool {
     node.visit(&mut Find).is_break()
 }
 
-/// Functions whose repeated evaluation would change results.
+/// Functions whose repeated evaluation would change results, and schema-
+/// qualified calls, whose repetition would multiply work.
 fn volatile(expr: &Expr) -> bool {
     struct Find;
     impl Visitor for Find {

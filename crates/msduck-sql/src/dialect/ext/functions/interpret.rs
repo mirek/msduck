@@ -31,7 +31,7 @@ enum Flow {
     Normal,
     Break,
     Continue,
-    Return(Option<Expr>),
+    Return(Option<Box<Expr>>),
 }
 
 struct Run<'a> {
@@ -167,7 +167,7 @@ impl Run<'_> {
                         }
                         _ => None,
                     };
-                    return Ok(Flow::Return(value));
+                    return Ok(Flow::Return(value.map(Box::new)));
                 }
                 Statement::Insert(insert) => {
                     let Some((variable, columns)) = self.table else {
@@ -240,7 +240,7 @@ pub fn scalar(
         sources: vec![],
     };
     match run.run(body, &mut env)? {
-        Flow::Return(Some(value)) => Ok(value),
+        Flow::Return(Some(value)) => Ok(*value),
         Flow::Return(None) | Flow::Normal => run.evaluator.value(fold::null(), returns),
         Flow::Break | Flow::Continue => Err(SqlError::new(
             135,
