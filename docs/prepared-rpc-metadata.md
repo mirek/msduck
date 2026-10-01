@@ -303,3 +303,36 @@ At `f2a0f46fb0aee526cc491893ccfdfe7bc7f56943`, formatting, strict workspace/all-
 JSON compilation error controls: two fresh pinned SQL Server captures independently agree on all 26 records per run (SHA-256 `a2b7366c69f7e7b82911631642f83edaccf45946ac0f6b7e5a2d9ed665cbddcb`). Both empty-input and dead-CASE controls preserve literal compilation errors; malformed path diagnostics precede malformed documents. Literal failures emit ERROR followed by DONEPROC(command 224, status 2), with no return status or handle. The adapter uses the existing deterministic JSON parser only for literal document/path operands after native binding; parameters, casts, columns and volatile operands remain unevaluated. Non-ASCII ANSI literals retain their code-page conversion barrier. Complete expected responses are embedded verbatim; runtime replay of the new implementation is pending.
 
 OUTPUT preparation reference: two fresh pinned SQL Server captures agree on all 16 records per run (SHA-256 `b14687c9f4929571938c89a2e0df5690f9594697b8a07c7198fa7d8ab9cf1a03`), covering joined UPDATE images and CTEs, direct parameter/cast outputs, empty candidates, stored/computed character collation and ordinary UPDATE/DELETE. Preparation retains UPDATE command 197 and DELETE command 196. Joined OUTPUT uses the existing explicit catalog binding/output-field API; ordinary OUTPUT uses the existing deterministic logical projection adapter. Neither path executes DML or changes cached execution SQL. Complete expected responses are retained verbatim; runtime replay is pending.
+
+
+## Current verified preparation checkpoint
+
+Production revision `4ce3643bd6741b15ebc1cf390e66bd59efc40cfc` passed
+formatting, strict workspace/all-target Clippy, all-target build and all 1,116
+workspace Rust tests, with one pre-existing ignored test. The 504 default clients
+passed 496 and failed eight, with zero skips and unchanged revision, binary and
+inputs. The local audit retained all 325 diagnostic cases with zero transport
+failures; it did not compare a SQL Server endpoint.
+
+Both strict JSON replays now match all 40 complete preparation responses,
+including conditional declarations, input collations, literal errors and
+parameter/volatile barriers. Metadata-only character casts can use a proven
+built-in numeric operand declaration without evaluating RAND. The core preserves
+state14 and bracket position2 for the empty-property path `$.[`; the old default
+client assertion still expects a generic state1 message, tracked in #734.
+
+The existing joined OUTPUT client and actual OUTPUT INTO handle/mutation
+regression pass. The complete supplemental replay still fails at native UPPER
+binding of a private Unicode image carrier, tracked in #735. Its adapter is
+reserved by a separate worker. No metadata fallback bypasses that binding error.
+
+The `--source-declarations PATH` capture mode covers mixed variant UNION,
+derived DISTINCT, grouped conditional conversion, parameter GENERATE_SERIES and
+recursive mixed character anchors. Two fresh pinned SQL Server runs agree on
+all 14 records per run (SHA-256 `c0b1ab5828c96eea90e588f02114484ed90ed7304fd9c6a7657fcb13b789e457`).
+All twelve complete preparation/unprepare/state controls are retained verbatim
+in the strict public regression. The series result uses a non-null fixed INT
+descriptor; grouped conversion retains computed flags33; derived hidden variant
+keys advertise ORDER ordinal0. These are reference requirements, not a current
+implementation pass. Runtime differences remain in the complete diagnostic
+artifact rather than being normalized to passing comparisons.
