@@ -844,8 +844,16 @@ mod tests {
             cast = format!("__msduck_cast_nvarchar({cast}, 5)");
         }
         // Each level adds a bounded amount, not a multiple of the inner size.
-        assert!(lowered(&nested).len() < 40 * nested.len(), "{}", lowered(&nested).len());
-        assert!(lowered(&cast).len() < 10 * cast.len(), "{}", lowered(&cast).len());
+        assert!(
+            lowered(&nested).len() < 40 * nested.len(),
+            "{}",
+            lowered(&nested).len()
+        );
+        assert!(
+            lowered(&cast).len() < 10 * cast.len(),
+            "{}",
+            lowered(&cast).len()
+        );
     }
 
     #[test]
