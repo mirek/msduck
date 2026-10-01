@@ -282,17 +282,61 @@ fn json_declaration(expression: &Expr, catalog: &CatalogSnapshot, scope: &Scope)
         ) => source,
         _ => return None,
     };
-    let Statement::Query(mut probe) = msduck_sql::batch::parse("SELECT 0").ok()?.remove(0) else {
-        return None;
+    let probe_expression = |expression: &Expr, annotate: bool| {
+        let Statement::Query(mut probe) = msduck_sql::batch::parse("SELECT 0").ok()?.remove(0)
+        else {
+            return None;
+        };
+        let sqlparser::ast::SetExpr::Select(select) = probe.body.as_mut() else {
+            return None;
+        };
+        select.projection = vec![sqlparser::ast::SelectItem::UnnamedExpr(expression.clone())];
+        if annotate {
+            probe = Box::new(expression_declarations(
+                &probe,
+                &HashMap::new(),
+                catalog,
+                scope,
+            ));
+        }
+        let fields = projection::query_fields(catalog, &probe, scope)?;
+        (fields.len() == 1).then(|| fields[0].clone())
     };
-    let sqlparser::ast::SetExpr::Select(select) = probe.body.as_mut() else {
-        return None;
-    };
-    select.projection = vec![sqlparser::ast::SelectItem::UnnamedExpr(source.clone())];
-    let fields = projection::query_fields(catalog, &probe, scope)?;
-    let [field] = fields.as_slice() else {
-        return None;
-    };
+    let mut declared_source = source.clone();
+    let mut field = probe_expression(&declared_source, false)?;
+    if field.collation.is_none() {
+        // A character conversion of a proven numeric declaration uses the
+        // database collation even when the operand is volatile. Annotate only
+        // the operand: typing an entire unknown character conversion would
+        // incorrectly conceal an unknown source collation or alias.
+        let operand = match &mut declared_source {
+            Expr::Cast { expr, .. }
+            | Expr::Convert {
+                expr,
+                data_type: Some(_),
+                ..
+            } => expr,
+            _ => return None,
+        };
+        let inner = probe_expression(operand, true)?;
+        let info = inner.info.as_ref()?;
+        if !matches!(
+            info.system_type_id,
+            Some(48 | 52 | 56 | 127 | 59 | 62 | 106 | 108 | 60 | 122 | 104)
+        ) || info.user_type_id != info.system_type_id.map(i32::from)
+        {
+            return None;
+        }
+        **operand = Expr::Convert {
+            is_try: false,
+            expr: Box::new(Expr::Value(sqlparser::ast::Value::Null.into())),
+            data_type: Some(msduck_sql::sql_type::ast(info.logical_type()?)),
+            charset: None,
+            target_before_value: true,
+            styles: vec![],
+        };
+        field = probe_expression(&declared_source, false)?;
+    }
     let info = field.info.as_ref()?;
     if !matches!(info.system_type_id, Some(167 | 175 | 231 | 239))
         || info.user_type_id != info.system_type_id.map(i32::from)
@@ -307,7 +351,7 @@ fn json_declaration(expression: &Expr, catalog: &CatalogSnapshot, scope: &Scope)
     };
     Some(Expr::Convert {
         is_try: false,
-        expr: Box::new(source.clone()),
+        expr: Box::new(declared_source),
         data_type: Some(msduck_sql::sql_type::ast(SqlType::Character(
             msduck_core::character::CharacterType::new(
                 msduck_core::character::Family::Nvarchar,
@@ -1688,7 +1732,7 @@ mod tests {
             default_collation: Some("SQL_Latin1_General_CP1_CI_AS".into()),
             ..Default::default()
         };
-        for (name, id, length) in [("int", 56, 4), ("nvarchar", 231, 8000)] {
+        for (name, id, length) in [("int", 56, 4), ("nvarchar", 231, 8000), ("float", 62, 8)] {
             catalog.types.insert(
                 name.into(),
                 TypeMetadata {
@@ -1700,6 +1744,11 @@ mod tests {
             );
         }
         for (sql, length, collation) in [
+            (
+                "SELECT JSON_QUERY(CAST(RAND() AS NVARCHAR(MAX)), '$.a')",
+                -1,
+                "SQL_Latin1_General_CP1_CI_AS",
+            ),
             (
                 "SELECT JSON_QUERY(CAST(@p AS NVARCHAR(MAX)), 'strict $.a')",
                 -1,
@@ -1775,6 +1824,7 @@ mod tests {
         );
         for sql in [
             "SELECT JSON_QUERY(missing, '$.a')",
+            "SELECT JSON_QUERY(CAST(unknown_function() AS NVARCHAR(MAX)), '$.a')",
             "SELECT JSON_QUERY(CAST(NULL AS INT), '$.a')",
             "SELECT JSON_VALUE(CAST(NULL AS NVARCHAR(MAX)))",
             "SELECT JSON_QUERY(DISTINCT CAST(NULL AS NVARCHAR(MAX)), '$.a')",
