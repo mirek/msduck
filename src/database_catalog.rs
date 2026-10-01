@@ -18,6 +18,10 @@ use std::path::{Path, PathBuf};
 
 pub const MASTER: &str = "master";
 pub const MASTER_ID: i32 = 1;
+/// The system database that keeps backup and restore history. It is created
+/// on first use (see `ensure_system`) and keeps SQL Server's ID.
+pub const MSDB: &str = "msdb";
+const MSDB_ID: i32 = 4;
 /// SQL Server assigns user databases IDs after the four system databases.
 const FIRST_USER_ID: i32 = 5;
 /// System databases msduck does not provide; their names stay reserved.
@@ -47,6 +51,11 @@ pub struct Catalog {
     /// Sessions cannot enter them meanwhile, as under SQL Server's
     /// exclusive database lock.
     altering: std::sync::Mutex<std::collections::HashSet<String>>,
+    /// The primary database file, or None for an in-memory server.
+    primary_path: Option<PathBuf>,
+    /// `master`'s recovery family, as BACKUP reports it. It is not stored:
+    /// RESTORE never targets `master`.
+    master_family: String,
 }
 
 impl Drop for Catalog {
@@ -241,6 +250,8 @@ impl Catalog {
                 changes: std::sync::Mutex::new(()),
                 users: Default::default(),
                 altering: Default::default(),
+                primary_path: None,
+                master_family: new_guid(),
             }
         } else {
             // Resolve the directory once, so later file work depends neither
@@ -265,6 +276,8 @@ impl Catalog {
                 changes: std::sync::Mutex::new(()),
                 users: Default::default(),
                 altering: Default::default(),
+                primary_path: Some(file.clone()),
+                master_family: new_guid(),
             }
         };
         owner.execute_batch(&format!(
@@ -277,7 +290,13 @@ impl Catalog {
                 published BOOLEAN NOT NULL DEFAULT false);
              CREATE SEQUENCE IF NOT EXISTS {ids} START {FIRST_USER_ID} MAXVALUE 32767 NO CYCLE;
              ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS user_access UTINYINT DEFAULT 0;
-             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS read_committed_snapshot BOOLEAN DEFAULT false",
+             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS read_committed_snapshot BOOLEAN DEFAULT false;
+             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS family_guid VARCHAR;
+             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS database_guid VARCHAR;
+             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS data_name VARCHAR;
+             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS log_name VARCHAR;
+             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS data_path VARCHAR;
+             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS log_path VARCHAR",
             registry = catalog.registry(),
             ids = catalog.ids(),
         ))?;
@@ -692,10 +711,23 @@ impl Catalog {
     pub fn create(&self, db: &Connection, name: &str) -> Result<Database> {
         validate(name)?;
         let _change = self.lock();
-        let name_key = key(name);
-        if RESERVED.contains(&name_key.as_str()) {
+        if RESERVED.contains(&key(name).as_str()) {
             return Err(exists(name));
         }
+        self.create_locked(db, name, None, None)
+    }
+
+    /// Create a user database, or `msdb` with its fixed ID, while holding the
+    /// change lock. A staged file, restored from a backup, becomes the new
+    /// database's file before it is attached.
+    fn create_locked(
+        &self,
+        db: &Connection,
+        name: &str,
+        fixed_id: Option<i32>,
+        staged: Option<&Restore<'_>>,
+    ) -> Result<Database> {
+        let name_key = key(name);
         if let Some((row, attached)) = self.lookup(db, &name_key)?
             && !self.forget_stale(db, &row, attached)?
         {
@@ -710,29 +742,53 @@ impl Catalog {
         // that took over a renamed primary's file name, may hold a generated
         // name, so an occupied name moves on to the next ID until the
         // sequence, which does not cycle, runs out.
-        let (database_id, file) = loop {
-            let database_id: i32 = db.query_row(
-                &format!("SELECT CAST(nextval({}) AS INTEGER)", literal(&self.ids())),
-                [],
-                |row| row.get(0),
-            )?;
-            let file = file_name(&self.prefix, database_id, &name_key);
-            let path = self.directory.join(&file);
-            // Only an existing entry skips the ID; any other error from
-            // inspecting storage ends the statement without using more IDs.
-            if !occupied(&path)? && !occupied(&wal(&path))? {
-                break (database_id, file);
+        let (database_id, file) = match fixed_id {
+            Some(database_id) => {
+                let file = file_name(&self.prefix, database_id, &name_key);
+                let path = self.directory.join(&file);
+                ensure!(
+                    !occupied(&path)? && !occupied(&wal(&path))?,
+                    "cannot create database {name}: '{}' already exists",
+                    path.display()
+                );
+                (database_id, file)
             }
+            None => loop {
+                let database_id: i32 = db.query_row(
+                    &format!("SELECT CAST(nextval({}) AS INTEGER)", literal(&self.ids())),
+                    [],
+                    |row| row.get(0),
+                )?;
+                let file = file_name(&self.prefix, database_id, &name_key);
+                let path = self.directory.join(&file);
+                // Only an existing entry skips the ID; any other error from
+                // inspecting storage ends the statement without using more IDs.
+                if !occupied(&path)? && !occupied(&wal(&path))? {
+                    break (database_id, file);
+                }
+            },
         };
         // The primary key serializes concurrent creators before any attach.
         let inserted = db.execute(
             &format!(
-                "INSERT INTO {}(name_key,name,database_id,file,create_date)
-                 VALUES (?,?,?,?,CAST(now() AS TIMESTAMP))
+                "INSERT INTO {}(name_key,name,database_id,file,create_date,
+                                family_guid,database_guid,data_name,log_name,data_path,log_path)
+                 VALUES (?,?,?,?,CAST(now() AS TIMESTAMP),?,?,?,?,?,?)
                  ON CONFLICT DO NOTHING",
                 self.registry()
             ),
-            duckdb::params![name_key, name, database_id, file],
+            duckdb::params![
+                name_key,
+                name,
+                database_id,
+                file,
+                staged.map(|staged| staged.family_guid),
+                staged.map(|staged| staged.database_guid),
+                staged.map(|staged| staged.data_name),
+                staged.map(|staged| staged.log_name),
+                staged.map(|staged| staged.data_path),
+                staged.map(|staged| staged.log_path),
+            ],
         )?;
         if inserted == 0 {
             return Err(exists(name));
@@ -744,9 +800,17 @@ impl Catalog {
             file,
             published: false,
         };
+        // A restored file takes the generated name; on failure the cleanup
+        // below deletes it like any file CREATE made.
+        let staged_file = match staged {
+            Some(staged) => self
+                .path(&row)
+                .and_then(|path| move_file(staged.staging, &path)),
+            None => Ok(()),
+        };
         // Clients see the database only once every catalog lists it.
-        let attached = self
-            .attach(db, &row, Attach::Create)
+        let attached = staged_file
+            .and_then(|()| self.attach(db, &row, Attach::Create))
             .and_then(|()| self.publish_all(db))
             .and_then(|()| self.set_published(db, &name_key, true));
         if let Err(error) = attached {
@@ -797,11 +861,17 @@ impl Catalog {
     ) -> Result<()> {
         let _change = self.lock();
         let name_key = key(name);
-        if name_key == MASTER {
+        // A published system database cannot be dropped. An msdb whose
+        // creation or recovery failed can, so that it can be created again.
+        let unavailable_msdb = name_key == MSDB
+            && self
+                .lookup(db, &name_key)?
+                .is_some_and(|(row, attached)| !(row.published && attached));
+        if RESERVED.contains(&name_key.as_str()) && !unavailable_msdb {
             bail!(SqlError::new(
                 3708,
                 4,
-                "Cannot drop the database 'master' because it is a system database."
+                format!("Cannot drop the database '{name_key}' because it is a system database.")
             ));
         }
         // A registered database that failed to attach can still be dropped.
@@ -991,6 +1061,7 @@ impl Catalog {
 
     fn publish(&self, db: &Connection, alias: &str) -> Result<()> {
         let target = quote(alias);
+        self.publish_files(db, alias)?;
         db.execute_batch(&format!(
             "CREATE OR REPLACE VIEW {target}.sys.databases AS
              SELECT CAST(name AS VARCHAR) AS name,
@@ -1061,6 +1132,101 @@ impl Catalog {
             primary = literal(&self.primary),
             upper = literal(&KEY_MAP.0),
             lower = literal(&KEY_MAP.1),
+        ))?;
+        Ok(())
+    }
+
+    /// `sys.master_files` and `sys.database_files` in one catalog, with
+    /// SQL Server's columns. Logical and physical names come from the
+    /// registry (see `effective`); sizes are DuckDB's allocated blocks in
+    /// 8 KB pages, and logs report no pages.
+    fn publish_files(&self, db: &Connection, alias: &str) -> Result<()> {
+        let target = quote(alias);
+        let database_id = if alias == self.primary {
+            MASTER_ID
+        } else {
+            db.query_row(
+                &format!("SELECT database_id FROM {} WHERE name=?", self.registry()),
+                [alias],
+                |row| row.get(0),
+            )?
+        };
+        let directory = format!("{}{}", self.directory.display(), std::path::MAIN_SEPARATOR);
+        let (master_data, master_log) = self.primary_paths();
+        let size = |catalog: &str| {
+            format!(
+                "coalesce((SELECT CAST(ceil(s.total_blocks * s.block_size / 8192.0) AS INTEGER)
+                           FROM pragma_database_size() s WHERE s.database_name={catalog}),0)"
+            )
+        };
+        db.execute_batch(&format!(
+            "CREATE OR REPLACE VIEW {target}.sys.master_files AS
+             SELECT CAST(f.database_id AS INTEGER) AS database_id,
+                    CAST(f.file_id AS INTEGER) AS file_id,
+                    CAST(NULL AS UUID) AS file_guid,
+                    CAST(f.file_id - 1 AS UTINYINT) AS type,
+                    CAST(CASE f.file_id WHEN 1 THEN 'ROWS' ELSE 'LOG' END AS VARCHAR) AS type_desc,
+                    CAST(2 - f.file_id AS INTEGER) AS data_space_id,
+                    CAST(f.name AS VARCHAR) AS name,
+                    CAST(f.physical_name AS VARCHAR) AS physical_name,
+                    CAST(0 AS UTINYINT) AS state,
+                    CAST('ONLINE' AS VARCHAR) AS state_desc,
+                    CAST(f.size AS INTEGER) AS size,
+                    CAST(CASE WHEN f.file_id = 2 AND f.database_id <> {MASTER_ID} THEN 268435456 ELSE -1 END AS INTEGER) AS max_size,
+                    CAST(CASE WHEN f.database_id IN ({MASTER_ID},{MSDB_ID}) THEN 10 ELSE 8192 END AS INTEGER) AS growth,
+                    false AS is_media_read_only,
+                    false AS is_read_only,
+                    false AS is_sparse,
+                    f.database_id IN ({MASTER_ID},{MSDB_ID}) AS is_percent_growth,
+                    false AS is_name_reserved,
+                    false AS is_persistent_log_buffer,
+                    CAST(NULL AS DECIMAL(25,0)) AS create_lsn,
+                    CAST(NULL AS DECIMAL(25,0)) AS drop_lsn,
+                    CAST(NULL AS DECIMAL(25,0)) AS read_only_lsn,
+                    CAST(NULL AS DECIMAL(25,0)) AS read_write_lsn,
+                    CAST(NULL AS DECIMAL(25,0)) AS differential_base_lsn,
+                    CAST(NULL AS UUID) AS differential_base_guid,
+                    CAST(NULL AS TIMESTAMP) AS differential_base_time,
+                    CAST(NULL AS DECIMAL(25,0)) AS redo_start_lsn,
+                    CAST(NULL AS UUID) AS redo_start_fork_guid,
+                    CAST(NULL AS DECIMAL(25,0)) AS redo_target_lsn,
+                    CAST(NULL AS UUID) AS redo_target_fork_guid,
+                    CAST(NULL AS DECIMAL(25,0)) AS backup_lsn,
+                    CAST(NULL AS INTEGER) AS credential_id
+             FROM (
+                 SELECT {MASTER_ID} AS database_id,1 AS file_id,'master' AS name,
+                        {master_data} AS physical_name,{master_size} AS size
+                 UNION ALL
+                 SELECT {MASTER_ID},2,'mastlog',{master_log},0
+                 UNION ALL
+                 SELECT r.database_id,1,
+                        coalesce(r.data_name,CASE WHEN r.database_id={MSDB_ID} THEN 'MSDBData' ELSE r.name END),
+                        coalesce(r.data_path,{directory}||r.file),
+                        {user_size}
+                 FROM {registry} r JOIN duckdb_databases() d ON d.database_name=r.name
+                 WHERE r.published
+                 UNION ALL
+                 SELECT r.database_id,2,
+                        coalesce(r.log_name,CASE WHEN r.database_id={MSDB_ID} THEN 'MSDBLog' ELSE r.name||'_log' END),
+                        coalesce(r.log_path,{directory}||r.file||'.wal'),
+                        0
+                 FROM {registry} r JOIN duckdb_databases() d ON d.database_name=r.name
+                 WHERE r.published
+             ) f
+             ORDER BY f.database_id, f.file_id;
+             CREATE OR REPLACE VIEW {target}.sys.database_files AS
+             SELECT file_id,file_guid,type,type_desc,data_space_id,name,physical_name,state,state_desc,
+                    size,max_size,growth,is_media_read_only,is_read_only,is_sparse,is_percent_growth,
+                    is_name_reserved,is_persistent_log_buffer,create_lsn,drop_lsn,read_only_lsn,
+                    read_write_lsn,differential_base_lsn,differential_base_guid,differential_base_time,
+                    redo_start_lsn,redo_start_fork_guid,redo_target_lsn,redo_target_fork_guid,backup_lsn
+             FROM {target}.sys.master_files WHERE database_id={database_id};",
+            registry = self.registry(),
+            master_data = literal(&master_data),
+            master_log = literal(&master_log),
+            master_size = size(&literal(&self.primary)),
+            user_size = size("r.name"),
+            directory = literal(&directory),
         ))?;
         Ok(())
     }
@@ -1136,6 +1302,425 @@ impl Catalog {
             Ok(())
         }
     }
+}
+
+/// The files of a database as BACKUP records them: logical and physical
+/// names and the recovery family. Physical names are the names SQL Server
+/// would report; msduck stores the data in its own DuckDB file.
+#[derive(Clone, Debug)]
+pub struct Files {
+    pub database_id: i32,
+    /// The SQL Server name.
+    pub name: String,
+    /// The DuckDB catalog that stores the database.
+    pub alias: String,
+    pub data_name: String,
+    pub log_name: String,
+    pub data_path: String,
+    pub log_path: String,
+    pub family_guid: String,
+    pub database_guid: String,
+    /// Microseconds since the Unix epoch.
+    pub create_date: i64,
+}
+
+/// A database restored from a backup: the staged DuckDB file and the
+/// metadata it keeps.
+#[derive(Clone, Copy, Debug)]
+pub struct Restore<'a> {
+    pub name: &'a str,
+    /// A DuckDB file in the catalog directory (see `staging_path`). It is
+    /// moved into place, or left for the caller to delete on failure.
+    pub staging: &'a Path,
+    pub data_name: &'a str,
+    pub log_name: &'a str,
+    pub data_path: &'a str,
+    pub log_path: &'a str,
+    pub family_guid: &'a str,
+    pub database_guid: &'a str,
+    /// WITH REPLACE: overwrite an existing database of another family.
+    pub replace: bool,
+}
+
+/// Several SQL Server errors reported together, in order.
+#[derive(Debug)]
+pub struct Diagnostics(pub Vec<SqlError>);
+
+impl std::fmt::Display for Diagnostics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.0.last() {
+            Some(error) => f.write_str(&error.message),
+            None => Ok(()),
+        }
+    }
+}
+
+impl std::error::Error for Diagnostics {}
+
+/// One registered database's file metadata, before defaults apply.
+struct FileRow {
+    name: String,
+    database_id: i32,
+    file: String,
+    data_name: Option<String>,
+    log_name: Option<String>,
+    data_path: Option<String>,
+    log_path: Option<String>,
+}
+
+impl Catalog {
+    /// The files of the published database `name`, giving it a recovery
+    /// family and database GUID on first use.
+    pub fn files(&self, db: &Connection, name: &str) -> Result<Option<Files>> {
+        let _change = self.lock();
+        let Some(alias) = self.resolve_published(db, name)? else {
+            return Ok(None);
+        };
+        if alias == self.primary {
+            let (data_path, log_path) = self.primary_paths();
+            let create_date: i64 = db.query_row(
+                "SELECT epoch_us(TIMESTAMP '2003-04-08 09:13:36.39')",
+                [],
+                |row| row.get(0),
+            )?;
+            return Ok(Some(Files {
+                database_id: MASTER_ID,
+                name: MASTER.into(),
+                alias,
+                data_name: "master".into(),
+                log_name: "mastlog".into(),
+                data_path,
+                log_path,
+                family_guid: self.master_family.clone(),
+                database_guid: self.master_family.clone(),
+                create_date,
+            }));
+        }
+        db.execute(
+            &format!(
+                "UPDATE {} SET family_guid=coalesce(family_guid,upper(CAST(uuid() AS VARCHAR))),
+                     database_guid=coalesce(database_guid,upper(CAST(uuid() AS VARCHAR)))
+                 WHERE name=? AND (family_guid IS NULL OR database_guid IS NULL)",
+                self.registry()
+            ),
+            [&alias],
+        )?;
+        let (row, family_guid, database_guid, create_date) = db.query_row(
+            &format!(
+                "SELECT name,database_id,file,data_name,log_name,data_path,log_path,
+                        family_guid,database_guid,epoch_us(create_date)
+                 FROM {} WHERE name=?",
+                self.registry()
+            ),
+            [&alias],
+            |row| {
+                Ok((
+                    FileRow::read(row)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, i64>(9)?,
+                ))
+            },
+        )?;
+        let (data_name, log_name, data_path, log_path) = self.effective(&row);
+        Ok(Some(Files {
+            database_id: row.database_id,
+            name: alias.clone(),
+            alias,
+            data_name,
+            log_name,
+            data_path,
+            log_path,
+            family_guid,
+            database_guid,
+            create_date,
+        }))
+    }
+
+    /// `master`'s data and log file names.
+    fn primary_paths(&self) -> (String, String) {
+        match &self.primary_path {
+            Some(path) => {
+                let path = path.display().to_string();
+                (path.clone(), format!("{path}.wal"))
+            }
+            None => (":memory:".into(), ":memory:".into()),
+        }
+    }
+
+    /// Logical and physical names with their defaults: `<name>` and
+    /// `<name>_log` (`MSDBData` and `MSDBLog` for msdb), and the database's
+    /// DuckDB file and its WAL.
+    fn effective(&self, row: &FileRow) -> (String, String, String, String) {
+        let (data_default, log_default) = if row.database_id == MSDB_ID {
+            ("MSDBData".to_owned(), "MSDBLog".to_owned())
+        } else {
+            (row.name.clone(), format!("{}_log", row.name))
+        };
+        let storage = self.directory.join(&row.file).display().to_string();
+        (
+            row.data_name.clone().unwrap_or(data_default),
+            row.log_name.clone().unwrap_or(log_default),
+            row.data_path.clone().unwrap_or_else(|| storage.clone()),
+            row.log_path.clone().unwrap_or(format!("{storage}.wal")),
+        )
+    }
+
+    fn file_rows(&self, db: &Connection) -> Result<Vec<FileRow>> {
+        let mut query = db.prepare(&format!(
+            "SELECT r.name,r.database_id,r.file,r.data_name,r.log_name,r.data_path,r.log_path
+             FROM {} r JOIN duckdb_databases() d ON d.database_name=r.name
+             WHERE r.published ORDER BY r.database_id",
+            self.registry()
+        ))?;
+        let rows = query
+            .query_map([], FileRow::read)?
+            .collect::<duckdb::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// A fresh path in the catalog directory for a DuckDB file that BACKUP
+    /// or RESTORE writes before moving or deleting it. Nothing exists there.
+    pub fn staging_path(&self, purpose: &str) -> Result<PathBuf> {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_nanos())
+            .unwrap_or_default();
+        for _ in 0..16 {
+            let path = self.directory.join(format!(
+                ".{}.{purpose}-{}-{nanos}-{}.duckdb",
+                self.prefix,
+                std::process::id(),
+                NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ));
+            if !occupied(&path)? && !occupied(&wal(&path))? {
+                return Ok(path);
+            }
+        }
+        bail!("could not choose a unique {purpose} file name")
+    }
+
+    /// Create `msdb` with SQL Server's database ID if it does not exist yet.
+    /// Returns whether it was created. Like CREATE DATABASE, this must run
+    /// outside a transaction.
+    pub fn ensure_system(&self, db: &Connection, name: &str) -> Result<bool> {
+        ensure!(key(name) == MSDB, "unknown system database {name}");
+        let _change = self.lock();
+        if self.resolve_published(db, MSDB)?.is_some() {
+            return Ok(false);
+        }
+        self.create_locked(db, MSDB, Some(MSDB_ID), None)?;
+        Ok(true)
+    }
+
+    /// RESTORE DATABASE: create the database from a staged file, or replace
+    /// an existing one in place, keeping its ID. Errors follow SQL Server:
+    /// 3154 for a database of another family without REPLACE, 1834/3156/3119
+    /// for physical names that belong to another database, 3102 when the
+    /// restoring session uses the database and 3101 when others do. `own`
+    /// counts the restoring session's holds of a catalog alias, and
+    /// `current` is its current catalog alias.
+    pub fn restore(
+        &self,
+        db: &Connection,
+        restore: &Restore<'_>,
+        own: &dyn Fn(&str) -> usize,
+        current: &str,
+    ) -> Result<Database> {
+        let name = restore.name;
+        validate(name)?;
+        let name_key = key(name);
+        ensure!(
+            !RESERVED.contains(&name_key.as_str()),
+            "RESTORE over the system database '{name}' is not supported by msduck"
+        );
+        let _change = self.lock();
+        let mut existing = self.lookup(db, &name_key)?;
+        if let Some((row, attached)) = &existing
+            && self.forget_stale(db, row, *attached)?
+        {
+            existing = None;
+        }
+        if let Some((row, attached)) = &existing {
+            ensure!(
+                row.published && *attached,
+                "database '{}' is unavailable; DROP it before restoring over it",
+                row.name
+            );
+            if current == row.name {
+                bail!(SqlError::new(
+                    3102,
+                    1,
+                    format!(
+                        "RESTORE cannot process database '{}' because it is in use by this session. It is recommended that the master database be used when performing this operation.",
+                        row.name
+                    )
+                ));
+            }
+            if self.users(&row.name) > own(&row.name) || self.in_transition(&row.name) {
+                bail!(SqlError::new(
+                    3101,
+                    1,
+                    "Exclusive access could not be obtained because the database is in use."
+                ));
+            }
+            let family: Option<String> = db.query_row(
+                &format!(
+                    "SELECT family_guid FROM {} WHERE name_key=?",
+                    self.registry()
+                ),
+                [&name_key],
+                |row| row.get(0),
+            )?;
+            if !restore.replace
+                && !family
+                    .as_deref()
+                    .is_some_and(|family| family.eq_ignore_ascii_case(restore.family_guid))
+            {
+                bail!(SqlError::new(
+                    3154,
+                    4,
+                    format!(
+                        "The backup set holds a backup of a database other than the existing '{}' database.",
+                        row.name
+                    )
+                ));
+            }
+        }
+        // A physical name another database uses cannot be overwritten.
+        let target = existing.as_ref().map(|(row, _)| row.name.clone());
+        let mut owners = vec![(
+            MASTER.to_owned(),
+            self.primary_paths().0,
+            self.primary_paths().1,
+        )];
+        for row in self.file_rows(db)? {
+            if Some(&row.name) == target.as_ref() {
+                continue;
+            }
+            let (_, _, data_path, log_path) = self.effective(&row);
+            owners.push((row.name.clone(), data_path, log_path));
+        }
+        let mut errors = Vec::new();
+        for (logical, physical) in [
+            (restore.data_name, restore.data_path),
+            (restore.log_name, restore.log_path),
+        ] {
+            if let Some((owner, _, _)) = owners
+                .iter()
+                .find(|(_, data, log)| data == physical || log == physical)
+            {
+                errors.push(SqlError::new(
+                    1834,
+                    1,
+                    format!(
+                        "The file '{physical}' cannot be overwritten.  It is being used by database '{owner}'."
+                    ),
+                ));
+                errors.push(SqlError::new(
+                    3156,
+                    4,
+                    format!(
+                        "File '{logical}' cannot be restored to '{physical}'. Use WITH MOVE to identify a valid location for the file."
+                    ),
+                ));
+            }
+        }
+        if !errors.is_empty() {
+            errors.push(SqlError::new(
+                3119,
+                1,
+                "Problems were identified while planning for the RESTORE statement. Previous messages provide details.",
+            ));
+            bail!(Diagnostics(errors));
+        }
+        let Some((row, _)) = existing else {
+            return self.create_locked(db, name, None, Some(restore));
+        };
+        let path = self.path(&row)?;
+        deletable(&path)?;
+        // Open and bootstrap the staged file first, so a backup this build
+        // cannot open never costs the existing database.
+        bootstrap_file(restore.staging)?;
+        // Hide the database, detach it and replace its file. A failure
+        // after the old file is gone leaves the database hidden, as SQL
+        // Server leaves a failed restore in the RESTORING state; DROP can
+        // remove it.
+        self.set_published(db, &name_key, false)?;
+        db.execute_batch(&format!("DETACH DATABASE {}", quote(&row.name)))
+            .inspect_err(|_| {
+                let _ = self.set_published(db, &name_key, true);
+            })?;
+        self.delete_files(&row, true)?;
+        move_file(restore.staging, &path)?;
+        db.execute(
+            &format!(
+                "UPDATE {} SET family_guid=?,database_guid=?,data_name=?,log_name=?,data_path=?,log_path=?
+                 WHERE name_key=?",
+                self.registry()
+            ),
+            duckdb::params![
+                restore.family_guid,
+                restore.database_guid,
+                restore.data_name,
+                restore.log_name,
+                restore.data_path,
+                restore.log_path,
+                name_key
+            ],
+        )?;
+        let result = self
+            .attach(db, &row, Attach::Recover)
+            .and_then(|()| self.publish_all(db))
+            .and_then(|()| self.set_published(db, &name_key, true));
+        if let Err(error) = result {
+            let _ = db.execute_batch(&format!("DETACH DATABASE IF EXISTS {}", quote(&row.name)));
+            return Err(error);
+        }
+        Ok(Database {
+            name: row.name,
+            database_id: row.database_id,
+        })
+    }
+}
+
+impl FileRow {
+    fn read(row: &duckdb::Row) -> duckdb::Result<Self> {
+        Ok(Self {
+            name: row.get(0)?,
+            database_id: row.get(1)?,
+            file: row.get(2)?,
+            data_name: row.get(3)?,
+            log_name: row.get(4)?,
+            data_path: row.get(5)?,
+            log_path: row.get(6)?,
+        })
+    }
+}
+
+/// A random (version 4) GUID in upper case, as SQL Server displays them.
+pub fn new_guid() -> String {
+    use ring::rand::SecureRandom;
+    let mut bytes = [0u8; 16];
+    // The system generator only fails when the OS has no entropy source.
+    ring::rand::SystemRandom::new()
+        .fill(&mut bytes)
+        .expect("system random number generator");
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    uuid::Uuid::from_bytes(bytes).to_string().to_uppercase()
+}
+
+/// Move a staged file into place; both are in the catalog directory.
+fn move_file(from: &Path, to: &Path) -> Result<()> {
+    ensure!(
+        !occupied(to)? && !occupied(&wal(to))?,
+        "'{}' already exists",
+        to.display()
+    );
+    std::fs::rename(from, to)
+        .with_context(|| format!("move {} to {}", from.display(), to.display()))
 }
 
 fn validate(name: &str) -> Result<()> {
