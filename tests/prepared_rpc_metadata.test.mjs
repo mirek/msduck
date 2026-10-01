@@ -3,7 +3,7 @@ import {test} from 'node:test'
 import {mkdir,writeFile,readFile} from 'node:fs/promises'
 import {start} from './support/client.mjs'
 import {assertSameCapture} from '../scripts/lib/reference.mjs'
-import {observe,retained,retainedCteDelete,cteDeleteOptions,retainedTemporalSets,temporalSetProfiles,retainedSetProperties,setPropertyProfiles,setPropertySetup,windowDeclarationProfiles,orderDeclarationProfiles,orderPropertyProfiles,bitwiseDeclarationProfiles,bitwiseSetup,rankingDeclarationProfiles,groupingOrderProfiles,catalogDeclarationProfiles,catalogDeclarationSetup,observeCatalogBatches,jsonDeclarationProfiles,jsonPreparationErrorProfiles,joinedOutputPreparationProfiles,sourceDeclarationProfiles,applySourceDeclarationProfiles,groupingErrorProfiles,bindingErrorProfiles,bindingMultipleErrorProfiles} from '../scripts/capture-prepared-rpc-metadata.mjs'
+import {observe,retained,retainedCteDelete,cteDeleteOptions,retainedTemporalSets,temporalSetProfiles,retainedSetProperties,setPropertyProfiles,setPropertySetup,windowDeclarationProfiles,orderDeclarationProfiles,orderPropertyProfiles,bitwiseDeclarationProfiles,bitwiseSetup,rankingDeclarationProfiles,groupingOrderProfiles,catalogDeclarationProfiles,catalogDeclarationSetup,observeCatalogBatches,jsonDeclarationProfiles,jsonPreparationErrorProfiles,joinedOutputPreparationProfiles,sourceDeclarationProfiles,applySourceDeclarationProfiles,groupingErrorProfiles,bindingErrorProfiles,bindingMultipleErrorProfiles,bindingNameLimitProfiles} from '../scripts/capture-prepared-rpc-metadata.mjs'
 
 test('prepared RPC responses match SQL Server and never execute during preparation',async t=>{
  const connection=await start(t)
