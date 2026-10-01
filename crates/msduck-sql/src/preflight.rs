@@ -159,7 +159,19 @@ pub fn variables(
                 return ControlFlow::Break(error.message);
             }
 
-            if matches!(query.for_clause, Some(ForClause::Json { .. })) {
+            if matches!(
+                query.for_clause,
+                Some(ForClause::Json {
+                    for_json: ForJson::Auto,
+                    ..
+                })
+            ) {
+                // FOR JSON AUTO belongs to the json_string feature.
+                if let Err(error) = crate::dialect::ext::json_string::validate_for_json_auto(query)
+                {
+                    return ControlFlow::Break(error);
+                }
+            } else if matches!(query.for_clause, Some(ForClause::Json { .. })) {
                 let mut statement = Statement::Query(Box::new(query.clone()));
                 if let Err(error) = crate::for_json::take(&mut statement) {
                     return ControlFlow::Break(error.to_string());

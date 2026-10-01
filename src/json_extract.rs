@@ -36,11 +36,63 @@ pub fn diagnostic(message: &str) -> Option<SqlError> {
     let message = message
         .strip_prefix("Invalid Input Error: ")
         .unwrap_or(message);
+    if let Some(diagnostic) = json_string_diagnostic(message) {
+        return Some(diagnostic);
+    }
     if let Some(diagnostic) = crate::openjson::diagnostic(message) {
         return Some(diagnostic);
     }
     msduck_core::json_path::diagnostic(message)
         .or_else(|| crate::string_escape::diagnostic(message))
+}
+
+/// Marker raised by the json_string feature's native functions and syntax
+/// checks (FOR JSON AUTO, JSON_MODIFY, STRING_SPLIT, STRING_AGG, HASHBYTES):
+/// `__msduck_sql_error_v1:<number>:<state>:<class>:<text>`. DuckDB stringifies
+/// scalar errors, so the SQL identity travels in this bounded, exact form.
+pub const JSON_STRING_MARKER: &str = "__msduck_sql_error_v1:";
+
+fn json_string_diagnostic(message: &str) -> Option<SqlError> {
+    let fields = message.strip_prefix(JSON_STRING_MARKER)?;
+    if fields.len() > 4096 {
+        return None;
+    }
+    let mut fields = fields.splitn(4, ':');
+    let number = fields.next()?.parse::<i32>().ok()?;
+    let state = fields.next()?.parse::<u8>().ok()?;
+    let class = fields.next()?.parse::<u8>().ok()?;
+    let text = fields.next()?;
+    // Only numbers the feature raises; anything else stays unrecognized.
+    if !matches!(
+        number,
+        174 | 214
+            | 313
+            | 4113
+            | 4199
+            | 8116
+            | 8144
+            | 8711
+            | 8733
+            | 8734
+            | 8748
+            | 9829
+            | 13600
+            | 13605
+            | 13607
+            | 13608
+            | 13609
+            | 13619
+            | 13620
+            | 13621
+            | 13660
+    ) || !matches!(class, 15 | 16)
+        || text.is_empty()
+    {
+        return None;
+    }
+    let mut error = SqlError::new(number, state, text);
+    error.severity = class;
+    Some(error)
 }
 
 fn isjson_bind_diagnostic(message: &str) -> Option<SqlError> {
@@ -298,6 +350,42 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn json_string_markers_recover_only_allowlisted_identities() {
+        let error = diagnostic(
+            "Invalid Input Error: __msduck_sql_error_v1:13608:2:16:Property cannot be found on the specified JSON path.",
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                error.number,
+                error.state,
+                error.severity,
+                error.message.as_str()
+            ),
+            (
+                13608,
+                2,
+                16,
+                "Property cannot be found on the specified JSON path."
+            )
+        );
+        let error = diagnostic("__msduck_sql_error_v1:174:1:15:a:b").unwrap();
+        assert_eq!(
+            (error.number, error.severity, error.message.as_str()),
+            (174, 15, "a:b")
+        );
+        for message in [
+            "__msduck_sql_error_v1:50000:1:16:user text",
+            "__msduck_sql_error_v1:13608:2:20:text",
+            "__msduck_sql_error_v1:13608:2:16:",
+            "__msduck_sql_error_v1:13608:x:16:text",
+            "prefix __msduck_sql_error_v1:13608:2:16:text",
+        ] {
+            assert!(json_string_diagnostic(message).is_none(), "{message}");
+        }
+    }
 
     #[test]
     fn isjson_depth_error_requires_exact_native_message() {
