@@ -920,6 +920,154 @@ fn joined_apply_declarations(query: &Query) -> Query {
     declared
 }
 
+fn missing_later_apply_column(query: &Query, qualifier: &str) -> Option<String> {
+    use sqlparser::ast::*;
+    // A top-level sole FROM tree has no caller row scope. Avoid guessing across
+    // CTEs, comma sources, aliased join groups or unfamiliar factor kinds.
+    if query.with.is_some() {
+        return None;
+    }
+    let SetExpr::Select(select) = query.body.as_ref() else {
+        return None;
+    };
+    let [table] = select.from.as_slice() else {
+        return None;
+    };
+    fn alias(factor: &TableFactor) -> Option<&str> {
+        match factor {
+            TableFactor::Table {
+                alias: Some(alias), ..
+            }
+            | TableFactor::Derived {
+                alias: Some(alias), ..
+            } => Some(&alias.name.value),
+            TableFactor::Table {
+                name, alias: None, ..
+            } => name.0.last()?.as_ident().map(|id| id.value.as_str()),
+            _ => None,
+        }
+    }
+    fn declarations(factor: &TableFactor) -> Option<Vec<String>> {
+        struct Names(Vec<String>);
+        impl Visitor for Names {
+            type Break = ();
+            fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
+                if let Some(name) = alias(factor) {
+                    self.0.push(name.into());
+                } else if !matches!(factor, TableFactor::NestedJoin { alias: None, .. }) {
+                    return ControlFlow::Break(());
+                }
+                ControlFlow::Continue(())
+            }
+        }
+        let mut names = Names(Vec::new());
+        sqlparser::ast::Visit::visit(factor, &mut names)
+            .is_continue()
+            .then_some(names.0)
+    }
+    let mut known = declarations(&table.relation)?;
+    let mut candidates = Vec::new();
+    for (index, join) in table.joins.iter().enumerate() {
+        let local = declarations(&join.relation)?;
+        if matches!(
+            join.join_operator,
+            JoinOperator::CrossApply | JoinOperator::OuterApply
+        ) && matches!(&join.relation, TableFactor::NestedJoin { alias: None, table_with_joins }
+                if table_with_joins.joins.iter().all(|child| matches!(child.join_operator,
+                    JoinOperator::CrossJoin(JoinConstraint::None) | JoinOperator::CrossApply)))
+            && !known
+                .iter()
+                .chain(&local)
+                .any(|name| name.eq_ignore_ascii_case(qualifier))
+            && table.joins[index + 1..].iter().any(|later| {
+                alias(&later.relation).is_some_and(|name| name.eq_ignore_ascii_case(qualifier))
+            })
+        {
+            let mut names = Vec::new();
+            let _ = visit_expressions(&join.relation, |expr| {
+                if let Expr::CompoundIdentifier(ids) = expr
+                    && ids.len() == 2
+                    && ids[0].value.eq_ignore_ascii_case(qualifier)
+                    && ids.iter().all(|id| {
+                        !id.value.is_empty()
+                            && id
+                                .value
+                                .bytes()
+                                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                    })
+                {
+                    let name = format!("{}.{}", ids[0].value, ids[1].value);
+                    if !names.contains(&name) {
+                        names.push(name);
+                    }
+                }
+                ControlFlow::<()>::Continue(())
+            });
+            if names.len() == 1 {
+                candidates.push(names.remove(0));
+            } else if !names.is_empty() {
+                return None;
+            }
+        }
+        known.extend(local);
+    }
+    (candidates.len() == 1).then(|| candidates.remove(0))
+}
+
+// Preserve the captured preparation-error wrapper for the bounded joined APPLY
+// family. Unknown diagnostics and ambiguous native qualifier reports stay with
+// the caller. A backend-reported missing qualifier must identify exactly one
+// original logical column; diagnostic text is never parsed as SQL or executed.
+pub(super) fn joined_apply_binding_error(
+    sql: &str,
+    error: &anyhow::Error,
+    output_name: &str,
+) -> Result<Option<Vec<u8>>> {
+    let Ok(statements) = msduck_sql::batch::parse(sql) else {
+        return Ok(None);
+    };
+    let [Statement::Query(query)] = statements.as_slice() else {
+        return Ok(None);
+    };
+    if joined_apply_declarations(query) == **query {
+        return Ok(None);
+    }
+    let mut response = Vec::new();
+    let number = crate::engine::emit_error(&mut response, error);
+    if number == 50000 {
+        let message = error.to_string();
+        let Some((qualifier, _)) = message
+            .strip_prefix("Binder Error: Referenced table \"")
+            .and_then(|rest| rest.split_once("\" not found!"))
+        else {
+            return Ok(None);
+        };
+        let Some(name) = missing_later_apply_column(query, qualifier) else {
+            return Ok(None);
+        };
+        response.clear();
+        tds::sql_error(
+            &mut response,
+            &msduck_core::diagnostic::SqlError::new(
+                4104,
+                1,
+                format!("The multi-part identifier \"{name}\" could not be bound."),
+            ),
+        );
+    } else if !matches!(number, 164 | 4104) {
+        return Ok(None);
+    }
+    tds::sql_error(
+        &mut response,
+        &msduck_core::diagnostic::SqlError::new(8180, 1, "Statement(s) could not be prepared."),
+    );
+    response.push(0x79);
+    response.extend(8180i32.to_le_bytes());
+    handle(&mut response, output_name, None)?;
+    tds::done(&mut response, 0xfe, 2, 0xe0, 0);
+    Ok(Some(response))
+}
+
 // Enrich nested source declarations bottom-up, retaining the original outer
 // expressions for ORDER identity. Only a proven one-column variant UNION may
 // use a synthetic declaration; recursive/CTE references and aliases are barriers.
@@ -2235,6 +2383,48 @@ mod tests {
             };
             assert_eq!(series_declarations(&query, &parameters), *query, "{sql}");
         }
+    }
+
+    #[test]
+    fn later_apply_diagnostic_requires_a_proven_forward_qualifier() {
+        let sql = "SELECT b.n FROM (VALUES(1),(2)) a(v) CROSS APPLY ((SELECT COUNT(*) AS n FROM (VALUES(0)) i(k) GROUP BY later.v) b CROSS JOIN (VALUES(1)) c(k)) CROSS JOIN (VALUES(2)) later(v)";
+        let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+            panic!("query")
+        };
+        let original = query.clone();
+        assert_eq!(
+            missing_later_apply_column(&query, "later"),
+            Some("later.v".into())
+        );
+        assert_eq!(missing_later_apply_column(&query, "a"), None);
+        assert_eq!(missing_later_apply_column(&query, "unknown"), None);
+        assert_eq!(query, original);
+        for sql in [
+            sql.replace("GROUP BY later.v", "GROUP BY later.v,later.w"),
+            sql.replace("(VALUES(1),(2)) a(v)", "(VALUES(1),(2)) later(v)"),
+            format!("WITH q AS (SELECT 1 AS v) {sql}"),
+            sql.replace(
+                "CROSS JOIN (VALUES(2)) later(v)",
+                "CROSS JOIN (VALUES(2)) other(v)",
+            ),
+        ] {
+            let Statement::Query(query) = msduck_sql::batch::parse(&sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            assert_eq!(missing_later_apply_column(&query, "later"), None, "{sql}");
+        }
+        let error = anyhow::anyhow!("Binder Error: Referenced table \"a\" not found!");
+        assert!(
+            joined_apply_binding_error(sql, &error, "handle")
+                .unwrap()
+                .is_none()
+        );
+        let error = anyhow::anyhow!("unrecognized native failure");
+        assert!(
+            joined_apply_binding_error(sql, &error, "handle")
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

@@ -122,10 +122,18 @@ impl State {
                 } else {
                     None
                 };
-                session.validate_prepared_sql(
+                if let Err(error) = session.validate_prepared_sql(
                     binding_probe.as_deref().unwrap_or(execution_sql),
                     &declarations,
-                )?;
+                ) {
+                    if procedure == "sp_prepare"
+                        && let Some(response) =
+                            prepare_metadata::joined_apply_binding_error(sql, &error, &output.name)?
+                    {
+                        return Ok(response);
+                    }
+                    return Err(error);
+                }
                 let description = if procedure == "sp_prepare" {
                     Some(prepare_metadata::describe(session, sql, &declarations)?)
                 } else {
