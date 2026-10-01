@@ -635,10 +635,72 @@ fn expression_declarations(
     declared
 }
 
+// SQL Server compiles literal JSON extraction even inside a dead CASE arm or
+// empty input. Only literal document/path operands are inspected here; bound
+// parameters, casts, columns and volatile expressions remain unevaluated.
+fn literal_json_error(statements: &[Statement]) -> Option<msduck_core::diagnostic::SqlError> {
+    fn text(expr: &Expr) -> Option<&str> {
+        match expr {
+            Expr::Nested(inner) => text(inner),
+            Expr::Value(value) => match &value.value {
+                sqlparser::ast::Value::NationalStringLiteral(text) => Some(text),
+                // Non-ASCII ANSI literal conversion depends on the database
+                // code page; preserve that barrier rather than inspecting the
+                // unconverted parser spelling.
+                sqlparser::ast::Value::SingleQuotedString(text) if text.is_ascii() => Some(text),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+    let result = sqlparser::ast::visit_expressions(&statements, |expr| {
+        let Expr::Function(function) = expr else {
+            return ControlFlow::Continue(());
+        };
+        let name = function.name.to_string().to_ascii_lowercase();
+        if !matches!(name.as_str(), "json_query" | "json_value")
+            || function.parameters != FunctionArguments::None
+            || function.over.is_some()
+            || function.filter.is_some()
+            || function.null_treatment.is_some()
+            || !function.within_group.is_empty()
+            || function.uses_odbc_syntax
+        {
+            return ControlFlow::Continue(());
+        }
+        let FunctionArguments::List(args) = &function.args else {
+            return ControlFlow::Continue(());
+        };
+        if args.duplicate_treatment.is_some() || !args.clauses.is_empty() {
+            return ControlFlow::Continue(());
+        }
+        let (document, path) = match args.args.as_slice() {
+            [
+                FunctionArg::Unnamed(FunctionArgExpr::Expr(document)),
+                FunctionArg::Unnamed(FunctionArgExpr::Expr(path)),
+            ] => (text(document), text(path)),
+            _ => return ControlFlow::Continue(()),
+        };
+        if let (Some(document), Some(path)) = (document, path)
+            && let Err(error) =
+                msduck_core::json_path::extract_detailed(document, path, name == "json_query")
+            && let Some(error) = msduck_core::json_path::diagnostic(&error.backend_message())
+        {
+            return ControlFlow::Break(error);
+        }
+        ControlFlow::Continue(())
+    });
+    match result {
+        ControlFlow::Break(error) => Some(error),
+        ControlFlow::Continue(()) => None,
+    }
+}
+
 pub(super) struct Description {
     pub prefix: Vec<u8>,
     pub status: i32,
     pub accepted: bool,
+    pub complete_error: Option<msduck_core::diagnostic::SqlError>,
 }
 
 fn wire(info: &TypeMetadata) -> Option<tds::Type> {
@@ -1224,12 +1286,23 @@ fn query_description(
             }
         }
     }
+    let order = prepared_order(&catalog, query, &scope, &fields, parameters);
+    fields_description(&fields, order, command)
+}
+
+// Root wire adapter shared by SELECT and independently bound DML descriptions.
+// Every field remains an explicit logical declaration; physical row values do
+// not supply missing metadata, and an unknown ORDER plan remains an error.
+fn fields_description(
+    fields: &[msduck_sql::binding_scope::Field],
+    order: projection::order::Plan,
+    command: u16,
+) -> Result<Vec<u8>> {
     ensure!(
         !fields.is_empty(),
         "unsupported empty prepared result declarations"
     );
-    let order = prepared_order(&catalog, query, &scope, &fields, parameters);
-    let aligned = crate::result_metadata::Aligned::new(fields.len(), &fields, &[]);
+    let aligned = crate::result_metadata::Aligned::new(fields.len(), fields, &[]);
     let columns = fields
         .iter()
         .enumerate()
@@ -1251,7 +1324,7 @@ fn query_description(
     );
     out.push(0x81);
     out.extend(u16::try_from(columns.len())?.to_le_bytes());
-    for (column, field) in columns.iter().zip(&fields) {
+    for (column, field) in columns.iter().zip(fields) {
         let mut encoded = Vec::new();
         tds::metadata(&mut encoded, std::slice::from_ref(column))?;
         if field
@@ -1436,6 +1509,15 @@ pub(super) fn describe(
             prefix,
             status: 8180,
             accepted: false,
+            complete_error: None,
+        });
+    }
+    if let Some(error) = literal_json_error(&statements) {
+        return Ok(Description {
+            prefix: vec![],
+            status: 0,
+            accepted: false,
+            complete_error: Some(error),
         });
     }
     // Declaration collection never evaluates initializers or parameter values.
@@ -1445,6 +1527,7 @@ pub(super) fn describe(
             prefix: vec![],
             status: 8182,
             accepted: true,
+            complete_error: None,
         });
     }
     let prefix = match statements.as_slice() {
@@ -1497,6 +1580,7 @@ pub(super) fn describe(
         prefix,
         status: 0,
         accepted: true,
+        complete_error: None,
     })
 }
 
@@ -1520,6 +1604,42 @@ pub(super) fn handle(out: &mut Vec<u8>, name: &str, value: Option<i32>) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn literal_json_compilation_preserves_errors_and_dynamic_barriers() {
+        for (sql, number, state) in [
+            ("SELECT JSON_QUERY(N'bad','$.a')", 13609, 1),
+            (
+                "SELECT CASE WHEN 1=0 THEN JSON_QUERY(N'bad','$.a') ELSE N'{}' END",
+                13609,
+                1,
+            ),
+            ("SELECT JSON_QUERY(N'bad','$.a') WHERE 1=0", 13609, 1),
+            ("SELECT JSON_QUERY(N'{}','strict $.a')", 13608, 1),
+            ("SELECT JSON_QUERY(N'bad','$.[')", 13607, 14),
+            ("SELECT JSON_VALUE(N'bad','$.a')", 13609, 1),
+        ] {
+            let statements = msduck_sql::batch::parse(sql).unwrap();
+            let before = statements.clone();
+            let error = literal_json_error(&statements).unwrap();
+            assert_eq!((error.number, error.state), (number, state), "{sql}");
+            assert_eq!(statements, before);
+        }
+        for sql in [
+            "SELECT JSON_QUERY(@j,'$.a')",
+            "SELECT JSON_QUERY(CAST(@p AS NVARCHAR(MAX)),'$.a')",
+            "SELECT JSON_QUERY(CAST(RAND() AS NVARCHAR(MAX)),'$.a')",
+            "SELECT JSON_QUERY(N'bad',@path)",
+            "SELECT JSON_QUERY(N'{}','$')",
+            "SELECT JSON_QUERY('ébad','$.a')",
+            "SELECT JSON_QUERY(DISTINCT N'bad','$.a')",
+        ] {
+            assert!(
+                literal_json_error(&msduck_sql::batch::parse(sql).unwrap()).is_none(),
+                "{sql}"
+            );
+        }
+    }
 
     #[test]
     fn json_declarations_retain_input_collation_without_evaluation() {

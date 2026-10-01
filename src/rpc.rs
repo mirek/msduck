@@ -134,6 +134,14 @@ impl State {
                 if let Some(description) = &description
                     && !description.accepted
                 {
+                    if let Some(error) = &description.complete_error {
+                        let mut response = Vec::new();
+                        tds::sql_error(&mut response, error);
+                        // Literal compilation errors have no RETURNSTATUS,
+                        // output handle or usable cached statement.
+                        tds::done(&mut response, 0xfe, 2, 0xe0, 0);
+                        return Ok(response);
+                    }
                     let mut response = description.prefix.clone();
                     response.push(0x79);
                     response.extend(description.status.to_le_bytes());
