@@ -10,7 +10,7 @@ import {captureBatch} from './capture-order-token.mjs'
 
 export const catalogViews=['foreign_keys','foreign_key_columns','key_constraints','default_constraints','check_constraints','computed_columns','triggers','sql_modules','procedures','database_files']
 export const catalogSetup=`CREATE TABLE dbo.catalog_parent(a INT NOT NULL,b INT NOT NULL,label NVARCHAR(40),CONSTRAINT PK_catalog_parent PRIMARY KEY(a,b),CONSTRAINT UQ_catalog_parent_label UNIQUE(label));
-CREATE TABLE dbo.catalog_child(a INT NOT NULL,b INT NOT NULL,state BIT CONSTRAINT DF_catalog_child_state DEFAULT(1),doubled AS(a*2) PERSISTED,CONSTRAINT PK_catalog_child PRIMARY KEY(a,b),CONSTRAINT FK_catalog_child_parent FOREIGN KEY(a,b) REFERENCES dbo.catalog_parent(a,b) ON DELETE CASCADE ON UPDATE CASCADE,CONSTRAINT CK_catalog_child_a CHECK(a>0)); CREATE INDEX IX_catalog_parent_label ON dbo.catalog_parent(label);`
+CREATE TABLE dbo.catalog_child(a INT NOT NULL,b INT NOT NULL,state BIT CONSTRAINT DF_catalog_child_state DEFAULT(1),doubled AS(a*2) PERSISTED,CONSTRAINT PK_catalog_child PRIMARY KEY(a,b),CONSTRAINT FK_catalog_child_parent FOREIGN KEY(a,b) REFERENCES dbo.catalog_parent(a,b) ON DELETE CASCADE ON UPDATE CASCADE,CONSTRAINT CK_catalog_child_a CHECK(a>0)); CREATE INDEX IX_catalog_parent_label ON dbo.catalog_parent(label); CREATE TABLE dbo.catalog_rename_target(id INT,label NVARCHAR(20));`
 export const catalogQueries=[
  ...catalogViews.map(view=>['empty schema '+view,`SELECT TOP(0) * FROM sys.${view}`]),
  ['constraint objects',"SELECT name,RTRIM(type) AS type,type_desc,OBJECT_NAME(parent_object_id) AS parent FROM sys.objects WHERE parent_object_id IN(OBJECT_ID('dbo.catalog_parent'),OBJECT_ID('dbo.catalog_child')) ORDER BY name"],
@@ -22,7 +22,7 @@ export const catalogQueries=[
  ['computed',"SELECT name,column_id,system_type_id,user_type_id,max_length,precision,scale,is_nullable,definition,uses_database_collation,is_persisted FROM sys.computed_columns WHERE object_id=OBJECT_ID('dbo.catalog_child')"],
  ['view definition',"SELECT OBJECT_DEFINITION(OBJECT_ID('dbo.catalog_view')) AS definition"],
  ['procedure definition',"SELECT definition,uses_ansi_nulls,uses_quoted_identifier,is_schema_bound,uses_database_collation,is_recompiled,null_on_null_input,execute_as_principal_id,uses_native_compilation,is_inlineable,inline_type FROM sys.sql_modules WHERE object_id=OBJECT_ID('dbo.catalog_proc')"],
- ['procedures',"SELECT name,RTRIM(type) AS type,type_desc,is_auto_executed,is_execution_replicated,is_repl_serializable,skips_repl_constraints FROM sys.procedures WHERE name='catalog_proc'"],
+ ['procedures',"SELECT name,RTRIM(type) AS type,type_desc,is_auto_executed,is_execution_replicated,is_repl_serializable_only,skips_repl_constraints FROM sys.procedures WHERE name='catalog_proc'"],
  ['triggers',"SELECT name,parent_class,parent_class_desc,OBJECT_NAME(parent_id) AS parent,RTRIM(type) AS type,type_desc,is_ms_shipped,is_disabled,is_not_for_replication,is_instead_of_trigger FROM sys.triggers WHERE name='catalog_trigger'"],
  ['pkeys named',"EXEC sys.sp_pkeys @table_name=N'catalog_parent',@table_owner=N'dbo'"],
  ['pkeys positional',"EXEC sys.sp_pkeys N'catalog_parent',N'dbo'"],
@@ -37,7 +37,9 @@ export const catalogQueries=[
  ['rename index',"EXEC sys.sp_rename N'dbo.catalog_parent.IX_catalog_parent_label',N'IX_catalog_parent_renamed',N'INDEX'"],
  ['renamed index',"SELECT name,index_id,is_unique,is_primary_key,is_unique_constraint FROM sys.indexes WHERE object_id=OBJECT_ID('dbo.catalog_parent') ORDER BY index_id"],
  ['rename table',"EXEC sys.sp_rename N'dbo.catalog_child',N'catalog_renamed'"],
- ['rename column',"EXEC sys.sp_rename N'dbo.catalog_renamed.a',N'new_a',N'COLUMN'"],
+ ['rename plain column',"EXEC sys.sp_rename N'dbo.catalog_rename_target.label',N'renamed_label',N'COLUMN'"],
+ ['renamed column',"SELECT name,column_id,system_type_id,max_length FROM sys.columns WHERE object_id=OBJECT_ID('dbo.catalog_rename_target') ORDER BY column_id"],
+ ['rename column with enforced dependencies',"EXEC sys.sp_rename N'dbo.catalog_renamed.a',N'new_a',N'COLUMN'"],
  ['rename constraint',"EXEC sys.sp_rename N'dbo.PK_catalog_child',N'PK_catalog_renamed',N'OBJECT'"],
  ['rename module',"EXEC sys.sp_rename N'dbo.catalog_proc',N'catalog_renamed_proc',N'OBJECT'"],
  ['retained renamed module',"SELECT OBJECT_DEFINITION(OBJECT_ID('dbo.catalog_renamed_proc')) AS definition"],
