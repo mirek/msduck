@@ -7914,6 +7914,26 @@
         "Same worker owns PR703 final exact-head workspace/client/audit verification, required CI, independent review or owner-authorized availability fallback, merge and prompt completion of every companion task/project/issue."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdG0t"
+    },
+    {
+      "id": "column-catalog-declarations-v1",
+      "title": "Align column catalog snapshots and identity view shape with SQL Server",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility goal; first-party prepared catalog failures and two agreeing fresh SQL Server captures. Same worker/worktree/PR703; parent task remains unchanged. No engine.rs/root lib/result_metadata.rs edits or external input.",
+      "issue": 709,
+      "scope": [
+        "src/query_catalog.rs",
+        "src/query_catalog/column_views.rs",
+        "src/columns.sql",
+        "reference/column-catalog-declarations.json"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Retain immutable complete two-run column catalog preparation capture; use existing parent-owned capture/public tests. Acquire canonical explicit snapshot fields for sys.columns and sys.identity_columns, preserving types/width/order/collation/nullability/provenance; no runtime values establish declarations.",
+        "Align backend sys.identity_columns complete source shape/order with captured 44 fields rather than concatenating all 43 sys.columns fields plus extras. Keep native and logical widths/order aligned and existing identity allocation/transaction behavior unchanged. Other unknown views/flags remain explicit gaps; no guessed descriptors for unsupported shapes.",
+        "Meaningful snapshot/native width/order tests in claimed module, complete prepared catalog response comparisons in parent scope and default catalog clients; final exact-head workspace formatting/strictClippy/tests/alltargets build/clients/audit, independent review or owner-authorized availability fallback and required CI. Same worker owns PR703 merge and prompt completion of every companion issue/project/task."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdIaH"
     }
   ]
 }
