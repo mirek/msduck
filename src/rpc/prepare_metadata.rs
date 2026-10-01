@@ -494,6 +494,7 @@ fn prepared_order(
     query: &Query,
     outer: &Scope,
     fields: &[msduck_sql::binding_scope::Field],
+    parameters: &HashMap<String, Parameter>,
 ) -> projection::order::Plan {
     use sqlparser::ast::*;
     let original = projection::order::infer(catalog, query, outer);
@@ -557,7 +558,27 @@ fn prepared_order(
             if column(expr, &scope).is_some() {
                 return true;
             }
+            if msduck_sql::conditional::candidate(expr)
+                && variant_declaration(expr, &scope, parameters) == Some(true)
+            {
+                return true;
+            }
             match expr {
+                Expr::Cast {
+                    expr, data_type, ..
+                }
+                | Expr::Convert {
+                    expr,
+                    data_type: Some(data_type),
+                    ..
+                } if catalog.cast_info(data_type).is_some_and(|info| {
+                    matches!(info.system_type_id, Some(48 | 52 | 56 | 127))
+                }) && column(expr, &scope).is_some_and(|field| {
+                    field.info.as_ref().and_then(|info| info.system_type_id) == Some(98)
+                }) =>
+                {
+                    true
+                }
                 Expr::Cast {
                     expr, data_type, ..
                 }
@@ -816,7 +837,7 @@ fn query_description(
         }
         out.extend_from_slice(&encoded[3..]);
     }
-    match prepared_order(&catalog, query, &scope, &fields) {
+    match prepared_order(&catalog, query, &scope, &fields, parameters) {
         projection::order::Plan::Token(ordinals) => tds::order::encode(&mut out, &ordinals)?,
         projection::order::Plan::NoToken => {}
         projection::order::Plan::Unknown(_) => bail!("unsupported prepared ORDER declaration"),
