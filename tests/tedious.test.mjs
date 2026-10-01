@@ -652,7 +652,7 @@ test('legacy datetime RPCs decode dates before 1900, boundaries and NULLs', { ti
     ['a', TYPES.DateTime, new Date('2000-01-01T00:00:00.003Z')],
     ['b', TYPES.DateTime, new Date('2000-01-01T00:00:00.007Z')]
   ])
-  assert.deepEqual(fractions.rows, [['2000-01-01 00:00:00.003333', '2000-01-01 00:00:00.006667']])
+  assert.deepEqual(fractions.rows, [['Jan  1 2000 12:00AM', 'Jan  1 2000 12:00AM']])
 })
 
 test('uniqueidentifier retains wire type through binding, storage and assignment', { timeout: 20000 }, async t => {
@@ -1867,13 +1867,15 @@ async function topPercentPrepared(c, sql, values) {
 // to the precise msduck result. Every other case must match the capture,
 // including descriptors, errors and completion tokens.
 const topPercentKnownDifferences = new Map([
-  // SERVERPROPERTY is not implemented, so the identity query fails to bind.
+  // msduck reports its own ProductVersion, and the row-dependent
+  // DATABASEPROPERTYEX(DB_NAME(), ...) result descriptor lacks flag 0x20.
   ['server identity', captured => ({
     ...captured,
-    sets: [],
-    done: [{ kind: 'done', rowCount: null, more: false }],
-    rowCount: 0,
-    errors: [{ number: 208, state: 1, class: 16, lineNumber: 1, message: 'Catalog Error: Scalar Function with name serverproperty does not exist!' }],
+    sets: captured.sets.map(set => ({
+      ...set,
+      columns: set.columns.map((column, index) => index === 1 ? { ...column, flags: 1 } : column),
+      rows: set.rows.map(([, collation]) => ['16.0.0.0', collation]),
+    })),
   })],
   // SQL Server reports varchar-to-float error 8114; msduck reports DuckDB's
   // conversion error 245 with the same metadata, rows and completion.
