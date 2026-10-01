@@ -8756,6 +8756,21 @@
       "dependencies": [],
       "issue": 718,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQq1"
+    },
+    {
+      "id": "gaps-conversion-v1-keys-expectation",
+      "title": "Drop the keys compat difference that styled CONVERT 127 resolves",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-conversion-v1",
+      "scope": [
+        "tests/compat/keys.test.mjs"
+      ],
+      "acceptance": [
+        "tests/compat/keys.test.mjs no longer lists datetimeoffset-keys step 5 (CONVERT style 127 for datetimeoffset) as a known difference, because gaps-conversion-v1 implements the style and the step now matches SQL Server; ships in the gaps-conversion-v1 PR."
+      ],
+      "dependencies": [],
+      "issue": 725,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQtr"
     }
   ]
 }
