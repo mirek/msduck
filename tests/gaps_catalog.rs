@@ -663,3 +663,56 @@ fn computed_expression_profile_matches_reference_types_and_nullability() {
         ]))).unwrap().collect::<duckdb::Result<Vec<_>>>().unwrap();
     assert_eq!(serde_json::Value::Array(actual), *expected);
 }
+
+#[test]
+fn computed_property_storage_upgrades_and_survives_restart() {
+    let directory = std::env::temp_dir().join(format!(
+        "msduck-computed-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("primary.duckdb");
+    // The preceding checkpoint's four-column store must upgrade before the
+    // catalog extension binds its new property column.
+    {
+        let db = duckdb::Connection::open(&path).unwrap();
+        db.execute_batch("CREATE TABLE main.__msduck_computed_definitions(object_id INTEGER NOT NULL,column_id INTEGER NOT NULL,definition VARCHAR,source_expression VARCHAR NOT NULL,PRIMARY KEY(object_id,column_id))").unwrap();
+    }
+    let mut original = None;
+    for restart in 0..2 {
+        let server = Server::open(path.to_str().unwrap()).unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        if restart == 0 {
+            assert!(
+                session
+                    .batch_response(
+                        "CREATE TABLE dbo.computed_upgrade(a INT,c AS ISNULL(a,0))",
+                        &Default::default(),
+                        false,
+                        None
+                    )
+                    .1
+            );
+        }
+        let row: (i32, String, bool) = session
+            .db
+            .query_row(
+                "SELECT object_id,definition,is_nullable FROM sys.computed_columns WHERE name='c'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(row.1, "(isnull([a],(0)))");
+        assert!(!row.2);
+        if let Some(expected) = &original {
+            assert_eq!(&row, expected);
+        } else {
+            original = Some(row);
+        }
+    }
+    std::fs::remove_dir_all(directory).unwrap();
+}

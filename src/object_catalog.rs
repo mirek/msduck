@@ -45,7 +45,8 @@ pub fn register(db: &Connection) -> Result<()> {
     db.execute_batch(
         "CREATE TABLE IF NOT EXISTS main.__msduck_computed_definitions(
         object_id INTEGER NOT NULL,column_id INTEGER NOT NULL,definition VARCHAR,
-        source_expression VARCHAR NOT NULL,PRIMARY KEY(object_id,column_id))",
+        source_expression VARCHAR NOT NULL,PRIMARY KEY(object_id,column_id));
+        ALTER TABLE main.__msduck_computed_definitions ADD COLUMN IF NOT EXISTS is_nullable BOOLEAN",
     )?;
     crate::column_catalog::register(db)?;
     db.execute_batch(include_str!("table_catalog.sql"))?;
