@@ -2510,9 +2510,9 @@ test('MERGE validation reports terminator and clause errors before batch writes'
   }
   await assert.rejects(prepare(c, missing, []), error => error.number === 10713 && error.class === 15)
   await assert.rejects(prepare(c, head + cases[0][0], []), error => error.number === 10714 && error.class === 15)
-  // Syntactically valid MERGE execution is still an explicit implementation gap.
-  await assert.rejects(query(c, missing + ' /* trailing comment */ ;'), error => error.number === 40515)
-  assert.deepEqual((await query(c, 'SELECT COUNT(*), @@TRANCOUNT FROM dbo.merge_validation')).rows, [[0,0]])
+  // A terminated MERGE executes (docs/gaps-merge.md).
+  assert.equal((await query(c, missing + ' /* trailing comment */ ;')).rowCount, 1)
+  assert.deepEqual((await query(c, 'SELECT COUNT(*), @@TRANCOUNT FROM dbo.merge_validation')).rows, [[1,0]])
   assert.deepEqual((await query(c, "SELECT '; MERGE' AS text")).rows, [['; MERGE']])
 })
 
@@ -2529,8 +2529,8 @@ test('CTE MERGE uses the same validation and execution boundary as ordinary MERG
   await assert.rejects(query(c, head + 'WHEN MATCHED THEN UPDATE SET n=1 WHEN MATCHED AND s.n=2 THEN DELETE;'), error => error.number === 5324 && error.class === 15)
   await assert.rejects(prepare(c, head + insert, []), error => error.number === 10713)
   await assert.rejects(prepare(c, head + insert + ';', []), error => error.number === 40515)
-  await assert.rejects(query(c, head + insert + ';'), error => error.number === 40515)
-  assert.deepEqual((await query(c, 'SELECT COUNT(*) FROM dbo.cte_merge_validation')).rows, [[0]])
+  assert.equal((await query(c, head + insert + ';')).rowCount, 1)
+  assert.deepEqual((await query(c, 'SELECT COUNT(*) FROM dbo.cte_merge_validation')).rows, [[1]])
   assert.deepEqual((await query(c, 'WITH s AS (SELECT 7 AS n) SELECT n FROM s')).rows, [[7]])
 })
 
