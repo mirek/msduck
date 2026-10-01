@@ -334,7 +334,22 @@ impl Registration {
 
     /// Exchange entries with `other`, so this handle takes over `other`'s
     /// SPID, login and client. RESETCONNECTION keeps the session's SPID.
+    /// Each handle keeps its own isolation level: a reset session starts at
+    /// READ COMMITTED.
     pub fn exchange(&mut self, other: &mut Registration) {
+        {
+            let mut entries = self.registry.entries();
+            let mine = entries.get(&self.spid).map(|entry| entry.isolation);
+            let theirs = entries.get(&other.spid).map(|entry| entry.isolation);
+            if let (Some(mine), Some(theirs)) = (mine, theirs) {
+                if let Some(entry) = entries.get_mut(&self.spid) {
+                    entry.isolation = theirs;
+                }
+                if let Some(entry) = entries.get_mut(&other.spid) {
+                    entry.isolation = mine;
+                }
+            }
+        }
         std::mem::swap(&mut self.spid, &mut other.spid);
     }
 }

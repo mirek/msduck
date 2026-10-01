@@ -108,8 +108,9 @@ impl Feature for Hooks {
     }
 }
 
-/// Report a compile-time diagnostic of this feature (148, 103) before any
-/// statement of the batch runs, as SQL Server does. Batches that cannot
+/// Report a compile-time diagnostic of this feature (148, 103, or 102 with
+/// SQL Server's wording) before any statement of the batch runs, as SQL
+/// Server does. Batches that cannot
 /// contain such a statement are not parsed twice.
 fn compile_error(session: &mut Session, sql: &str, rpc: bool) -> Option<(Vec<u8>, bool)> {
     let upper = sql.to_ascii_uppercase();
