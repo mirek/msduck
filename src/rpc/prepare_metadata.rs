@@ -822,6 +822,8 @@ fn series_declarations(query: &Query, parameters: &HashMap<String, Parameter>) -
                 Some(TableAlias {
                     name: Ident::new("generate_series"),
                     columns: vec![],
+                    at: false,
+                    explicit: false,
                 })
             });
             let Ok(mut statements) = msduck_sql::batch::parse("SELECT 0 AS value") else {
@@ -854,7 +856,7 @@ fn series_declarations(query: &Query, parameters: &HashMap<String, Parameter>) -
         }
     }
     let mut declared = query.clone();
-    let _ = declared.visit(&mut Declare(parameters));
+    let _ = VisitMut::visit(&mut declared, &mut Declare(parameters));
     declared
 }
 
