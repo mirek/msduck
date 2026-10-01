@@ -247,6 +247,123 @@ fn variant_row_number(
             })
 }
 
+// Describe only validated scalar JSON functions over explicit character inputs.
+// The source is retained in a metadata-only CAST so input collation survives;
+// this query is never submitted to DuckDB or used as cached execution SQL.
+fn json_declaration(expression: &Expr, catalog: &CatalogSnapshot, scope: &Scope) -> Option<Expr> {
+    let Expr::Function(function) = expression else {
+        return None;
+    };
+    let name = function.name.to_string().to_ascii_lowercase();
+    if !matches!(name.as_str(), "json_query" | "json_value")
+        || function.over.is_some()
+        || function.filter.is_some()
+        || function.null_treatment.is_some()
+        || !function.within_group.is_empty()
+        || function.parameters != FunctionArguments::None
+        || function.uses_odbc_syntax
+    {
+        return None;
+    }
+    let FunctionArguments::List(args) = &function.args else {
+        return None;
+    };
+    if args.duplicate_treatment.is_some() || !args.clauses.is_empty() {
+        return None;
+    }
+    let source = match (name.as_str(), args.args.as_slice()) {
+        ("json_query", [FunctionArg::Unnamed(FunctionArgExpr::Expr(source))])
+        | (
+            "json_query" | "json_value",
+            [
+                FunctionArg::Unnamed(FunctionArgExpr::Expr(source)),
+                FunctionArg::Unnamed(FunctionArgExpr::Expr(_)),
+            ],
+        ) => source,
+        _ => return None,
+    };
+    let Statement::Query(mut probe) = msduck_sql::batch::parse("SELECT 0").ok()?.remove(0) else {
+        return None;
+    };
+    let sqlparser::ast::SetExpr::Select(select) = probe.body.as_mut() else {
+        return None;
+    };
+    select.projection = vec![sqlparser::ast::SelectItem::UnnamedExpr(source.clone())];
+    let fields = projection::query_fields(catalog, &probe, scope)?;
+    let [field] = fields.as_slice() else {
+        return None;
+    };
+    let info = field.info.as_ref()?;
+    if !matches!(info.system_type_id, Some(167 | 175 | 231 | 239))
+        || info.user_type_id != info.system_type_id.map(i32::from)
+        || field.collation.as_ref()?.as_ref().ok()?.name().is_none()
+    {
+        return None;
+    }
+    let length = match info.max_length? {
+        -1 if name == "json_query" => msduck_core::character::Length::Max,
+        -1 | 1.. => msduck_core::character::Length::Bounded(4000),
+        _ => return None,
+    };
+    Some(Expr::Convert {
+        is_try: false,
+        expr: Box::new(source.clone()),
+        data_type: Some(msduck_sql::sql_type::ast(SqlType::Character(
+            msduck_core::character::CharacterType::new(
+                msduck_core::character::Family::Nvarchar,
+                length,
+            )
+            .ok()?,
+        ))),
+        charset: None,
+        target_before_value: true,
+        styles: vec![],
+    })
+}
+
+fn json_declarations(query: &Query, catalog: &CatalogSnapshot, outer: &Scope) -> Query {
+    struct Declare<'a> {
+        catalog: &'a CatalogSnapshot,
+        outer: &'a Scope,
+        scopes: Vec<Scope>,
+    }
+    impl VisitorMut for Declare<'_> {
+        type Break = ();
+        fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
+            self.scopes.push(
+                projection::scopes(
+                    self.catalog,
+                    query,
+                    self.scopes.last().unwrap_or(self.outer),
+                )
+                .body,
+            );
+            ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &mut Query) -> ControlFlow<()> {
+            self.scopes.pop();
+            ControlFlow::Continue(())
+        }
+        fn post_visit_expr(&mut self, expression: &mut Expr) -> ControlFlow<()> {
+            if let Some(declaration) = json_declaration(
+                expression,
+                self.catalog,
+                self.scopes.last().unwrap_or(self.outer),
+            ) {
+                *expression = declaration;
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut declared = query.clone();
+    let _ = declared.visit(&mut Declare {
+        catalog,
+        outer,
+        scopes: Vec::new(),
+    });
+    declared
+}
+
 // This clone is used only for declaration inference, never execution. Native
 // validation has already checked the original seed expression and function.
 fn expression_declarations(
@@ -911,6 +1028,7 @@ fn query_description(
         .map_err(anyhow::Error::msg)?;
     for candidate in [
         original_declarations,
+        json_declarations(query, &catalog, &scope),
         expression_declarations(&declaration_query, parameters, &catalog, &scope),
     ] {
         if let Some(declared) = projection::query_fields(&catalog, &candidate, &scope) {
@@ -940,12 +1058,46 @@ fn query_description(
         && select.projection.len() == fields.len()
     {
         let source_scope = projection::scopes(&catalog, &expanded, &scope).body;
-        for (field, item) in fields.iter_mut().zip(&select.projection) {
+        let json_fields = projection::query_fields(
+            &catalog,
+            &json_declarations(&expanded, &catalog, &scope),
+            &scope,
+        );
+        let field_count = fields.len();
+        for (index, (field, item)) in fields.iter_mut().zip(&select.projection).enumerate() {
             let expression = match item {
                 sqlparser::ast::SelectItem::UnnamedExpr(expr)
                 | sqlparser::ast::SelectItem::ExprWithAlias { expr, .. } => expr,
                 _ => continue,
             };
+            // JSON functions have computed, nullable results independently of
+            // the source's nullability. Conditional parents retain their own
+            // proven nullability; the metadata clone supplies source collation.
+            let mut has_json = false;
+            let _ = sqlparser::ast::visit_expressions(expression, |node| {
+                if json_declaration(node, &catalog, &source_scope).is_some() {
+                    has_json = true;
+                }
+                ControlFlow::<()>::Continue(())
+            });
+            if has_json
+                && let Some(declared) = &json_fields
+                && declared.len() == field_count
+            {
+                let declaration = &declared[index];
+                if declaration.info.is_some() {
+                    field.collation = declaration.collation.clone();
+                    field.properties = msduck_sql::result_properties::expression_with(
+                        expression,
+                        &[],
+                        &source_scope.rows,
+                        &|node| {
+                            json_declaration(node, &catalog, &source_scope)
+                                .map(|_| msduck_core::result::Properties::expression(true))
+                        },
+                    );
+                }
+            }
             // Captured hidden sorting exposes a direct identity variant as a
             // stored catalog projection, unlike the unsorted computed profile.
             if hidden_order
@@ -1366,6 +1518,79 @@ pub(super) fn handle(out: &mut Vec<u8>, name: &str, value: Option<i32>) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn json_declarations_retain_input_collation_without_evaluation() {
+        let catalog = CatalogSnapshot {
+            default_collation: Some("SQL_Latin1_General_CP1_CI_AS".into()),
+            ..Default::default()
+        };
+        for (sql, length, collation) in [
+            (
+                "SELECT JSON_QUERY(CAST(@p AS NVARCHAR(MAX)), 'strict $.a')",
+                -1,
+                "SQL_Latin1_General_CP1_CI_AS",
+            ),
+            (
+                "SELECT JSON_QUERY(CAST(@p AS NVARCHAR(8)), '$.a')",
+                8000,
+                "SQL_Latin1_General_CP1_CI_AS",
+            ),
+            (
+                "SELECT JSON_VALUE(CAST(@p AS NVARCHAR(MAX)) COLLATE Latin1_General_100_BIN2, '$.a')",
+                8000,
+                "Latin1_General_100_BIN2",
+            ),
+            (
+                "SELECT ISNULL(JSON_QUERY(CAST(@p AS NVARCHAR(MAX)), '$.a'), N'{}')",
+                -1,
+                "SQL_Latin1_General_CP1_CI_AS",
+            ),
+        ] {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            let original = query.clone();
+            let scope = Scope::default();
+            let described = json_declarations(&query, &catalog, &scope);
+            let fields = projection::query_fields(&catalog, &described, &scope).unwrap();
+            assert_eq!(
+                fields[0].info.as_ref().unwrap().max_length,
+                Some(length),
+                "{sql}"
+            );
+            assert_eq!(
+                fields[0]
+                    .collation
+                    .as_ref()
+                    .unwrap()
+                    .as_ref()
+                    .unwrap()
+                    .name(),
+                Some(collation),
+                "{sql}"
+            );
+            assert_eq!(
+                *query, *original,
+                "metadata must not change cached execution AST"
+            );
+        }
+        for sql in [
+            "SELECT JSON_QUERY(missing, '$.a')",
+            "SELECT JSON_QUERY(CAST(NULL AS INT), '$.a')",
+            "SELECT JSON_VALUE(CAST(NULL AS NVARCHAR(MAX)))",
+            "SELECT JSON_QUERY(DISTINCT CAST(NULL AS NVARCHAR(MAX)), '$.a')",
+        ] {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            assert_eq!(
+                json_declarations(&query, &catalog, &Scope::default()),
+                *query,
+                "{sql}"
+            );
+        }
+    }
 
     #[test]
     fn bitwise_declarations_use_catalog_types_and_keep_unknown_barriers() {
