@@ -46,7 +46,8 @@ procedure) opens a scope that ends with the batch.
 - Local temporary tables are private to their session: another session
   gets error 208 and can create its own table with the same name.
 - A global temporary table is visible to every session in the database
-  and is dropped when the session that created it ends.
+  and is dropped when the session that created it ends (unless another
+  session dropped and recreated it meanwhile).
 - A table variable belongs to the batch or nested body that declares it.
   Neither later batches nor nested bodies can see it (error 1087). As in
   SQL Server, a declaration in a branch that does not run still declares
@@ -72,8 +73,8 @@ procedure) opens a scope that ends with the batch.
 | `DROP TABLE #missing` | 3701, state 5, class 11 |
 | `TRUNCATE TABLE @t`, `DROP TABLE @t`, `SELECT ... INTO @t` | 102, state 1, class 15 |
 
-Messages from constraint and conversion errors name the temporary object as
-written (`#t`, `@t`), never its backend table.
+Messages from constraint, binding and conversion errors name the temporary
+object as written (`#t`, `@t`) rather than its backend table.
 
 ## Implementation
 

@@ -71,6 +71,16 @@ pub(super) fn exists(db: &duckdb::Connection, physical: &str) -> Result<bool> {
     Ok(count > 0)
 }
 
+/// The identity of a backend table in its database, if it exists.
+pub(super) fn oid(db: &duckdb::Connection, backend: &Backend) -> Result<Option<i64>> {
+    let oid: Option<i64> = db.query_row(
+        "SELECT max(table_oid) FROM duckdb_tables() WHERE database_name = ? AND schema_name = 'dbo' AND table_name = ?",
+        [&backend.alias, &backend.physical],
+        |row| row.get(0),
+    )?;
+    Ok(oid)
+}
+
 /// Drop a backend table with the ordinary DROP TABLE path, so the catalog,
 /// identity sequences and indexes go with it. A table in a database other
 /// than the current one is dropped directly; that database's catalog drops

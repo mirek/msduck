@@ -94,6 +94,10 @@ struct Local {
 struct Global {
     name: String,
     backend: Backend,
+    /// The backend table's identity, so the session never drops a table of
+    /// the same name that another session created after this one was
+    /// dropped.
+    oid: Option<i64>,
 }
 
 pub(super) struct Hooks;
@@ -304,18 +308,30 @@ impl Feature for Hooks {
     }
 
     fn session_end(&self, session: &mut Session) {
+        // Take the registry first: an open transaction rolls back, and
+        // everything the session created goes regardless.
+        let state = std::mem::take(&mut session.ext.temp_tables);
         if session.transactions > 0 {
             let _ = session.rollback_transaction("");
         }
-        let state = std::mem::take(&mut session.ext.temp_tables);
+        let globals = state
+            .globals
+            .into_iter()
+            .filter(|global| {
+                global.oid.is_some()
+                    && storage::oid(&session.db, &global.backend).ok().flatten() == global.oid
+            })
+            .map(|global| global.backend);
         let backends = state
             .frames
             .into_iter()
             .flat_map(|frame| frame.variables)
             .map(|variable| variable.backend)
             .chain(state.locals.into_iter().map(|local| local.backend))
-            .chain(state.globals.into_iter().map(|global| global.backend))
-            .chain(state.graveyard);
+            .chain(state.graveyard)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .chain(globals.collect::<Vec<_>>());
         for backend in backends {
             let _ = storage::drop_table(session, &backend);
         }
@@ -592,19 +608,22 @@ fn create(
     .map_err(|error| localize(&session.ext.temp_tables, error))
     .map_err(|error| rename_error(error, &physical, &name.name))?;
     let backend = Backend { alias, physical };
-    let state = &mut session.ext.temp_tables;
     match name.kind {
-        Kind::Local => state.locals.push(Local {
+        Kind::Local => session.ext.temp_tables.locals.push(Local {
             key: name.key(),
             name: name.name.clone(),
             backend,
             level,
             dropped: false,
         }),
-        _ => state.globals.push(Global {
-            name: name.name.clone(),
-            backend,
-        }),
+        _ => {
+            let oid = storage::oid(&session.db, &backend).ok().flatten();
+            session.ext.temp_tables.globals.push(Global {
+                name: name.name.clone(),
+                backend,
+                oid,
+            })
+        }
     }
     Ok(execution)
 }
