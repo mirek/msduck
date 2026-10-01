@@ -48,7 +48,12 @@ pub(super) fn exec(
             let dialect = msduck_sql::dialect::ServerDialect;
             match sqlparser::parser::Parser::new(&dialect)
                 .try_with_sql(&value)
-                .and_then(|mut parser| parser.parse_object_name(false))
+                .and_then(|mut parser| {
+                    let name = parser.parse_object_name(false)?;
+                    // The whole value must be a name.
+                    parser.expect_token(&sqlparser::tokenizer::Token::EOF)?;
+                    Ok(name)
+                })
                 .ok()
             {
                 Some(name) => super::define::identifiers(&name)?,
@@ -59,13 +64,22 @@ pub(super) fn exec(
         }
     };
     let last = parts.last()?;
-    let system_schema = parts.len() < 2 || parts[parts.len() - 2].eq_ignore_ascii_case("sys");
+    let system_schema = parts.len() < 2 || {
+        let schema = &parts[parts.len() - 2];
+        schema.is_empty() || schema.eq_ignore_ascii_case("sys")
+    };
     if last.eq_ignore_ascii_case("sp_executesql") && system_schema {
         return Some(execute_sql(session, &call, variables));
     }
+    // System procedures (sp_, xp_) that are not user modules belong to
+    // other features or the engine.
+    let system = ["sp_", "xp_"]
+        .iter()
+        .any(|prefix| last.to_lowercase().starts_with(prefix));
     let (schema, name) = match super::define::split(session, &parts) {
         Ok(Some(found)) => found,
         Ok(None) => return None,
+        Err(_) if system => return None,
         Err(error) => return Some(Err(error)),
     };
     let module = match modules::find(&session.db, schema.as_deref(), &name) {
@@ -78,13 +92,7 @@ pub(super) fn exec(
         }
         // Other features run other module types and system procedures.
         Some(_) => None,
-        None if system_schema
-            && ["sp_", "xp_"]
-                .iter()
-                .any(|prefix| name.to_lowercase().starts_with(prefix)) =>
-        {
-            None
-        }
+        None if system => None,
         None => Some(Err(not_found(&parts.join(".")).into())),
     }
 }
@@ -149,6 +157,18 @@ fn convert(
     data_type: SqlType,
     variables: &HashMap<String, Parameter>,
 ) -> Result<Parameter> {
+    // Arguments are constants and variables; an expression is a syntax error.
+    let mut inner = expr;
+    if let Expr::UnaryOp { expr, .. } = inner {
+        inner = expr;
+    }
+    if let Expr::BinaryOp { op, .. } = inner {
+        bail!(SqlError::syntax(
+            102,
+            1,
+            format!("Incorrect syntax near '{op}'.")
+        ));
+    }
     let target = msduck_sql::sql_type::ast(data_type);
     let value = session
         .evaluate_scalar(expr.clone(), target.clone(), variables)
@@ -279,15 +299,25 @@ fn write_back(
         let Some(target) = caller.get(variable).map(|p| p.data_type) else {
             continue;
         };
-        let value = session.evaluate_scalar(
-            Expr::Identifier(Ident::new(parameter)),
-            msduck_sql::sql_type::ast(target),
-            frame,
-        )?;
+        let target_type = msduck_sql::sql_type::ast(target);
+        let value = session
+            .evaluate_scalar(
+                Expr::Identifier(Ident::new(parameter)),
+                target_type.clone(),
+                frame,
+            )
+            .and_then(crate::backend_value::from_backend)
+            .map_err(|_| {
+                let source = frame
+                    .get(parameter)
+                    .map(|p| type_name(&p.ast_type()))
+                    .unwrap_or_else(|| "int".into());
+                output_conversion(&source, &type_name(&target_type))
+            })?;
         caller.insert(
             variable.clone(),
             Parameter {
-                value: crate::backend_value::from_backend(value)?,
+                value,
                 data_type: target,
             },
         );
@@ -295,21 +325,60 @@ fn write_back(
     if let (Some(status), Some(variable)) = (status, call.status) {
         let variable = variable.to_lowercase();
         if let Some(target) = caller.get(&variable).map(|p| p.data_type) {
-            let value = session.evaluate_scalar(
-                msduck_sql::expr::number(status),
-                msduck_sql::sql_type::ast(target),
-                &HashMap::new(),
-            )?;
+            let target_type = msduck_sql::sql_type::ast(target);
+            let value = session
+                .evaluate_scalar(
+                    msduck_sql::expr::number(status),
+                    target_type.clone(),
+                    &HashMap::new(),
+                )
+                .and_then(crate::backend_value::from_backend)
+                .map_err(|_| output_conversion("int", &type_name(&target_type)))?;
             caller.insert(
                 variable,
                 Parameter {
-                    value: crate::backend_value::from_backend(value)?,
+                    value,
                     data_type: target,
                 },
             );
         }
     }
     Ok(())
+}
+
+/// A returned value that does not fit the caller's variable (captured: 8114
+/// state 2, which ends the batch).
+fn output_conversion(source: &str, target: &str) -> anyhow::Error {
+    SqlError::new(
+        8114,
+        2,
+        format!("Error converting data type {source} to {target}."),
+    )
+    .into()
+}
+
+/// End the batch after a failed write-back, keeping the call's output; a
+/// caller's CATCH handler receives the error instead.
+fn abort_after(
+    session: &mut Session,
+    call: &Call<'_>,
+    out: &[u8],
+    error: anyhow::Error,
+) -> anyhow::Error {
+    if caught_by_caller(session, call) {
+        return keep(out, error);
+    }
+    let mut tokens = out.to_vec();
+    session.last_error = crate::engine::emit_error(&mut tokens, &error);
+    Partial {
+        tokens,
+        error: if session.ext.procedures.frames.is_empty() {
+            StatementErrors(vec![]).into()
+        } else {
+            Aborted.into()
+        },
+    }
+    .into()
 }
 
 /// Whether this call's errors go to a CATCH handler of some caller.
@@ -348,13 +417,18 @@ fn finish(session: &Session, out: Vec<u8>, result: Result<i32, Failure>) -> Resu
     }
 }
 
-fn nesting(session: &mut Session) -> Result<()> {
-    if session.ext.procedures.frames.len() >= super::MAX_NESTING {
+/// Fail with 217 when `levels` more would exceed 32. SQL Server ends the
+/// batch, unless a caller's CATCH handler receives the error (captured).
+fn nesting(session: &mut Session, call: &Call<'_>, levels: usize) -> Result<()> {
+    if session.ext.procedures.level() + levels > super::MAX_NESTING {
         let error = SqlError::new(
             217,
             1,
             "Maximum stored procedure, function, trigger, or view nesting level exceeded (limit 32).",
         );
+        if caught_by_caller(session, call) {
+            bail!(error);
+        }
         let mut tokens = Vec::new();
         crate::tds::sql_error(&mut tokens, &error);
         session.last_error = error.number;
@@ -371,13 +445,36 @@ fn nesting(session: &mut Session) -> Result<()> {
     Ok(())
 }
 
+/// The 266 check SQL Server makes after EXECUTE when `@@TRANCOUNT` changed.
+fn transaction_count(session: &Session, before: u32) -> Option<SqlError> {
+    (session.transactions != before).then(|| {
+        SqlError::new(
+            266,
+            2,
+            format!(
+                "Transaction count after EXECUTE indicates a mismatching number of BEGIN and COMMIT statements. Previous count = {before}, current count = {}.",
+                session.transactions
+            ),
+        )
+    })
+}
+
+/// A failure after the frame produced output keeps that output.
+fn keep(out: &[u8], error: anyhow::Error) -> anyhow::Error {
+    Partial {
+        tokens: out.to_vec(),
+        error: super::diagnostic(&error).into(),
+    }
+    .into()
+}
+
 fn procedure(
     session: &mut Session,
     call: &Call<'_>,
     module: &modules::Module,
     caller: &mut HashMap<String, Parameter>,
 ) -> Result<Exec> {
-    nesting(session)?;
+    nesting(session, call, 1)?;
     let definition = msduck_sql::dialect::ext::procedures::definition(&module.definition)
         .ok_or_else(|| anyhow::anyhow!("stored procedure definition is not a procedure"))??;
     let note = |session: &mut Session, error: &SqlError| {
@@ -397,6 +494,7 @@ fn procedure(
         session,
         Some(module.name.clone()),
         in_try,
+        1,
         |session, out| {
             let (statements, variables) =
                 match super::define::compile(&module.definition, &definition) {
@@ -420,22 +518,11 @@ fn procedure(
             &frame_variables,
             Some(status),
             caller,
-        )?;
-        if session.transactions != transactions {
-            let error = SqlError::new(
-                266,
-                2,
-                format!(
-                    "Transaction count after EXECUTE indicates a mismatching number of BEGIN and COMMIT statements. Previous count = {transactions}, current count = {}.",
-                    session.transactions
-                ),
-            );
+        )
+        .map_err(|error| abort_after(session, call, &out, error))?;
+        if let Some(error) = transaction_count(session, transactions) {
             note(session, &error);
-            return Err(Partial {
-                tokens: out,
-                error: error.into(),
-            }
-            .into());
+            return Err(keep(&out, error.into()));
         }
     }
     finish(session, out, result)
@@ -462,7 +549,7 @@ fn dynamic(
     expr: &Expr,
     caller: &mut HashMap<String, Parameter>,
 ) -> Result<Exec> {
-    nesting(session)?;
+    nesting(session, call, 1)?;
     let text = session.evaluate_scalar(
         expr.clone(),
         DataType::Nvarchar(Some(sqlparser::ast::CharacterLength::Max)),
@@ -474,7 +561,8 @@ fn dynamic(
         _ => bail!("unsupported dynamic SQL value"),
     };
     let in_try = caught_by_caller(session, call);
-    let (out, result) = run::frame(session, None, in_try, |session, out| {
+    let transactions = session.transactions;
+    let (out, result) = run::frame(session, None, in_try, 1, |session, out| {
         if let Some(definition) = msduck_sql::dialect::ext::procedures::definition(&text) {
             return run::define(session, &text, definition, out);
         }
@@ -491,7 +579,11 @@ fn dynamic(
     });
     let result = result.map(|finished| finished.procedure_status());
     if let Ok(status) = result {
-        write_back(session, call, &[], &HashMap::new(), Some(status), caller)?;
+        write_back(session, call, &[], &HashMap::new(), Some(status), caller)
+            .map_err(|error| abort_after(session, call, &out, error))?;
+        if let Some(error) = transaction_count(session, transactions) {
+            return Err(keep(&out, error.into()));
+        }
     }
     finish(session, out, result)
 }
@@ -514,9 +606,12 @@ fn executesql_text(
     };
     let unicode = match expr {
         Expr::Value(value) => matches!(value.value, Value::NationalStringLiteral(_)),
-        Expr::Identifier(ident) => caller
-            .get(&ident.value.to_lowercase())
-            .is_some_and(|p| type_name(&p.ast_type()).starts_with('n')),
+        Expr::Identifier(ident) => caller.get(&ident.value.to_lowercase()).is_some_and(|p| {
+            matches!(
+                type_name(&p.ast_type()).as_str(),
+                "nvarchar" | "nchar" | "ntext"
+            )
+        }),
         _ => false,
     };
     if !unicode {
@@ -540,7 +635,7 @@ fn execute_sql(
     call: &Call<'_>,
     caller: &mut HashMap<String, Parameter>,
 ) -> Result<Exec> {
-    nesting(session)?;
+    nesting(session, call, 2)?;
     let mut statement = None;
     let mut declarations = None;
     let mut values = Vec::new();
@@ -638,8 +733,9 @@ fn execute_sql(
         bail!(too_many());
     }
     let in_try = caught_by_caller(session, call);
+    let transactions = session.transactions;
     let mut frame_variables = HashMap::new();
-    let (out, result) = run::frame(session, None, in_try, |session, out| {
+    let (out, result) = run::frame(session, None, in_try, 2, |session, out| {
         if let Some(definition) = msduck_sql::dialect::ext::procedures::definition(&sql) {
             if !declared.is_empty() {
                 return Err(Failure::Error(super::define::nested_create().into()));
@@ -652,7 +748,7 @@ fn execute_sql(
         run::run(session, &statements, &mut frame_variables, out)
     });
     let result = result.map(|finished: Finished| finished.error_status);
-    match &result {
+    let written = match &result {
         Ok(status) => write_back(
             session,
             call,
@@ -660,14 +756,20 @@ fn execute_sql(
             &frame_variables,
             Some(*status),
             caller,
-        )?,
+        ),
         // sp_executesql still reports a compilation error's number as its
         // status.
         Err(Failure::Error(error)) => {
             let number = super::diagnostic(error).number;
-            write_back(session, call, &[], &HashMap::new(), Some(number), caller)?;
+            write_back(session, call, &[], &HashMap::new(), Some(number), caller)
         }
-        Err(Failure::Abort) => {}
+        Err(Failure::Abort) => Ok(()),
+    };
+    written.map_err(|error| abort_after(session, call, &out, error))?;
+    if result.is_ok()
+        && let Some(error) = transaction_count(session, transactions)
+    {
+        return Err(keep(&out, error.into()));
     }
     finish(session, out, result)
 }

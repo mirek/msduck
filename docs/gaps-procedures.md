@@ -14,7 +14,7 @@ what remains.
 
 ## Evidence
 
-`scripts/capture-gaps-procedures.mjs` runs 137 observations twice, each in a
+`scripts/capture-gaps-procedures.mjs` runs 145 observations twice, each in a
 fresh pinned SQL Server 2025 container (17.0.4065.4, the image in
 `scripts/lib/reference-container.mjs`). It records result sets, ERROR and INFO
 messages, RETURNVALUEs and the token stream: every DONE, DONEPROC and
@@ -97,6 +97,9 @@ value is one of:
 - a variable, optionally followed by `OUT`/`OUTPUT`;
 - `DEFAULT`.
 
+An expression such as `1 + 1` is a compilation error (102), except for
+`sp_set_session_context`, whose binder reports it.
+
 `WITH RECOMPILE` is accepted.
 
 - Arguments convert to the parameter types. Character values are truncated
@@ -141,9 +144,14 @@ Each call runs in its own frame:
 - Its own variables: the caller's are not visible (137 at CREATE).
 - `SET NOCOUNT`, `XACT_ABORT`, `ANSI_WARNINGS` and `DATEFIRST` revert when
   it returns.
-- `@@NESTLEVEL` counts frames.
-- A 33rd nested level fails with 217 and aborts the batch.
-- A changed `@@TRANCOUNT` raises 266 after the call.
+- `@@NESTLEVEL` counts frames. sp_executesql adds two levels, itself and
+  its batch (captured 1 for `EXEC (string)` and 2 for sp_executesql).
+- A 33rd nested level fails with 217 and aborts the batch, unless a
+  caller's CATCH handler receives it.
+- A changed `@@TRANCOUNT` raises 266 after a procedure, `EXEC (string)` or
+  sp_executesql.
+- An OUTPUT value or status that does not fit the caller's variable fails
+  with 8114 (state 2) and ends the batch.
 - `@@ROWCOUNT` after a call is that of the procedure's last statement (0
   after a bare RETURN).
 - `ERROR_NUMBER()` and the other error functions inside a procedure see the
@@ -162,7 +170,9 @@ transfers the first error to that CATCH handler instead. The parser marks
 calls inside TRY bodies so that a procedure knows this. A nested procedure
 ends with DONEINPROC (224) and the call with DONEPROC, without RETURNSTATUS.
 `ERROR_PROCEDURE()` names the procedure in which the error arose. It is NULL
-for errors outside procedures and in dynamic SQL.
+for errors outside procedures and in dynamic SQL. A batch statement outside
+CATCH clears the remembered procedure, so a later error at batch level does
+not inherit it.
 
 ## Dynamic SQL and sp_executesql
 
@@ -237,6 +247,8 @@ The replay test lists each of these:
   example, 208 reads "Catalog Error: Table with name ... does not exist!".
 - A duplicate key ends the batch rather than the statement, so the
   procedure does not continue.
+- `@@NESTLEVEL` in a parameterized tedious request (an sp_executesql RPC)
+  is 0; SQL Server reports 2.
 - `EXEC ('')` sends RETURNSTATUS 0. SQL Server sends only DONEPROC.
 - These are not supported:
   - numbered procedures (`;2`);
