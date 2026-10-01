@@ -1014,12 +1014,125 @@ fn missing_later_apply_column(query: &Query, qualifier: &str) -> Option<String> 
     (candidates.len() == 1).then(|| candidates.remove(0))
 }
 
+// Match the backend report against a single explicit logical source and its
+// catalog snapshot. No CTE, join, nested-query, alias or computed projection may
+// supply a guessed source/column name. ASCII unquoted dbo names are the captured
+// family; other spellings remain unknown until independently evidenced.
+fn simple_source_binding_error(
+    query: &Query,
+    catalog: &CatalogSnapshot,
+    message: &str,
+) -> Option<msduck_core::diagnostic::SqlError> {
+    use sqlparser::ast::*;
+    let SetExpr::Select(select) = query.body.as_ref() else {
+        return None;
+    };
+    let [table] = select.from.as_slice() else {
+        return None;
+    };
+    if !table.joins.is_empty() {
+        return None;
+    }
+    let TableFactor::Table {
+        name,
+        alias: None,
+        args: None,
+        ..
+    } = &table.relation
+    else {
+        return None;
+    };
+    let [
+        ObjectNamePart::Identifier(schema),
+        ObjectNamePart::Identifier(source),
+    ] = name.0.as_slice()
+    else {
+        return None;
+    };
+    let captured_name = |id: &Ident| {
+        id.quote_style.is_none()
+            && !id.value.is_empty()
+            && id
+                .value
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    };
+    let [SelectItem::UnnamedExpr(Expr::Identifier(column))] = select.projection.as_slice() else {
+        return None;
+    };
+    if !schema.value.eq_ignore_ascii_case("dbo")
+        || !captured_name(schema)
+        || !captured_name(source)
+        || !captured_name(column)
+    {
+        return None;
+    }
+    // Compare with a plain AST template, so extra clauses cannot hide further
+    // binding errors. Only the original identifier/source nodes are copied;
+    // native diagnostic text never supplies SQL syntax or execution input.
+    let Statement::Query(mut plain) = msduck_sql::batch::parse("SELECT value FROM dbo.source")
+        .ok()?
+        .remove(0)
+    else {
+        return None;
+    };
+    let SetExpr::Select(expected) = plain.body.as_mut() else {
+        return None;
+    };
+    expected.projection = select.projection.clone();
+    let TableFactor::Table {
+        name: expected_name,
+        ..
+    } = &mut expected.from[0].relation
+    else {
+        return None;
+    };
+    *expected_name = name.clone();
+    if plain.as_ref() != query {
+        return None;
+    }
+    let fields = catalog.tables.get(&name.to_string())?;
+    if let Some((native, _)) = message
+        .strip_prefix("Catalog Error: Table with name ")
+        .and_then(|rest| rest.split_once(" does not exist!"))
+    {
+        if native == source.value && fields.is_empty() {
+            return Some(msduck_core::diagnostic::SqlError::new(
+                208,
+                1,
+                format!("Invalid object name '{}.{}'.", schema.value, source.value),
+            ));
+        }
+        return None;
+    }
+    let (native, _) = message
+        .strip_prefix("Binder Error: Referenced column \"")?
+        .split_once("\" not found in FROM clause!")?;
+    if fields.is_empty()
+        || fields
+            .iter()
+            .any(|field| field.name.eq_ignore_ascii_case(native))
+    {
+        return None;
+    }
+    if column.value != native {
+        return None;
+    }
+    Some(msduck_core::diagnostic::SqlError::new(
+        207,
+        1,
+        format!("Invalid column name '{}'.", column.value),
+    ))
+}
+
 // Preserve the captured preparation-error wrapper for the canonical grouping
-// diagnostic and bounded joined APPLY family. Unknown diagnostics and ambiguous
+// diagnostic, proven simple-source errors and bounded joined APPLY family.
+// Unknown diagnostics and ambiguous
 // native qualifier reports stay with the caller. A backend-reported missing
 // qualifier must identify exactly one original logical column; diagnostic text
 // is never parsed as SQL or executed.
 pub(super) fn preparation_binding_error(
+    session: &Session,
     sql: &str,
     error: &anyhow::Error,
     output_name: &str,
@@ -1030,16 +1143,39 @@ pub(super) fn preparation_binding_error(
     let [Statement::Query(query)] = statements.as_slice() else {
         return Ok(None);
     };
-    let joined_apply = joined_apply_declarations(query) != **query;
+    let message = error.to_string();
+    let catalog = if message.starts_with("Binder Error: Referenced column ")
+        || message.starts_with("Catalog Error: Table with name ")
+    {
+        crate::query_catalog::snapshot(&session.db, query).ok()
+    } else {
+        None
+    };
+    binding_error_response(query, error, output_name, catalog.as_ref())
+}
+
+fn binding_error_response(
+    query: &Query,
+    error: &anyhow::Error,
+    output_name: &str,
+    catalog: Option<&CatalogSnapshot>,
+) -> Result<Option<Vec<u8>>> {
+    let joined_apply = joined_apply_declarations(query) != *query;
     let mut response = Vec::new();
     let number = crate::engine::emit_error(&mut response, error);
+    let source_error =
+        catalog.and_then(|catalog| simple_source_binding_error(query, catalog, &error.to_string()));
     // Error 164 is emitted only for the canonical grouping diagnostic. Fresh
     // captures prove the same wrapper for ordinary, parameter-only and scalar
-    // correlated grouping. Other errors retain the joined-family scope guard.
-    if number != 164 && !joined_apply {
+    // correlated grouping. Other errors require a proven simple source or retain
+    // the joined-family scope guard.
+    if number != 164 && !joined_apply && source_error.is_none() {
         return Ok(None);
     }
-    if number == 50000 {
+    if let Some(diagnostic) = source_error {
+        response.clear();
+        tds::sql_error(&mut response, &diagnostic);
+    } else if number == 50000 {
         let message = error.to_string();
         let Some((qualifier, _)) = message
             .strip_prefix("Binder Error: Referenced table \"")
@@ -2391,6 +2527,91 @@ mod tests {
     }
 
     #[test]
+    fn simple_source_errors_require_original_shape_and_catalog_agreement() {
+        use msduck_sql::binding_scope::Field;
+        let parse = |sql: &str| {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            query
+        };
+        let mut catalog = CatalogSnapshot::default();
+        catalog.tables.insert(
+            "dbo.prepare_heap".into(),
+            vec![Field {
+                name: "a".into(),
+                info: None,
+                collation: None,
+                json_fragment: false,
+                properties: Default::default(),
+            }],
+        );
+        catalog.tables.insert("dbo.prepare_missing".into(), vec![]);
+        let column_error =
+            "Binder Error: Referenced column \"missing_column\" not found in FROM clause!";
+        let source_error = "Catalog Error: Table with name prepare_missing does not exist!";
+        let column_query = parse("SELECT missing_column FROM dbo.prepare_heap");
+        assert_eq!(
+            simple_source_binding_error(&column_query, &catalog, column_error),
+            Some(msduck_core::diagnostic::SqlError::new(
+                207,
+                1,
+                "Invalid column name 'missing_column'."
+            ))
+        );
+        let source_query = parse("SELECT a FROM dbo.prepare_missing");
+        assert_eq!(
+            simple_source_binding_error(&source_query, &catalog, source_error),
+            Some(msduck_core::diagnostic::SqlError::new(
+                208,
+                1,
+                "Invalid object name 'dbo.prepare_missing'."
+            ))
+        );
+        for sql in [
+            "SELECT missing_column,other_missing FROM dbo.prepare_heap",
+            "SELECT missing_column FROM dbo.prepare_heap WHERE other_missing=1",
+            "SELECT missing_column FROM dbo.prepare_heap ORDER BY other_missing",
+            "SELECT missing_column FROM dbo.prepare_heap h",
+            "SELECT missing_column FROM dbo.prepare_heap CROSS JOIN dbo.prepare_missing",
+            "WITH q AS (SELECT 1 AS a) SELECT missing_column FROM dbo.prepare_heap",
+            "SELECT missing_column FROM dbo.prepare_heap UNION ALL SELECT missing_column FROM dbo.prepare_heap",
+            "SELECT [missing_column] FROM dbo.prepare_heap",
+            "SELECT missing_column FROM other.prepare_heap",
+            "SELECT a FROM dbo.prepare_heap",
+        ] {
+            assert!(
+                simple_source_binding_error(&parse(sql), &catalog, column_error).is_none(),
+                "{sql}"
+            );
+        }
+        assert!(
+            simple_source_binding_error(&column_query, &CatalogSnapshot::default(), column_error)
+                .is_none()
+        );
+        assert!(
+            simple_source_binding_error(
+                &source_query,
+                &catalog,
+                "Catalog Error: Table with name other_source does not exist!"
+            )
+            .is_none()
+        );
+        assert!(
+            simple_source_binding_error(&column_query, &catalog, "unrecognized backend error")
+                .is_none()
+        );
+        let mut contradictory = catalog.clone();
+        contradictory.tables.get_mut("dbo.prepare_heap").unwrap()[0].name = "missing_column".into();
+        contradictory.tables.insert(
+            "dbo.prepare_missing".into(),
+            catalog.tables["dbo.prepare_heap"].clone(),
+        );
+        assert!(simple_source_binding_error(&column_query, &contradictory, column_error).is_none());
+        assert!(simple_source_binding_error(&source_query, &contradictory, source_error).is_none());
+    }
+
+    #[test]
     fn later_apply_diagnostic_requires_a_proven_forward_qualifier() {
         let sql = "SELECT b.n FROM (VALUES(1),(2)) a(v) CROSS APPLY ((SELECT COUNT(*) AS n FROM (VALUES(0)) i(k) GROUP BY later.v) b CROSS JOIN (VALUES(1)) c(k)) CROSS JOIN (VALUES(2)) later(v)";
         let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
@@ -2420,13 +2641,13 @@ mod tests {
         }
         let error = anyhow::anyhow!("Binder Error: Referenced table \"a\" not found!");
         assert!(
-            preparation_binding_error(sql, &error, "handle")
+            binding_error_response(&query, &error, "handle", None)
                 .unwrap()
                 .is_none()
         );
         let error = anyhow::anyhow!("unrecognized native failure");
         assert!(
-            preparation_binding_error(sql, &error, "handle")
+            binding_error_response(&query, &error, "handle", None)
                 .unwrap()
                 .is_none()
         );

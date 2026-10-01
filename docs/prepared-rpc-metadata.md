@@ -418,3 +418,30 @@ currently differ from SQL Server's207/208 plus8180 responses. They are not
 normalized or claimed fixed by the grouping change. Existing default prepared
 GROUP BY tests also expect a single error; those assertions require a separately
 authorized correction to the captured two-error contract.
+
+
+At `62521e1a2c8b2f0c8f2246ce7664496010e56a2c`, formatting, strict workspace
+Clippy, all-target build and all 1,126 Rust tests passed (one ignored, 152
+suites). The dedicated replay passed23/25, including all eight new complete
+grouping controls; only #705 and #735 remain failing. The audit recorded325
+cases with zero transport errors and no SQL Server comparison. The complete
+default inventory finished495/504, zero skipped/todo, not aborted,402857ms;
+checkout, test inputs and binary remained unchanged. Eight failures are the
+old prepared GROUP BY single-error assertions, and one is the old JSON path
+expectation. Both startup-failure cases from the earlier run passed in this full
+inventory. Raw client summary, dedicated log and actual audit JSON are retained.
+
+The `--binding-errors PATH` mode replays the entire six-profile binding-error
+capture, including the missing-column and missing-table controls. All twelve
+complete reference records are embedded verbatim in the dedicated replay.
+For simple single-column SELECT from an unquoted ASCII dbo source, the adapter
+now requires agreement among the original AST, the native missing-name report
+and an explicit read-only catalog snapshot before formatting207/208. A plain
+AST template excludes additional clauses, multiple projections, aliases, joins,
+CTEs and nested queries that could require different or multiple diagnostics.
+A catalog contradicting the missing-name report blocks conversion. Unknown or
+unrecognized shapes keep their existing error path; no native report is parsed
+as SQL or passed for execution. The wrapper preserves8180, NULL handle,
+RETURNSTATUS and DONEPROC without allocating/caching a statement. Root adapters
+acquire the snapshot; the diagnostic rule receives it explicitly. Dedicated
+replay and workspace verification of this new source-binding change are pending.

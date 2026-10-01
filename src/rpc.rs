@@ -127,8 +127,12 @@ impl State {
                     &declarations,
                 ) {
                     if procedure == "sp_prepare"
-                        && let Some(response) =
-                            prepare_metadata::preparation_binding_error(sql, &error, &output.name)?
+                        && let Some(response) = prepare_metadata::preparation_binding_error(
+                            session,
+                            sql,
+                            &error,
+                            &output.name,
+                        )?
                     {
                         return Ok(response);
                     }
