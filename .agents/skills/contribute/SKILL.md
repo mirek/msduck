@@ -164,9 +164,9 @@ above.
    permission to ignore findings or to work outside the claim.
 8. Promptly publish completion (`states: {ID: "done"}` via `publish`) and check
    the project card and linked issue after merge, so dependants are released.
-   If the worker cannot finish the PR, retain the claim and report the blocker;
-   the owner may explicitly designate another integration session or hand off
-   remaining work after stopping the original worker and its remote jobs. A
+   If the worker cannot finish the PR, retain the claim and report the blocker.
+   Once the claim is stale, another session may take over the remaining work as
+   a successor task under the standing authorization in `docs/agent-work.md`. A
    separate integrator follows the same exact-head gates. Never delete, move,
    expire or reuse a claim.
 
@@ -174,9 +174,14 @@ A ref is created atomically once per task ID. GitHub rules forbid subsequent
 updates/deletion. Two conforming workers cannot acquire that same ID. This does
 not constrain a malicious owner credential or a harness that ignores the rules.
 Distinct tasks can still conflict conceptually; the owner publishes disjoint
-ready scopes and explicit dependencies. No automatic timeout/reclaim is safe.
-For a blocked or abandoned task, use `status TASK-ID blocked` and follow the
-owner recovery procedure in `docs/agent-work.md`.
+ready scopes and explicit dependencies. Claims never time out on their own.
+However, the owner has given standing authorization to resolve a stale claim or
+reservation that blocks owner-approved work, so do not stop to ask. Check the
+evidence that it is stale, mark it blocked and publish a successor or a
+companion task. The procedure is in "Standing authorization for stale claims"
+in `docs/agent-work.md`. Report the resolution afterwards. Sessions often run
+unattended for days, so keep progressing and do not idle while waiting for
+approval.
 
 ## Verification and shared resources
 
