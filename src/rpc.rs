@@ -12,6 +12,9 @@ use msduck_core::{
 };
 use std::collections::HashMap;
 
+mod prepare_delete;
+mod prepare_metadata;
+
 struct RpcParameter {
     name: String,
     status: u8,
@@ -84,19 +87,86 @@ impl State {
                         (3..=4).contains(&parameters.len()),
                         "invalid sp_prepare parameter count"
                     );
-                    if parameters.len() == 4 {
-                        ensure!(
-                            input_int(&parameters[3])? == 0,
-                            "unsupported sp_prepare metadata option"
+                    if parameters.len() == 4
+                        && (parameters[3].parameter.data_type != DataType::Int
+                            || !matches!(parameters[3].parameter.value, Value::Int(1)))
+                    {
+                        let mut out = Vec::new();
+                        tds::sql_error(
+                            &mut out,
+                            &msduck_core::diagnostic::SqlError::new(
+                                214,
+                                3,
+                                "Procedure expects parameter '@options' of type 'int'.",
+                            ),
                         );
+                        out.push(0x79);
+                        out.extend(214i32.to_le_bytes());
+                        prepare_metadata::handle(&mut out, &output.name, None)?;
+                        tds::done(&mut out, 0xfe, 2, 0xe0, 0);
+                        return Ok(out);
                     }
                     HashMap::new()
                 } else {
                     bind(&declarations, &parameters[3..])?
                 };
                 // Validate both syntax and database binding without executing the statement.
-                session.validate_prepared_sql(sql, &declarations)?;
-                let bytes = sql.len()
+                let lowered = if procedure == "sp_prepare" {
+                    prepare_delete::lower(sql)?
+                } else {
+                    None
+                };
+                let execution_sql = lowered.as_deref().unwrap_or(sql);
+                let binding_probe = if procedure == "sp_prepare" {
+                    prepare_metadata::nested_count_binding_sql(execution_sql)?
+                } else {
+                    None
+                };
+                if let Err(error) = session.validate_prepared_sql(
+                    binding_probe.as_deref().unwrap_or(execution_sql),
+                    &declarations,
+                ) {
+                    if procedure == "sp_prepare"
+                        && let Some(response) = prepare_metadata::preparation_binding_error(
+                            session,
+                            sql,
+                            &error,
+                            &output.name,
+                        )?
+                    {
+                        return Ok(response);
+                    }
+                    return Err(error);
+                }
+                let description = if procedure == "sp_prepare" {
+                    Some(prepare_metadata::describe(session, sql, &declarations)?)
+                } else {
+                    None
+                };
+                if let Some(description) = &description
+                    && !description.accepted
+                {
+                    if let Some(error) = &description.complete_error {
+                        let mut response = Vec::new();
+                        tds::sql_error(&mut response, error);
+                        // Literal compilation errors have no RETURNSTATUS,
+                        // output handle or usable cached statement.
+                        tds::done(&mut response, 0xfe, 2, 0xe0, 0);
+                        return Ok(response);
+                    }
+                    let mut response = description.prefix.clone();
+                    response.push(0x79);
+                    response.extend(description.status.to_le_bytes());
+                    prepare_metadata::handle(&mut response, &output.name, None)?;
+                    tds::done(&mut response, 0xfe, 2, 0xe0, 0);
+                    return Ok(response);
+                }
+                if binding_probe.is_some() {
+                    // An accepted description must still validate/cache the
+                    // actual execution SQL, never the diagnostic probe.
+                    session.validate_prepared_sql(execution_sql, &declarations)?;
+                }
+                let bytes = execution_sql.len()
                     + declarations
                         .iter()
                         .map(|(name, kind)| name.len() + std::mem::size_of_val(kind))
@@ -110,18 +180,22 @@ impl State {
                     .checked_add(1)
                     .ok_or_else(|| anyhow::anyhow!("prepared statement handle space exhausted"))?;
                 self.next_handle = handle;
-                let (response, success) = session.batch_response(
-                    if procedure == "sp_prepare" { "" } else { sql },
-                    &bindings,
-                    true,
-                    Some((&output.name, handle)),
-                );
+                let (response, success) = if let Some(description) = description {
+                    let mut response = description.prefix;
+                    response.push(0x79);
+                    response.extend(description.status.to_le_bytes());
+                    prepare_metadata::handle(&mut response, &output.name, Some(handle))?;
+                    tds::done(&mut response, 0xfe, 0, 0xe0, 0);
+                    (response, true)
+                } else {
+                    session.batch_response(sql, &bindings, true, Some((&output.name, handle)))
+                };
                 if success {
                     self.bytes += bytes;
                     self.prepared.insert(
                         handle,
                         Prepared {
-                            sql: sql.to_owned(),
+                            sql: execution_sql.to_owned(),
                             declarations,
                             bytes,
                         },
@@ -631,6 +705,58 @@ mod tests {
         out
     }
     #[test]
+    fn joined_output_into_prepares_without_writes_and_keeps_handle_usable() {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        session.batch("CREATE TABLE joined_prepare_target(id INT,n INT); CREATE TABLE joined_prepare_sink(n INT); INSERT INTO joined_prepare_target VALUES(1,1)", &HashMap::new(), false);
+        let mut state = State::default();
+        let sql = "UPDATE t SET n=t.n+@step OUTPUT inserted.n INTO joined_prepare_sink(n) FROM joined_prepare_target t JOIN (VALUES(1)) s(id) ON t.id=s.id";
+        state
+            .execute(&mut session, &prepare_request(sql, "@step INT"))
+            .unwrap();
+        assert_eq!(state.prepared[&1].sql, sql);
+        assert_eq!(
+            session
+                .db
+                .query_row("SELECT n FROM dbo.joined_prepare_target", [], |r| r
+                    .get::<_, i32>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            session
+                .db
+                .query_row("SELECT COUNT(*) FROM dbo.joined_prepare_sink", [], |r| r
+                    .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        let mut execute = handle_request(12, 1);
+        execute.extend([0, 0, 0x26, 4, 4]);
+        execute.extend(7i32.to_le_bytes());
+        state.execute(&mut session, &execute).unwrap();
+        assert_eq!(
+            session
+                .db
+                .query_row("SELECT n FROM dbo.joined_prepare_target", [], |r| r
+                    .get::<_, i32>(0))
+                .unwrap(),
+            8
+        );
+        assert_eq!(
+            session
+                .db
+                .query_row("SELECT n FROM dbo.joined_prepare_sink", [], |r| r
+                    .get::<_, i32>(0))
+                .unwrap(),
+            8
+        );
+        state.execute(&mut session, &handle_request(15, 1)).unwrap();
+        assert!(state.prepared.is_empty());
+        assert_eq!(state.bytes, 0);
+    }
+
+    #[test]
     fn preparation_validates_without_running_sql_and_release_reclaims_storage() {
         let server = Server::open(":memory:").unwrap();
         let mut session = Session::new(server.connection().unwrap()).unwrap();
@@ -687,6 +813,93 @@ mod tests {
         state.execute(&mut session, &valid).unwrap();
         assert!(state.prepared.contains_key(&1));
     }
+    #[test]
+    fn rejected_options_do_not_consume_handles_or_prepare_statements() {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        let mut state = State::default();
+        for option in [Some(0i32), Some(2), None] {
+            let mut request = prepare_request("SELECT @x AS x", "@x int");
+            request.extend([0, 0, 0x26, 4]);
+            if let Some(value) = option {
+                request.push(4);
+                request.extend(value.to_le_bytes());
+            } else {
+                request.push(0);
+            }
+            let response = state.execute(&mut session, &request).unwrap();
+            assert_eq!(response[0], 0xaa, "expected SQL error token");
+            assert_eq!(&response[3..7], &214i32.to_le_bytes());
+            assert_eq!(
+                &response[response.len() - 13..response.len() - 8],
+                &[0xfe, 2, 0, 0xe0, 0]
+            );
+            assert!(state.prepared.is_empty());
+            assert_eq!(state.bytes, 0);
+            assert_eq!(state.next_handle, 0);
+        }
+        let response = state
+            .execute(&mut session, &prepare_request("SELECT @x AS x", "@x int"))
+            .unwrap();
+        assert_eq!(response[0], 0x81, "metadata must precede status and handle");
+        assert!(state.prepared.contains_key(&1));
+    }
+    #[test]
+    fn failed_count_preparation_returns_diagnostics_without_allocating_a_handle() {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        let mut state = State::default();
+        let response = state
+            .execute(
+                &mut session,
+                &prepare_request("SELECT COUNT(NULL) AS unknown", ""),
+            )
+            .unwrap();
+        assert_eq!(response[0], 0xaa);
+        assert_eq!(
+            &response[response.len() - 13..response.len() - 8],
+            &[0xfe, 2, 0, 0xe0, 0]
+        );
+        assert!(state.prepared.is_empty());
+        assert_eq!(state.bytes, 0);
+        assert_eq!(state.next_handle, 0);
+    }
+    #[test]
+    fn nested_count_null_keeps_binding_precedence_and_no_handles() {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        session
+            .db
+            .execute_batch("CREATE TABLE dbo.count_binding(a INT)")
+            .unwrap();
+        let mut state = State::default();
+        for sql in [
+            "SELECT SUM(COUNT(NULL)) FROM dbo.count_binding",
+            "SELECT SUM(COUNT_BIG(NULL)) FROM dbo.count_binding",
+        ] {
+            let response = state
+                .execute(&mut session, &prepare_request(sql, ""))
+                .unwrap();
+            assert_eq!(response[0], 0xaa);
+            assert_eq!(i32::from_le_bytes(response[3..7].try_into().unwrap()), 8117);
+            assert!(state.prepared.is_empty());
+            assert_eq!(state.next_handle, 0);
+            assert_eq!(state.bytes, 0);
+        }
+        for sql in [
+            "SELECT SUM(COUNT(NULL)) FROM dbo.missing_count_binding",
+            "SELECT SUM(COUNT(NULL)) FROM dbo.count_binding WHERE missing=1",
+        ] {
+            assert!(
+                state
+                    .execute(&mut session, &prepare_request(sql, ""))
+                    .is_err(),
+                "binding must precede NULL diagnostic: {sql}"
+            );
+            assert!(state.prepared.is_empty());
+        }
+    }
+
     #[test]
     fn failed_prepexec_does_not_leak_a_handle() {
         let server = Server::open(":memory:").unwrap();

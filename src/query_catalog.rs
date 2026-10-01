@@ -1,4 +1,6 @@
 //! Read-only projection provenance for persisted query-result column metadata.
+mod column_views;
+
 use crate::declared_columns::Info;
 use duckdb::{Connection, types::Value};
 use msduck_sql::catalog_snapshot::CatalogSnapshot;
@@ -323,7 +325,8 @@ pub(crate) fn snapshot<T: Visit>(db: &Connection, query: &T) -> duckdb::Result<C
 }
 
 pub(crate) fn system_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Field>> {
-    crate::index_catalog::fields(view, catalog_collation)
+    column_views::fields(view, catalog_collation)
+        .or_else(|| crate::index_catalog::fields(view, catalog_collation))
         .or_else(|| object_catalog_fields(view, catalog_collation))
 }
 

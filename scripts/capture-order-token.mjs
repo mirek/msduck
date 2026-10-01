@@ -103,7 +103,7 @@ async function captureTokens(connection,action) {
   return {...result,doneTokens,events}
  } finally {connection.createTokenStreamParser=createParser;StreamParser.prototype.readToken=readToken}
 }
-async function capturePreparedPhase(connection, request, issue, setComplete, prepared = false) {
+export async function capturePreparedPhase(connection, request, issue, setComplete, prepared = false) {
   const result = { sets: [], done: [], errors: [], info: [], returnStatus: null, returnValues: [] }
   const onError = e => result.errors.push({ number: e.number, state: e.state, class: e.class, lineNumber: e.lineNumber, message: e.message })
   const onInfo = e => result.info.push({ number: e.number, state: e.state, class: e.class, lineNumber: e.lineNumber, message: e.message })
