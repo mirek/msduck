@@ -1,10 +1,13 @@
-//! Syntax for: Computed columns over nvarchar(max) and session-dependent defaults.
-//!
-//! Stub until its gap task lands; see docs/extension-hooks.md.
+//! Syntax for computed columns over Unicode and JSON expressions, and for
+//! session-dependent column defaults. Computed columns themselves are parsed
+//! by `dialect::computed_column`; this feature claims no statements. See
+//! docs/gaps-computed.md.
 use sqlparser::{
     ast::Statement,
     parser::{Parser, ParserError},
 };
+
+pub mod session;
 
 /// Parse a statement this feature owns, or decline without consuming tokens.
 pub fn parse(_parser: &mut Parser) -> Option<Result<Statement, ParserError>> {

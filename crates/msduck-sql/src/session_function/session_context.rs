@@ -105,6 +105,12 @@ pub struct SessionContext {
     entries: Vec<Entry>,
 }
 impl SessionContext {
+    /// Stored keys (as first set) and values, in the order keys were added.
+    pub fn entries(&self) -> impl Iterator<Item = (&str, &ContextValue)> {
+        self.entries
+            .iter()
+            .map(|entry| (entry.key.as_str(), &entry.value))
+    }
     pub fn get(&self, key: &str) -> Option<&ContextValue> {
         self.entries
             .iter()
@@ -174,8 +180,14 @@ impl SessionContext {
 /// case and trailing spaces, and the final non-space character must match
 /// exactly (`email` finds `Email` and `email `, but not `EMAIL`).
 pub fn keys_match(stored: &str, probe: &str) -> bool {
-    let (stored, probe) = (stored.trim_end_matches(' '), probe.trim_end_matches(' '));
-    stored.to_lowercase() == probe.to_lowercase() && stored.chars().last() == probe.chars().last()
+    key_identity(stored) == key_identity(probe)
+}
+
+/// The identity [`keys_match`] compares: the lower-case key without trailing
+/// spaces, and its exact final non-space character.
+pub fn key_identity(key: &str) -> (String, Option<char>) {
+    let key = key.trim_end_matches(' ');
+    (key.to_lowercase(), key.chars().last())
 }
 
 /// One `EXEC sp_set_session_context` argument, bound by position. Parameter
@@ -571,4 +583,52 @@ pub fn context_key(argument: &NameArgument) -> Result<Option<&str>, SqlError> {
         1,
         format!("Argument data type {kind} is invalid for argument 1 of session_context function."),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entries_keep_first_spelling_and_identity_matches_keys_match() {
+        let mut context = SessionContext::default();
+        context.set("Email", ContextValue::Int(1), false).unwrap();
+        context.set("email ", ContextValue::Int(2), false).unwrap();
+        context
+            .set(
+                "name",
+                ContextValue::NVarChar {
+                    text: "x".into(),
+                    max_bytes: 2,
+                },
+                false,
+            )
+            .unwrap();
+        let entries: Vec<_> = context.entries().collect();
+        assert_eq!(
+            entries,
+            vec![
+                ("Email", &ContextValue::Int(2)),
+                (
+                    "name",
+                    &ContextValue::NVarChar {
+                        text: "x".into(),
+                        max_bytes: 2
+                    }
+                )
+            ]
+        );
+        for (stored, probe, same) in [
+            ("email", "Email", true),
+            ("Email", "email", true),
+            ("Email", "EMAIL ", false),
+            ("Email", "eMail  ", true),
+            ("email", "email", true),
+            ("ab", "aB", false),
+            ("aB", "AB", true),
+        ] {
+            assert_eq!(keys_match(stored, probe), same, "{stored} {probe}");
+            assert_eq!(key_identity(stored) == key_identity(probe), same);
+        }
+    }
 }

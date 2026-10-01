@@ -43,7 +43,7 @@ fn nondeterministic(expr: &Expr) -> bool {
 /// Declarations whose DuckDB storage is the value itself. Other types use
 /// carrier representations (UTF-16, offsets, variants, money) that a
 /// generated-column expression cannot yet bind.
-fn native(kind: &DataType) -> bool {
+pub fn native(kind: &DataType) -> bool {
     use msduck_core::{character::Family, types::Type};
     match msduck_sql::sql_type::declaration(kind) {
         Ok(Type::Character(character)) => {
@@ -79,7 +79,7 @@ const DATE_PART_FUNCTIONS: &[&str] = &[
 
 /// Column names referenced by an expression, excluding variables and date
 /// part arguments.
-fn references(expr: &Expr) -> Vec<Ident> {
+pub fn references(expr: &Expr) -> Vec<Ident> {
     let mut parts = Vec::new();
     let _ = visit_expressions(expr, |expr| {
         if let Expr::Function(function) = expr
@@ -108,7 +108,9 @@ fn references(expr: &Expr) -> Vec<Ident> {
 
 /// Validate the computed columns of a CREATE TABLE and replace each
 /// placeholder type with the type inferred from its expression. A type that
-/// cannot be inferred stays unknown and DuckDB's own type is used.
+/// cannot be inferred stays unknown and DuckDB's own type is used. Columns
+/// whose expression the `computed` feature already lowered keep their
+/// declared type.
 pub fn plan(db: &duckdb::Connection, table: &mut CreateTable) -> Result<()> {
     if !table
         .columns
@@ -117,12 +119,61 @@ pub fn plan(db: &duckdb::Connection, table: &mut CreateTable) -> Result<()> {
     {
         return Ok(());
     }
-    let table_name = table
+    validate(table)?;
+    let sources = sources(table);
+    for column in &mut table.columns {
+        let Some((expr, _)) = computed(column) else {
+            continue;
+        };
+        if !is_placeholder(&column.data_type) {
+            continue;
+        }
+        for reference in references(expr) {
+            let source = sources
+                .iter()
+                .find_map(|item| match item {
+                    SelectItem::ExprWithAlias {
+                        expr: Expr::Cast { data_type, .. },
+                        alias,
+                    } if alias.value.eq_ignore_ascii_case(&reference.value) => Some(data_type),
+                    _ => None,
+                })
+                .expect("validated reference");
+            if !native(source) {
+                bail!(
+                    "unsupported computed column '{}' over {} column '{}'",
+                    column.name.value,
+                    source,
+                    reference.value
+                );
+            }
+        }
+        match infer(db, expr, &sources)? {
+            Some(kind) if native(&kind) => column.data_type = kind,
+            Some(kind) => bail!(
+                "unsupported computed column '{}' of type {kind}",
+                column.name.value
+            ),
+            None => {}
+        }
+    }
+    Ok(())
+}
+
+/// The table's name as SQL Server error messages print it.
+fn table_name(table: &CreateTable) -> String {
+    table
         .name
         .0
         .last()
         .and_then(ObjectNamePart::as_ident)
-        .map_or_else(|| table.name.to_string(), |id| id.value.clone());
+        .map_or_else(|| table.name.to_string(), |id| id.value.clone())
+}
+
+/// Check the computed columns' references (207, 1759) and determinism
+/// (4936, and msduck's refusal of non-persisted non-deterministic columns).
+pub fn validate(table: &CreateTable) -> Result<()> {
+    let table_name = table_name(table);
     let is_computed = |name: &str| {
         table
             .columns
@@ -176,23 +227,14 @@ pub fn plan(db: &duckdb::Connection, table: &mut CreateTable) -> Result<()> {
                 column.name.value
             );
         }
-        for reference in references(expr) {
-            let source = table
-                .columns
-                .iter()
-                .find(|c| c.name.value.eq_ignore_ascii_case(&reference.value))
-                .expect("checked above");
-            if !native(&source.data_type) {
-                bail!(
-                    "unsupported computed column '{}' over {} column '{}'",
-                    column.name.value,
-                    source.data_type,
-                    source.name.value
-                );
-            }
-        }
     }
-    let sources: Vec<SelectItem> = table
+    Ok(())
+}
+
+/// A row of the table's other columns, as typed NULLs, for inferring and
+/// lowering computed-column expressions.
+pub fn sources(table: &CreateTable) -> Vec<SelectItem> {
+    table
         .columns
         .iter()
         .filter(|column| computed(column).is_none())
@@ -205,25 +247,11 @@ pub fn plan(db: &duckdb::Connection, table: &mut CreateTable) -> Result<()> {
             },
             alias: column.name.clone(),
         })
-        .collect();
-    for column in &mut table.columns {
-        let Some((expr, _)) = computed(column) else {
-            continue;
-        };
-        match infer(db, expr, &sources)? {
-            Some(kind) if native(&kind) => column.data_type = kind,
-            Some(kind) => bail!(
-                "unsupported computed column '{}' of type {kind}",
-                column.name.value
-            ),
-            None => {}
-        }
-    }
-    Ok(())
+        .collect()
 }
 
-/// The declared type of `expr` over a row of the other columns.
-fn infer(db: &duckdb::Connection, expr: &Expr, sources: &[SelectItem]) -> Result<Option<DataType>> {
+/// `SELECT projection FROM (SELECT sources) AS __msduck_computed_source`.
+pub fn source_query(projection: Vec<SelectItem>, sources: &[SelectItem]) -> Result<Box<Query>> {
     let Statement::Query(mut query) = msduck_sql::batch::parse(
         "SELECT __msduck_expr FROM (SELECT 1 AS __msduck_column) AS __msduck_computed_source",
     )?
@@ -233,7 +261,7 @@ fn infer(db: &duckdb::Connection, expr: &Expr, sources: &[SelectItem]) -> Result
     let SetExpr::Select(select) = query.body.as_mut() else {
         unreachable!()
     };
-    select.projection = vec![SelectItem::UnnamedExpr(expr.clone())];
+    select.projection = projection;
     if let Some(TableFactor::Derived { subquery, .. }) =
         select.from.first_mut().map(|from| &mut from.relation)
         && let SetExpr::Select(inner) = subquery.body.as_mut()
@@ -241,6 +269,16 @@ fn infer(db: &duckdb::Connection, expr: &Expr, sources: &[SelectItem]) -> Result
     {
         inner.projection = sources.to_vec();
     }
+    Ok(query)
+}
+
+/// The declared type of `expr` over a row of the other columns.
+pub fn infer(
+    db: &duckdb::Connection,
+    expr: &Expr,
+    sources: &[SelectItem],
+) -> Result<Option<DataType>> {
+    let query = source_query(vec![SelectItem::UnnamedExpr(expr.clone())], sources)?;
     let Some(fields) = crate::query_catalog::projection(db, &query)? else {
         return Ok(None);
     };
