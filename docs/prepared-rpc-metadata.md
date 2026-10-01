@@ -445,3 +445,35 @@ as SQL or passed for execution. The wrapper preserves8180, NULL handle,
 RETURNSTATUS and DONEPROC without allocating/caching a statement. Root adapters
 acquire the snapshot; the diagnostic rule receives it explicitly. Dedicated
 replay and workspace verification of this new source-binding change are pending.
+
+
+Complete verification of `78e930bf5e8f46e5da8434bb0709f7c76893413b` retained
+all1,127 passing Rust tests,24/26 dedicated tests and495/504 default clients.
+The two dedicated gaps and nine obsolete default expectations remain strict;
+raw artifacts preserve the failed results. The audit recorded325 cases without
+transport errors and without a SQL Server comparison. Independent local review
+found no confirmed findings. A fresh GitHub Codex request and one retry both
+reported verified quota limits; the exact-head availability fallback is recorded
+in the PR and does not waive other merge gates.
+
+The `--binding-multiple-errors PATH` mode covers multiple missing projections,
+a missing simple WHERE key before a missing projection, repeated missing-column
+occurrences, and successful handle allocation after failures. Both fresh pinned
+SQL Server containers agree on all ten records/run (SHA-256
+`37163c38245bf544b6ce6056289539ad5afa691046c79bf032de8ff6da5c17ca`).
+All eight complete preparation controls are embedded verbatim. WHERE diagnostics
+precede projection diagnostics; projection order and duplicate occurrences are
+retained before a single8180, RETURNSTATUS8180, NULL handle and DONEPROC224.
+The following valid quoted-column preparation receives handles1/2, proving no
+handle numbers were consumed by the failed preparations.
+
+The adapter now derives an ordered diagnostic vector from the original plain
+query and an explicit catalog snapshot. The native first missing name must
+agree with the first logical error. Only unquoted ASCII projection identifiers
+and a simple equality to a valid INT literal are recognized; unknown predicates,
+additional clauses, aliases and other source scopes remain barriers. A known
+filter column needs an explicit built-in integral declaration. Non-ASCII catalog
+names block ASCII absence inference rather than guessing Unicode name equality.
+The rule does not inspect rows, parameter values or volatile results and does
+not modify execution SQL. Verification of this new vector implementation is
+pending; quoted/Unicode/alias boundary failures remain recorded separately.

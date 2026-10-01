@@ -1018,11 +1018,11 @@ fn missing_later_apply_column(query: &Query, qualifier: &str) -> Option<String> 
 // catalog snapshot. No CTE, join, nested-query, alias or computed projection may
 // supply a guessed source/column name. ASCII unquoted dbo names are the captured
 // family; other spellings remain unknown until independently evidenced.
-fn simple_source_binding_error(
+fn simple_source_binding_errors(
     query: &Query,
     catalog: &CatalogSnapshot,
     message: &str,
-) -> Option<msduck_core::diagnostic::SqlError> {
+) -> Option<Vec<msduck_core::diagnostic::SqlError>> {
     use sqlparser::ast::*;
     let SetExpr::Select(select) = query.body.as_ref() else {
         return None;
@@ -1057,16 +1057,43 @@ fn simple_source_binding_error(
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || b == b'_')
     };
-    let [SelectItem::UnnamedExpr(Expr::Identifier(column))] = select.projection.as_slice() else {
-        return None;
-    };
-    if !schema.value.eq_ignore_ascii_case("dbo")
+    let columns = select
+        .projection
+        .iter()
+        .map(|item| match item {
+            SelectItem::UnnamedExpr(Expr::Identifier(id)) if captured_name(id) => Some(id),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()?;
+    if columns.is_empty()
+        || !schema.value.eq_ignore_ascii_case("dbo")
         || !captured_name(schema)
         || !captured_name(source)
-        || !captured_name(column)
     {
         return None;
     }
+    // The captured simple filter binds before the projected columns. Permit
+    // only equality to a compile-valid INT literal, with no calls or subqueries.
+    let filter = match &select.selection {
+        None => None,
+        Some(Expr::BinaryOp {
+            left,
+            op: BinaryOperator::Eq,
+            right,
+        }) => {
+            let (Expr::Identifier(id), Expr::Value(value)) = (left.as_ref(), right.as_ref()) else {
+                return None;
+            };
+            if !captured_name(id)
+                || !matches!(&value.value,
+                sqlparser::ast::Value::Number(number, false) if number.parse::<i32>().is_ok())
+            {
+                return None;
+            }
+            Some(id)
+        }
+        _ => return None,
+    };
     // Compare with a plain AST template, so extra clauses cannot hide further
     // binding errors. Only the original identifier/source nodes are copied;
     // native diagnostic text never supplies SQL syntax or execution input.
@@ -1080,6 +1107,7 @@ fn simple_source_binding_error(
         return None;
     };
     expected.projection = select.projection.clone();
+    expected.selection = select.selection.clone();
     let TableFactor::Table {
         name: expected_name,
         ..
@@ -1097,32 +1125,61 @@ fn simple_source_binding_error(
         .and_then(|rest| rest.split_once(" does not exist!"))
     {
         if native == source.value && fields.is_empty() {
-            return Some(msduck_core::diagnostic::SqlError::new(
+            return Some(vec![msduck_core::diagnostic::SqlError::new(
                 208,
                 1,
                 format!("Invalid object name '{}.{}'.", schema.value, source.value),
-            ));
+            )]);
         }
         return None;
     }
     let (native, _) = message
         .strip_prefix("Binder Error: Referenced column \"")?
         .split_once("\" not found in FROM clause!")?;
-    if fields.is_empty()
-        || fields
+    if fields.is_empty() || fields.iter().any(|field| !field.name.is_ascii()) {
+        return None;
+    }
+    // An existing filter column must have a proven built-in integral
+    // declaration before its comparison can be treated as compilation-safe.
+    // Unknown, alias and other families may add independent diagnostics.
+    if let Some(id) = filter
+        && let Some(field) = fields
             .iter()
-            .any(|field| field.name.eq_ignore_ascii_case(native))
+            .find(|field| field.name.eq_ignore_ascii_case(&id.value))
     {
+        let info = field.info.as_ref()?;
+        if !matches!(info.system_type_id, Some(48 | 52 | 56 | 127 | 104))
+            || info.user_type_id != info.system_type_id.map(i32::from)
+        {
+            return None;
+        }
+    }
+    let missing = filter
+        .into_iter()
+        .chain(columns)
+        .filter(|id| {
+            !fields
+                .iter()
+                .any(|field| field.name.eq_ignore_ascii_case(&id.value))
+        })
+        .collect::<Vec<_>>();
+    // Native reports must agree with the first logical diagnostic. Preserve
+    // repeated occurrences; SQL Server reports each binding failure in order.
+    if missing.first()?.value != native {
         return None;
     }
-    if column.value != native {
-        return None;
-    }
-    Some(msduck_core::diagnostic::SqlError::new(
-        207,
-        1,
-        format!("Invalid column name '{}'.", column.value),
-    ))
+    Some(
+        missing
+            .into_iter()
+            .map(|id| {
+                msduck_core::diagnostic::SqlError::new(
+                    207,
+                    1,
+                    format!("Invalid column name '{}'.", id.value),
+                )
+            })
+            .collect(),
+    )
 }
 
 // Preserve the captured preparation-error wrapper for the canonical grouping
@@ -1163,8 +1220,8 @@ fn binding_error_response(
     let joined_apply = joined_apply_declarations(query) != *query;
     let mut response = Vec::new();
     let number = crate::engine::emit_error(&mut response, error);
-    let source_error =
-        catalog.and_then(|catalog| simple_source_binding_error(query, catalog, &error.to_string()));
+    let source_error = catalog
+        .and_then(|catalog| simple_source_binding_errors(query, catalog, &error.to_string()));
     // Error 164 is emitted only for the canonical grouping diagnostic. Fresh
     // captures prove the same wrapper for ordinary, parameter-only and scalar
     // correlated grouping. Other errors require a proven simple source or retain
@@ -1172,9 +1229,11 @@ fn binding_error_response(
     if number != 164 && !joined_apply && source_error.is_none() {
         return Ok(None);
     }
-    if let Some(diagnostic) = source_error {
+    if let Some(diagnostics) = source_error {
         response.clear();
-        tds::sql_error(&mut response, &diagnostic);
+        for diagnostic in diagnostics {
+            tds::sql_error(&mut response, &diagnostic);
+        }
     } else if number == 50000 {
         let message = error.to_string();
         let Some((qualifier, _)) = message
@@ -2552,25 +2611,75 @@ mod tests {
         let source_error = "Catalog Error: Table with name prepare_missing does not exist!";
         let column_query = parse("SELECT missing_column FROM dbo.prepare_heap");
         assert_eq!(
-            simple_source_binding_error(&column_query, &catalog, column_error),
-            Some(msduck_core::diagnostic::SqlError::new(
+            simple_source_binding_errors(&column_query, &catalog, column_error),
+            Some(vec![msduck_core::diagnostic::SqlError::new(
                 207,
                 1,
                 "Invalid column name 'missing_column'."
-            ))
+            )])
         );
         let source_query = parse("SELECT a FROM dbo.prepare_missing");
         assert_eq!(
-            simple_source_binding_error(&source_query, &catalog, source_error),
-            Some(msduck_core::diagnostic::SqlError::new(
+            simple_source_binding_errors(&source_query, &catalog, source_error),
+            Some(vec![msduck_core::diagnostic::SqlError::new(
                 208,
                 1,
                 "Invalid object name 'dbo.prepare_missing'."
-            ))
+            )])
+        );
+        for (sql, native, names) in [
+            (
+                "SELECT missing_one,missing_two FROM dbo.prepare_heap",
+                "missing_one",
+                vec!["missing_one", "missing_two"],
+            ),
+            (
+                "SELECT missing_one FROM dbo.prepare_heap WHERE missing_two=1",
+                "missing_two",
+                vec!["missing_two", "missing_one"],
+            ),
+            (
+                "SELECT missing_one,missing_one FROM dbo.prepare_heap",
+                "missing_one",
+                vec!["missing_one", "missing_one"],
+            ),
+            (
+                "SELECT a,missing_one FROM dbo.prepare_heap",
+                "missing_one",
+                vec!["missing_one"],
+            ),
+        ] {
+            let error =
+                format!("Binder Error: Referenced column \"{native}\" not found in FROM clause!");
+            let expected = names
+                .into_iter()
+                .map(|name| {
+                    msduck_core::diagnostic::SqlError::new(
+                        207,
+                        1,
+                        format!("Invalid column name '{name}'."),
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                simple_source_binding_errors(&parse(sql), &catalog, &error),
+                Some(expected),
+                "{sql}"
+            );
+        }
+        assert!(
+            simple_source_binding_errors(
+                &parse("SELECT missing_one FROM dbo.prepare_heap WHERE missing_two=1"),
+                &catalog,
+                "Binder Error: Referenced column \"missing_one\" not found in FROM clause!"
+            )
+            .is_none(),
+            "native first error must agree with logical clause order"
         );
         for sql in [
-            "SELECT missing_column,other_missing FROM dbo.prepare_heap",
-            "SELECT missing_column FROM dbo.prepare_heap WHERE other_missing=1",
+            "SELECT missing_column FROM dbo.prepare_heap WHERE other_missing=unknown_function()",
+            "SELECT missing_column FROM dbo.prepare_heap WHERE other_missing=2147483648",
+            "SELECT missing_column FROM dbo.prepare_heap WHERE a=1",
             "SELECT missing_column FROM dbo.prepare_heap ORDER BY other_missing",
             "SELECT missing_column FROM dbo.prepare_heap h",
             "SELECT missing_column FROM dbo.prepare_heap CROSS JOIN dbo.prepare_missing",
@@ -2581,16 +2690,16 @@ mod tests {
             "SELECT a FROM dbo.prepare_heap",
         ] {
             assert!(
-                simple_source_binding_error(&parse(sql), &catalog, column_error).is_none(),
+                simple_source_binding_errors(&parse(sql), &catalog, column_error).is_none(),
                 "{sql}"
             );
         }
         assert!(
-            simple_source_binding_error(&column_query, &CatalogSnapshot::default(), column_error)
+            simple_source_binding_errors(&column_query, &CatalogSnapshot::default(), column_error)
                 .is_none()
         );
         assert!(
-            simple_source_binding_error(
+            simple_source_binding_errors(
                 &source_query,
                 &catalog,
                 "Catalog Error: Table with name other_source does not exist!"
@@ -2598,8 +2707,13 @@ mod tests {
             .is_none()
         );
         assert!(
-            simple_source_binding_error(&column_query, &catalog, "unrecognized backend error")
+            simple_source_binding_errors(&column_query, &catalog, "unrecognized backend error")
                 .is_none()
+        );
+        let mut unicode_catalog = catalog.clone();
+        unicode_catalog.tables.get_mut("dbo.prepare_heap").unwrap()[0].name = "K".into();
+        assert!(
+            simple_source_binding_errors(&column_query, &unicode_catalog, column_error).is_none()
         );
         let mut contradictory = catalog.clone();
         contradictory.tables.get_mut("dbo.prepare_heap").unwrap()[0].name = "missing_column".into();
@@ -2607,8 +2721,12 @@ mod tests {
             "dbo.prepare_missing".into(),
             catalog.tables["dbo.prepare_heap"].clone(),
         );
-        assert!(simple_source_binding_error(&column_query, &contradictory, column_error).is_none());
-        assert!(simple_source_binding_error(&source_query, &contradictory, source_error).is_none());
+        assert!(
+            simple_source_binding_errors(&column_query, &contradictory, column_error).is_none()
+        );
+        assert!(
+            simple_source_binding_errors(&source_query, &contradictory, source_error).is_none()
+        );
     }
 
     #[test]
