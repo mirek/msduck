@@ -43,12 +43,12 @@ pub(super) fn run(
     parameters: &mut HashMap<String, Parameter>,
 ) -> Result<Execution> {
     let target = target(statement);
-    // SQL Server ends only the statement on a duplicate key; the engine
-    // continues a SQL batch after a failed INSERT or UPDATE it can identify.
-    // RPC requests keep ending at the error: the engine's RPC completion
-    // for a continued request is not yet SQL Server's (docs/gaps-keys.md).
+    // SQL Server ends only the statement on a duplicate key, in SQL batches
+    // and RPC requests alike (reference/gaps-rpc-procedures.json); the
+    // engine continues after a failed INSERT or UPDATE it can identify.
+    // `rpc` (set by the keys batch hook) no longer changes this.
+    let _batch_is_rpc = session.ext.keys.rpc;
     let command = match statement {
-        _ if session.ext.keys.rpc => None,
         Statement::Insert(_) => Some(0xc3),
         Statement::Update(_) => Some(0xc5),
         _ => None,

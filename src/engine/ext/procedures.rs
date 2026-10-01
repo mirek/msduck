@@ -5,6 +5,8 @@
 //!   PROCEDURE, over the module store.
 //! - `call`: argument binding, OUTPUT round trips and return status for
 //!   procedures, `EXEC (string)` and sp_executesql in SQL batches.
+//! - `rpc`: RPC requests that name a procedure, and sp_executesql RPCs with
+//!   OUTPUT parameters (`Session::rpc_call`, used by `src/rpc.rs`).
 //! - `run`: the body interpreter. Each call runs in its own frame with its
 //!   own variables; statements, control flow and errors follow the captured
 //!   SQL Server token streams in docs/gaps-procedures.md.
@@ -17,6 +19,7 @@ use std::collections::HashMap;
 
 mod call;
 mod define;
+mod rpc;
 mod run;
 
 /// Maximum procedure nesting (SQL Server error 217 beyond it).

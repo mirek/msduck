@@ -12,13 +12,26 @@ use msduck_core::{
 };
 use std::collections::HashMap;
 
+pub(crate) mod procedures;
+
 struct RpcParameter {
+    /// The name as sent, `@` included; empty for a positional parameter.
     name: String,
     status: u8,
+    /// The TYPE_INFO byte.
+    kind: u8,
     parameter: Parameter,
+}
+impl RpcParameter {
+    /// The fByRefValue status flag: an OUTPUT parameter.
+    fn output(&self) -> bool {
+        self.status & 1 != 0
+    }
 }
 struct Prepared {
     sql: String,
+    /// The declaration list as sent, for executions with OUTPUT parameters.
+    declaration_text: Option<String>,
     declarations: Vec<(String, DataType)>,
     bytes: usize,
 }
@@ -43,33 +56,53 @@ impl State {
             }
             .to_owned()
         } else {
-            c.text(length as usize)?.to_lowercase()
+            c.text(length as usize)?
         };
         ensure!(c.u16()? == 0, "unsupported RPC flags");
         let mut parameters = Vec::new();
         while c.remaining() > 0 {
             let n = c.u8()? as usize;
-            let name = c.text(n)?.to_lowercase();
+            let name = c.text(n)?;
             let status = c.u8()?;
-            ensure!(
-                status & !1 == 0,
-                "unsupported default/encrypted RPC parameter"
-            );
+            // fByRefValue (1) and fDefaultValue (2); fEncrypted is refused.
+            ensure!(status & !3 == 0, "unsupported encrypted RPC parameter");
+            let kind = c.u8()?;
             parameters.push(RpcParameter {
                 name,
                 status,
-                parameter: rpc_value(&mut c)?,
+                kind,
+                parameter: rpc_typed_value(&mut c, kind)?,
             });
         }
-        let procedure = procedure.strip_prefix("sys.").unwrap_or(&procedure);
-        match procedure {
+        let lower = procedure.to_lowercase();
+        match lower.strip_prefix("sys.").unwrap_or(&lower) {
             "sp_executesql" => {
                 let sql = input_text(parameters.first(), false)?;
+                let values = parameters.get(2..).unwrap_or_default();
+                if values.iter().any(RpcParameter::output) {
+                    // Run as `EXEC sp_executesql`, which returns them.
+                    let statement = parameters.first().map(|p| &p.parameter);
+                    let declarations = parameters
+                        .get(1)
+                        .map_or_else(|| procedures::text(None), |p| p.parameter.clone());
+                    let values: Vec<_> = (2..).zip(values).collect();
+                    let statement = statement
+                        .cloned()
+                        .unwrap_or_else(|| procedures::text(Some(sql)));
+                    return Ok(procedures::execute_sql(
+                        session,
+                        &statement,
+                        &declarations,
+                        &values,
+                        None,
+                    )?
+                    .0);
+                }
                 let declarations = declarations(parameters.get(1))?;
-                let bindings = bind(&declarations, parameters.get(2..).unwrap_or_default())?;
+                let bindings = bind(&declarations, values)?;
                 Ok(session.batch(sql, &bindings, true))
             }
-            "sp_prepare" | "sp_prepexec" => {
+            procedure @ ("sp_prepare" | "sp_prepexec") => {
                 let output = parameters
                     .first()
                     .ok_or_else(|| anyhow::anyhow!("missing output handle"))?;
@@ -77,8 +110,11 @@ impl State {
                     output.status == 1 && matches!(output.parameter.data_type, DataType::Int),
                     "prepared handle must be an int OUTPUT parameter"
                 );
+                let declaration_text = declaration_text(parameters.get(1))?.map(str::to_owned);
                 let declarations = declarations(parameters.get(1))?;
                 let sql = input_text(parameters.get(2), false)?;
+                let values = parameters.get(3..).unwrap_or_default();
+                let outputs = values.iter().any(RpcParameter::output);
                 let bindings = if procedure == "sp_prepare" {
                     ensure!(
                         (3..=4).contains(&parameters.len()),
@@ -91,12 +127,15 @@ impl State {
                         );
                     }
                     HashMap::new()
+                } else if outputs {
+                    bind_outputs(&declarations, values)?
                 } else {
-                    bind(&declarations, &parameters[3..])?
+                    bind(&declarations, values)?
                 };
                 // Validate both syntax and database binding without executing the statement.
                 session.validate_prepared_sql(sql, &declarations)?;
                 let bytes = sql.len()
+                    + declaration_text.as_ref().map_or(0, String::len)
                     + declarations
                         .iter()
                         .map(|(name, kind)| name.len() + std::mem::size_of_val(kind))
@@ -105,23 +144,40 @@ impl State {
                     self.prepared.len() < 1024 && self.bytes + bytes <= tds::MAX_MESSAGE,
                     "prepared statement capacity exceeded"
                 );
+                // An aborted batch does not consume a handle number.
                 let handle = self
                     .next_handle
                     .checked_add(1)
                     .ok_or_else(|| anyhow::anyhow!("prepared statement handle space exhausted"))?;
-                self.next_handle = handle;
-                let (response, success) = session.batch_response(
-                    if procedure == "sp_prepare" { "" } else { sql },
-                    &bindings,
-                    true,
-                    Some((&output.name, handle)),
-                );
-                if success {
+                let (response, completed) = if outputs {
+                    let values: Vec<_> = (3..).zip(values).collect();
+                    procedures::execute_sql(
+                        session,
+                        &procedures::text(Some(sql)),
+                        &procedures::text(declaration_text.as_deref()),
+                        &values,
+                        Some((output, handle)),
+                    )?
+                } else {
+                    let (mut response, _) = session.batch_response(
+                        if procedure == "sp_prepare" { "" } else { sql },
+                        &bindings,
+                        true,
+                        None,
+                    );
+                    let completed = procedures::with_handle(&mut response, output, handle)?;
+                    (response, completed)
+                };
+                // SQL Server keeps the handle unless the batch was aborted,
+                // even after a statement-terminating error.
+                if completed {
+                    self.next_handle = handle;
                     self.bytes += bytes;
                     self.prepared.insert(
                         handle,
                         Prepared {
                             sql: sql.to_owned(),
+                            declaration_text,
                             declarations,
                             bytes,
                         },
@@ -135,22 +191,35 @@ impl State {
                         .first()
                         .ok_or_else(|| anyhow::anyhow!("missing prepared handle"))?,
                 )?;
-                let prepared = self.prepared.get(&handle).ok_or_else(|| {
-                    anyhow::anyhow!("Could not find prepared statement with handle {handle}.")
-                })?;
-                let bindings = bind(&prepared.declarations, &parameters[1..])?;
+                let values = &parameters[1..];
+                let indexed: Vec<_> = (1..).zip(values).collect();
+                let Some(prepared) = self.prepared.get(&handle) else {
+                    return procedures::missing_handle(handle, 4, &indexed);
+                };
+                if values.iter().any(RpcParameter::output) {
+                    bind_outputs(&prepared.declarations, values)?;
+                    return Ok(procedures::execute_sql(
+                        session,
+                        &procedures::text(Some(&prepared.sql)),
+                        &procedures::text(prepared.declaration_text.as_deref()),
+                        &indexed,
+                        None,
+                    )?
+                    .0);
+                }
+                let bindings = bind(&prepared.declarations, values)?;
                 Ok(session.prepared_batch(&prepared.sql, &bindings))
             }
             "sp_unprepare" => {
                 ensure!(parameters.len() == 1, "sp_unprepare requires one handle");
                 let handle = input_int(&parameters[0])?;
-                let prepared = self.prepared.remove(&handle).ok_or_else(|| {
-                    anyhow::anyhow!("Could not find prepared statement with handle {handle}.")
-                })?;
+                let Some(prepared) = self.prepared.remove(&handle) else {
+                    return procedures::missing_handle(handle, 8, &[]);
+                };
                 self.bytes -= prepared.bytes;
                 Ok(session.batch("", &HashMap::new(), true))
             }
-            _ => bail!("unsupported RPC procedure {procedure}"),
+            _ => procedures::call(session, &procedure, &parameters),
         }
     }
 }
@@ -167,6 +236,13 @@ fn input_text(parameter: Option<&RpcParameter>, nullable: bool) -> Result<&str> 
         Value::Text(text) => Ok(text),
         Value::Null if nullable => Ok(""),
         _ => bail!("RPC requires Unicode text"),
+    }
+}
+/// The declaration list as sent; `None` when it is absent or NULL.
+fn declaration_text(parameter: Option<&RpcParameter>) -> Result<Option<&str>> {
+    match parameter.map(|parameter| &parameter.parameter.value) {
+        None | Some(Value::Null) => Ok(None),
+        Some(_) => input_text(parameter, true).map(Some),
     }
 }
 fn input_int(parameter: &RpcParameter) -> Result<i32> {
@@ -192,18 +268,33 @@ fn bind(
     parameters: &[RpcParameter],
 ) -> Result<HashMap<String, Parameter>> {
     ensure!(
+        parameters.iter().all(|parameter| parameter.status == 0),
+        "unsupported output value parameter"
+    );
+    bind_outputs(declarations, parameters)
+}
+/// Check values against the declarations, allowing OUTPUT values (which
+/// `procedures::execute_sql` binds itself).
+fn bind_outputs(
+    declarations: &[(String, DataType)],
+    parameters: &[RpcParameter],
+) -> Result<HashMap<String, Parameter>> {
+    ensure!(
         parameters.len() == declarations.len(),
         "RPC parameter count does not match declaration"
     );
     let mut bindings = HashMap::new();
     for (index, parameter) in parameters.iter().enumerate() {
-        ensure!(parameter.status == 0, "unsupported output value parameter");
+        ensure!(
+            parameter.status & 2 == 0,
+            "unsupported default value parameter"
+        );
         let name = if parameter.name.is_empty() {
             declarations[index].0.clone()
         } else if parameter.name.starts_with('@') {
-            parameter.name.clone()
+            parameter.name.to_lowercase()
         } else {
-            format!("@{}", parameter.name)
+            format!("@{}", parameter.name.to_lowercase())
         };
         let (_, data_type) = declarations
             .iter()
@@ -224,8 +315,12 @@ fn bind(
     }
     Ok(bindings)
 }
+#[cfg(test)]
 fn rpc_value(c: &mut Cursor<'_>) -> Result<Parameter> {
     let kind = c.u8()?;
+    rpc_typed_value(c, kind)
+}
+fn rpc_typed_value(c: &mut Cursor<'_>, kind: u8) -> Result<Parameter> {
     match kind {
         0x1f => Ok(Parameter {
             value: Value::Null,
@@ -657,13 +752,13 @@ mod tests {
         state.execute(&mut session, &handle_request(15, 1)).unwrap();
         assert_eq!(state.bytes, 0);
         assert!(state.prepared.is_empty());
-        assert!(
-            state
-                .execute(&mut session, &handle_request(12, 1))
-                .unwrap_err()
-                .to_string()
-                .contains("Could not find prepared statement")
-        );
+        // Captured: 8179 (state 4), RETURNSTATUS 8179 and a DONEPROC with
+        // the error flag.
+        let missing = state.execute(&mut session, &handle_request(12, 1)).unwrap();
+        assert_eq!(&missing[..8], &[0xaa, 0x7a, 0, 0xf3, 0x1f, 0, 0, 4]);
+        assert!(missing.ends_with(&[
+            0x79, 0xf3, 0x1f, 0, 0, 0xfe, 2, 0, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ]));
     }
     #[test]
     fn malformed_or_invalid_preparation_allocates_no_handle() {
@@ -688,7 +783,7 @@ mod tests {
         assert!(state.prepared.contains_key(&1));
     }
     #[test]
-    fn failed_prepexec_does_not_leak_a_handle() {
+    fn failed_prepexec_statement_keeps_its_handle() {
         let server = Server::open(":memory:").unwrap();
         let mut session = Session::new(server.connection().unwrap()).unwrap();
         session
@@ -701,12 +796,21 @@ mod tests {
         let mut request = prepare_request("INSERT INTO dbo.items VALUES (1)", "");
         request[6] = 13;
         let response = state.execute(&mut session, &request).unwrap();
-        assert_eq!(
-            &response[response.len() - 13..response.len() - 10],
-            &[0xfe, 2, 0]
-        );
-        assert!(state.prepared.is_empty());
-        assert_eq!(state.bytes, 0);
+        // As captured from SQL Server ("prepexec duplicate"): the duplicate
+        // key ends only the INSERT (DONEINPROC with the error flag), the
+        // status is 2627, and the handle follows it in an unflagged DONEPROC.
+        let mut tail = vec![0xff, 3, 0, 0xc3, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        tail.extend([0x79, 0x43, 0x0a, 0, 0]);
+        tail.extend([0xac, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0x26, 4, 4, 1, 0, 0, 0]);
+        tail.extend([0xfe, 0, 0, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        assert!(response.ends_with(&tail), "{response:02x?}");
+        assert!(state.prepared.contains_key(&1));
+        assert!(state.bytes > 0);
+        // The handle executes again with the same statement-level failure.
+        let again = state.execute(&mut session, &handle_request(12, 1)).unwrap();
+        assert!(again.ends_with(&[
+            0x79, 0x43, 0x0a, 0, 0, 0xfe, 0, 0, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+        ]));
         assert_eq!(
             session
                 .db
@@ -714,6 +818,22 @@ mod tests {
                 .unwrap(),
             1
         );
+    }
+    #[test]
+    fn aborted_prepexec_keeps_no_handle_and_consumes_no_number() {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        let mut state = State::default();
+        let mut request = prepare_request("THROW 50004, 'q', 1", "");
+        request[6] = 13;
+        let response = state.execute(&mut session, &request).unwrap();
+        assert!(!response.contains(&0xac));
+        assert!(state.prepared.is_empty());
+        assert_eq!(state.bytes, 0);
+        state
+            .execute(&mut session, &prepare_request("SELECT 1", ""))
+            .unwrap();
+        assert!(state.prepared.contains_key(&1));
     }
     #[test]
     fn handle_space_does_not_wrap_or_reuse_freed_handles() {

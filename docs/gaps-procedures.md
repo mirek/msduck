@@ -200,6 +200,11 @@ Its errors are:
 parameterized request already runs as an sp_executesql RPC through
 `src/rpc.rs`, and procedure calls inside it work.
 
+RPC requests that name a procedure (tedious `callProcedure`), and
+sp_executesql RPCs with OUTPUT parameters, run through
+`procedures/rpc.rs` (`Session::rpc_call`) as the equivalent `EXEC`; see
+[gaps-rpc-procedures.md](gaps-rpc-procedures.md).
+
 ## Syntax encoding
 
 A call stays a `Statement::Execute`, so the engine's procedure-call path
@@ -220,18 +225,6 @@ the plain form.
 
 The replay test lists each of these:
 
-- **RPC procedure calls and output parameters**, which need `src/rpc.rs`.
-  The `prepared-rpc-metadata-v1` task reserves that file. The work left
-  there:
-  - accept parameters with the RPC status flag `fByRefValue` (1) in `bind`.
-    It still fails with 40515 "unsupported output value parameter";
-  - after the batch, send their final values as RETURNVALUE tokens before
-    DONEPROC;
-  - dispatch an RPC by procedure name (tedious `callProcedure`) to the
-    procedure runtime. It still fails with "unsupported RPC procedure".
-
-  The declaration parsing, binding and frame-variable write-back these need
-  already exist here.
 - A failed call sends RETURNSTATUS 1 before its DONEPROC. SQL Server sends
   no status for procedures. For sp_executesql, it sends the error number.
   This status comes from the engine's EXEC error path.
@@ -246,7 +239,8 @@ The replay test lists each of these:
 - Messages that come from engine diagnostics use the engine's text. For
   example, 208 reads "Catalog Error: Table with name ... does not exist!".
 - `@@NESTLEVEL` in a parameterized tedious request (an sp_executesql RPC)
-  is 0; SQL Server reports 2.
+  without OUTPUT parameters is 0; SQL Server reports 2. A request with
+  OUTPUT parameters runs as `EXEC sp_executesql` and reports 2.
 - `EXEC ('')` sends RETURNSTATUS 0. SQL Server sends only DONEPROC.
 - These are not supported:
   - numbered procedures (`;2`);
