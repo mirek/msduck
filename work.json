@@ -8832,7 +8832,7 @@
     {
       "id": "gaps-unicode-predicates-v1",
       "title": "Comparisons and LIKE over nvarchar/nchar columns",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01), umbrella #710; prerequisite for the workload's ordinary filtered queries.",
       "scope": [
         "src/engine/ext/keys.rs",
