@@ -85,6 +85,10 @@ async function main(args){
  const output=resolve(args[0]??'reference/gaps-catalog.json')
  await refuseExistingFixture(output)
  const runs=[await referenceRun(),await referenceRun()]
+ const failures=new Set(['pkeys missing parameter','fkeys missing parameters','rename missing object','rename invalid object type','rename column with enforced dependencies'])
+ for(const run of runs)for(const record of run){
+  if(Boolean(record.result.errors.length)!==failures.has(record.name))throw Error('unexpected error outcome: '+record.name+' '+JSON.stringify(record.result.errors).slice(0,800))
+ }
  // Clock/ID/file values are retained in both raw runs. Only the complete empty
  // view responses are asserted equal here; no dynamic differences are erased.
  for(const view of catalogViews){
