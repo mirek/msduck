@@ -120,4 +120,9 @@ test('bracketed names, derived tables, unions and CASE results', async t => {
   assert.deepEqual(await rows("SELECT id, CONCAT(CASE WHEN id = 1 THEN n END, N'!'), CAST(CASE WHEN id = 1 THEN n END AS nvarchar(5)) FROM t WHERE id < 3 ORDER BY id"), [[1, 'x!', 'x'], [2, '!', null]])
   assert.deepEqual(await rows("SELECT id FROM t WHERE CASE WHEN id < 3 THEN n END LIKE N'x%'"), [[1]])
   assert.deepEqual(await rows('SELECT a.id, b.id FROM t a LEFT JOIN t b ON a.id = b.id + 1 ORDER BY a.id'), [[1, null], [2, 1], [3, 2], [4, 3]])
+  assert.deepEqual(await rows('SELECT t.id, d.c FROM t LEFT JOIN (SELECT id, COUNT(*) AS c FROM t GROUP BY id) AS d ON d.id = t.id WHERE t.id < 3 ORDER BY t.id'), [[1, 1], [2, 1]])
+  // A same-named int column elsewhere in the statement leaves the inner n untyped there.
+  await query(c, 'CREATE TABLE a (n int); INSERT a VALUES (1)')
+  assert.deepEqual(await rows('SELECT n FROM a WHERE EXISTS (SELECT 1 FROM t WHERE n < @p)', [['p', TYPES.NVarChar, 'y']]), [[1]])
+  assert.deepEqual(await rows("SELECT id FROM t WHERE CASE WHEN id = 1 THEN n ELSE N'q' END = N'x' ORDER BY id"), [[1]])
 })
