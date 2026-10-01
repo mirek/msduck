@@ -1285,8 +1285,10 @@ test('UPDATE FROM resolves target aliases and preserves inner-join filters', { t
   const cte = await query(c, 'WITH s AS (SELECT 1 AS id, -12.9 AS n) UPDATE t SET n=s.n FROM dbo.alias_target t JOIN s ON t.id=s.id')
   assert.deepEqual(cte.rows, [])
   assert.deepEqual((await query(c, 'SELECT n FROM dbo.alias_target WHERE id=1')).rows, [[-12]])
-  await assert.rejects(query(c, 'UPDATE t SET n=s.n FROM dbo.alias_target t LEFT JOIN dbo.alias_source s ON t.id=s.id'), e => /unsupported outer\/lateral join/.test(e.message))
-  assert.deepEqual((await query(c, 'SELECT n FROM dbo.alias_target WHERE id=1')).rows, [[-12]])
+  // An outer join keeps unmatched targets (#723): they receive NULL.
+  const outer = await query(c, 'UPDATE t SET n=s.n FROM dbo.alias_target t LEFT JOIN dbo.alias_source s ON t.id=s.id')
+  assert.equal(outer.rowCount, 3)
+  assert.deepEqual((await query(c, 'SELECT id,n FROM dbo.alias_target ORDER BY id')).rows, [[1,null],[2,20],[3,30]])
 })
 
 test('compound UPDATE assignments use typed arithmetic and preserve statement atomicity', { timeout: 20000 }, async t => {
@@ -1335,7 +1337,9 @@ test('DELETE supports optional FROM, joined aliases and CTE completion counts', 
   assert.deepEqual(none.rows, [])
   await query(c, 'DELETE [target] FROM dbo.delete_source s JOIN dbo.delete_target [target] ON [target].id=s.id')
   assert.deepEqual((await query(c, 'SELECT id FROM dbo.delete_target')).rows, [[1]])
-  await assert.rejects(query(c, 'DELETE t FROM dbo.delete_target t LEFT JOIN dbo.delete_source s ON t.id=s.id'), e => /unsupported outer\/lateral join/.test(e.message))
+  // An outer join with a match filter deletes only matched targets (#723).
+  const outer = await query(c, 'DELETE t FROM dbo.delete_target t LEFT JOIN dbo.delete_source s ON t.id=s.id WHERE s.id IS NOT NULL')
+  assert.equal(outer.rowCount, 0)
   assert.deepEqual((await query(c, 'SELECT id FROM dbo.delete_target')).rows, [[1]])
   // A SQL batch changes the caller session; sp_executesql restores SET options.
   assert.deepEqual((await capture(c, 'SET NOCOUNT ON')).errors, [])
