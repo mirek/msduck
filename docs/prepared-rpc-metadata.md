@@ -295,3 +295,5 @@ the same diagnostic artifact; their alias metadata is separate execution work,
 and no complete batch-view comparison pass is claimed. The default client now
 asserts those captured scalar type/length distinctions while keeping its
 allocator, DDL and rollback behavior assertions.
+
+JSON declaration reference: two fresh pinned SQL Server 2025 containers independently agreed on all 18 records per run (SHA-256 `ebc113e6ba79a71a0085b3621a7100b827fc421998bb59e9cfa2dca68d73aa81`). Complete records are embedded verbatim in the public regression. JSON_QUERY retains MAX for a MAX input but reports NVARCHAR(4000) for the bounded column control; JSON_VALUE reports NVARCHAR(4000). Both retain explicit input collation. ISNULL removes nullable metadata in the captured non-NULL replacement case. The invalid literal fails during preparation with error 13609; this is evidence, not a reason to evaluate runtime parameters while preparing. Runtime replay is pending.
