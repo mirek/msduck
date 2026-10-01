@@ -67,6 +67,16 @@ export const declarationProfiles=[
  ['datetime COALESCE','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIME2(7))) AS d'],
  ['datetime mixed offset','SELECT COALESCE(CAST(NULL AS DATETIME2(2)),CAST(NULL AS DATETIMEOFFSET(7))) AS d'],
 ]
+export const jsonDeclarationProfiles=[
+ ['JSON_QUERY declared text',"SELECT JSON_QUERY(CAST(@p AS NVARCHAR(MAX)),'strict $.a') AS j"],
+ ['JSON_VALUE declared text',"SELECT JSON_VALUE(CAST(@p AS NVARCHAR(MAX)),'strict $.a') AS j"],
+ ['JSON_QUERY empty source',"SELECT JSON_QUERY(label,'$.a') AS j FROM dbo.prepare_heap WHERE 1=0"],
+ ['JSON_QUERY explicit collation',"SELECT JSON_QUERY(CAST(@p AS NVARCHAR(MAX)) COLLATE Latin1_General_100_BIN2,'$.a') AS j"],
+ ['JSON_VALUE explicit collation',"SELECT JSON_VALUE(CAST(@p AS NVARCHAR(100)) COLLATE Latin1_General_100_BIN2,'$.a') AS j"],
+ ['JSON_QUERY ISNULL',"SELECT ISNULL(JSON_QUERY(CAST(@p AS NVARCHAR(MAX)),'$.a'),N'{}') AS j"],
+ ['JSON_QUERY CASE',"SELECT CASE WHEN @p>0 THEN JSON_QUERY(CAST(@p AS NVARCHAR(MAX)),'$.a') ELSE N'{}' END AS j"],
+ ['JSON_QUERY invalid literal',"SELECT JSON_QUERY(N'bad','$.a') AS j"],
+]
 export const catalogBatchProfiles=[
  ['catalog width contract','SELECT object_id,column_id,system_type_id,user_type_id,max_length,precision,scale,is_identity FROM sys.columns WHERE 1=0'],
  ['catalog complete batch shape','SELECT * FROM sys.columns WHERE 1=0'],
@@ -325,11 +335,11 @@ export async function retainedSetProperties(){
 }
 async function main(){
  const args=process.argv.slice(2);const mode=args[0]?.startsWith('--')?args.shift():undefined
- if(![undefined,'--check','--write-fixture','--regressions','--declarations','--window-declarations','--order-declarations','--order-properties','--bitwise-declarations','--ranking-declarations','--grouping-order','--catalog-declarations','--catalog-batches','--temporal-sets','--set-properties','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --window-declarations | --order-declarations | --order-properties | --bitwise-declarations | --ranking-declarations | --grouping-order | --catalog-declarations | --catalog-batches | --temporal-sets | --set-properties | --cte-delete] [output]')
+ if(![undefined,'--check','--write-fixture','--regressions','--declarations','--window-declarations','--order-declarations','--order-properties','--bitwise-declarations','--ranking-declarations','--grouping-order','--catalog-declarations','--catalog-batches','--json-declarations','--temporal-sets','--set-properties','--cte-delete'].includes(mode)||args.length>1)throw Error('usage: capture-prepared-rpc-metadata.mjs [--check | --write-fixture | --regressions | --declarations | --window-declarations | --order-declarations | --order-properties | --bitwise-declarations | --ranking-declarations | --grouping-order | --catalog-declarations | --catalog-batches | --json-declarations | --temporal-sets | --set-properties | --cte-delete] [output]')
  if(mode==='--check'){const r=await retained();console.log('Checked prepared RPC records',r.runs[0].length);return}
  if(mode==='--write-fixture')await refuseExistingFixture(fixture)
  const output=resolve(args[0]??'artifacts/prepared-rpc-metadata/capture.json');assert.notEqual(output,fileURLToPath(fixture))
- const regression=mode==='--catalog-declarations'||mode==='--grouping-order'||mode==='--ranking-declarations'||mode==='--bitwise-declarations'||mode==='--order-properties'||mode==='--order-declarations'||mode==='--window-declarations'||mode==='--regressions'||mode==='--declarations'||mode==='--temporal-sets'||mode==='--set-properties';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--catalog-declarations'?catalogDeclarationProfiles:mode==='--grouping-order'?groupingOrderProfiles:mode==='--ranking-declarations'?rankingDeclarationProfiles:mode==='--bitwise-declarations'?bitwiseDeclarationProfiles:mode==='--order-properties'?orderPropertyProfiles:mode==='--order-declarations'?orderDeclarationProfiles:mode==='--window-declarations'?windowDeclarationProfiles:mode==='--set-properties'?setPropertyProfiles:mode==='--temporal-sets'?temporalSetProfiles:mode==='--declarations'?declarationProfiles:regressionProfiles
+ const regression=mode==='--json-declarations'||mode==='--catalog-declarations'||mode==='--grouping-order'||mode==='--ranking-declarations'||mode==='--bitwise-declarations'||mode==='--order-properties'||mode==='--order-declarations'||mode==='--window-declarations'||mode==='--regressions'||mode==='--declarations'||mode==='--temporal-sets'||mode==='--set-properties';const cteDelete=mode==='--cte-delete';const preparationProfiles=mode==='--json-declarations'?jsonDeclarationProfiles:mode==='--catalog-declarations'?catalogDeclarationProfiles:mode==='--grouping-order'?groupingOrderProfiles:mode==='--ranking-declarations'?rankingDeclarationProfiles:mode==='--bitwise-declarations'?bitwiseDeclarationProfiles:mode==='--order-properties'?orderPropertyProfiles:mode==='--order-declarations'?orderDeclarationProfiles:mode==='--window-declarations'?windowDeclarationProfiles:mode==='--set-properties'?setPropertyProfiles:mode==='--temporal-sets'?temporalSetProfiles:mode==='--declarations'?declarationProfiles:regressionProfiles
  if(mode==='--catalog-batches'){
   const runs=[]
   for(let i=0;i<2;i++)runs.push(await withReferenceContainer(config=>isolatedReference(config,observeCatalogBatches)))
