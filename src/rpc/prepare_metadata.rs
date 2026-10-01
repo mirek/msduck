@@ -1551,7 +1551,11 @@ mod tests {
                 panic!("query")
             };
             let original = query.clone();
-            let scope = Scope::default();
+            let mut scope = Scope::default();
+            scope.parameters.insert(
+                "@p".into(),
+                catalog.cast_info(&DataType::Int(None)).unwrap(),
+            );
             let described = json_declarations(&query, &catalog, &scope);
             let fields = projection::query_fields(&catalog, &described, &scope).unwrap();
             assert_eq!(
