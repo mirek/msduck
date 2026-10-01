@@ -240,12 +240,16 @@ fn constraint_failure_leaves_the_target_unchanged() {
         &mut session,
         "CREATE TABLE dbo.merge_constraint(id INT NOT NULL PRIMARY KEY,n INT NOT NULL CONSTRAINT CK_merge_positive CHECK (n>0)); INSERT dbo.merge_constraint VALUES (1,10)",
     );
-    // The batch continues after the terminated statement.
-    let (_, number) = run(
-        &mut session,
-        "MERGE dbo.merge_constraint AS t USING (VALUES (1,11),(2,-1)) AS s(id,n) ON t.id=s.id WHEN MATCHED THEN UPDATE SET n=s.n WHEN NOT MATCHED BY TARGET THEN INSERT (id,n) VALUES (s.id,s.n); INSERT dbo.merge_constraint VALUES (3,30)",
+    // CHECK constraints are enforced by the constraints feature after the
+    // write; the whole statement is undone.
+    assert_eq!(
+        run(
+            &mut session,
+            "MERGE dbo.merge_constraint AS t USING (VALUES (1,11),(2,-1)) AS s(id,n) ON t.id=s.id WHEN MATCHED THEN UPDATE SET n=s.n WHEN NOT MATCHED BY TARGET THEN INSERT (id,n) VALUES (s.id,s.n);"
+        ),
+        (false, 547)
     );
-    assert_eq!(number, 0);
+    ok(&mut session, "INSERT dbo.merge_constraint VALUES (3,30)");
     assert_eq!(
         pairs(&session, "merge_constraint"),
         [(1, Some(10)), (3, Some(30))]
@@ -518,10 +522,6 @@ fn constraint_failures_inside_a_transaction_keep_it_usable() {
     );
     for (sql, number) in [
         (
-            "MERGE dbo.t AS t USING (VALUES (1,-1),(9,9)) AS s(id,n) ON t.id=s.id WHEN MATCHED THEN UPDATE SET n=s.n WHEN NOT MATCHED THEN INSERT (id,n) VALUES (s.id,s.n);",
-            547,
-        ),
-        (
             "MERGE dbo.t AS t USING (VALUES (1,CAST(NULL AS INT))) AS s(id,n) ON t.id=s.id WHEN MATCHED THEN UPDATE SET n=s.n;",
             515,
         ),
@@ -551,13 +551,7 @@ fn constraint_failures_inside_a_transaction_keep_it_usable() {
     assert_eq!(pairs(&session, "t"), [(1, Some(20)), (2, Some(10))]);
     assert_eq!(
         rows(&session, "SELECT id FROM dbo.prior ORDER BY id"),
-        [
-            [Some(1)],
-            [Some(515)],
-            [Some(547)],
-            [Some(2627)],
-            [Some(2627)]
-        ]
+        [[Some(1)], [Some(515)], [Some(2627)], [Some(2627)]]
     );
 }
 

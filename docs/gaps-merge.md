@@ -101,8 +101,8 @@ extension hooks in docs/extension-hooks.md.
    544, and an assignment to an IDENTITY column with 8102. An INSERT column
    count mismatch fails with 109 or 110.
 5. **Constraints.** Before writing, the new images are checked against NOT
-   NULL, CHECK and, inside a caller's transaction, PRIMARY KEY and UNIQUE
-   constraints. A violation ends only the statement: msduck emits 515, 547 or
+   NULL and, inside a caller's transaction, PRIMARY KEY and UNIQUE
+   constraints. A violation ends only the statement: msduck emits 515 or
    2627, then 3621 ("The statement has been terminated."), and the batch
    continues. The caller's transaction stays usable with its earlier work,
    as SQL Server keeps it with XACT_ABORT OFF. With XACT_ABORT ON, the
@@ -161,11 +161,14 @@ extension hooks in docs/extension-hooks.md.
 
 ## Remaining differences and limits
 
-- **Diagnostics.** Constraint messages keep the backend's wording. msduck
-  does not record constraint names, so for 547 and 2627 it cannot write
-  SQL Server's "The MERGE statement conflicted with the CHECK constraint
-  "name"..." and "Violation of PRIMARY KEY constraint 'name'..." text. The
-  error numbers, states and classes match.
+- **Key diagnostics.** 2627 messages keep the backend's wording rather than
+  SQL Server's "Violation of PRIMARY KEY constraint 'name'..." text. The
+  number, state and class match.
+- **CHECK and FOREIGN KEY.** The constraints feature
+  (docs/gaps-constraints.md) enforces these around the whole MERGE, after it
+  writes. A violation reports SQL Server's 547 message and undoes the
+  statement, but ends the batch. Inside a caller's transaction, it leaves
+  that transaction uncommittable.
 - **Parse-time diagnostics.** Errors found while parsing (1065, 156, 10713,
   10714, 5324) keep the engine's parser prefix and class 16. A hint after the
   alias reports 156 without SQL Server's second error, 319.
@@ -174,9 +177,8 @@ extension hooks in docs/extension-hooks.md.
   INSERT, UPDATE and DELETE as statement-terminating.
 - **OUTPUT before 8672.** SQL Server streams the OUTPUT rows it produced
   before 8672. msduck detects 8672 before writing, so it returns none.
-- **Other constraint failures.** FOREIGN KEY violations, and key violations
-  outside a caller's transaction, are detected by the backend while
-  writing. Other failures can also happen after a write began, for example
+- **Other constraint failures.** Key violations outside a caller's
+  transaction are detected by the backend while writing. Other failures can also happen after a write began, for example
   an OUTPUT INTO row the sink table rejects.
   - Without a caller's transaction, the statement is still rolled back
     completely.

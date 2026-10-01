@@ -160,6 +160,9 @@ fn execute(
         Err(_) if own => {
             let _ = session.db.execute_batch("ROLLBACK");
         }
+        // Another feature's statement transaction (the constraints feature
+        // runs MERGE inside one) handles the failure itself.
+        Err(_) if session.transaction_descriptor == 0 => {}
         Err(error) => {
             if error
                 .downcast_ref::<SqlError>()
