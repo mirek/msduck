@@ -1141,7 +1141,7 @@
     {
       "id": "index-catalog-adapter-v1",
       "title": "Persist table-owned index identities and expose captured SQL Server catalog metadata",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner continuing full SQL Server compatibility goal and explicit request for disjoint claimable parallel work. Owner-captured DROP INDEX reference proves identical logical index names can exist on different tables and must bind through table ownership. Repository inspection finds no sys.indexes or duckdb_indexes adapter. No external submissions consumed.",
       "scope": [
         "src/index_catalog.rs",
@@ -7793,7 +7793,7 @@
     {
       "id": "prepared-rpc-metadata-v1",
       "title": "Emit declaration-based metadata for prepared RPC results",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Owner continuing full compatibility goal, first-party missing prepare metadata and verified public catalog/Session APIs. Engine.rs, root lib and query_catalog are excluded to preserve owner separate work.",
       "issue": 702,
       "dependencies": [
@@ -7970,7 +7970,7 @@
     {
       "id": "column-catalog-client-expectations-v1",
       "title": "Align column catalog client expectation with captured fixed scalar types",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Owner continuing full SQL Server compatibility goal; first-party exact-head sys.columns legacy nullable-width expectation versus independently captured fixed metadata. Same worker/worktree/PR703. No external input.",
       "issue": 712,
       "scope": [
@@ -8771,6 +8771,63 @@
       "dependencies": [],
       "issue": 725,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQtr"
+    },
+    {
+      "id": "gaps-tedious-expectations-v1",
+      "title": "Update obsolete tests/tedious.test.mjs expectations for newly supported features",
+      "state": "ready",
+      "authorization": "Owner-approved successor (2026-10-01) of stalled column-catalog-client-expectations-v1 for tests/tedious.test.mjs, umbrella #710.",
+      "scope": [
+        "tests/tedious.test.mjs"
+      ],
+      "acceptance": [
+        "Only assertions that pinned failures of features now supported by gap PRs (MERGE, outer-join UPDATE/DELETE, SERVERPROPERTY/DATABASEPROPERTYEX, ALTER TABLE ADD named DEFAULT) are updated to the supported behavior; every other check, including validation errors, is kept.",
+        "Lands in the same PR as the feature that changes the behavior so main stays green; npm test passes on the merged head."
+      ],
+      "dependencies": [],
+      "issue": 752,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PeNL1"
+    },
+    {
+      "id": "gaps-rpc-procedures-v1",
+      "title": "RPC procedure calls and RPC OUTPUT parameters",
+      "state": "ready",
+      "authorization": "Owner-approved successor (2026-10-01) of stalled prepared-rpc-metadata-v1 for src/rpc.rs, umbrella #710.",
+      "scope": [
+        "src/rpc.rs",
+        "src/rpc/procedures.rs",
+        "tests/compat/rpc_procedures.test.mjs",
+        "tests/gaps_rpc_procedures.rs",
+        "docs/gaps-rpc-procedures.md",
+        "scripts/capture-gaps-rpc-procedures.mjs",
+        "reference/gaps-rpc-procedures.json"
+      ],
+      "acceptance": [
+        "RPC requests naming a procedure (system procedures such as sp_getapplock and user procedures stored by the procedures feature; tedious callProcedure and mssql request.execute) execute with named/positional input and OUTPUT parameters, RETURNVALUE tokens and RETURNSTATUS as SQL Server sends them.",
+        "sp_executesql over RPC with OUTPUT parameter declarations (tedious addOutputParameter) returns output values; a duplicate-key error inside an RPC batch ends only that statement and still returns a prepared handle as SQL Server does.",
+        "Existing prepared RPC behavior and tests keep passing; AGENTS.md checks, PR, review or fallback, merge and completion."
+      ],
+      "dependencies": [],
+      "issue": 753,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PeNMc"
+    },
+    {
+      "id": "gaps-index-catalog-v1",
+      "title": "Constraint-backed indexes in sys.indexes and sys.index_columns",
+      "state": "ready",
+      "authorization": "Owner-approved successor (2026-10-01) of stalled index-catalog-adapter-v1 for src/index_catalog.rs, umbrella #710.",
+      "scope": [
+        "src/index_catalog.rs",
+        "tests/gaps_index_catalog.rs"
+      ],
+      "acceptance": [
+        "sys.indexes and sys.index_columns list PRIMARY KEY and UNIQUE constraint indexes (from main.__msduck_keys) with SQL Server's is_primary_key, is_unique_constraint, is_unique, type and key ordinals instead of failing with 40515; filtering by OBJECT_ID works.",
+        "Catalog acquisition and sync are scoped to the current database so same-named tables in two databases do not duplicate rows; existing index catalog tests keep passing.",
+        "Intended to be claimed as a companion by the gaps-catalog-v1 worker; AGENTS.md checks, PR, review or fallback, merge and completion."
+      ],
+      "dependencies": [],
+      "issue": 754,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PeNM8"
     }
   ]
 }
