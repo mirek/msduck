@@ -292,12 +292,7 @@ fn json_declaration(expression: &Expr, catalog: &CatalogSnapshot, scope: &Scope)
         };
         select.projection = vec![sqlparser::ast::SelectItem::UnnamedExpr(expression.clone())];
         if annotate {
-            probe = Box::new(expression_declarations(
-                &probe,
-                &HashMap::new(),
-                catalog,
-                scope,
-            ));
+            *probe = expression_declarations(&probe, &HashMap::new(), catalog, scope);
         }
         let fields = projection::query_fields(catalog, &probe, scope)?;
         (fields.len() == 1).then(|| fields[0].clone())
