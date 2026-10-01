@@ -252,13 +252,11 @@ pub fn spec(db: &Connection, query: &Query, scope: &crate::query_catalog::Scope)
     })
 }
 
+/// JSON text of one value and its grouping key (None for SQL NULL).
+type Rendered = (Option<Vec<u16>>, Option<Vec<u16>>);
+
 /// JSON text of one value, and its grouping key.
-fn render_value(
-    value: &Value,
-    kind: Option<&Type>,
-    fragment: bool,
-    ci: bool,
-) -> Result<(Option<Vec<u16>>, Option<Vec<u16>>)> {
+fn render_value(value: &Value, kind: Option<&Type>, fragment: bool, ci: bool) -> Result<Rendered> {
     if matches!(value, Value::Null) {
         return Ok((None, None));
     }

@@ -478,12 +478,12 @@ impl Lower<'_> {
         if is_null(&args[1]) {
             return Err(invalid("NULL", 2, "json_modify"));
         }
-        for position in 0..2 {
-            if let Some(kind) = self.static_type(&args[position])
+        for (position, arg) in args.iter().enumerate().take(2) {
+            if let Some(kind) = self.static_type(arg)
                 && !matches!(kind, Type::Character(_))
             {
                 return Err(invalid(
-                    type_name(&kind, literal(&args[position])),
+                    type_name(&kind, literal(arg)),
                     position + 1,
                     "json_modify",
                 ));
