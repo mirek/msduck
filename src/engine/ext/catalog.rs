@@ -39,7 +39,11 @@ impl Feature for Hooks {
             [schema, name] => (schema.as_str(), name.as_str()),
             _ => return Ok(None),
         };
-        if let Statement::CreateTable(table) = statement {
+        let target_exists: bool = session.db.query_row(
+            "SELECT count(*)>0 FROM sys.objects o JOIN main.__msduck_schemas s USING(schema_id) WHERE lower(s.name)=lower(?) AND lower(o.name)=lower(?) AND rtrim(o.type)='U'",
+            [schema, name], |r| r.get(0)
+        )?;
+        if !target_exists && let Statement::CreateTable(table) = statement {
             // Native DDL must not succeed before a named DEFAULT's object
             // namespace conflict is detected in a caller-owned transaction.
             let mut declared = std::collections::HashSet::new();

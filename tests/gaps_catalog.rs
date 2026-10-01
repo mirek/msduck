@@ -516,3 +516,37 @@ fn generated_key_names_avoid_existing_schema_objects_in_callers_transaction() {
         .unwrap();
     assert_eq!(target, None);
 }
+
+#[test]
+fn existing_table_error_precedes_its_named_default_conflict() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let sql =
+        "CREATE TABLE dbo.existing_defaults(id INT CONSTRAINT DF_existing_defaults DEFAULT(1))";
+    assert!(
+        session
+            .batch_response(sql, &Default::default(), false, None)
+            .1
+    );
+    let (response, success) = session.batch_response(sql, &Default::default(), false, None);
+    assert!(!success);
+    let message: Vec<u8> = "There is already an object named 'existing_defaults' in the database."
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    assert!(
+        response
+            .windows(message.len())
+            .any(|bytes| bytes == message)
+    );
+    let constraint: Vec<u8> =
+        "There is already an object named 'DF_existing_defaults' in the database."
+            .encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect();
+    assert!(
+        !response
+            .windows(constraint.len())
+            .any(|bytes| bytes == constraint)
+    );
+}
