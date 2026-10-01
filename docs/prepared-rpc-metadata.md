@@ -260,3 +260,17 @@ its inputs or evaluating expressions. Unknown/ambiguous/alias declarations,
 opaque or volatile calls and nested query scopes return unknown. This identity
 proof does not establish a result type or authorize optimizer constant folding.
 The RPC adapter separately checks supported declarations and native binding.
+
+The `--catalog-declarations` mode retains eight system catalog profiles twice
+in fresh SQL Server containers. Full raw SHA256 is
+`37fb1991d65b2da420cb8a5246143dca1317d6b02a68afc3b35e5bffec20da60`.
+Both eighteen-record runs agree completely. The empty `sys.columns` projection
+has 43 fields, while `sys.identity_columns` has 44; their schemas and flags
+cannot be treated as a simple concatenation. Direct catalog integer fields
+retain fixed wire types and read-only flags8, and `name` retains sysname user
+id256 and flags9. Identity variant fields have flags33 in the unsorted profile,
+while a qualified variant projection with a hidden sort has flags9. Captured
+TYPE_NAME is NVarChar(256 bytes), flags33; explicit/TRY integer conversions have
+nullable integer declarations and flags33. These captures establish reference
+requirements, not a current implementation pass. The complete raw artifact is
+retained separately; no catalog fixture or descriptor is normalized.
