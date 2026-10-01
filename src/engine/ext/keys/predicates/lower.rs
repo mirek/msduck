@@ -788,8 +788,9 @@ fn membership(value: &Expr, subquery: &Query) -> Option<Expr> {
 
 /// How deep below the expression the translator hands over [`lower`] looks.
 /// The translator lowers every node bottom-up, so deeper nodes were lowered
-/// already; only what a built-in lowering of this node created (for example
-/// NULLIF's `CASE WHEN a = b`) is new, and that is shallow. Bounding the
+/// already; only what a built-in lowering of this node created is new. The
+/// deepest such shape seen is NULLIF's `CASE WHEN a = b THEN NULL ELSE a
+/// END` (the comparison two levels down); IN and BETWEEN are not expanded. Bounding the
 /// walk keeps lowering linear in the size of deeply nested expressions.
 const DEPTH: usize = 4;
 
