@@ -226,6 +226,11 @@ impl std::fmt::Display for StatementErrors {
 impl std::error::Error for StatementErrors {}
 
 pub(crate) fn emit_error(out: &mut Vec<u8>, error: &anyhow::Error) -> i32 {
+    // Output a hook produced before failing precedes its diagnostic.
+    if let Some(partial) = error.downcast_ref::<ext::Partial>() {
+        out.extend_from_slice(&partial.tokens);
+        return emit_error(out, &partial.error);
+    }
     if let Some(StatementErrors(errors)) = error.downcast_ref::<StatementErrors>() {
         for error in errors {
             tds::sql_error(out, error);
@@ -905,6 +910,11 @@ impl Session {
             }
             if msduck_sql::dialect::alter_database::request(&statement).is_some() {
                 continue; // Databases are resolved only when executed.
+            }
+            if msduck_sql::dialect::ext::custom(&statement).is_some()
+                || matches!(statement, Statement::Set(Set::SetTransaction { .. }))
+            {
+                continue; // Extension statements and session settings bind when executed.
             }
             if let Some(call) = msduck_sql::raiserror::call(&statement) {
                 for expression in [call.message, call.severity, call.state]
@@ -2137,6 +2147,7 @@ impl Session {
             tds::transaction_env(&mut out, 8, self.transaction_descriptor);
         }
         self.transactions += 1;
+        ext::transaction_begin(self, isolation);
         Ok(out)
     }
     fn rollback_doomed(&mut self, out: &mut Vec<u8>) {
@@ -2180,8 +2191,8 @@ impl Session {
             self.transactions > 0,
             "ROLLBACK has no corresponding BEGIN TRANSACTION"
         );
+        // A savepoint wins over an outer transaction of the same name.
         if !name.is_empty()
-            && name != self.transaction_name
             && let Some(result) = ext::rollback_to(self, name)
         {
             return result;
@@ -6352,24 +6363,25 @@ mod transaction_tests {
         let mut session = Session::new(server.connection().unwrap()).unwrap();
         session.begin_transaction(0, "outer").unwrap();
         let descriptor = session.transaction_descriptor;
+        // Levels 1-5 are SQL Server's; 6 is not a level.
         assert!(
             session
                 .transaction_request(TransactionRequest::Commit {
                     restart: Some(BeginTransaction {
-                        isolation: 4,
+                        isolation: 6,
                         name: String::new()
                     })
                 })
                 .is_err()
         );
         assert!(session.rollback_transaction("missing").is_err());
-        assert!(
-            session
-                .transaction_request(TransactionRequest::Save {
-                    name: "point".into()
-                })
-                .is_err()
-        );
+        // A savepoint request keeps the transaction (see the transactions
+        // extension, docs/gaps-transactions.md).
+        session
+            .transaction_request(TransactionRequest::Save {
+                name: "point".into(),
+            })
+            .unwrap();
         assert_eq!(session.transaction_descriptor, descriptor);
         assert_eq!(session.transactions, 1);
         session.rollback_transaction("outer").unwrap();

@@ -380,6 +380,8 @@ fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Fiel
             ("login_name", 231, 231, 256, 0, 0, false, false),
             ("status", 231, 231, 60, 0, 0, false, false),
             ("is_user_process", 104, 104, 1, 1, 0, false, false),
+            // reference/gaps-transactions.json (and SQL Server's declaration).
+            ("transaction_isolation_level", 52, 52, 2, 5, 0, false, false),
             ("original_login_name", 231, 231, 256, 0, 0, false, false),
             ("database_id", 52, 52, 2, 5, 0, false, false),
         ],

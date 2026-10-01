@@ -216,7 +216,8 @@ test('sys.dm_exec_sessions and @@SPID describe sessions as SQL Server does', { t
   assert.deepEqual((await run(c, `SELECT ${subset.map(column => column.name).join(',')} FROM sys.dm_exec_sessions WHERE 1=0`)).columns[0],
     subset.map(({ name, type, length, flags }) => ({ name, type, length, flags })))
   // SELECT * lists the columns msduck provides, in SQL Server's order.
-  const provided = new Set(subset.map(column => column.name))
+  // transaction_isolation_level was added later (docs/gaps-transactions.md).
+  const provided = new Set([...subset.map(column => column.name), 'transaction_isolation_level'])
   assert.deepEqual((await run(c, 'SELECT * FROM sys.dm_exec_sessions WHERE 1=0')).columns[0].map(column => column.name),
     observed('dm_exec_sessions declarations').sets[0].rows.filter(([name]) => provided.has(name)).map(([name]) => name))
   const own = reference.find(item => item.name === 'own session values')

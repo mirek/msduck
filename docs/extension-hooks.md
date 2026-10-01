@@ -79,8 +79,9 @@ declare the scalar variable".
 | `rewrite_statement`, `rewrite_expr` | After session functions are lowered, for statements and for scalar evaluations (SET, DECLARE, IF and WHILE conditions, RETURN) | Session-aware lowering, such as `SCOPE_IDENTITY()` or names of temporary objects |
 | `lower_expr` | At the end of the translator's post-visit of each expression | Pure lowering to native functions |
 | `isolation` | When a SQL or transaction-manager request selects an isolation level | Accept or reject levels. `None` defers to the built-in rule, which accepts read committed and snapshot |
+| `transaction_begin` | After every BEGIN TRANSACTION, SQL or transaction-manager, including nested ones, with the requested isolation level (0 keeps the session's) | Session isolation level |
 | `transaction_end` | After the outermost COMMIT or any ROLLBACK | Release transaction-owned resources |
-| `save_transaction`, `rollback_to` | On a transaction-manager savepoint request, or a ROLLBACK naming something other than the outermost transaction | Savepoints. Return ENVCHANGE tokens; the transaction stays open |
+| `save_transaction`, `rollback_to` | On a transaction-manager savepoint request, or a named ROLLBACK before the name is compared with the outermost transaction's | Savepoints. Return ENVCHANGE tokens; the transaction stays open. `rollback_to` returns `None` for a name it does not know |
 | `register` | Once per DuckDB instance, after the built-in scalar functions | Native scalar and table functions |
 | `bootstrap_database` | For every database at startup, creation and attach, after the built-in catalogs | Idempotent catalog tables and views |
 | `session_start`, `session_end` | When a session is created; when it is dropped, including RESETCONNECTION and disconnect | Session-owned resources |
@@ -89,8 +90,10 @@ When a hook fails after producing output (for example, a procedure whose
 first statement returned rows), return `Err(ext::Partial { tokens, error
 }.into())`. The engine writes the tokens and then handles the error like any
 other statement error: TRY/CATCH, `@@ERROR`, XACT_ABORT and doomed
-transactions. A successful `Exec` with a non-zero `status` is not an error.
-Its DONEPROC carries no error flag.
+transactions. A transaction-manager hook (`save_transaction`,
+`rollback_to`) may return a `Partial` too; its tokens precede the error. A
+successful `Exec` with a non-zero `status` is not an error. Its DONEPROC
+carries no error flag.
 
 Rewrites can see the same tree more than once, for example a SET statement
 and then its value expression, so they must be idempotent.

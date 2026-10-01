@@ -281,14 +281,20 @@ These rules hold for the pinned build and the captured matrix only.
 
 ## Current msduck state
 
-This task changed no Rust behavior, and msduck implements none of the rules
-above. According to [transaction-manager.md](transaction-manager.md), nested
-BEGIN counting, named outer rollback, 6401/3902/3903 and ENVCHANGE 8/9/10 exist
-for SQL and TM requests. Declared savepoints and TM_SAVE_XACT fail explicitly.
-[transaction-recovery.md](transaction-recovery.md) records that the pinned
-DuckDB parser rejects `SAVEPOINT`, and that native runtime errors invalidate the
-DuckDB transaction. No statement-level undo exists that could provide ROLLBACK
-TO. The fixture has not been replayed against msduck.
+The capture task changed no Rust behavior. Task `gaps-transactions-v1`
+(issue #727) later implemented these rules for SQL batches, procedures, RPCs
+and transaction-manager requests, using before-image copies of written tables
+because DuckDB has no savepoints. [gaps-transactions.md](gaps-transactions.md)
+describes the implementation and its limits: schema changes (including
+creating `#temp` tables) and SELECT INTO after a savepoint fail explicitly,
+and a native error that
+invalidates the DuckDB transaction still cannot be recovered
+([transaction-recovery.md](transaction-recovery.md)). The fixture is not yet
+replayed whole; `tests/gaps_transactions.rs` and
+`tests/compat/transactions.test.mjs` assert its rules.
+
+The successors below remain the long-term design (a deterministic core and a
+proven backend facility).
 
 ## Proposed successors
 

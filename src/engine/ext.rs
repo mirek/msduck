@@ -169,6 +169,12 @@ pub(super) trait Feature: Sync {
     /// strictly, so the calls pair up like brackets.
     fn batch_end(&self, _session: &mut Session) {}
 
+    /// A transaction began (SQL `BEGIN TRANSACTION` or a transaction-manager
+    /// request), including a nested one. `isolation` is the level the
+    /// request selected (TDS numbering, 0 when it keeps the session's level)
+    /// and was already accepted by [`Feature::isolation`].
+    fn transaction_begin(&self, _session: &mut Session, _isolation: u8) {}
+
     /// The outermost transaction ended (`committed` false for rollback).
     fn transaction_end(&self, _session: &mut Session, _committed: bool) {}
 
@@ -178,9 +184,11 @@ pub(super) trait Feature: Sync {
         None
     }
 
-    /// ROLLBACK to `name` when it is not the outermost transaction's name
-    /// (SQL `ROLLBACK TRAN name` or a TDS rollback with a name). Return
-    /// ENVCHANGE tokens, if any; the transaction stays open.
+    /// ROLLBACK to `name` (SQL `ROLLBACK TRAN name` or a TDS rollback with a
+    /// name), before it is compared with the outermost transaction's name,
+    /// so a savepoint wins over a transaction of the same name. Return
+    /// ENVCHANGE tokens, if any; the transaction stays open. `None` leaves
+    /// the name to the engine.
     fn rollback_to(&self, _session: &mut Session, _name: &str) -> Option<Result<Vec<u8>>> {
         None
     }
@@ -429,6 +437,12 @@ pub(super) fn rollback_to(session: &mut Session, name: &str) -> Option<Result<Ve
     FEATURES
         .iter()
         .find_map(|feature| feature.rollback_to(session, name))
+}
+
+pub(super) fn transaction_begin(session: &mut Session, isolation: u8) {
+    for feature in FEATURES {
+        feature.transaction_begin(session, isolation);
+    }
 }
 
 pub(super) fn transaction_end(session: &mut Session, committed: bool) {
