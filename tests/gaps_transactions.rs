@@ -607,3 +607,41 @@ fn terminating_a_session_ends_its_wait() {
     assert!(failed);
     assert!(elapsed < Duration::from_secs(10), "{elapsed:?}");
 }
+
+#[test]
+fn every_write_form_is_restored() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    run(
+        &mut s,
+        "CREATE TABLE dbo.k(id INT PRIMARY KEY, v INT);
+         CREATE TABLE dbo.audit(id INT, v INT);
+         CREATE TABLE dbo.other(id INT);
+         INSERT dbo.k VALUES (1, 1), (2, 2), (3, 3); INSERT dbo.other VALUES (1), (2)",
+    )
+    .unwrap();
+    run(&mut s, "BEGIN TRAN; SAVE TRAN s").unwrap();
+    for sql in [
+        "UPDATE [dbo].[k] SET v = 10 WHERE id = 1",
+        "UPDATE t SET v = 20 FROM dbo.k AS t JOIN dbo.other o ON o.id = t.id WHERE t.id = 2",
+        "DELETE t FROM dbo.k t WHERE t.id = 3",
+        "INSERT INTO k (id, v) VALUES (4, 4)",
+        "UPDATE dbo.k SET v = v + 1 OUTPUT inserted.id, inserted.v INTO dbo.audit(id, v) WHERE id = 4",
+        "TRUNCATE TABLE dbo.other",
+    ] {
+        run(&mut s, sql).unwrap_or_else(|number| panic!("{sql}: {number}"));
+    }
+    assert_eq!(ints(&s, "SELECT id FROM dbo.k ORDER BY id"), [1, 2, 4]);
+    run(&mut s, "ROLLBACK TRAN s").unwrap();
+    assert_eq!(
+        pairs(&s, "SELECT id, CAST(v AS VARCHAR) FROM dbo.k ORDER BY id"),
+        [
+            (1, Some("1".into())),
+            (2, Some("2".into())),
+            (3, Some("3".into()))
+        ]
+    );
+    assert_eq!(ints(&s, "SELECT count(*) FROM dbo.audit"), [0]);
+    assert_eq!(ints(&s, "SELECT id FROM dbo.other ORDER BY id"), [1, 2]);
+    run(&mut s, "COMMIT").unwrap();
+}

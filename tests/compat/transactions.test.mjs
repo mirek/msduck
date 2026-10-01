@@ -58,6 +58,14 @@ test('SET TRANSACTION ISOLATION LEVEL is accepted, reported and scoped to sp_exe
   assert.equal(await level(c), 2)
 })
 
+test('a reset connection returns to READ COMMITTED', async t => {
+  const c = await start(t)
+  await query(c, 'SET TRANSACTION ISOLATION LEVEL SERIALIZABLE')
+  await new Promise(resolve => c.reset(resolve))
+  assert.equal(await level(c), 2)
+  assert.deepEqual((await query(c, 'DBCC USEROPTIONS WITH NO_INFOMSGS')).rows.at(-1), ['isolation level', 'read committed'])
+})
+
 test('SQL savepoints undo only later work and keep @@TRANCOUNT', async t => {
   const c = await start(t)
   await query(c, 'CREATE TABLE dbo.svp(id INT IDENTITY(1,1) CONSTRAINT pk_svp PRIMARY KEY, v INT NOT NULL)')

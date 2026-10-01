@@ -325,6 +325,8 @@ fn targets(statement: &Statement) -> Vec<ObjectName> {
                     Expr::CompoundIdentifier(idents) => {
                         names.push(ObjectName::from(idents.clone()))
                     }
+                    // `INTO table(column, ...)` parses as a call.
+                    Expr::Function(function) => names.push(function.name.clone()),
                     _ => {}
                 }
             }
