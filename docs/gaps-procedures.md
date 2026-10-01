@@ -245,8 +245,6 @@ The replay test lists each of these:
 - ERROR and INFO tokens carry no procedure name, and line numbers are 1.
 - Messages that come from engine diagnostics use the engine's text. For
   example, 208 reads "Catalog Error: Table with name ... does not exist!".
-- A duplicate key ends the batch rather than the statement, so the
-  procedure does not continue.
 - `@@NESTLEVEL` in a parameterized tedious request (an sp_executesql RPC)
   is 0; SQL Server reports 2.
 - `EXEC ('')` sends RETURNSTATUS 0. SQL Server sends only DONEPROC.
