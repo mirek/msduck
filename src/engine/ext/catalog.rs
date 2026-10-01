@@ -29,16 +29,61 @@ impl Feature for Hooks {
         let parts = name
             .0
             .iter()
-            .map(|part| part.as_ident().map(|ident| ident.value.as_str()))
+            .map(|part| part.as_ident().map(|ident| ident.value.clone()))
             .collect::<Option<Vec<_>>>();
         let Some(parts) = parts else {
             return Ok(None);
         };
         let (schema, name) = match parts.as_slice() {
-            [name] => ("dbo", *name),
-            [schema, name] => (*schema, *name),
+            [name] => ("dbo", name.as_str()),
+            [schema, name] => (schema.as_str(), name.as_str()),
             _ => return Ok(None),
         };
+        if let Statement::CreateTable(table) = statement {
+            // Native DDL must not succeed before a named DEFAULT's object
+            // namespace conflict is detected in a caller-owned transaction.
+            let mut declared = std::collections::HashSet::new();
+            let normalized: String = session
+                .db
+                .query_row("SELECT lower(?)", [name], |r| r.get(0))?;
+            declared.insert(normalized);
+            for option in table.columns.iter().flat_map(|column| &column.options) {
+                if !matches!(option.option, sqlparser::ast::ColumnOption::Default(_)) {
+                    continue;
+                }
+                let Some(constraint) = &option.name else {
+                    continue;
+                };
+                let normalized: String =
+                    session
+                        .db
+                        .query_row("SELECT lower(?)", [&constraint.value], |r| r.get(0))?;
+                if !declared.insert(normalized)
+                    || crate::object_catalog::key_name_exists(
+                        &session.db,
+                        schema,
+                        &constraint.value,
+                    )?
+                {
+                    return Err(crate::engine::StatementErrors(vec![
+                        msduck_core::diagnostic::SqlError::new(
+                            2714,
+                            5,
+                            format!(
+                                "There is already an object named '{}' in the database.",
+                                constraint.value
+                            ),
+                        ),
+                        msduck_core::diagnostic::SqlError::new(
+                            1750,
+                            1,
+                            "Could not create constraint or index. See previous errors.",
+                        ),
+                    ])
+                    .into());
+                }
+            }
+        }
         let exists: bool = session.db.query_row(
             "SELECT count(*)>0 FROM sys.objects o JOIN main.__msduck_schemas s USING(schema_id) WHERE lower(s.name)=lower(?) AND lower(o.name)=lower(?) AND rtrim(o.type) IN ('D','PK','UQ')",
             [schema,name], |r| r.get(0)

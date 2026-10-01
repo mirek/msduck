@@ -394,12 +394,20 @@ fn key_namespace_failures_preserve_the_callers_transaction_and_writes() {
     };
     assert!(run(
         &mut session,
-        "CREATE TABLE kept(id INT); CREATE TABLE defaults(id INT CONSTRAINT DF_shared DEFAULT(1)); BEGIN TRANSACTION; INSERT kept VALUES(42)"
+        "CREATE TABLE kept(id INT); CREATE TABLE defaults(id INT CONSTRAINT DF_shared DEFAULT(1)); CREATE TABLE keeper(id INT CONSTRAINT PK_shared PRIMARY KEY); BEGIN TRANSACTION; INSERT kept VALUES(42)"
     ));
     for (table, sql) in [
         (
             "failed_existing",
             "CREATE TABLE failed_existing(id INT CONSTRAINT DF_shared PRIMARY KEY)",
+        ),
+        (
+            "failed_existing_key_default",
+            "CREATE TABLE failed_existing_key_default(id INT PRIMARY KEY,d INT CONSTRAINT PK_shared DEFAULT(1))",
+        ),
+        (
+            "failed_existing_key_default_only",
+            "CREATE TABLE failed_existing_key_default_only(d INT CONSTRAINT PK_shared DEFAULT(1))",
         ),
         (
             "failed_dupe",
