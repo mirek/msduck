@@ -440,7 +440,7 @@ const bindingMultipleErrorReference=[{"name":"two missing columns","sql":"SELECT
 
 test('prepared multiple binding errors preserve clause order duplicates and complete framing',async t=>{
  const connection=await start(t)
- const actual=await observe(connection,{verifyVersion:false,profilePlan:bindingNameLimitProfiles,bindingMultipleErrorProfiles,variantPlan:['api-default','named-one'],execute:false})
+ const actual=await observe(connection,{verifyVersion:false,profilePlan:bindingMultipleErrorProfiles,variantPlan:['api-default','named-one'],execute:false})
  await mkdir('artifacts/prepared-rpc-metadata',{recursive:true})
  await writeFile('artifacts/prepared-rpc-metadata/binding-multiple-error-runtime.json',JSON.stringify({expected:bindingMultipleErrorReference,actual},null,2)+'\n')
  assert.equal(actual.length-2,bindingMultipleErrorReference.length)
@@ -467,7 +467,7 @@ const bindingNameLimitReference=[{"name":"missing identifier at 128 units","sql"
 
 test('prepared binding name limits preserve syntax identity and complete framing',async t=>{
  const connection=await start(t)
- const actual=await observe(connection,{verifyVersion:false,profilePlan:bindingNameLimitProfiles,bindingNameLimitProfiles,variantPlan:['api-default','named-one'],execute:false})
+ const actual=await observe(connection,{verifyVersion:false,profilePlan:bindingNameLimitProfiles,variantPlan:['api-default','named-one'],execute:false})
  await mkdir('artifacts/prepared-rpc-metadata',{recursive:true})
  await writeFile('artifacts/prepared-rpc-metadata/binding-name-limit-runtime.json',JSON.stringify({expected:bindingNameLimitReference,actual},null,2)+'\n')
  assert.equal(actual.length-2,bindingNameLimitReference.length)
