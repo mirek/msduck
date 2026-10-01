@@ -34,14 +34,9 @@ state, class and message). They cover:
   13 collations, plus 447, 448 and 468;
 - SERVERPROPERTY, DATABASEPROPERTYEX and ROWCOUNT_BIG with SQL_VARIANT_PROPERTY.
 
-The `bin2Server` section repeats the property programs on a second container
-installed with `MSSQL_COLLATION=Latin1_General_100_BIN2` (see below). FORMAT
-uses the existing `reference/format.json` (docs/format.md).
-
-The script refuses to overwrite an existing fixture. It labels its containers
-with the task id and waits for the BIN2 collation to take effect, because SQL
-Server applies `MSSQL_COLLATION` by rebuilding the system databases after its
-first start.
+FORMAT uses the existing `reference/format.json` (docs/format.md). The script
+refuses to overwrite an existing fixture and labels its container with the
+task id.
 
 ## Explicit COLLATE
 
@@ -140,11 +135,13 @@ Server's implicit conversion from sql_variant produces. Row-dependent
 arguments (`DATABASEPROPERTYEX(name, 'Status') FROM sys.databases`) choose
 among the values with a CASE. Unknown names and missing databases give NULL.
 
-msduck compares binary by default, so it reports the collation that behaves
-that way: Collation `Latin1_General_100_BIN2`, CollationID 264200,
-ComparisonStyle 0, SqlSortOrder 0 and SqlSortOrderName `bin_ascii_8`, the
-values of the BIN2 reference server. DATABASEPROPERTYEX reports the same
-collation for every database. ProductVersion is `16.0.0.0`, matching the
+Collation is `SQL_Latin1_General_CP1_CI_AS` for the server and every
+database (CollationID 872468488, ComparisonStyle 196609, SqlSortOrder 52,
+SqlSortOrderName `nocase_iso`), consistent with `sys.databases` and the
+login collation. Note that msduck's default comparisons are currently
+case and accent sensitive (binary): `N'A' = N'a'` is false without an
+explicit case-insensitive COLLATE, unlike a real SQL_Latin1_General_CP1_CI_AS
+server. ProductVersion is `16.0.0.0`, matching the
 version in PRELOGIN and LOGINACK (ProductMajorVersion 16, ProductLevel RTM,
 Edition `Developer Edition (64-bit)`, EngineEdition 3). ServerName,
 MachineName and ComputerNamePhysicalNetBIOS are the host name and
@@ -180,11 +177,9 @@ difference not listed here, and on a listed difference that disappears.
 - GROUP BY and DISTINCT under an explicit collation do not ignore trailing
   spaces, and duplicate ORDER BY items are not rejected with 169.
 - ROWCOUNT_BIG() is described as nullable bigint (IntN, length 8).
-- `sys.databases.collation_name` and the login ENVCHANGE still report
-  SQL_Latin1_General_CP1_CI_AS.
-- Database names in DATABASEPROPERTYEX match case-insensitively (a BIN2
-  server matches them exactly); user databases report the SIMPLE recovery
-  model, and IsXTPSupported, IsFulltextEnabled, ProductBuild and
+- The reported collation is case insensitive while default comparisons are
+  binary (see above).
+- User databases report the SIMPLE recovery model, and IsXTPSupported, IsFulltextEnabled, ProductBuild and
   ProductUpdateLevel differ from the reference server.
 - SQL_VARIANT_PROPERTY of a non-constant property name and CONVERT of a
   sysname sql_variant produced elsewhere use the built-in sql_variant support,

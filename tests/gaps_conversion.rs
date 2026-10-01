@@ -98,7 +98,7 @@ async fn reported_repros_now_succeed() {
             "SELECT CONVERT(nvarchar(128), SERVERPROPERTY('Collation')), CONVERT(nvarchar(128), SERVERPROPERTY('ProductVersion')), CONVERT(nvarchar(128), DATABASEPROPERTYEX('master', 'Status')), CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), 'Updateability'))"
         )
         .await,
-        some(&["Latin1_General_100_BIN2", "16.0.0.0", "ONLINE", "READ_WRITE"])
+        some(&["SQL_Latin1_General_CP1_CI_AS", "16.0.0.0", "ONLINE", "READ_WRITE"])
     );
     let rows = client
         .simple_query("SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3; SELECT ROWCOUNT_BIG()")
@@ -399,7 +399,7 @@ async fn properties_are_typed_like_sql_server() {
             "DECLARE @p nvarchar(128) = N'ProductLevel'; SELECT CONVERT(nvarchar(128), SERVERPROPERTY(@p)), CONVERT(nvarchar(128), DATABASEPROPERTYEX(N'MASTER', N'Recovery')), CONVERT(nvarchar(128), DATABASEPROPERTYEX('master', 'UserAccess')), CONVERT(nvarchar(128), DATABASEPROPERTYEX('master', 'Collation'))"
         )
         .await,
-        some(&["RTM", "SIMPLE", "MULTI_USER", "Latin1_General_100_BIN2"])
+        some(&["RTM", "SIMPLE", "MULTI_USER", "SQL_Latin1_General_CP1_CI_AS"])
     );
     for (sql, number) in [
         ("SELECT SERVERPROPERTY()", 174),

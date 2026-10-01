@@ -206,27 +206,5 @@ const docker = extra => async (args, env) => {
 }
 
 const main = await withReferenceContainer(async (config, container) => ({ image: container.image, ...await run(config, cases) }), { docker: docker([]) })
-// msduck compares binary (case and accent sensitive, code point order) and
-// reports Latin1_General_100_BIN2; a server installed with that collation
-// shows the values the server and database properties must then have.
-const bin2 = await withReferenceContainer(async config => {
-  // SQL Server applies MSSQL_COLLATION after its first start by rebuilding
-  // the system databases, restarting in between: wait for the new collation.
-  const { connect } = await import('./lib/reference.mjs')
-  const deadline = Date.now() + 300000
-  while (true) {
-    try {
-      const connection = await connect(config)
-      try {
-        const result = await capture(connection, "SELECT CONVERT(nvarchar(128), SERVERPROPERTY('Collation')) AS c")
-        if (result.sets[0]?.rows[0]?.[0] === 'Latin1_General_100_BIN2') break
-      } finally { connection.close() }
-    } catch {}
-    if (Date.now() > deadline) throw new Error('the BIN2 server collation did not take effect')
-    await new Promise(resolve => setTimeout(resolve, 2000))
-  }
-  return run(config, cases.filter(c => ['serverproperty', 'databasepropertyex'].includes(c.group)))
-},
-  { docker: docker(['--env', 'MSSQL_COLLATION=Latin1_General_100_BIN2']) })
-await writeNewFixture(output, { image: main.image, version: main.version, timeZone: 'UTC', cases: main.captured, bin2Server: { collation: 'Latin1_General_100_BIN2', cases: bin2.captured } })
-console.log('Captured', main.captured.length, 'cases and', bin2.captured.length, 'BIN2 server cases from', main.version)
+await writeNewFixture(output, { image: main.image, version: main.version, timeZone: 'UTC', cases: main.captured })
+console.log('Captured', main.captured.length, 'cases from', main.version)

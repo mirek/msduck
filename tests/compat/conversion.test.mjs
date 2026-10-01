@@ -24,7 +24,6 @@ const known = new Map([
   ['ProductUpdateLevel', 'msduck version'],
   ['IsFulltextEnabled', 'no full-text search'],
   ['Recovery', 'user databases report the SIMPLE recovery model'],
-  ['master', 'database names compare case-insensitively'],
   ['column argument', 'no tempdb database'],
   ['read only', 'EXEC of a string'],
 ])
@@ -35,9 +34,7 @@ function outcome(result) {
 
 test('styled CONVERT, COLLATE and properties match the SQL Server capture', async t => {
   const connection = await start(t, { options: { requestTimeout: 60000 } })
-  // Property groups follow a server installed with msduck's collation.
-  const cases = fixture.cases.filter(c => !['serverproperty', 'databasepropertyex'].includes(c.group))
-    .concat(fixture.bin2Server.cases)
+  const cases = fixture.cases
   const differences = []
   let compileTime = 0
   for (const entry of cases) {
@@ -111,7 +108,7 @@ test('generic repros return SQL Server types', async t => {
     SQL_VARIANT_PROPERTY(SERVERPROPERTY('ProductVersion'), 'BaseType') AS base,
     ROWCOUNT_BIG() AS row_count`)
   assert.deepEqual(rows, [[1, 0, '2024-01-01T21:34:05.1234567Z', '2024-01-02T03:04:05.123', '010203', '2024-01-01',
-    'Latin1_General_100_BIN2', 3, 'ONLINE', 'nvarchar', '0']])
+    'SQL_Latin1_General_CP1_CI_AS', 3, 'ONLINE', 'nvarchar', '0']])
   const types = columns[0].map(c => `${c.type.name}(${c.dataLength})`)
   assert.deepEqual(types.slice(2), ['NVarChar(80)', 'VarChar(30)', 'VarChar(6)', 'NVarChar(8000)',
     'Variant(8009)', 'Variant(8009)', 'Variant(8009)', 'Variant(8009)', 'IntN(8)'])

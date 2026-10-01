@@ -16,10 +16,10 @@ use sqlparser::ast::{
 };
 use std::{collections::HashMap, ops::ControlFlow};
 
-/// The collation msduck reports for the server and every database. Default
-/// comparisons are binary (case and accent sensitive, code point order), so
-/// the reported name must not claim a case-insensitive collation.
-pub(super) const COLLATION: &str = "Latin1_General_100_BIN2";
+/// The collation msduck reports for the server and every database, as
+/// `sys.databases` and the login collation do. msduck's default comparisons
+/// are currently binary (case sensitive); see docs/gaps-conversion.md.
+pub(super) const COLLATION: &str = "SQL_Latin1_General_CP1_CI_AS";
 
 const SERVER_VARIANT: &str = "__MSDUCK_VARIANT_SERVERPROPERTY";
 const DATABASE_VARIANT: &str = "__MSDUCK_VARIANT_DATABASEPROPERTYEX";
@@ -138,8 +138,8 @@ pub(super) fn server(property: &str) -> Property {
     let text = |value: &str| Text(value.into());
     match property.to_ascii_lowercase().as_str() {
         "collation" => text(COLLATION),
-        "collationid" => Int(264200),
-        "comparisonstyle" => Int(0),
+        "collationid" => Int(872468488),
+        "comparisonstyle" => Int(196609),
         "computernamephysicalnetbios" | "machinename" | "servername" => Text(host_name()),
         "edition" => text("Developer Edition (64-bit)"),
         "editionid" => Int(-2117995310),
@@ -169,8 +169,8 @@ pub(super) fn server(property: &str) -> Property {
         "resourceversion" => text("16.00.0000"),
         "sqlcharset" => TinyInt(1),
         "sqlcharsetname" => text("iso_1"),
-        "sqlsortorder" => TinyInt(0),
-        "sqlsortordername" => text("bin_ascii_8"),
+        "sqlsortorder" => TinyInt(52),
+        "sqlsortordername" => text("nocase_iso"),
         _ => Null,
     }
 }
@@ -209,7 +209,7 @@ fn database(row: &DatabaseRow, property: &str) -> Property {
     let text = |value: &str| Text(value.into());
     match property.to_ascii_lowercase().as_str() {
         "collation" => text(COLLATION),
-        "comparisonstyle" => Int(0),
+        "comparisonstyle" => Int(196609),
         "isautocreatestatistics" | "isautoupdatestatistics" => Int(1),
         "isautoclose"
         | "isautocreatestatisticsincremental"
@@ -238,7 +238,7 @@ fn database(row: &DatabaseRow, property: &str) -> Property {
         | "isxtpsupported" => Int(0),
         "lcid" => Int(1033),
         "recovery" => Text(row.recovery.clone()),
-        "sqlsortorder" => TinyInt(0),
+        "sqlsortorder" => TinyInt(52),
         "status" => Text(row.state.clone()),
         "updateability" => text(if row.read_only {
             "READ_ONLY"
