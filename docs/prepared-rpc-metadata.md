@@ -241,3 +241,22 @@ The valid window calls have fixed FloatN(8) declarations even for empty input;
 source/native validation precedes metadata enrichment. Conditional expression
 provenance remains computed, while direct and derived ranking outputs retain
 their captured derived flags. No window operand is evaluated for metadata.
+
+The `--grouping-order` mode retains ten integral conditional/grouping profiles
+in two fresh SQL Server containers. Full raw SHA256 is
+`1ea40d233fa2133498b3f35bc3a1a26e684062db6c46a327824d0e9ccbf38d08`.
+All twenty complete preparation/unprepare responses are embedded verbatim,
+including parameter-case and qualified CASE identity, COALESCE/ISNULL,
+alias/direct-expression/ordinal sorts, ROLLUP, and row-constant controls.
+SQL Server retains ORDER for both captured row-constant conditional controls;
+no runtime parameter value is used to decide it. The folded CASE profile also
+retains its fixed INT descriptor and flags0; GROUPING has fixed TinyInt flags32.
+These controls preserve observed descriptor differences rather than assuming
+that all integral results use the same wire declaration.
+
+The deterministic `projection::order::expression_identity` helper compares a
+bounded scalar AST using explicit field and parameter identity without mutating
+its inputs or evaluating expressions. Unknown/ambiguous/alias declarations,
+opaque or volatile calls and nested query scopes return unknown. This identity
+proof does not establish a result type or authorize optimizer constant folding.
+The RPC adapter separately checks supported declarations and native binding.
