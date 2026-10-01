@@ -5,6 +5,7 @@
 //! `Cannot insert the value NULL into column 'c', table 'db.dbo.t'; column
 //! does not allow nulls. INSERT fails.` (`UPDATE fails.` for an UPDATE).
 use super::super::{Execution, Parameter, Partial, Session, reenter};
+use crate::query_error::{FailedQuery, attach_context};
 use anyhow::Result;
 use msduck_core::diagnostic::SqlError;
 use sqlparser::ast::{Statement, TableFactor, TableObject};
@@ -21,12 +22,12 @@ pub(super) fn execute(
 ) -> Result<Option<Execution>> {
     let (verb, target) = match statement {
         Statement::Insert(insert) => match &insert.table {
-            TableObject::TableName(name) => ("INSERT", Some(name)),
-            _ => ("INSERT", None),
+            TableObject::TableName(name) => (Verb::Insert, Some(name)),
+            _ => (Verb::Insert, None),
         },
         Statement::Update(update) => match &update.table.relation {
-            TableFactor::Table { name, .. } => ("UPDATE", Some(name)),
-            _ => ("UPDATE", None),
+            TableFactor::Table { name, .. } => (Verb::Update, Some(name)),
+            _ => (Verb::Update, None),
         },
         _ => return Ok(None),
     };
@@ -43,10 +44,33 @@ pub(super) fn execute(
     }
 }
 
+#[derive(Clone, Copy)]
+enum Verb {
+    Insert,
+    Update,
+}
+
+impl Verb {
+    fn text(self) -> &'static str {
+        match self {
+            Verb::Insert => "INSERT",
+            Verb::Update => "UPDATE",
+        }
+    }
+
+    /// The TDS DONE command of the statement.
+    fn command(self) -> u16 {
+        match self {
+            Verb::Insert => 0xc3,
+            Verb::Update => 0xc5,
+        }
+    }
+}
+
 fn translate(
     session: &Session,
     error: anyhow::Error,
-    verb: &str,
+    verb: Verb,
     schema: Option<&str>,
 ) -> anyhow::Error {
     // A feature's partial output keeps its tokens; only the error changes.
@@ -82,14 +106,25 @@ fn translate(
         515,
         2,
         format!(
-            "Cannot insert the value NULL into column '{column}', table '{qualified}'; column does not allow nulls. {verb} fails."
+            "Cannot insert the value NULL into column '{column}', table '{qualified}'; column does not allow nulls. {} fails.",
+            verb.text()
         ),
     );
     // Keep every context the engine attached (failed-query metadata,
     // OUTPUT sink state) and add the SqlError, which the client sees. The
     // backend text stays the error's display, which message-based
     // classification (515) reads.
-    error.context(diagnostic).context(message)
+    let attached = error.downcast_ref::<FailedQuery>().is_some()
+        || error.downcast_ref::<crate::output_sink::Failed>().is_some();
+    let translated = error.context(diagnostic).context(message);
+    if attached {
+        return translated;
+    }
+    // Like 2628, the violation terminates the DML statement: the failed
+    // query's command makes the engine report 3621 "The statement has been
+    // terminated." and complete the statement with its INSERT or UPDATE
+    // command, as SQL Server does.
+    attach_context(translated, Vec::new(), verb.command())
 }
 
 /// Split DuckDB's `table.column` against the current database's catalog,

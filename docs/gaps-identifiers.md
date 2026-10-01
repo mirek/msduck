@@ -75,15 +75,17 @@ Two layers make this work:
   at execution with `__msduck_current_db_name()` rather than taking it from
   its callers. This covers INSERT and UPDATE, inside and outside explicit
   transactions.
-- **515** now uses SQL Server's text and state 2:
-  `Cannot insert the value NULL into column 'id', table 'foo.dbo.items';
-  column does not allow nulls. INSERT fails.` (`UPDATE fails.` for an
-  UPDATE). DuckDB's constraint message names only `table.column`; the schema
-  comes from the current database's catalog, preferring the statement's own
-  schema. A table variable is named bare (`table '@t'`), as SQL Server does,
-  and a temporary table as `tempdb.dbo.#name`. The error number, batch continuation, TRY/CATCH and XACT_ABORT
-  handling are unchanged. The backend text remains the error's display, so
-  message-based classification still yields 515.
+- **515** now uses SQL Server's text and state 2: `Cannot insert the value
+  NULL into column 'id', table 'foo.dbo.items'; column does not allow nulls.
+  INSERT fails.` (`UPDATE fails.` for an UPDATE), followed like SQL Server
+  by 3621 "The statement has been terminated." and the statement's
+  completion. DuckDB's constraint message names only `table.column`; the
+  schema comes from the current database's catalog, preferring the
+  statement's own schema. A table variable is named bare (`table '@t'`), as
+  SQL Server does, and a temporary table as `tempdb.dbo.#name`. The error
+  number, batch continuation, TRY/CATCH and XACT_ABORT handling are
+  unchanged. The backend text remains the error's display, so message-based
+  classification still yields 515.
 - **2627** and **2601** name the object as `'dbo.items'` in SQL Server, with
   no database part, so they never carried the wrong database. Their SQL
   Server text comes from the keys feature; the replay differs only in the

@@ -221,6 +221,23 @@ fn not_null_violation_names_the_current_database() {
             "Cannot insert the value NULL into column 'id', table 'foo.dbo.items'; column does not allow nulls. INSERT fails.".into()
         )
     );
+    // SQL Server follows the error with 3621 "The statement has been
+    // terminated." and completes the INSERT.
+    let (tokens, _) = session.batch_response(
+        "INSERT INTO items(id) VALUES (NULL)",
+        &HashMap::new(),
+        false,
+        None,
+    );
+    let terminated: Vec<u8> = "The statement has been terminated."
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    assert!(
+        tokens
+            .windows(terminated.len())
+            .any(|w| w == terminated.as_slice())
+    );
     ok(&mut session, "INSERT INTO items(id) VALUES (1)");
     assert_eq!(
         fails(&mut session, "UPDATE items SET id = NULL"),
