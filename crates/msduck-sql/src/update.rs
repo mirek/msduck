@@ -15,21 +15,22 @@ pub const OUTER_TARGET: &str = "__msduck_outer_target";
 pub fn canonicalize(statement: &mut Statement) -> Result<()> {
     struct Resolve;
     impl VisitorMut for Resolve {
-        type Break = String;
+        // Keep the error value, so SQL Server numbers such as 8154 survive.
+        type Break = anyhow::Error;
         fn pre_visit_statement(
             &mut self,
             statement: &mut Statement,
-        ) -> std::ops::ControlFlow<String> {
+        ) -> std::ops::ControlFlow<anyhow::Error> {
             if let Statement::Update(update) = statement
                 && let Err(error) = resolve_alias(update)
             {
-                return std::ops::ControlFlow::Break(error.to_string());
+                return std::ops::ControlFlow::Break(error);
             }
             std::ops::ControlFlow::Continue(())
         }
     }
     if let std::ops::ControlFlow::Break(error) = statement.visit(&mut Resolve) {
-        anyhow::bail!(error);
+        return Err(error);
     }
     Ok(())
 }
@@ -114,6 +115,47 @@ pub(crate) fn outer_target(
     sources: &[TableWithJoins],
     operation: &str,
 ) -> Result<Option<TableFactor>> {
+    let Some(found) = locate(table, sources, operation)? else {
+        return Ok(None);
+    };
+    let flat = sources[found.tree].joins.iter().all(|join| {
+        matches!(
+            &join.join_operator,
+            JoinOperator::Join(_) | JoinOperator::Inner(_) | JoinOperator::CrossJoin(_)
+        )
+    });
+    if flat && !found.nested {
+        return Ok(None);
+    }
+    anyhow::ensure!(
+        table.joins.is_empty(),
+        "unsupported joined {operation} target"
+    );
+    Ok(Some(found.relation))
+}
+
+/// Where the statement's target appears in its FROM trees.
+#[derive(Clone)]
+struct Located {
+    /// Index of the FROM tree that contains the target.
+    tree: usize,
+    /// Whether the target sits inside a parenthesized join.
+    nested: bool,
+    relation: TableFactor,
+}
+
+/// Find the FROM relation that is the statement's target, as SQL Server
+/// binds it: a relation whose alias is the one-part target name, or an
+/// unaliased relation spelled like the target. Otherwise the single reference
+/// to the same table under any alias or qualification; among several, the
+/// one unaliased reference, or error 8154. Without a catalog, two names
+/// denote the same table when their last parts match and any schema parts
+/// both give agree, taking `dbo` for a missing schema.
+fn locate(
+    table: &TableWithJoins,
+    sources: &[TableWithJoins],
+    operation: &str,
+) -> Result<Option<Located>> {
     let TableFactor::Table {
         name: target,
         alias: None,
@@ -122,51 +164,61 @@ pub(crate) fn outer_target(
     else {
         return Ok(None);
     };
-    let mut found = vec![];
-    let mut outer = false;
-    for source in sources {
-        let flat = source.joins.iter().all(|join| {
-            matches!(
-                &join.join_operator,
-                JoinOperator::Join(_) | JoinOperator::Inner(_) | JoinOperator::CrossJoin(_)
-            )
-        });
-        let before = found.len();
-        search(target, &source.relation, false, &mut found);
+    let mut relations = vec![];
+    for (index, source) in sources.iter().enumerate() {
+        collect(index, &source.relation, false, &mut relations);
         for join in &source.joins {
-            search(target, &join.relation, false, &mut found);
-        }
-        if found.len() > before && (!flat || found[before..].iter().any(|(nested, _)| *nested)) {
-            outer = true;
+            collect(index, &join.relation, false, &mut relations);
         }
     }
-    if !outer {
-        return Ok(None);
+    let named = relations
+        .iter()
+        .filter(|found| names_target(target, &found.relation))
+        .collect::<Vec<_>>();
+    if !named.is_empty() {
+        anyhow::ensure!(named.len() == 1, "ambiguous {operation} target in FROM");
+        return Ok(named.into_iter().next().map(Located::clone));
     }
-    anyhow::ensure!(found.len() == 1, "ambiguous {operation} target in FROM");
-    anyhow::ensure!(
-        table.joins.is_empty(),
-        "unsupported joined {operation} target"
-    );
-    Ok(found.pop().map(|(_, relation)| relation))
+    let same = relations
+        .iter()
+        .filter(|found| same_table(target, &found.relation))
+        .collect::<Vec<_>>();
+    match same.as_slice() {
+        [] => Ok(None),
+        [found] => Ok(Some((*found).clone())),
+        several => {
+            let unaliased = several
+                .iter()
+                .filter(|found| matches!(found.relation, TableFactor::Table { alias: None, .. }))
+                .collect::<Vec<_>>();
+            match unaliased.as_slice() {
+                [found] => Ok(Some((**found).clone())),
+                _ => Err(msduck_core::diagnostic::SqlError::new(
+                    8154,
+                    1,
+                    format!("The table '{target}' is ambiguous."),
+                )
+                .into()),
+            }
+        }
+    }
 }
 
-fn search(
-    target: &ObjectName,
-    relation: &TableFactor,
-    nested: bool,
-    found: &mut Vec<(bool, TableFactor)>,
-) {
+fn collect(tree: usize, relation: &TableFactor, nested: bool, found: &mut Vec<Located>) {
     match relation {
         TableFactor::NestedJoin {
             table_with_joins, ..
         } => {
-            search(target, &table_with_joins.relation, true, found);
+            collect(tree, &table_with_joins.relation, true, found);
             for join in &table_with_joins.joins {
-                search(target, &join.relation, true, found);
+                collect(tree, &join.relation, true, found);
             }
         }
-        relation if names_target(target, relation) => found.push((nested, relation.clone())),
+        TableFactor::Table { args: None, .. } => found.push(Located {
+            tree,
+            nested,
+            relation: relation.clone(),
+        }),
         _ => {}
     }
 }
@@ -188,6 +240,34 @@ fn names_target(target: &ObjectName, relation: &TableFactor) -> bool {
                 matches!((a.as_ident(), b.as_ident()), (Some(a), Some(b)) if a.value.eq_ignore_ascii_case(&b.value))
             })
     }
+}
+
+/// Whether two table names denote the same table (see [`locate`]).
+fn same_table(target: &ObjectName, relation: &TableFactor) -> bool {
+    let TableFactor::Table { name, .. } = relation else {
+        return false;
+    };
+    let parts = |name: &ObjectName| {
+        name.0
+            .iter()
+            .map(|part| part.as_ident().map(|id| id.value.to_lowercase()))
+            .collect::<Option<Vec<_>>>()
+    };
+    let (Some(a), Some(b)) = (parts(target), parts(name)) else {
+        return false;
+    };
+    let schema = |parts: &[String]| match parts {
+        [_] => Some("dbo".to_string()),
+        [.., schema, _] => Some(schema.clone()),
+        [] => None,
+    };
+    let database = |parts: &[String]| (parts.len() == 3).then(|| parts[0].clone());
+    a.last() == b.last()
+        && schema(&a) == schema(&b)
+        && match (database(&a), database(&b)) {
+            (Some(a), Some(b)) => a == b,
+            _ => true,
+        }
 }
 
 /// The base table of a FROM relation under a new alias, without hints.
@@ -256,36 +336,22 @@ pub(crate) fn resolve_from_target(
     selection: &mut Option<Expr>,
     operation: &str,
 ) -> Result<()> {
-    let TableFactor::Table {
-        name: target,
-        alias: None,
-        ..
-    } = &table.relation
+    let Some(Located {
+        tree: index,
+        nested,
+        relation,
+    }) = locate(table, sources, operation)?
     else {
         return Ok(());
     };
-    let matches = |relation: &TableFactor| names_target(target, relation);
-    let found = sources
-        .iter()
-        .enumerate()
-        .flat_map(|(index, source)| {
-            std::iter::once(&source.relation)
-                .chain(source.joins.iter().map(|join| &join.relation))
-                .filter(|relation| matches(relation))
-                .map(move |relation| (index, relation.clone()))
-        })
-        .collect::<Vec<_>>();
-    if found.is_empty() {
-        return Ok(());
-    }
-    anyhow::ensure!(found.len() == 1, "ambiguous {operation} target in FROM");
+    anyhow::ensure!(!nested, "unsupported nested {operation} target");
     anyhow::ensure!(
         table.joins.is_empty(),
         "unsupported joined {operation} target"
     );
-    let (index, relation) = &found[0];
+    let matches = |candidate: &TableFactor| *candidate == relation;
     let mut predicates = Vec::new();
-    for join in &sources[*index].joins {
+    for join in &sources[index].joins {
         let constraint = match &join.join_operator {
             JoinOperator::Join(c) | JoinOperator::Inner(c) | JoinOperator::CrossJoin(c) => c,
             _ => anyhow::bail!("unsupported outer/lateral join in {operation} target tree"),
@@ -296,7 +362,7 @@ pub(crate) fn resolve_from_target(
             _ => anyhow::bail!("unsupported {operation} join constraint"),
         }
     }
-    let entry = sources.remove(*index);
+    let entry = sources.remove(index);
     let remaining = std::iter::once(entry.relation)
         .chain(entry.joins.into_iter().map(|j| j.relation))
         .filter(|candidate| !matches(candidate))
@@ -305,8 +371,8 @@ pub(crate) fn resolve_from_target(
             joins: vec![],
         })
         .collect::<Vec<_>>();
-    sources.splice(*index..*index, remaining);
-    table.relation = relation.clone();
+    sources.splice(index..index, remaining);
+    table.relation = relation;
     for predicate in predicates {
         *selection = Some(match selection.take() {
             Some(previous) => Expr::BinaryOp {
@@ -400,6 +466,54 @@ mod tests {
             .map(|a| a.target.to_string())
             .collect::<Vec<_>>();
         assert_eq!(targets, ["value", "dbo.t.name", "s.other", "value"]);
+    }
+
+    #[test]
+    fn table_named_targets_bind_to_their_single_reference() {
+        // An aliased or differently qualified reference to the target table.
+        assert_eq!(
+            canonical("UPDATE items SET value = 0 FROM items t LEFT JOIN foo s ON s.id = t.id WHERE s.id IS NULL").unwrap(),
+            "UPDATE items AS __msduck_outer_target SET value = 0 FROM items t LEFT JOIN foo s ON s.id = t.id WHERE __msduck_outer_target.rowid = t.rowid AND (s.id IS NULL)"
+        );
+        assert_eq!(
+            canonical(
+                "UPDATE dbo.items SET value = 0 FROM items LEFT JOIN foo s ON s.id = items.id"
+            )
+            .unwrap(),
+            "UPDATE items AS __msduck_outer_target SET value = 0 FROM items LEFT JOIN foo s ON s.id = items.id WHERE __msduck_outer_target.rowid = items.rowid"
+        );
+        // The same rule applies to flat inner trees.
+        assert_eq!(
+            canonical("UPDATE items SET value = 0 FROM items t JOIN foo s ON s.id = t.id").unwrap(),
+            "UPDATE items t SET value = 0 FROM foo s WHERE s.id = t.id"
+        );
+        // Several references: the unaliased one, else 8154.
+        assert_eq!(
+            canonical(
+                "UPDATE items SET value = 0 FROM items LEFT JOIN items p ON p.id = items.id - 1"
+            )
+            .unwrap(),
+            "UPDATE items AS __msduck_outer_target SET value = 0 FROM items LEFT JOIN items p ON p.id = items.id - 1 WHERE __msduck_outer_target.rowid = items.rowid"
+        );
+        let error = canonical(
+            "UPDATE items SET value = 0 FROM items t LEFT JOIN items u ON u.id = t.id + 1",
+        )
+        .unwrap_err();
+        let error = error
+            .downcast_ref::<msduck_core::diagnostic::SqlError>()
+            .unwrap();
+        assert_eq!(
+            (error.number, error.message.as_str()),
+            (8154, "The table 'items' is ambiguous.")
+        );
+        // Other schemas are other tables.
+        assert_eq!(
+            canonical(
+                "UPDATE items SET value = 0 FROM sales.items t LEFT JOIN foo s ON s.id = t.id"
+            )
+            .unwrap(),
+            "UPDATE items SET value = 0 FROM sales.items t LEFT JOIN foo s ON s.id = t.id"
+        );
     }
 
     #[test]

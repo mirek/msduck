@@ -79,6 +79,13 @@ const cases = [
   ['unbound qualifier', tables, 'UPDATE t SET value = nosuch.value FROM items t LEFT JOIN foo s ON s.id = t.id;'],
   ['delete output deleted rows', tables, 'DELETE t OUTPUT deleted.id, deleted.value FROM items t LEFT JOIN foo s ON s.id = t.id WHERE s.id IS NULL;'],
   ['output into', tables, "UPDATE t SET value = ISNULL(s.value, 0) OUTPUT inserted.id + 100, inserted.name INTO bar(id, label) FROM items t LEFT JOIN foo s ON s.id = t.id WHERE s.id IS NULL;", items + ' SELECT id, label FROM bar ORDER BY id;'],
+  // A target named by its table binds to the one aliased or differently
+  // qualified reference to that table in FROM.
+  ['table-named target with aliased from', tables, 'UPDATE items SET value = 0 FROM items t LEFT JOIN foo s ON s.id = t.id WHERE s.id IS NULL;'],
+  ['table-named delete with aliased from', tables, 'DELETE items FROM items t LEFT JOIN foo s ON s.id = t.id WHERE s.id IS NULL;'],
+  ['schema-qualified target', tables, 'UPDATE dbo.items SET value = ISNULL(s.value, 0) FROM items LEFT JOIN foo s ON s.id = items.id;'],
+  ['schema-qualified source', tables, 'DELETE items FROM dbo.items LEFT JOIN foo s ON s.id = items.id WHERE s.id IS NULL;'],
+  ['ambiguous table-named target', tables, 'UPDATE items SET value = 0 FROM items t LEFT JOIN items u ON u.id = t.id + 1;'],
 ].map(([name, setup, dml, readback = items]) => ({ name, setup, dml: dml + ' SELECT @@ROWCOUNT AS row_count;', readback }))
 
 const keep = result => canonical({

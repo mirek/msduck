@@ -21,6 +21,18 @@ any of these:
   join) changes only where it matched. ON predicates stay in their join and
   WHERE filters the joined rows, so `WHERE source.id IS NULL` gives an
   anti-join DELETE.
+- **Target binding.** The target binds the way SQL Server binds it:
+  - to the FROM relation whose alias is the target name;
+  - to an unaliased relation spelled like the target;
+  - otherwise to the single reference to the same table under another alias
+    or qualification, so `UPDATE items ... FROM items t LEFT JOIN ...`
+    changes `t`.
+
+  Among several such references SQL Server takes the unaliased one, and
+  fails with 8154 when there is none. This rule now also applies to flat
+  inner-join trees, which before fell through to a cross join. Without a
+  catalog, two names denote the same table when their last parts match and
+  their schemas agree, with `dbo` assumed for a missing schema.
 - **Duplicate matches.** A target row matched by several joined rows changes
   once. UPDATE uses the values of one matching row, which SQL Server leaves
   unspecified. `@@ROWCOUNT` and the DONE count give the number of distinct
@@ -35,8 +47,9 @@ any of these:
   - table hints;
   - CTE sources;
   - variables and RPC parameters.
-- **Errors.** A column found in both the target and a source fails with 209,
-  an unknown column with 207 and an unknown qualifier with 4104. A runtime
+- **Errors.** In UPDATE SET expressions, a column found in both the target
+  and a source fails with 209, an unknown column with 207 and an unknown
+  qualifier with 4104. A runtime
   error such as divide by zero (8134) ends the statement with the rows
   unchanged. The batch continues and TRY/CATCH catches the error.
 - **Transactions.** A ROLLBACK restores the rows.
@@ -77,7 +90,7 @@ The changes follow the extension hooks in docs/extension-hooks.md:
 
 ## Evidence
 
-- `reference/gaps-outer_dml.json` holds 41 programs captured from
+- `reference/gaps-outer_dml.json` holds 46 programs captured from
   `mcr.microsoft.com/mssql/server:2022-latest` (16.0.4236.2) by
   `scripts/capture-gaps-outer_dml.mjs`. Each case records its setup, the DML
   batch with `SELECT @@ROWCOUNT`, and a readback, with rows, error numbers and
@@ -91,6 +104,22 @@ The changes follow the extension hooks in docs/extension-hooks.md:
   readbacks.
 
 ## Remaining limits
+
+- Unknown or ambiguous names in WHERE or ON clauses fail with the backend's
+  binder text and number 50000, not 207, 209 or 4104. The same is true of
+  SELECT and flat joins elsewhere in msduck. For DELETE the text can name
+  the internal alias `__msduck_outer_target`.
+- An outer-tree UPDATE uses the joined OUTPUT stages, so it inherits their
+  target limits even without OUTPUT, and the messages mention OUTPUT. These
+  targets fail explicitly:
+  - tables with computed (generated) columns;
+  - views and CTE targets;
+  - tables with a column named `rowid`.
+- OUTPUT metadata can mark a column nullable when SQL Server does not. This
+  happens when a parenthesized join contains a RIGHT or FULL join and sits
+  under an inner join. Rows are unaffected.
+- An outer-tree DELETE of a table with a stored column named `rowid` fails
+  explicitly. The column would shadow the backend row identity.
 
 - Preparing (sp_prepare) an outer-tree UPDATE whose SET or WHERE uses an
   unqualified target column fails with a backend binder error. Preparation

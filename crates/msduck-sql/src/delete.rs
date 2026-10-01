@@ -6,18 +6,19 @@ use std::ops::ControlFlow;
 pub fn canonicalize(statement: &mut Statement) -> Result<()> {
     struct Resolve;
     impl VisitorMut for Resolve {
-        type Break = String;
-        fn pre_visit_statement(&mut self, statement: &mut Statement) -> ControlFlow<String> {
+        // Keep the error value, so SQL Server numbers such as 8154 survive.
+        type Break = anyhow::Error;
+        fn pre_visit_statement(&mut self, statement: &mut Statement) -> ControlFlow<anyhow::Error> {
             if let Statement::Delete(delete) = statement
                 && let Err(error) = resolve(delete)
             {
-                return ControlFlow::Break(error.to_string());
+                return ControlFlow::Break(error);
             }
             ControlFlow::Continue(())
         }
     }
     if let ControlFlow::Break(error) = statement.visit(&mut Resolve) {
-        anyhow::bail!(error);
+        return Err(error);
     }
     Ok(())
 }

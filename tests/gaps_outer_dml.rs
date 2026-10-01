@@ -395,6 +395,48 @@ fn errors_keep_sql_server_numbers_and_leave_rows_unchanged() {
 }
 
 #[test]
+fn table_named_targets_bind_to_their_aliased_reference() {
+    let unmatched = rows(&[
+        (1, Some(10), "a"),
+        (2, Some(0), "bb"),
+        (3, Some(30), "ccc"),
+        (4, Some(0), "dddd"),
+    ]);
+    assert_eq!(
+        changed(
+            "UPDATE items SET value = 0 FROM items t LEFT JOIN foo s ON s.id = t.id WHERE s.id IS NULL"
+        ),
+        (2, unmatched)
+    );
+    assert_eq!(
+        changed("DELETE items FROM items t LEFT JOIN foo s ON s.id = t.id WHERE s.id IS NULL"),
+        (2, rows(&[(1, Some(10), "a"), (3, Some(30), "ccc")]))
+    );
+    assert_eq!(
+        failed("UPDATE items SET value = 0 FROM items t LEFT JOIN items u ON u.id = t.id + 1"),
+        (8154, rows(&ORIGINAL))
+    );
+}
+
+#[test]
+fn delete_refuses_a_stored_rowid_column() {
+    let (_server, mut session) = session();
+    assert!(run(
+        &mut session,
+        "CREATE TABLE r(rowid INT NOT NULL, id INT NOT NULL); INSERT INTO r VALUES (7, 1), (7, 2), (8, 3)"
+    ));
+    assert!(!run(
+        &mut session,
+        "DELETE t FROM r t LEFT JOIN foo s ON s.id = t.id WHERE s.id IS NULL"
+    ));
+    let count: i64 = session
+        .db
+        .query_row("SELECT count(*) FROM r", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(count, 3);
+}
+
+#[test]
 fn transactions_roll_back_outer_join_writes() {
     let (_server, mut session) = session();
     assert!(run(
@@ -422,7 +464,7 @@ fn reference_capture_matches_the_session_readback() {
     let reference: Value =
         serde_json::from_str(include_str!("../reference/gaps-outer_dml.json")).unwrap();
     let cases = reference["cases"].as_array().unwrap();
-    assert_eq!(cases.len(), 41);
+    assert_eq!(cases.len(), 46);
     for case in cases {
         let name = case["name"].as_str().unwrap();
         let server = Server::open(":memory:").unwrap();

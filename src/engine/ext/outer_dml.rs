@@ -15,7 +15,8 @@ use super::super::{Execution, Parameter, Session};
 use super::Feature;
 use anyhow::Result;
 use sqlparser::ast::{
-    Delete, OutputClause, SetExpr, Statement, Update, helpers::attached_token::AttachedToken,
+    Delete, FromTable, OutputClause, SetExpr, Statement, TableFactor, Update,
+    helpers::attached_token::AttachedToken,
 };
 use std::collections::HashMap;
 
@@ -31,7 +32,7 @@ impl Feature for Hooks {
 
     fn statement(
         &self,
-        _session: &mut Session,
+        session: &mut Session,
         statement: &mut Statement,
         _parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Option<Execution>> {
@@ -55,10 +56,42 @@ impl Feature for Hooks {
             let Statement::Delete(canonical) = canonical else {
                 unreachable!()
             };
+            shadows_row_identity(session, &canonical)?;
             *delete = canonical;
         }
         Ok(None)
     }
+}
+
+/// The canonical DELETE matches rows by DuckDB's `rowid`, which a stored
+/// column of that name would shadow; refuse instead of deleting by its values.
+/// (The UPDATE stages refuse such targets the same way.)
+fn shadows_row_identity(session: &Session, delete: &Delete) -> Result<()> {
+    let (FromTable::WithFromKeyword(targets) | FromTable::WithoutKeyword(targets)) = &delete.from;
+    let Some(TableFactor::Table { name, .. }) = targets.first().map(|target| &target.relation)
+    else {
+        return Ok(());
+    };
+    let parts = name
+        .0
+        .iter()
+        .filter_map(|part| part.as_ident().map(|id| id.value.as_str()))
+        .collect::<Vec<_>>();
+    let (schema, table) = match parts.as_slice() {
+        [table] => ("dbo", *table),
+        [.., schema, table] => (*schema, *table),
+        [] => return Ok(()),
+    };
+    let shadowed: i64 = session.db.query_row(
+        "SELECT count(*) FROM information_schema.columns WHERE table_catalog=current_database() AND table_schema=? COLLATE NOCASE AND table_name=? COLLATE NOCASE AND column_name='rowid' COLLATE NOCASE",
+        [schema, table],
+        |row| row.get(0),
+    )?;
+    anyhow::ensure!(
+        shadowed == 0,
+        "DELETE with an outer join in its target tree cannot target a table with a column named rowid"
+    );
+    Ok(())
 }
 
 /// The DELETE of a plain or CTE-wrapped DELETE statement.

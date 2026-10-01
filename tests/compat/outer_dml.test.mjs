@@ -20,7 +20,7 @@ const reset = 'DROP TABLE IF EXISTS items; DROP TABLE IF EXISTS foo; DROP TABLE 
 
 test('outer-join UPDATE and DELETE match the SQL Server capture', async t => {
   const connection = await start(t)
-  assert.equal(reference.cases.length, 41)
+  assert.equal(reference.cases.length, 46)
   // Every case runs, so one report lists all differences.
   const differences = []
   for (const entry of reference.cases) {
