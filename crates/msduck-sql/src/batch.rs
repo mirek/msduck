@@ -18,9 +18,12 @@ pub fn parse(sql: &str) -> Result<Vec<Statement>> {
             return Ok(statements);
         }
         ensure!(statements.len() < 10000, "too many statements in batch");
-        let mut statement = parser
-            .parse_statement()
-            .map_err(crate::drop_index_syntax::parse_error)?;
+        let mut statement = parser.parse_statement().map_err(|error| {
+            match crate::dialect::ext::procedures::diagnostic(&error) {
+                Some(diagnostic) => diagnostic.into(),
+                None => crate::drop_index_syntax::parse_error(error),
+            }
+        })?;
         explicit_defaults(&mut statement);
         crate::variant_cast::mark(&mut statement);
         crate::window_frame::validate_syntax(&statement).map_err(anyhow::Error::msg)?;
@@ -41,11 +44,62 @@ pub fn parse(sql: &str) -> Result<Vec<Statement>> {
     }
 }
 
+/// The names and types of an sp_executesql parameter declaration list.
 pub fn parameter_declarations(source: &str) -> Result<Vec<(String, SqlType)>> {
+    Ok(declared_parameters(source)?
+        .into_iter()
+        .map(|parameter| (parameter.name, parameter.data_type))
+        .collect())
+}
+
+/// One sp_executesql parameter declaration: `@name type [OUT | OUTPUT]`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeclaredParameter {
+    /// Lower-cased name, including `@`.
+    pub name: String,
+    pub data_type: SqlType,
+    pub output: bool,
+}
+
+/// Parse an sp_executesql parameter declaration list such as
+/// `@a int, @b nvarchar(10) OUTPUT`. `OUT`/`OUTPUT` follow a type; the list
+/// is otherwise a DECLARE list without initializers.
+pub fn declared_parameters(source: &str) -> Result<Vec<DeclaredParameter>> {
+    use sqlparser::tokenizer::Token;
     if source.trim().is_empty() {
         return Ok(Vec::new());
     }
-    let statements = parse(&format!("DECLARE {source}"))?;
+    // Remove each OUT/OUTPUT keyword that ends a declaration, recording which
+    // declaration it belonged to, then parse the rest as DECLARE.
+    let tokens = crate::dialect::tokenize(source)?;
+    let mut outputs = vec![false];
+    let mut depth = 0usize;
+    let mut kept = String::new();
+    let mut last = 0;
+    for token in &tokens {
+        match &token.token {
+            Token::LParen => depth += 1,
+            Token::RParen => depth = depth.saturating_sub(1),
+            Token::Comma if depth == 0 => outputs.push(false),
+            Token::Word(word)
+                if depth == 0
+                    && word.quote_style.is_none()
+                    && (word.value.eq_ignore_ascii_case("OUTPUT")
+                        || word.value.eq_ignore_ascii_case("OUT")) =>
+            {
+                let output = outputs.last_mut().expect("one declaration");
+                ensure!(!*output, "invalid parameter declarations");
+                *output = true;
+                let start = crate::dialect::ext::procedures::offset(source, token.span.start);
+                let end = crate::dialect::ext::procedures::offset(source, token.span.end);
+                kept.push_str(&source[last..start]);
+                last = end;
+            }
+            _ => {}
+        }
+    }
+    kept.push_str(&source[last..]);
+    let statements = parse(&format!("DECLARE {kept}"))?;
     ensure!(statements.len() == 1, "invalid RPC parameter declarations");
     let Statement::Declare { stmts } = &statements[0] else {
         bail!("invalid parameter declarations");
@@ -62,8 +116,19 @@ pub fn parameter_declarations(source: &str) -> Result<Vec<(String, SqlType)>> {
             .ok_or_else(|| anyhow::anyhow!("missing parameter type"))?;
         let kind = variable_type(kind)?;
         for name in &declaration.names {
-            result.push((name.value.to_lowercase(), kind));
+            result.push(DeclaredParameter {
+                name: name.value.to_lowercase(),
+                data_type: kind,
+                output: false,
+            });
         }
+    }
+    ensure!(
+        result.len() == outputs.len(),
+        "invalid parameter declarations"
+    );
+    for (parameter, output) in result.iter_mut().zip(outputs) {
+        parameter.output = output;
     }
     Ok(result)
 }
@@ -176,6 +241,23 @@ fn canonicalize_insert(statement: &mut Statement) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn declarations_accept_output_parameters() {
+        let declared =
+            declared_parameters("@a int, @B nvarchar(10) OUTPUT, @c decimal(5, 2) OUT").unwrap();
+        let shape: Vec<_> = declared
+            .iter()
+            .map(|p| (p.name.as_str(), p.output))
+            .collect();
+        assert_eq!(shape, [("@a", false), ("@b", true), ("@c", true)]);
+        assert_eq!(
+            parameter_declarations("@x int OUTPUT").unwrap(),
+            [("@x".to_string(), SqlType::Int)]
+        );
+        for invalid in ["@x int OUTPUT OUTPUT", "@x OUTPUT", "@x int = 1"] {
+            assert!(declared_parameters(invalid).is_err(), "{invalid}");
+        }
+    }
     #[test]
     fn semicolon_free_batches_do_not_split_literals_or_comments() {
         let statements=parse("SET NOCOUNT ON\nSET ANSI_NULLS ON\nSELECT N'a; SET NOCOUNT OFF' AS text; -- SELECT 2\nSELECT 3").unwrap();
