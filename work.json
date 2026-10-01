@@ -7966,6 +7966,23 @@
       "dependencies": [],
       "issue": 711,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdJmK"
+    },
+    {
+      "id": "column-catalog-client-expectations-v1",
+      "title": "Align column catalog client expectation with captured fixed scalar types",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility goal; first-party exact-head sys.columns legacy nullable-width expectation versus independently captured fixed metadata. Same worker/worktree/PR703. No external input.",
+      "issue": 712,
+      "scope": [
+        "tests/tedious.test.mjs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Verify the exact narrow empty sys.columns query in two fresh pinned ordinary SQL Server batch runs before changing its legacy nullable-width assertion. Preserve reference type and fixed/nullable length distinctions, complete raw data and all existing behavioral/catalog rollback assertions; no weak or normalized comparisons.",
+        "Only replace the obsolete scalar-width assertion with the independently captured type/length contract. Capture and complete public catalog comparisons remain in parent-owned files. Same worker/worktree/PR703; no engine.rs edits.",
+        "Focused catalog clients and final exact-head default clients plus workspace/audit/CI/review or authorized fallback under parent PR gates; same worker owns final merge and prompt registry/project/issue completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdJ3l"
     }
   ]
 }
