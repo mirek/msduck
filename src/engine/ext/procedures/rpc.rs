@@ -26,8 +26,11 @@ fn parameter_name(name: &str) -> bool {
         && chars.all(|c| c.is_alphanumeric() || matches!(c, '_' | '@' | '#' | '$'))
 }
 
-/// `EXEC name arguments`, each argument a synthetic variable. Arguments are
-/// parsed one at a time and kept in request order: an RPC may pass a
+/// `EXEC name arguments`, each argument a synthetic variable. The name is
+/// parsed as an object name and placed in the statement as such, never
+/// printed back into SQL text (printing loses the `]]` escape of a
+/// bracketed part). Arguments are parsed one at a time against a fixed
+/// placeholder name and kept in request order: an RPC may pass a
 /// positional argument after a named one (it binds by its ordinal), which
 /// the T-SQL grammar rejects (119).
 fn statement(name: &str, arguments: &[RpcArgument<'_>]) -> Result<Statement, SqlError> {
@@ -50,11 +53,10 @@ fn statement(name: &str, arguments: &[RpcArgument<'_>]) -> Result<Statement, Sql
     let parse = |sql: &str| -> Result<Statement, SqlError> {
         let mut statements = crate::engine::parse_batch(sql).map_err(sql_error)?;
         match (statements.pop(), statements.is_empty()) {
-            (Some(statement), true) => Ok(statement),
+            (Some(statement @ Statement::Execute { .. }), true) => Ok(statement),
             _ => Err(not_found()),
         }
     };
-    let mut call = parse(&format!("EXEC {object}"))?;
     let mut parameters = Vec::new();
     for (index, argument) in arguments.iter().enumerate() {
         let mut text = String::new();
@@ -80,7 +82,7 @@ fn statement(name: &str, arguments: &[RpcArgument<'_>]) -> Result<Statement, Sql
         let Statement::Execute {
             parameters: mut parsed,
             ..
-        } = parse(&format!("EXEC {object} {text}"))?
+        } = parse(&format!("EXEC __msduck_rpc_target {text}"))?
         else {
             return Err(not_found());
         };
@@ -89,11 +91,15 @@ fn statement(name: &str, arguments: &[RpcArgument<'_>]) -> Result<Statement, Sql
         }
         parameters.push(parsed.remove(0));
     }
+    let mut call = parse("EXEC __msduck_rpc_target")?;
     if let Statement::Execute {
-        parameters: target, ..
+        name: target,
+        parameters: values,
+        ..
     } = &mut call
     {
-        *target = parameters;
+        *target = Some(object);
+        *values = parameters;
     }
     // As the batch parser does: sp_set_session_context binds by position.
     let mut statements = vec![call];
@@ -263,6 +269,32 @@ mod tests {
             let error = statement(name, &[]).unwrap_err();
             assert_eq!(error.number, 2812, "{name}");
         }
+        // `]]` inside brackets is part of the name, which stays one
+        // identifier with no arguments of its own.
+        let escaped = statement(
+            "[sp_executesql]] N'DROP TABLE t' --]",
+            &[RpcArgument {
+                name: None,
+                value: &one,
+                output: false,
+                default: false,
+            }],
+        )
+        .unwrap();
+        let call = msduck_sql::dialect::ext::procedures::call(&escaped).unwrap();
+        let msduck_sql::dialect::ext::procedures::Target::Name(target) = call.target else {
+            panic!("expected a name");
+        };
+        assert_eq!(target.0.len(), 1);
+        assert_eq!(
+            target.0[0].as_ident().unwrap().value,
+            "sp_executesql] N'DROP TABLE t' --"
+        );
+        assert_eq!(call.arguments.len(), 1);
+        assert_eq!(
+            call.arguments[0].value.unwrap().to_string(),
+            "@__msduck_rpc_0"
+        );
         let argument = RpcArgument {
             name: Some("@a = 1; DROP TABLE t; --"),
             value: &one,

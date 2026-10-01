@@ -59,8 +59,9 @@ name or id) runs as the call `EXEC name arguments` would in a SQL batch.
 `Session::rpc_call` (`src/engine/ext/procedures/rpc.rs`) does this:
 
 - **The name** is parsed as a T-SQL object name: one to three parts,
-  quoted or not, case-insensitive. A name that does not parse, such as
-  `p; SELECT 1`, fails with 2812. The name never becomes SQL text.
+  quoted or not (`]]` escapes `]` inside brackets), case-insensitive. A
+  name that does not parse, such as `p; SELECT 1`, fails with 2812. The
+  parsed name goes into the statement as is; it never becomes SQL text.
 - **Arguments** are bound to synthetic caller variables typed as the RPC
   parameters. Values are never rendered as SQL. Arguments are passed in
   request order:
@@ -214,6 +215,7 @@ tokens:
   uses state 5.
 - After 266, RETURNSTATUS is always 0, even when the procedure returned
   another value.
+- 8179 for an unknown handle does not set `@@ERROR` for the next batch.
 - `SESSION_CONTEXT` of an nvarchar value still needs an explicit CAST
   (40515 otherwise). This is an existing limit, and a SQL batch has the
   same one.

@@ -247,20 +247,25 @@ fn argument(parameter: &RpcParameter) -> RpcArgument<'_> {
     }
 }
 
+/// A parameter name without `@` names the same parameter; an empty name
+/// stays positional.
+fn at_name(name: &str) -> String {
+    match name {
+        "" => String::new(),
+        name if name.starts_with('@') => name.to_owned(),
+        name => format!("@{name}"),
+    }
+}
+
 /// An RPC request naming procedure `name`.
 pub(super) fn call(
     session: &mut Session,
     name: &str,
     parameters: &[RpcParameter],
 ) -> Result<Vec<u8>> {
-    // A parameter name without `@` names the same parameter.
     let names: Vec<String> = parameters
         .iter()
-        .map(|parameter| match parameter.name.as_str() {
-            "" => String::new(),
-            name if name.starts_with('@') => name.to_owned(),
-            name => format!("@{name}"),
-        })
+        .map(|parameter| at_name(&parameter.name))
         .collect();
     let arguments: Vec<RpcArgument<'_>> = parameters
         .iter()
@@ -322,7 +327,19 @@ pub(super) fn execute_sql(
             default: false,
         },
     ];
-    arguments.extend(values.iter().map(|(_, parameter)| argument(parameter)));
+    let names: Vec<String> = values
+        .iter()
+        .map(|(_, parameter)| at_name(&parameter.name))
+        .collect();
+    arguments.extend(
+        values
+            .iter()
+            .zip(&names)
+            .map(|((_, parameter), name)| RpcArgument {
+                name: (!name.is_empty()).then_some(name.as_str()),
+                ..argument(parameter)
+            }),
+    );
     let result = session.rpc_call("sp_executesql", &arguments);
     let mut out = result.tokens;
     let handle_value = |out: &mut Vec<u8>| -> Result<()> {
