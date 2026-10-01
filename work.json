@@ -8453,7 +8453,7 @@
     {
       "id": "gaps-catalog-v1",
       "title": "Constraint, module and file catalogs, OBJECT_DEFINITION, sp_pkeys, sp_fkeys, sp_rename",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
       "scope": [
         "src/engine/ext/catalog.rs",
@@ -8856,7 +8856,7 @@
     {
       "id": "catalog-key-identities-v1",
       "title": "Persist key constraint identities through keys lifecycle",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner continuing goal in this session (2026-10-01): implement a fully functional SQL Server-compatible Rust server backed by DuckDB, plus the existing owner catalog workload authorization in gaps-catalog-v1 (#728). First-party code at76033e3 and approved gaps-keys-v1 done snapshot show the keys lifecycle needs a disjoint catalog integration companion. No external content is input.",
       "scope": [
         "src/engine/ext/keys/catalog.rs",
@@ -9081,6 +9081,34 @@
       "dependencies": [],
       "issue": 754,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PeNM8"
+    },
+    {
+      "id": "gaps-catalog-v2",
+      "title": "Constraint, module and file catalogs, OBJECT_DEFINITION, sp_pkeys, sp_fkeys, sp_rename (successor)",
+      "state": "ready",
+      "authorization": "Owner standing authorization for stale claims; successor of stale gaps-catalog-v1 and catalog-key-identities-v1 (evidence in the registry change), umbrella #710, issue #728.",
+      "scope": [
+        "src/engine/ext/catalog.rs",
+        "src/engine/ext/catalog/",
+        "crates/msduck-sql/src/dialect/ext/catalog.rs",
+        "crates/msduck-sql/src/dialect/ext/catalog/",
+        "tests/compat/catalog.test.mjs",
+        "tests/gaps_catalog.rs",
+        "docs/gaps-catalog.md",
+        "scripts/capture-gaps-catalog.mjs",
+        "reference/gaps-catalog.json",
+        "src/object_catalog.rs",
+        "src/engine/ext/keys/catalog.rs",
+        "src/engine/ext/keys/create_table.rs"
+      ],
+      "acceptance": [
+        "sys.foreign_keys, sys.foreign_key_columns, sys.key_constraints, sys.default_constraints, sys.check_constraints, sys.computed_columns, sys.triggers, sys.sql_modules, sys.procedures, sys.parameters and sys.database_files exist in every database with SQL Server column sets and rows for existing objects (reusing what the constraints, keys, procedures, functions, triggers and backup features already provide); internal temp-table backing tables are hidden from sys.tables/sys.objects/INFORMATION_SCHEMA.",
+        "OBJECT_DEFINITION returns module and view definitions; sp_pkeys, sp_fkeys (named and positional) return SQL Server's result shapes; sp_rename renames tables, columns, indexes, constraints and modules with SQL Server's caution message; key constraint identities persist through the keys lifecycle (CLUSTERED/NONCLUSTERED recorded).",
+        "Builds on the owner-authored work on stale branches work/gaps-catalog-v1 and work/catalog-key-identities-v1 where useful; tests assert rows against a SQL Server capture; AGENTS.md checks, PR, review or fallback, merge, completion."
+      ],
+      "dependencies": [],
+      "issue": 728,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQvA"
     }
   ]
 }
