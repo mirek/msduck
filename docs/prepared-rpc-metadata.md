@@ -477,3 +477,5 @@ names block ASCII absence inference rather than guessing Unicode name equality.
 The rule does not inspect rows, parameter values or volatile results and does
 not modify execution SQL. Verification of this new vector implementation is
 pending; quoted/Unicode/alias boundary failures remain recorded separately.
+
+The `--binding-name-limits PATH` capture records unquoted ASCII column and source names at 128 and 129 units. Two fresh pinned containers agree on ten records/run (SHA-256 `1cfe105d603cee8c48960adb0a5b8c018876a34bc9d9f365c29e95e2a964c7b9`). All eight complete controls are retained verbatim. Missing names at 128 units retain 207/208; overlong names retain 103, state4, severity15 and the original first128 units, followed by8180 and the complete failed-preparation framing. Recognition requires the original plain single-column/no-filter AST, native report and explicit catalog to agree. Combined overlong names, filters or projections remain unknown rather than receiving fabricated ordinary binding errors. Verification of the new name-limit change is pending.

@@ -1119,12 +1119,36 @@ fn simple_source_binding_errors(
     if plain.as_ref() != query {
         return None;
     }
+    // SQL Server rejects an overlong identifier before ordinary name binding.
+    // The captured ASCII family has identical byte and UTF-16 lengths. Other
+    // shapes/precedence combinations remain unknown rather than becoming 207/208.
+    let overlong_error = |id: &Ident| {
+        msduck_core::diagnostic::SqlError::syntax(
+            103,
+            4,
+            format!(
+                "The identifier that starts with '{}' is too long. Maximum length is 128.",
+                &id.value[..128]
+            ),
+        )
+    };
     let fields = catalog.tables.get(&name.to_string())?;
     if let Some((native, _)) = message
         .strip_prefix("Catalog Error: Table with name ")
         .and_then(|rest| rest.split_once(" does not exist!"))
     {
+        if columns.iter().any(|id| id.value.len() > 128)
+            || filter.is_some_and(|id| id.value.len() > 128)
+        {
+            return None;
+        }
         if native == source.value && fields.is_empty() {
+            if source.value.len() > 128 {
+                if columns.len() != 1 || filter.is_some() {
+                    return None;
+                }
+                return Some(vec![overlong_error(source)]);
+            }
             return Some(vec![msduck_core::diagnostic::SqlError::new(
                 208,
                 1,
@@ -1138,6 +1162,23 @@ fn simple_source_binding_errors(
         .split_once("\" not found in FROM clause!")?;
     if fields.is_empty() || fields.iter().any(|field| !field.name.is_ascii()) {
         return None;
+    }
+    if source.value.len() > 128 || filter.is_some_and(|id| id.value.len() > 128) {
+        return None;
+    }
+    if columns.iter().any(|id| id.value.len() > 128) {
+        let [id] = columns.as_slice() else {
+            return None;
+        };
+        if filter.is_some()
+            || id.value != native
+            || fields
+                .iter()
+                .any(|field| field.name.eq_ignore_ascii_case(&id.value))
+        {
+            return None;
+        }
+        return Some(vec![overlong_error(id)]);
     }
     // An existing filter column must have a proven built-in integral
     // declaration before its comparison can be treated as compilation-safe.
@@ -2727,6 +2768,90 @@ mod tests {
         assert!(
             simple_source_binding_errors(&source_query, &contradictory, source_error).is_none()
         );
+    }
+
+    #[test]
+    fn simple_source_name_limits_preserve_syntax_identity_and_unknown_precedence() {
+        use msduck_sql::binding_scope::Field;
+        let parse = |sql: &str| {
+            let Statement::Query(query) = msduck_sql::batch::parse(sql).unwrap().remove(0) else {
+                panic!("query")
+            };
+            query
+        };
+        let mut catalog = CatalogSnapshot::default();
+        catalog.tables.insert(
+            "dbo.prepare_heap".into(),
+            vec![Field {
+                name: "a".into(),
+                info: None,
+                collation: None,
+                json_fragment: false,
+                properties: Default::default(),
+            }],
+        );
+        for length in [128, 129] {
+            let name = "x".repeat(length);
+            let column_sql = format!("SELECT {name} FROM dbo.prepare_heap");
+            let column_error =
+                format!("Binder Error: Referenced column \"{name}\" not found in FROM clause!");
+            let source_sql = format!("SELECT a FROM dbo.{name}");
+            let source_error = format!("Catalog Error: Table with name {name} does not exist!");
+            catalog.tables.insert(format!("dbo.{name}"), vec![]);
+            for (sql, error, number, message) in [
+                (
+                    column_sql,
+                    column_error.clone(),
+                    207,
+                    format!("Invalid column name '{name}'."),
+                ),
+                (
+                    source_sql,
+                    source_error,
+                    208,
+                    format!("Invalid object name 'dbo.{name}'."),
+                ),
+            ] {
+                let expected = if length == 128 {
+                    msduck_core::diagnostic::SqlError::new(number, 1, message)
+                } else {
+                    msduck_core::diagnostic::SqlError::syntax(
+                        103,
+                        4,
+                        format!(
+                            "The identifier that starts with '{}' is too long. Maximum length is 128.",
+                            "x".repeat(128)
+                        ),
+                    )
+                };
+                assert_eq!(
+                    simple_source_binding_errors(&parse(&sql), &catalog, &error),
+                    Some(vec![expected])
+                );
+            }
+            if length == 129 {
+                for sql in [
+                    format!("SELECT missing,{name} FROM dbo.prepare_heap"),
+                    format!("SELECT {name} FROM dbo.prepare_heap WHERE missing=1"),
+                    format!("SELECT missing FROM dbo.prepare_heap WHERE {name}=1"),
+                    format!("SELECT {name} FROM dbo.{name}"),
+                ] {
+                    assert!(
+                        simple_source_binding_errors(&parse(&sql), &catalog, &column_error)
+                            .is_none(),
+                        "{sql}"
+                    );
+                }
+                assert!(
+                    simple_source_binding_errors(
+                        &parse(&format!("SELECT {name} FROM dbo.prepare_heap")),
+                        &catalog,
+                        "Binder Error: Referenced column \"different\" not found in FROM clause!"
+                    )
+                    .is_none()
+                );
+            }
+        }
     }
 
     #[test]
