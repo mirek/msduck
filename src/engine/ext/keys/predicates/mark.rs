@@ -14,7 +14,27 @@ use sqlparser::ast::*;
 use std::ops::ControlFlow;
 
 fn marked(expr: &Expr) -> bool {
-    matches!(expr, Expr::Function(f) if [MARK, MAYBE].contains(&f.name.to_string().as_str()))
+    matches!(expr, Expr::Function(f) if f.name.to_string() == MARK)
+}
+
+fn maybe(expr: &Expr) -> bool {
+    matches!(expr, Expr::Function(f) if f.name.to_string() == MAYBE)
+}
+
+/// Whether `expr` is known not to be text: a column of another backend
+/// type, or a number. A carrier compared with it fails either way, so it
+/// needs no dispatch, and an outer join on it stays a hash join.
+fn not_text(catalog: &Catalog, expr: &Expr) -> bool {
+    match expr {
+        Expr::Nested(inner) => not_text(catalog, inner),
+        Expr::Value(value) => matches!(value.value, Value::Number(..)),
+        Expr::UnaryOp { expr, .. } => not_text(catalog, expr),
+        Expr::Identifier(ident) if ident.value.starts_with('@') => false,
+        Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
+            matches!(catalog.resolve(expr), Resolution::Plain { text: false })
+        }
+        _ => false,
+    }
 }
 
 /// Whether `expr` is a column reference whose type is unknown here: a
@@ -44,7 +64,8 @@ fn first_argument(function: &Function) -> Option<&Expr> {
 
 /// Whether `expr` is Unicode text: a carrier column, a character function
 /// of one (ISNULL and COALESCE take the type of their first argument), a
-/// CASE with one among its results, or a scalar subquery selecting one.
+/// CASE whose results are such text or string literals, or a scalar
+/// subquery selecting one.
 fn unicode(catalog: &Catalog, expr: &Expr) -> bool {
     match expr {
         Expr::Nested(inner) => unicode(catalog, inner),
@@ -55,8 +76,21 @@ fn unicode(catalog: &Catalog, expr: &Expr) -> bool {
             else_result,
             ..
         } => {
-            conditions.iter().any(|c| unicode(catalog, &c.result))
-                || else_result.as_deref().is_some_and(|e| unicode(catalog, e))
+            // Every result must be text: SQL Server types the CASE by
+            // precedence, so `CASE … THEN n ELSE 0 END` is an int.
+            let results: Vec<&Expr> = conditions
+                .iter()
+                .map(|c| &c.result)
+                .chain(else_result.as_deref())
+                .filter(|r| !matches!(r, Expr::Value(v) if matches!(v.value, Value::Null)))
+                .collect();
+            !results.is_empty()
+                && results.iter().any(|r| unicode(catalog, r))
+                && results.iter().all(|r| {
+                    unicode(catalog, r)
+                        || matches!(r, Expr::Value(v) if matches!(v.value,
+                            Value::SingleQuotedString(_) | Value::NationalStringLiteral(_)))
+                })
         }
         Expr::Subquery(query) => match query.body.as_ref() {
             SetExpr::Select(select) => match select.projection.as_slice() {
@@ -104,16 +138,30 @@ fn mark(catalog: &Catalog, operands: Vec<&mut Expr>) {
     if operands.iter().any(|o| collated(o) || marked(o)) {
         return;
     }
-    let text = operands.iter().any(|o| unicode(catalog, o));
+    // A subquery pass can type a column the statement pass could not.
+    let unwrap = |e: &Expr| -> Expr {
+        match e {
+            Expr::Function(f) if maybe(e) => match &f.args {
+                FunctionArguments::List(list) => match list.args.as_slice() {
+                    [FunctionArg::Unnamed(FunctionArgExpr::Expr(inner))] => inner.clone(),
+                    _ => e.clone(),
+                },
+                _ => e.clone(),
+            },
+            _ => e.clone(),
+        }
+    };
+    let text = operands.iter().any(|o| unicode(catalog, &unwrap(o)));
+    let typed = operands.iter().any(|o| not_text(catalog, o));
     for operand in operands {
         let name = if text {
             MARK
-        } else if unknown(catalog, operand) {
+        } else if !typed && !maybe(operand) && unknown(catalog, operand) {
             MAYBE
         } else {
             continue;
         };
-        let inner = std::mem::replace(operand, Expr::Value(Value::Null.into()));
+        let inner = unwrap(operand);
         *operand = msduck_sql::expr::unary_function(name, inner);
     }
 }

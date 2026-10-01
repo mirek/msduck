@@ -185,8 +185,8 @@ LIKE case and the backend rewrites.
   exponentially. A comparison of a converted value that the first stage
   does not mark, such as `CAST(n AS nvarchar(5)) = N'x '`, compares the
   converted text as VARCHAR, where trailing spaces count.
-- **Carriers against numbers.** A marked comparison of an NVARCHAR column with
-  a number fails ("Comparing nvarchar with a value of DuckDB type … is not
+- **Carriers against numbers.** A comparison of an NVARCHAR column, a JSON
+  function result or a Unicode RPC parameter with a number fails ("Comparing nvarchar with a value of DuckDB type … is not
   supported"). SQL Server converts the NVARCHAR value to the number's type.
 - **Literals and variables.** N'' literals, NVARCHAR variables and
   parameters are VARCHAR in the backend. Comparisons between them, without
