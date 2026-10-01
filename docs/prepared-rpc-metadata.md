@@ -351,3 +351,40 @@ metadata clone changes execution SQL or evaluates parameter values.
 Full workspace/default-client/audit checks of this newer implementation remain
 required. The earlier diagnostic gaps tracked in #705, #731, #734 and #735 remain
 separate work; the focused pass does not establish complete compatibility.
+
+At `de68fbc1db6119f66a3fbf33ca2e8c0b2b0fffb2`, all 1,119 workspace Rust tests
+passed (one pre-existing ignored), as did formatting, strict Clippy and the
+all-target build. The broader preparation suite passed 21/23, retaining the
+known #705 and #735 failures. Default clients passed 500/504 with zero skips;
+APPLY and the obsolete JSON assertion failed, and two servers exited during
+startup before SQL execution. Both startup cases passed an exact-revision rerun
+with the binary hash unchanged. The full failed run remains recorded. The audit
+recorded all 325 cases without transport errors and without a SQL Server
+comparison; raw JSON is preserved separately from the progress log.
+
+The `--apply-source-declarations PATH` mode retains six profiles across API
+default and option1 preparation, with fourteen records/run in two fresh pinned
+SQL Server containers. Both complete runs agree (SHA-256
+`09b54e3d3b1c51cce4a9b096deab7e0ed55a07c189c704ded85b4b06739e8027`).
+CROSS APPLY retains fixed non-null INT inputs; OUTER APPLY null-extends all
+right-side fields. Grouped/chained correlation and both invalid controls retain
+complete descriptors, ORDER, errors, return values and completion framing.
+
+At `857a2e9ee1584a7539130dcc9e56d57150723c8a`, all twelve complete APPLY
+comparisons pass, along with the existing source, variant-window and literal
+JSON error replays. Formatting, strict Clippy, all-target build and all 41 RPC
+Rust tests pass; independent owner-run review found no confirmed findings.
+Unaliased groups of CROSS JOIN/APPLY are flattened only in a metadata clone.
+Native validation and cached execution SQL retain the original join tree.
+Unsupported joins and aliased groups remain barriers. Captured failed
+preparation emits the primary error, 8180, RETURNSTATUS8180, a NULL handle and
+DONEPROC(command224/status2), without allocating a statement. Mapping a native
+missing qualifier to4104 requires a unique original column, a later-source
+declaration, and no visible left/local declaration; ambiguous or unfamiliar
+shapes remain unmapped.
+
+The older default APPLY assertion expects a single error; SQL Server's captured
+pair is delivered by tedious as an AggregateError. Its exact two-error assertion
+correction and the stale JSON correction await additional owner authorization
+over the narrowly claimed default test file. Full verification of the updated
+main integration and the latest implementation remains required.
