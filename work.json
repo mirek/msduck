@@ -7938,7 +7938,7 @@
     {
       "id": "gaps-ext-hooks-v1",
       "title": "Extension hooks and module store for parallel SQL Server gap work",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01), umbrella issue #710; enabling infrastructure so feature tasks own disjoint files.",
       "scope": [
         "src/engine.rs",
@@ -8007,6 +8007,535 @@
         "Final exact-head workspace formatting/strictClippy/tests/alltargets build, independent clients, semantic copied-corpus audit, required CI and verified review or authorized fallback; claiming worker merges and promptly completes task/project/issue."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdLTH"
+    },
+    {
+      "id": "gaps-applock-v1",
+      "title": "Application locks: sp_getapplock, sp_releaseapplock, APPLOCK_MODE, APPLOCK_TEST",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/applock.rs",
+        "src/engine/ext/applock/",
+        "crates/msduck-sql/src/dialect/ext/applock.rs",
+        "crates/msduck-sql/src/dialect/ext/applock/",
+        "tests/compat/applock.test.mjs",
+        "tests/gaps_applock.rs",
+        "docs/gaps-applock.md",
+        "scripts/capture-gaps-applock.mjs",
+        "reference/gaps-applock.json"
+      ],
+      "acceptance": [
+        "sp_getapplock and sp_releaseapplock accept named (@Resource, @LockMode, @LockOwner, @LockTimeout, @DbPrincipal) and positional arguments, including EXEC @rc = ..., and return SQL Server's status codes (0 granted, 1 granted after wait, -1 timeout, -2 cancelled, -3 deadlock victim, -999 parameter/other error) with SQL Server's errors for invalid modes and owners.",
+        "Locks are shared across sessions of the same database with SQL Server's compatibility matrix for Shared, Update, IntentShared, IntentExclusive and Exclusive. Lock timeouts of 0, -1 (bounded by request cancellation) and N ms are honored. Session-owned locks persist until released or the session ends or resets. Transaction-owned locks require an open transaction and are released at the outermost commit or rollback. Locks are reference counted per owner.",
+        "APPLOCK_MODE and APPLOCK_TEST return SQL Server's values. Multi-connection tests cover contention, timeout, release, ownership and the generic repro EXEC sp_getapplock @Resource=N'foo', @LockMode='Exclusive', @LockOwner='Session', @LockTimeout=0.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/applock.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-applock.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 713,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQpW"
+    },
+    {
+      "id": "gaps-backup-v1",
+      "title": "BACKUP DATABASE, RESTORE HEADERONLY/FILELISTONLY/DATABASE and msdb backup history",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/backup.rs",
+        "src/engine/ext/backup/",
+        "crates/msduck-sql/src/dialect/ext/backup.rs",
+        "crates/msduck-sql/src/dialect/ext/backup/",
+        "tests/compat/backup.test.mjs",
+        "tests/gaps_backup.rs",
+        "docs/gaps-backup.md",
+        "scripts/capture-gaps-backup.mjs",
+        "reference/gaps-backup.json",
+        "src/database_catalog.rs"
+      ],
+      "acceptance": [
+        "BACKUP DATABASE name TO DISK = path WITH options (FORMAT, INIT, NOINIT, NAME, DESCRIPTION, COMPRESSION, COPY_ONLY, STATS, CHECKSUM) writes a self-describing backup file at the given server path; options that do not apply are accepted. The backup is transactionally consistent and works for in-memory and file-backed servers.",
+        "RESTORE HEADERONLY and RESTORE FILELISTONLY return SQL Server's column sets, with logical file names <db> and <db>_log. RESTORE DATABASE new_name FROM DISK WITH REPLACE, MOVE logical TO physical, RECOVERY, STATS restores contents into a new or replaced database, with SQL Server errors for an existing database without REPLACE and for a missing file.",
+        "msdb exists with backupset, backupmediafamily, backupmediaset and restorehistory rows recorded by these operations; SELECT TOP(1) * FROM msdb..backupmediafamily works. sys.database_files and sys.master_files report the logical files. Tests restore a backup into a clone, verify contents and header fields, and cover REPLACE and MOVE.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/backup.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-backup.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 714,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQpl"
+    },
+    {
+      "id": "gaps-keys-v1",
+      "title": "Key and index columns of every type, single-NULL UNIQUE, CLUSTERED/INCLUDE/filtered indexes",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/keys.rs",
+        "src/engine/ext/keys/",
+        "crates/msduck-sql/src/dialect/ext/keys.rs",
+        "crates/msduck-sql/src/dialect/ext/keys/",
+        "tests/compat/keys.test.mjs",
+        "tests/gaps_keys.rs",
+        "docs/gaps-keys.md",
+        "scripts/capture-gaps-keys.mjs",
+        "reference/gaps-keys.json",
+        "crates/msduck-sql/src/dialect/key_index_type.rs",
+        "src/unicode_carrier.rs"
+      ],
+      "acceptance": [
+        "PRIMARY KEY, UNIQUE constraints and indexes work on nvarchar/nchar (Unicode carrier) and datetimeoffset columns, alone and in composite keys, enforcing uniqueness with error 2627 (constraint) or 2601 (unique index) and SQL Server's duplicate-key message.",
+        "A UNIQUE constraint or unique index allows only one NULL per key (SQL Server semantics) and rejects a second with 2627/2601; filtered unique indexes (WHERE col IS NOT NULL) allow many NULLs.",
+        "Column-level CONSTRAINT name UNIQUE(col) and PRIMARY KEY(col) column-list forms parse; CREATE [UNIQUE] CLUSTERED INDEX, INCLUDE(...), filtered WHERE predicates and common WITH (...) index options are accepted with correct uniqueness behavior, and DROP INDEX works on them. Tests cover every generic repro of these forms with asserted values and error numbers.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/keys.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-keys.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 715,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQp6"
+    },
+    {
+      "id": "gaps-constraints-v1",
+      "title": "ALTER TABLE constraint lifecycle and foreign-key referential actions",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/constraints.rs",
+        "src/engine/ext/constraints/",
+        "crates/msduck-sql/src/dialect/ext/constraints.rs",
+        "crates/msduck-sql/src/dialect/ext/constraints/",
+        "tests/compat/constraints.test.mjs",
+        "tests/gaps_constraints.rs",
+        "docs/gaps-constraints.md",
+        "scripts/capture-gaps-constraints.mjs",
+        "reference/gaps-constraints.json"
+      ],
+      "acceptance": [
+        "ALTER TABLE supports ADD [CONSTRAINT name] CHECK / DEFAULT expr FOR col / UNIQUE(cols) / PRIMARY KEY(cols) / FOREIGN KEY(cols) REFERENCES t(cols) [ON DELETE|ON UPDATE actions]; WITH CHECK and WITH NOCHECK ADD; NOCHECK|CHECK CONSTRAINT ALL|name and WITH CHECK CHECK CONSTRAINT ALL; DROP CONSTRAINT [IF EXISTS] name for DEFAULT, CHECK, UNIQUE, PRIMARY KEY and FOREIGN KEY; ADD col type NOT NULL CONSTRAINT df DEFAULT v [WITH VALUES].",
+        "Existing rows are validated when SQL Server validates them (547 for CHECK/FK violations on WITH CHECK, 1505/2627 for duplicate keys) and constraints are enforced afterwards; disabled (NOCHECK) constraints are not enforced. Data and other constraints survive the operation.",
+        "FOREIGN KEY ON DELETE/ON UPDATE CASCADE, SET NULL, SET DEFAULT and NO ACTION work for inline, table-level and ALTER TABLE forms, including multi-level cascades, with 547 for NO ACTION violations. Tests assert the resulting rows and error numbers for every generic repro.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/constraints.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-constraints.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 716,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQqR"
+    },
+    {
+      "id": "gaps-rowversion-identity-v1",
+      "title": "rowversion/timestamp, decimal identity, SCOPE_IDENTITY and IDENTITY_INSERT",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/rowversion_identity.rs",
+        "src/engine/ext/rowversion_identity/",
+        "crates/msduck-sql/src/dialect/ext/rowversion_identity.rs",
+        "crates/msduck-sql/src/dialect/ext/rowversion_identity/",
+        "tests/compat/rowversion_identity.test.mjs",
+        "tests/gaps_rowversion_identity.rs",
+        "docs/gaps-rowversion_identity.md",
+        "scripts/capture-gaps-rowversion_identity.mjs",
+        "reference/gaps-rowversion_identity.json",
+        "src/identity_insert_session.rs",
+        "src/identity_insert_write.rs",
+        "src/identity_insert_catalog.rs",
+        "src/identity_metadata.rs",
+        "crates/msduck-sql/src/identity_insert.rs",
+        "crates/msduck-sql/src/identity_insert_gate.rs"
+      ],
+      "acceptance": [
+        "rowversion and timestamp columns are generated automatically as 8-byte binary values from a database-wide monotonically increasing counter, change on every UPDATE of the row, cannot be written explicitly (SQL Server error 273), and report binary(8) metadata; @@DBTS works.",
+        "IDENTITY on decimal(p,0)/numeric(p,0), tinyint and smallint columns works with seed and increment; SCOPE_IDENTITY(), @@IDENTITY and IDENT_CURRENT return SQL Server's values and types (numeric(38,0) for SCOPE_IDENTITY/@@IDENTITY).",
+        "SET IDENTITY_INSERT table ON/OFF works in SQL batches with SQL Server's rules (explicit column list required, one table per session, seed advanced past inserted values). Tests cover every generic repro with asserted values.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/rowversion_identity.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-rowversion_identity.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 717,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQqi"
+    },
+    {
+      "id": "gaps-computed-v1",
+      "title": "Computed columns over nvarchar(max)/JSON and session-dependent defaults",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/computed.rs",
+        "src/engine/ext/computed/",
+        "crates/msduck-sql/src/dialect/ext/computed.rs",
+        "crates/msduck-sql/src/dialect/ext/computed/",
+        "tests/compat/computed.test.mjs",
+        "tests/gaps_computed.rs",
+        "docs/gaps-computed.md",
+        "scripts/capture-gaps-computed.mjs",
+        "reference/gaps-computed.json",
+        "src/computed_columns.rs",
+        "crates/msduck-sql/src/dialect/computed_column.rs"
+      ],
+      "acceptance": [
+        "Computed columns (PERSISTED or not) whose expressions use nvarchar(max) or other Unicode-carrier columns and functions such as JSON_VALUE and CONVERT(nvarchar(n), ...) can be created, read, indexed when persisted, and report the computed flag in sys.columns.",
+        "Column DEFAULT expressions using SESSION_CONTEXT, SUSER_SNAME, HOST_NAME, APP_NAME and other session functions are evaluated per insert in the inserting session, including with CONVERT around them.",
+        "Tests cover the generic repros with asserted values.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/computed.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-computed.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 718,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQq1"
+    },
+    {
+      "id": "gaps-procedures-v1",
+      "title": "Stored procedures and sp_executesql with parameter declarations",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/procedures.rs",
+        "src/engine/ext/procedures/",
+        "crates/msduck-sql/src/dialect/ext/procedures.rs",
+        "crates/msduck-sql/src/dialect/ext/procedures/",
+        "tests/compat/procedures.test.mjs",
+        "tests/gaps_procedures.rs",
+        "docs/gaps-procedures.md",
+        "scripts/capture-gaps-procedures.mjs",
+        "reference/gaps-procedures.json",
+        "crates/msduck-sql/src/batch.rs"
+      ],
+      "acceptance": [
+        "CREATE, ALTER, CREATE OR ALTER and DROP PROCEDURE [IF EXISTS] store definitions in the module store (properties JSON records parameters: name, type, output flag, default) and appear in sys.objects. Bodies run with their own variable scope, parameters with defaults, OUTPUT parameters, RETURN status, nested calls, multiple result sets, TRY/CATCH and SQL Server error propagation.",
+        "EXEC/EXECUTE supports positional, named, DEFAULT and OUTPUT arguments and EXEC @rc = proc, and reports RETURNSTATUS/DONEPROC tokens as SQL Server does. EXEC('dynamic sql') and EXEC sp_executesql N'...', N'@a int, @b int OUTPUT', ... (named and positional values, OUTPUT round trip) work in SQL batches.",
+        "Tests cover the generic repro CREATE PROCEDURE foo AS SELECT 7 AS value and sp_executesql with parameter declarations through tedious, asserting values and return status.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/procedures.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-procedures.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 719,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQrO"
+    },
+    {
+      "id": "gaps-functions-v1",
+      "title": "User-defined scalar, inline and multi-statement table-valued functions",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/functions.rs",
+        "src/engine/ext/functions/",
+        "crates/msduck-sql/src/dialect/ext/functions.rs",
+        "crates/msduck-sql/src/dialect/ext/functions/",
+        "tests/compat/functions.test.mjs",
+        "tests/gaps_functions.rs",
+        "docs/gaps-functions.md",
+        "scripts/capture-gaps-functions.mjs",
+        "reference/gaps-functions.json"
+      ],
+      "acceptance": [
+        "CREATE, ALTER, CREATE OR ALTER and DROP FUNCTION [IF EXISTS] for scalar functions (BEGIN ... RETURN ... END bodies with DECLARE/SET/IF/RETURN), inline table-valued functions (RETURNS TABLE AS RETURN (query)) and multi-statement table-valued functions (RETURNS @t TABLE(...)), with options WITH SCHEMABINDING, EXECUTE AS CALLER, RETURNS NULL ON NULL INPUT, stored in the module store and visible in sys.objects.",
+        "Functions with parameters can be called from SELECT lists, WHERE, ORDER BY, DEFAULT/computed expressions where SQL Server allows, other functions and procedures; table-valued functions work in FROM, joins and CROSS/OUTER APPLY with correct results and result metadata.",
+        "Tests cover the generic repros (CREATE FUNCTION dbo.foo(@x int) RETURNS int AS BEGIN RETURN @x+1; END; and table-valued forms) asserting returned values.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/functions.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-functions.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 720,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQrp"
+    },
+    {
+      "id": "gaps-triggers-v1",
+      "title": "DML triggers and DISABLE/ENABLE TRIGGER",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/triggers.rs",
+        "src/engine/ext/triggers/",
+        "crates/msduck-sql/src/dialect/ext/triggers.rs",
+        "crates/msduck-sql/src/dialect/ext/triggers/",
+        "tests/compat/triggers.test.mjs",
+        "tests/gaps_triggers.rs",
+        "docs/gaps-triggers.md",
+        "scripts/capture-gaps-triggers.mjs",
+        "reference/gaps-triggers.json"
+      ],
+      "acceptance": [
+        "CREATE, ALTER, CREATE OR ALTER and DROP TRIGGER for AFTER/FOR and INSTEAD OF INSERT, UPDATE and DELETE on tables, stored in the module store (properties JSON records events and instead_of) with parent_object_id set; trigger bodies accept optional statement terminators and the full batch language.",
+        "Triggers fire once per statement with multirow inserted/deleted pseudo-tables, UPDATE(col) and COLUMNS_UPDATED(), nested trigger effects, @@ROWCOUNT preservation, and error/ROLLBACK propagation that undoes the triggering statement as SQL Server does.",
+        "DISABLE/ENABLE TRIGGER name|ALL ON table and ALTER TABLE ... DISABLE/ENABLE TRIGGER work; dropping a table drops its triggers. Tests assert multirow side effects and rollback behavior.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/triggers.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-triggers.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 721,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQsB"
+    },
+    {
+      "id": "gaps-merge-v1",
+      "title": "MERGE statements, including table hints",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/merge.rs",
+        "src/engine/ext/merge/",
+        "crates/msduck-sql/src/dialect/ext/merge.rs",
+        "crates/msduck-sql/src/dialect/ext/merge/",
+        "tests/compat/merge.test.mjs",
+        "tests/gaps_merge.rs",
+        "docs/gaps-merge.md",
+        "scripts/capture-gaps-merge.mjs",
+        "reference/gaps-merge.json",
+        "src/merge.rs",
+        "crates/msduck-sql/src/merge.rs",
+        "crates/msduck-sql/src/merge_output.rs",
+        "crates/msduck-sql/src/merge_top.rs"
+      ],
+      "acceptance": [
+        "MERGE [TOP (n)] [INTO] target [WITH (hints such as SERIALIZABLE, HOLDLOCK, UPDLOCK, ROWLOCK)] [AS] alias USING source ON condition with WHEN MATCHED [AND ...] THEN UPDATE/DELETE, WHEN NOT MATCHED [BY TARGET] THEN INSERT, WHEN NOT MATCHED BY SOURCE THEN UPDATE/DELETE executes atomically with correct row counts.",
+        "OUTPUT $action, inserted.*, deleted.* (and OUTPUT INTO) works; a target row matched by several source rows fails with 8672; parameters and variables bind.",
+        "Tests cover the generic upsert repro with and without hints and every branch, asserting resulting rows and counts.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/merge.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-merge.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 722,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQsX"
+    },
+    {
+      "id": "gaps-outer-dml-v1",
+      "title": "UPDATE and DELETE with outer joins in the target tree",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/outer_dml.rs",
+        "src/engine/ext/outer_dml/",
+        "crates/msduck-sql/src/dialect/ext/outer_dml.rs",
+        "crates/msduck-sql/src/dialect/ext/outer_dml/",
+        "tests/compat/outer_dml.test.mjs",
+        "tests/gaps_outer_dml.rs",
+        "docs/gaps-outer_dml.md",
+        "scripts/capture-gaps-outer_dml.mjs",
+        "reference/gaps-outer_dml.json",
+        "crates/msduck-sql/src/update.rs",
+        "crates/msduck-sql/src/delete.rs",
+        "src/engine/joined_output.rs",
+        "src/output_join.rs"
+      ],
+      "acceptance": [
+        "UPDATE target SET ... FROM target LEFT/RIGHT/FULL JOIN source ... and DELETE target FROM target LEFT JOIN source ... WHERE source.id IS NULL (and OUTER APPLY forms) update or delete exactly the rows SQL Server does, with correct @@ROWCOUNT and OUTPUT where already supported.",
+        "Tests cover the generic repros asserting resulting rows.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/outer_dml.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-outer_dml.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 723,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQsr"
+    },
+    {
+      "id": "gaps-json-string-v1",
+      "title": "FOR JSON AUTO, JSON_MODIFY, ordered STRING_AGG, STRING_SPLIT and HASHBYTES",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/json_string.rs",
+        "src/engine/ext/json_string/",
+        "crates/msduck-sql/src/dialect/ext/json_string.rs",
+        "crates/msduck-sql/src/dialect/ext/json_string/",
+        "tests/compat/json_string.test.mjs",
+        "tests/gaps_json_string.rs",
+        "docs/gaps-json_string.md",
+        "scripts/capture-gaps-json_string.mjs",
+        "reference/gaps-json_string.json",
+        "src/for_json.rs",
+        "src/for_json/"
+      ],
+      "acceptance": [
+        "FOR JSON AUTO (with ROOT, INCLUDE_NULL_VALUES, WITHOUT_ARRAY_WRAPPER) nests joined tables like SQL Server and works inside subqueries and trigger/procedure bodies.",
+        "JSON_MODIFY supports set, insert, delete via NULL, append, lax and strict paths and JSON_QUERY values. STRING_AGG(expr, sep) WITHIN GROUP (ORDER BY ...) orders results. STRING_SPLIT(string, separator [, enable_ordinal]) returns value (and ordinal) with SQL Server types. HASHBYTES supports MD2, MD4, MD5, SHA, SHA1, SHA2_256 and SHA2_512 over varchar, nvarchar (UTF-16LE) and varbinary, returning varbinary.",
+        "Tests cover each generic repro asserting values and metadata.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/json_string.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-json_string.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 724,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQtE"
+    },
+    {
+      "id": "gaps-conversion-v1",
+      "title": "Explicit COLLATE, styled CONVERT, FORMAT, SERVERPROPERTY, DATABASEPROPERTYEX, ROWCOUNT_BIG",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/conversion.rs",
+        "src/engine/ext/conversion/",
+        "crates/msduck-sql/src/dialect/ext/conversion.rs",
+        "crates/msduck-sql/src/dialect/ext/conversion/",
+        "tests/compat/conversion.test.mjs",
+        "tests/gaps_conversion.rs",
+        "docs/gaps-conversion.md",
+        "scripts/capture-gaps-conversion.mjs",
+        "reference/gaps-conversion.json"
+      ],
+      "acceptance": [
+        "Expression COLLATE with Latin1_General_CI_AS, Latin1_General_CS_AS, SQL_Latin1_General_CP1_CI_AS, *_BIN2 and similar common collations compares and sorts with the requested case/accent sensitivity.",
+        "CONVERT with date/time styles (0-14, 20-23, 100-114, 120-131 including 126 and 127 for datetime, datetime2 and datetimeoffset) and binary styles 0, 1 and 2 in both directions follows SQL Server. FORMAT(value, format [, culture]) supports .NET standard and custom date/time and numeric formats for en-US and the invariant culture.",
+        "SERVERPROPERTY (Collation, ProductVersion, ProductLevel, Edition, EngineEdition, ServerName, MachineName, InstanceName, IsCaseSensitive and others) and DATABASEPROPERTYEX (Collation, Status, Recovery, Updateability, UserAccess, Version) return SQL Server-typed sql_variant values; ROWCOUNT_BIG() returns bigint. Tests cover each generic repro.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/conversion.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-conversion.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 725,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQtr"
+    },
+    {
+      "id": "gaps-temp-tables-v1",
+      "title": "#temp tables and table variables",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/temp_tables.rs",
+        "src/engine/ext/temp_tables/",
+        "crates/msduck-sql/src/dialect/ext/temp_tables.rs",
+        "crates/msduck-sql/src/dialect/ext/temp_tables/",
+        "tests/compat/temp_tables.test.mjs",
+        "tests/gaps_temp_tables.rs",
+        "docs/gaps-temp_tables.md",
+        "scripts/capture-gaps-temp_tables.mjs",
+        "reference/gaps-temp_tables.json"
+      ],
+      "acceptance": [
+        "CREATE TABLE #t and ##t, SELECT ... INTO #t, INSERT/UPDATE/DELETE/SELECT/TRUNCATE/DROP on them, OBJECT_ID('tempdb..#t'), and indexes/constraints on them work. Local temp tables are private to the session, procedure-scoped ones are dropped at procedure exit, and all are dropped at session end or reset; global temp tables are visible to other sessions.",
+        "DECLARE @t TABLE(... with PRIMARY KEY, UNIQUE, CHECK, DEFAULT, IDENTITY) supports INSERT/SELECT/UPDATE/DELETE, joins and OUTPUT INTO @t, has batch (or module) scope, and is not affected by ROLLBACK.",
+        "Tests cover the generic repros CREATE TABLE #foo(id int) and DECLARE @foo TABLE(id int) asserting values and isolation between sessions.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/temp_tables.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-temp_tables.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 726,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQuQ"
+    },
+    {
+      "id": "gaps-transactions-v1",
+      "title": "Isolation levels, SAVE TRANSACTION and WAITFOR",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/transactions.rs",
+        "src/engine/ext/transactions/",
+        "crates/msduck-sql/src/dialect/ext/transactions.rs",
+        "crates/msduck-sql/src/dialect/ext/transactions/",
+        "tests/compat/transactions.test.mjs",
+        "tests/gaps_transactions.rs",
+        "docs/gaps-transactions.md",
+        "scripts/capture-gaps-transactions.mjs",
+        "reference/gaps-transactions.json",
+        "src/sessions.rs"
+      ],
+      "acceptance": [
+        "SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SNAPSHOT and SERIALIZABLE and transaction-manager begin requests with levels 1-5 are accepted and reported (sys.dm_exec_sessions.transaction_isolation_level, DBCC USEROPTIONS if feasible); documented semantics map to DuckDB's snapshot isolation without silently claiming stronger locking.",
+        "SAVE TRAN[SACTION] name and ROLLBACK TRAN name to a savepoint (SQL and transaction-manager Save/Rollback requests) undo only work done after the savepoint and keep the transaction open with @@TRANCOUNT unchanged, matching SQL Server, with SQL Server errors for unknown names.",
+        "WAITFOR DELAY 'hh:mm:ss[.mmm]' and WAITFOR TIME (literal or variable) wait for the requested time and are interruptible by attention/cancel. Tests cover the generic repros including the driver begin with SERIALIZABLE.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/transactions.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-transactions.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 727,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQur"
+    },
+    {
+      "id": "gaps-catalog-v1",
+      "title": "Constraint, module and file catalogs, OBJECT_DEFINITION, sp_pkeys, sp_fkeys, sp_rename",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/catalog.rs",
+        "src/engine/ext/catalog/",
+        "crates/msduck-sql/src/dialect/ext/catalog.rs",
+        "crates/msduck-sql/src/dialect/ext/catalog/",
+        "tests/compat/catalog.test.mjs",
+        "tests/gaps_catalog.rs",
+        "docs/gaps-catalog.md",
+        "scripts/capture-gaps-catalog.mjs",
+        "reference/gaps-catalog.json",
+        "src/object_catalog.rs"
+      ],
+      "acceptance": [
+        "sys.foreign_keys, sys.foreign_key_columns, sys.key_constraints, sys.default_constraints, sys.check_constraints, sys.computed_columns, sys.triggers, sys.sql_modules, sys.procedures and sys.database_files exist in every database with SQL Server column sets and rows for existing objects; constraint objects appear in sys.objects.",
+        "OBJECT_DEFINITION returns module and view definitions. sp_pkeys, sp_fkeys (named and positional arguments) return SQL Server's result shapes; sp_rename renames tables, columns, indexes, constraints and modules with SQL Server's caution message.",
+        "Tests query each catalog for tables with primary, unique, foreign, default, check and computed definitions and assert rows.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/catalog.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-catalog.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 728,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQvA"
+    },
+    {
+      "id": "gaps-identifiers-v1",
+      "title": "Contextual identifiers and database-qualified errors",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/identifiers.rs",
+        "src/engine/ext/identifiers/",
+        "crates/msduck-sql/src/dialect/ext/identifiers.rs",
+        "crates/msduck-sql/src/dialect/ext/identifiers/",
+        "tests/compat/identifiers.test.mjs",
+        "tests/gaps_identifiers.rs",
+        "docs/gaps-identifiers.md",
+        "scripts/capture-gaps-identifiers.mjs",
+        "reference/gaps-identifiers.json",
+        "src/query_error.rs",
+        "src/storage_diagnostic.rs"
+      ],
+      "acceptance": [
+        "Unquoted identifiers that are valid in SQL Server but reserved in DuckDB (for example offset, at, limit, qualify, pivot, any other non-T-SQL reserved words) work as table, column, alias and parameter names in DDL and DML.",
+        "Error messages that name an object (such as 2628 string truncation and 2627 duplicate key) qualify it with the session's current database, not master.",
+        "Tests cover CREATE TABLE items(offset int NOT NULL) and the truncation message in a user database.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/identifiers.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-identifiers.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 729,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQvb"
+    },
+    {
+      "id": "gaps-bulk-v1",
+      "title": "Bulk load (INSERT BULK) from tedious/mssql",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
+      "scope": [
+        "src/engine/ext/bulk.rs",
+        "src/engine/ext/bulk/",
+        "crates/msduck-sql/src/dialect/ext/bulk.rs",
+        "crates/msduck-sql/src/dialect/ext/bulk/",
+        "tests/compat/bulk.test.mjs",
+        "tests/gaps_bulk.rs",
+        "docs/gaps-bulk.md",
+        "scripts/capture-gaps-bulk.mjs",
+        "reference/gaps-bulk.json",
+        "src/server.rs"
+      ],
+      "acceptance": [
+        "INSERT BULK table (columns) [WITH (options)] followed by a BulkLoadBCP message loads rows with SQL Server types, constraints, identity handling (KEEP_IDENTITY), CHECK_CONSTRAINTS, FIRE_TRIGGERS and KEEP_NULLS options and returns SQL Server's row count, using the existing bulk-load codec read-only.",
+        "mssql Table with request.bulk() and tedious newBulkLoad succeed for integer, string, Unicode, decimal, datetime, datetimeoffset, binary, bit and NULL values; tests assert loaded rows.",
+        "Use the extension hooks (docs/extension-hooks.md). Consult SQL Server documentation and, where behavior is uncertain, capture the pinned reference container. Add tests/compat/bulk.test.mjs (tedious) and Rust tests asserting values and error numbers, describe behavior and remaining limits in docs/gaps-bulk.md, and run the AGENTS.md checks (clippy with toolchain 1.95). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge, and publish done. Extra files not in this scope require a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [
+        "gaps-ext-hooks-v1"
+      ],
+      "issue": 730,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQv4"
     }
   ]
 }
