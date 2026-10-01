@@ -438,3 +438,73 @@ fn key_namespace_failures_preserve_the_callers_transaction_and_writes() {
         42
     );
 }
+
+#[test]
+fn generated_key_names_avoid_existing_schema_objects_in_callers_transaction() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let run = |session: &mut Session, sql: &str| {
+        session
+            .batch_response(sql, &Default::default(), false, None)
+            .1
+    };
+    assert!(run(&mut session, "CREATE TABLE dbo.kept(id INT)"));
+    let last_object: i64 = session
+        .db
+        .query_row("SELECT currval('main.__msduck_object_ids')", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    let consumed_tag: i64 = session
+        .db
+        .query_row("SELECT nextval('main.__msduck_key_tags')", [], |r| r.get(0))
+        .unwrap();
+    // The blocker and target table each consume one object identity. The
+    // target's first constraint consumes the next key tag.
+    let candidate = msduck_sql::dialect::ext::keys::table::generated_name(
+        true,
+        "generated_target",
+        (((last_object + 2) as u64) << 20) ^ (consumed_tag + 1) as u64,
+    );
+    assert!(run(
+        &mut session,
+        &format!("CREATE TABLE dbo.[{candidate}](id INT)")
+    ));
+    assert!(run(
+        &mut session,
+        "BEGIN TRANSACTION; INSERT INTO dbo.kept VALUES(42)"
+    ));
+    assert!(run(
+        &mut session,
+        "CREATE TABLE dbo.generated_target(id INT PRIMARY KEY)"
+    ));
+    assert_eq!(session.transactions, 1);
+    let actual: String = session.db.query_row(
+        "SELECT k.name FROM sys.key_constraints k JOIN sys.tables t ON t.object_id=k.parent_object_id WHERE t.name='generated_target'", [], |r| r.get(0)
+    ).unwrap();
+    assert_ne!(actual, candidate);
+    let count: i64 = session
+        .db
+        .query_row(
+            "SELECT count(*) FROM sys.objects WHERE name=?",
+            [&candidate],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 1);
+    assert!(run(&mut session, "ROLLBACK"));
+    let retained: i64 = session
+        .db
+        .query_row("SELECT count(*) FROM dbo.kept", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(retained, 0);
+    let target: Option<i32> = session
+        .db
+        .query_row(
+            "SELECT main.__msduck_object_id('dbo.generated_target','U')",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(target, None);
+}

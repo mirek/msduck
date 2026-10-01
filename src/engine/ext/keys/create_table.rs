@@ -169,18 +169,34 @@ fn create(
         } else {
             None
         };
+        let name = if let Some(name) = &constraint.name {
+            name.clone()
+        } else {
+            // Generated names share the schema namespace with user objects.
+            // Resolve collisions instead of failing after native CREATE TABLE
+            // has succeeded inside a caller-owned transaction.
+            let mut seed = ((created.object_id as u64) << 20) ^ tag as u64;
+            loop {
+                let candidate = plan::generated_name(constraint.primary, &created.name, seed);
+                let normalized: String =
+                    session
+                        .db
+                        .query_row("SELECT lower(?)", [&candidate], |r| r.get(0))?;
+                if !declared.contains(&normalized)
+                    && !crate::object_catalog::key_name_exists(&session.db, &schema, &candidate)?
+                {
+                    declared.insert(normalized);
+                    break candidate;
+                }
+                seed = seed.wrapping_add(1);
+            }
+        };
         catalog::insert(
             &session.db,
             &catalog::Key {
                 tag,
                 object_id: created.object_id,
-                name: constraint.name.clone().unwrap_or_else(|| {
-                    plan::generated_name(
-                        constraint.primary,
-                        &created.name,
-                        ((created.object_id as u64) << 20) ^ tag as u64,
-                    )
-                }),
+                name,
                 kind: if constraint.primary { "PK" } else { "UQ" }.into(),
                 unique: true,
                 clustered: false,
