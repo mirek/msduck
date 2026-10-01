@@ -8555,6 +8555,25 @@
       "dependencies": [],
       "issue": 726,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQuQ"
+    },
+    {
+      "id": "json-path-empty-property-v1",
+      "title": "Preserve JSON path empty-property diagnostic before array selector",
+      "state": "ready",
+      "authorization": "Owner continuing full compatibility goal; first-party PR703 JSON compilation captures and failing deterministic diagnostic assertion. Same claiming worker/worktree/PR703; no engine or root library edits.",
+      "issue": 733,
+      "scope": [
+        "crates/msduck-core/src/json_path.rs",
+        "crates/msduck-core/tests/json_path_empty_key.rs",
+        "reference/prepared-json-path-errors.json"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Retain immutable complete two-run owner capture from prepared JSON compilation controls; independent runs agree. Preserve raw path-before-document errors and full RPC responses; parent owns capture/public adapter files.",
+        "Correct deterministic empty property before array-selector syntax error from explicit bounded UTF-16 path inputs, retaining captured number13607/state14/message/character/position and existing selector/document errors. Unknown wider diagnostic rules remain gaps; no root/backend/session/value-dependent metadata.",
+        "Fixture-backed pure core tests plus valid key/array and error-barrier regressions. Parent exact-head formatting/strictClippy/workspace/alltargets build/default/dedicated clients/audit/review or owner fallback/CI required. Same worker owns PR703 merge and prompt completion of all parent/companion issues/projects."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdTNJ"
     }
   ]
 }
