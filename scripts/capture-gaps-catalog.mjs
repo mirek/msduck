@@ -67,7 +67,48 @@ export async function observeCatalog(connection){
  return records
 }
 
-async function referenceRun(){
+// Exercise declaration text independently of stored values: clocks and NEWID
+// are never evaluated by these metadata queries.
+export const definitionDefaults=[
+ ['positive','INT','1'],['negative','INT','-1'],['zeros','INT','0001'],
+ ['decimal','DECIMAL(10,2)','1.25'],['exponent','FLOAT','1e2'],
+ ['string','VARCHAR(30)',"'a''b'"],['unicode','NVARCHAR(30)',"N'a''b'"],
+ ['null','INT','NULL'],['clock','DATETIME','GETDATE()'],
+ ['cast','BIGINT','CAST(1 AS BIGINT)'],['convert','INT',"CONVERT(INT,'2')"],
+ ['uuid','UNIQUEIDENTIFIER','NEWID()'],['binary','VARBINARY(4)','0x01'],
+ ['sum','INT','1+2'],['nested','INT','(((1)))'],
+]
+export const definitionComputed=[
+ ['multiply','a*2'],['add','a+2'],['nested','a*(b+1)'],['divide','a/2'],
+ ['coalesce','COALESCE(b,0)'],['cast','CAST(a AS BIGINT)'],['isnull','ISNULL(b,0)'],
+ ['case','CASE WHEN a>0 THEN a ELSE 0 END'],['lower','LOWER(label)'],
+]
+export const definitionSetup=[
+ ['setup default definitions',`CREATE TABLE dbo.definition_defaults(${definitionDefaults.map(([name,type,expr])=>`d_${name} ${type} CONSTRAINT DF_definition_${name} DEFAULT(${expr})`).join(',')})`],
+ ['setup computed definitions',`CREATE TABLE dbo.definition_computed(a INT NOT NULL,b INT NULL,label VARCHAR(20),${definitionComputed.map(([name,expr])=>`c_${name} AS(${expr})`).join(',')})`],
+]
+export const definitionQueries=[
+ ['empty schema default_constraints','SELECT TOP(0) * FROM sys.default_constraints'],
+ ['empty schema computed_columns','SELECT TOP(0) * FROM sys.computed_columns'],
+ ['default definitions',"SELECT name,parent_column_id,definition,is_system_named FROM sys.default_constraints WHERE parent_object_id=OBJECT_ID('dbo.definition_defaults') ORDER BY parent_column_id"],
+ ['computed definitions',"SELECT name,column_id,system_type_id,user_type_id,max_length,precision,scale,is_nullable,definition,uses_database_collation,is_persisted FROM sys.computed_columns WHERE object_id=OBJECT_ID('dbo.definition_computed') ORDER BY column_id"],
+ ['default object definitions',"SELECT name,OBJECT_DEFINITION(object_id) AS definition FROM sys.default_constraints WHERE parent_object_id=OBJECT_ID('dbo.definition_defaults') ORDER BY parent_column_id"],
+]
+
+export async function observeDefinitions(connection){
+ const records=[]
+ for(const [name,sql] of [
+  ['version',"SELECT CAST(SERVERPROPERTY('ProductVersion') AS NVARCHAR(128)) AS version"],
+  ...definitionSetup,...definitionQueries,
+ ]){
+  const result=canonical(await captureBatch(connection,sql))
+  if(result.errors.length)throw Error(name+': '+JSON.stringify(result.errors).slice(0,800))
+  records.push({name,sql,result})
+ }
+ return records
+}
+
+async function referenceRun(observe=observeCatalog){
  return withReferenceContainer(async(config,metadata)=>{
   assertSameCapture(metadata.image,referenceImage,'pinned reference image')
   const admin=await connect(config)
@@ -76,29 +117,35 @@ async function referenceRun(){
    if(result.errors.length)throw Error('reference database creation failed')
   }finally{admin.close()}
   const connection=await connect({...config,options:{...config.options,database:'msduck_catalog_reference'}})
-  try{return await observeCatalog(connection)}finally{connection.close()}
+  try{return await observe(connection)}finally{connection.close()}
  },{image:referenceImage})
 }
 
 async function main(args){
- if(args.length>1)throw Error('usage: capture-gaps-catalog.mjs [new-output.json]')
+ const definitions=args[0]==='--definitions'
+ if(definitions)args=args.slice(1)
+ if(args.length>1)throw Error('usage: capture-gaps-catalog.mjs [--definitions] [new-output.json]')
+ if(definitions&&!args[0])throw Error('definition profile requires a new output path')
  const output=resolve(args[0]??'reference/gaps-catalog.json')
  await refuseExistingFixture(output)
- const runs=[await referenceRun(),await referenceRun()]
+ const observe=definitions?observeDefinitions:observeCatalog
+ const runs=[await referenceRun(observe),await referenceRun(observe)]
  const failures=new Set(['pkeys missing parameter','fkeys missing parameters','rename missing object','rename invalid object type','rename column with enforced dependencies'])
  for(const run of runs)for(const record of run){
   if(Boolean(record.result.errors.length)!==failures.has(record.name))throw Error('unexpected error outcome: '+record.name+' '+JSON.stringify(record.result.errors).slice(0,800))
  }
  // Clock/ID/file values are retained in both raw runs. Only the complete empty
  // view responses are asserted equal here; no dynamic differences are erased.
- for(const view of catalogViews){
+ const views=definitions?['default_constraints','computed_columns']:catalogViews
+ for(const view of views){
   const name='empty schema '+view
   const results=runs.map(run=>run.find(record=>record.name===name)?.result)
   if(results.some(result=>!result||result.errors.length||result.sets.length!==1||result.sets[0].rows.length))throw Error('missing schema capture: '+view)
   assertSameCapture(results[0],results[1],name)
  }
+ if(definitions)assertSameCapture(runs[0],runs[1],'complete definition profile')
  await mkdir(dirname(output),{recursive:true})
  await writeNewFixture(output,{image:referenceImage,contract:'Complete empty schemas agree; other responses retained raw in both runs without normalization.',runs})
- console.log(JSON.stringify({output,records:runs.map(run=>run.length),schemaControls:catalogViews.length}))
+ console.log(JSON.stringify({output,records:runs.map(run=>run.length),schemaControls:views.length,definitions}))
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))await main(process.argv.slice(2))
