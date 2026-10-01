@@ -1026,9 +1026,11 @@ fn query_description(
     let mut declaration_query = query.clone();
     crate::aggregate_columns::annotate(&session.db, &mut declaration_query, parameters)
         .map_err(anyhow::Error::msg)?;
+    let json_query = json_declarations(query, &catalog, &scope);
     for candidate in [
         original_declarations,
-        json_declarations(query, &catalog, &scope),
+        json_query.clone(),
+        expression_declarations(&json_query, parameters, &catalog, &scope),
         expression_declarations(&declaration_query, parameters, &catalog, &scope),
     ] {
         if let Some(declared) = projection::query_fields(&catalog, &candidate, &scope) {
@@ -1085,7 +1087,7 @@ fn query_description(
                 && declared.len() == field_count
             {
                 let declaration = &declared[index];
-                if declaration.info.is_some() {
+                if field.info.is_some() {
                     field.collation = declaration.collation.clone();
                     field.properties = msduck_sql::result_properties::expression_with(
                         expression,
@@ -1590,6 +1592,26 @@ mod tests {
                 "metadata must not change cached execution AST"
             );
         }
+        let Statement::Query(query) = msduck_sql::batch::parse("SELECT CASE WHEN @p>0 THEN JSON_QUERY(CAST(@p AS NVARCHAR(MAX)), '$.a') ELSE N'{}' END").unwrap().remove(0) else { panic!("query") };
+        let mut scope = Scope::default();
+        scope.parameters.insert(
+            "@p".into(),
+            catalog.cast_info(&DataType::Int(None)).unwrap(),
+        );
+        let declared_json = json_declarations(&query, &catalog, &scope);
+        let described = expression_declarations(&declared_json, &HashMap::new(), &catalog, &scope);
+        let fields = projection::query_fields(&catalog, &described, &scope).unwrap();
+        assert_eq!(fields[0].info.as_ref().unwrap().max_length, Some(-1));
+        assert_eq!(
+            projection::query_fields(&catalog, &declared_json, &scope).unwrap()[0]
+                .collation
+                .as_ref()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .name(),
+            Some("SQL_Latin1_General_CP1_CI_AS")
+        );
         for sql in [
             "SELECT JSON_QUERY(missing, '$.a')",
             "SELECT JSON_QUERY(CAST(NULL AS INT), '$.a')",
