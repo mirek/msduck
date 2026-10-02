@@ -9641,6 +9641,24 @@
         "Add meaningful fullpath native/client regressions against exact raw quoted SQLServer evidence, including batch/RPC/prepared metadata/value paths. RequiredAGENTSfmt/workspacetests/strictClippy/alltargetbuild/npmtest/audit on finalhead; independentreviewandfreshverifiedCodexreview/fallback. ExistingPR798 owns allthreeclaimsthroughmerge/completion. No unrelatedenginechanges; reuseexistingworktree/cache andsharedLinuxlock."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjqC-"
+    },
+    {
+      "id": "gaps-release-docs-v1-pages",
+      "title": "Reconcile stale remaining-limit sections in gap feature pages",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01), umbrella #710; companion of gaps-release-docs-v1.",
+      "scope": [
+        "docs/gaps-constraints.md",
+        "docs/gaps-computed.md",
+        "docs/gaps-json_string.md",
+        "docs/gaps-keys.md"
+      ],
+      "acceptance": [
+        "Remaining-limit sections no longer describe features that later merged work implemented (constraint indexes in sys.indexes, sys.default_constraints, Unicode predicates/conversions, procedure/trigger bodies, catalogs); they point to the implementing page instead."
+      ],
+      "dependencies": [],
+      "issue": 710,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjqIs"
     }
   ]
 }
