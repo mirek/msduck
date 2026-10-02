@@ -9460,7 +9460,7 @@
     {
       "id": "quoted-session-identifiers-reference-v1",
       "title": "Capture quoted session-counter and parameter-like identifiers",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal; first-party quoted-column regression in PR786 and inspected root lowering leave public behavior unverified. Gather independent pinned SQL Server ground truth without engine edits or native builds; no external intake.",
       "scope": [
         "scripts/capture-quoted-session-identifiers.mjs",
