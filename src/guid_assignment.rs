@@ -7,6 +7,19 @@ use duckdb::{
 };
 use msduck_core::types::uniqueidentifier::{parse_nvarchar, parse_varchar};
 
+const ERROR_PREFIX: &str = "__msduck_guid_character_conversion:";
+const CONVERSION: &str =
+    "Conversion failed when converting from a character string to uniqueidentifier.";
+
+/// Recognize only this adapter's canonical native error envelope. Ordinary
+/// backend failures and application diagnostics retain their own identities.
+pub fn diagnostic(message: &str) -> Option<msduck_core::diagnostic::SqlError> {
+    let message = message
+        .strip_prefix("Invalid Input Error: ")?
+        .strip_prefix(ERROR_PREFIX)?;
+    (message == CONVERSION).then(|| msduck_core::diagnostic::SqlError::new(8169, 2, CONVERSION))
+}
+
 /// Register the storage conversion without changing existing assignment plans.
 /// The caller also owns diagnostic translation and transaction error handling.
 pub fn register(db: &Connection) -> duckdb::Result<()> {
@@ -53,12 +66,12 @@ impl VScalar for CharacterGuid {
             let bytes = if let Some(payload) = &payload {
                 let units = crate::unicode_carrier::vector_units(&source, payload, row, len)?
                     .ok_or("missing non-NULL GUID Unicode source")?;
-                parse_nvarchar(&units)?
+                parse_nvarchar(&units).map_err(|error| format!("{ERROR_PREFIX}{error}"))?
             } else {
                 // GUID syntax is ASCII. UTF-8 and CP1252 agree in the accepted
                 // prefix; any non-ASCII prefix fails and suffixes are ignored.
                 let text = crate::unicode_carrier::bytes(&source, row, len)?;
-                parse_varchar(&text)?
+                parse_varchar(&text).map_err(|error| format!("{ERROR_PREFIX}{error}"))?
             };
             target.insert(row, uuid::Uuid::from_bytes_le(bytes).to_string().as_str());
         }
@@ -70,6 +83,39 @@ impl VScalar for CharacterGuid {
 mod tests {
     use super::*;
     const GUID: &str = "00112233-4455-6677-8899-aabbccddeeff";
+
+    #[test]
+    fn native_error_envelope_preserves_core_identity_without_reclassifying_other_errors() {
+        let db = Connection::open_in_memory().unwrap();
+        register(&db).unwrap();
+        let error = db
+            .query_row::<String, _, _>(
+                "SELECT CAST(__msduck_guid_assignment(?) AS VARCHAR)",
+                ["bad"],
+                |row| row.get(0),
+            )
+            .unwrap_err();
+        assert_eq!(
+            diagnostic(&error.to_string()),
+            Some(parse_varchar(b"bad").unwrap_err())
+        );
+        for message in [
+            CONVERSION.to_owned(),
+            format!("Invalid Input Error: {CONVERSION}"),
+            format!("Invalid Input Error: {ERROR_PREFIX}{CONVERSION} extra"),
+            format!("other error: {ERROR_PREFIX}{CONVERSION}"),
+        ] {
+            assert_eq!(diagnostic(&message), None);
+        }
+        let invalid_carrier = db
+            .query_row::<String, _, _>(
+                "SELECT CAST(__msduck_guid_assignment(struct_pack(__msduck_utf16le:=?)) AS VARCHAR)",
+                [vec![0_u8]],
+                |row| row.get(0),
+            )
+            .unwrap_err();
+        assert_eq!(diagnostic(&invalid_carrier.to_string()), None);
+    }
 
     #[test]
     fn characters_null_and_native_guid_have_exact_uuid_layout() {
