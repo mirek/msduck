@@ -3053,7 +3053,7 @@
     {
       "id": "identity-alter-preflight-v1",
       "title": "Preflight dependent IDENTITY columns before ALTER DDL",
-      "state": "blocked",
+      "state": "ready",
       "authorization": "Direct owner continuing full SQL Server compatibility goal. First-party macOS explicit-transaction reproduction during owner-authored identity-sequence-dependency-v1 review; no external submission approved.",
       "scope": [
         "src/table_alter.rs"
@@ -9186,7 +9186,7 @@
     {
       "id": "guid-storage-assignment-v1",
       "title": "Apply captured SQL Server GUID character conversion to storage assignments",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal in this session (2026-10-02): implement a fully functional SQL Server-compatible Rust server backed by DuckDB. Owner-approved main2f88e888a5f444a6c3ed798b22ee54e3591d23b1 docs/guid-conversion-order.md says root execution still needs existing core GUID character conversion; src/assignment.rs leaves GUID storage targets on native casts. This is first-party gap evidence, not external content. Old catalog claims are blocked with a claimed successor; this task excludes those scopes and engine.rs.",
       "scope": [
         "src/assignment.rs",
@@ -9272,7 +9272,7 @@
     {
       "id": "guid-assignment-shell-integration-v2",
       "title": "Wire GUID assignment registration and captured transaction diagnostics",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction in this session: \"just claim it, put in instructions that if worker is not responsive, just take over, don't halt the whole factory\". Owner explicitly authorizes successor recovery without a further stopped-worker confirmation; retains permanent claims and verified owner-only intake.",
       "scope": [
         "src/scalar.rs",
@@ -9295,7 +9295,7 @@
     {
       "id": "session-options-translator-input-v1",
       "title": "Pass explicit SET option snapshots to extension translators",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct continuing owner SQL Server compatibility goal and claimed GUID shell task777: the full reference replay observes @@OPTIONS for XACT_ABORT controls. Root Translator now takes an explicit session options snapshot; four extension/output constructors need the same input. Approved registry shows no ready scope overlap. First-party compiler evidence, not external content.",
       "scope": [
         "src/engine/ext/computed/columns.rs",
@@ -9314,7 +9314,7 @@
     {
       "id": "guid-alter-target-routing-v1",
       "title": "Route GUID ALTER COLUMN through the validated assignment executor",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct continuing owner compatibility goal, GUID tasks771/777 and explicit standing instruction to claim successor work instead of halting. First-party failed GUID ALTER regression: table_alter validator correctly rejects pre-injected USING; target conversion must be added inside existing validated executor. Existing identity-alter-preflight-v1 is unclaimed, owner issue321 last updated2026-09-26T14:04:48Z (>6days), no worker holds it. Defer this stale unclaimed reservation, retain its unfinished acceptance, and claim bounded GUID routing; restore original ready state after this companion completes.",
       "scope": [
         "src/table_alter.rs"
@@ -9366,7 +9366,7 @@
     {
       "id": "guid-assignment-client-ci-v1",
       "title": "Discover the GUID assignment client regression in periodic CI",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal, claimed GUID assignment integration771/777. The focused client regression passes but periodic CI discovers tests/compat/*.test.mjs rather than this standalone file. Add a disjoint wrapper using the existing registered-client-test pattern; package.json belongs to another claimed worker and is untouched.",
       "scope": [
         "tests/compat/guid_assignment.test.mjs"
