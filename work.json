@@ -9524,6 +9524,28 @@
         "No engine/backend edits, no localCargo cache. Required currenthead fmt/strictClippy/fullworkspace/alltargets/independentclients/audit under existingLinuxrunnerlock; exactrequiredCI, verifiedreview/fallback, focusedownerPR, merge and prompt registry/project/issue completion. Fullruntimefollowup792 remains incomplete/unreserved; do not markitdone or hide raw gaps."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjcNS"
+    },
+    {
+      "id": "quoted-checked-operands-v1",
+      "title": "Keep quoted columns in checked arithmetic row binding",
+      "state": "ready",
+      "authorization": "Direct continuing owner compatibility goal, two matching merged 30-record SQL Server quoted-session captures and deterministic source inspection; fresh bounded task excluding other worker reservations.",
+      "scope": [
+        "crates/msduck-sql/src/checked_expression.rs",
+        "crates/msduck-sql/src/checked_projection.rs",
+        "crates/msduck-sql/tests/quoted_checked_operands.rs",
+        "docs/quoted-checked-operands.md"
+      ],
+      "dependencies": [
+        "quoted-session-identifiers-reference-v1"
+      ],
+      "issue": 795,
+      "acceptance": [
+        "Public parameter-only checked planning does not resolve quoted column identifiers from parameter declarations. Scoped planning resolves quoted operands through explicit logical row sources, preserving unknown and ambiguous shadowing and true unquoted parameter behavior.",
+        "Checked projection scalar prechecks classify quoted and qualified column operands as row-dependent, including empty sources. Add failing-before-fix tests for bracket/doublequote/parenthesized/qualified operands, conflicting BIGINT parameter versus captured INT column declaration, absent/unknown/ambiguous row scopes, immutable input AST/maps and original leaf inserted exactly once. Do not evaluate values or fabricate unsupported binding.",
+        "Keep expression_metadata/storage.rs metadata mismatch and root runtime/preflight/wire gaps explicit and unmodified. No local Cargo/native cache; exact-head fmt/strict Clippy/workspace/alltargets/independent clients/audit under shared Linux lock, required CI and verified review/fallback, worker-owned PR merge and prompt registry/project/issue completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pjf8M"
     }
   ]
 }
