@@ -31,6 +31,15 @@ across these nine query profiles in both runs. Additional tests cover empty,
 derived and CTE sources, casing, parentheses, parameters and quoted names.
 These tests establish declaration behavior, not full wire compatibility.
 
+Raw GUID replay at `5088aa2` has 52 differences, down from 55 on the merged
+GUID predecessor. The mixed control query retains one wire difference:
+SESSIONPROPERTY flags are 1 rather than the captured 33. The root descriptor
+adapter still loses that computed property despite correct logical inference.
+Complete session replay also shows that login options and SET ANSI_WARNINGS OFF
+succeed and differ only in these flags; their client checks retain that explicit
+gap while comparing every other field. Broader unsupported SET options retain
+their expected-error checks. Raw observations are preserved without patching.
+
 Complete current-revision Rust/client checks and raw public replay are required
 before merging. The diagnostic audit records evidence; it does not establish
 SQL Server compatibility. Missing ORDER framing and remaining unproven type,
