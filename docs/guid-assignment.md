@@ -45,7 +45,8 @@ Transaction behavior must follow the captured evidence. With XACT_ABORT OFF
 transaction: the next request observes both values as zero, the prior write is
 absent, and COMMIT reports 3902. In the single-batch TRY/CATCH control, CATCH
 observes 8169/state 2 with `@@TRANCOUNT=1, XACT_STATE()=-1`. Attempting COMMIT
-reports 3930; batch completion reports 3998 and rolls the transaction back.
+reports 3930; the subsequent SELECT still reads the prior row 30 inside that
+transaction. Batch completion reports 3998 and rolls the transaction back.
 A subsequent readback confirms both transaction state and prior writes were
 cleared. These results do not establish behavior for other conversion classes.
 
@@ -62,14 +63,33 @@ deterministic character conversion and mixed-endian GUID bytes.
 `src/guid_assignment.rs` now provides an explicitly registered native adapter
 for character/Unicode conversion, NULL and UUID passthrough. It emits canonical
 text from the core's mixed-endian bytes and lets DuckDB own UUID slot layout.
-Four native regressions cover byte layout, raw UTF-16 suffixes, single
-evaluation across 6,000 rows and native diagnostic translation.
+Seven native regressions cover byte layout, raw UTF-16 suffixes, single
+evaluation across 6,000 rows, native diagnostic translation and checked
+conversion without poisoning native transaction reads.
 `guid_assignment::diagnostic` recognizes only this adapter's canonical marked
 DuckDB error envelope and returns the core error identity (8169/state 2/severity
 16). Application text, unrelated backend errors, malformed carriers and appended
 error text are not reclassified. Root assignment still needs wiring, diagnostics
 and the captured transaction effects. These native tests do not establish server
 assignment support.
+
+For DML, use `__msduck_guid_assignment_check(input)` and materialize its result
+once. It returns fixed VARCHAR fields `value` (canonical GUID text or NULL) and
+`error` (marked conversion diagnostic or NULL). UUID passthrough and supported
+typed NULL inputs retain those same fields. The shell must inspect every error
+before changing target rows; an error's NULL value is not a successful NULL
+assignment. Decode a known adapter error cell with
+`guid_assignment::checked_diagnostic`, then cast error-free values to native UUID
+when applying the staged mutation. Reusing materialized values and diagnostics
+avoids evaluating volatile operands again.
+
+The checked adapter treats expected character conversion failures as data;
+malformed physical carriers and unsupported source types remain explicit native
+failures. Prior transaction writes stay readable after checked conversion, and
+the shell owns SQL Server's logical uncommittable state, commit rejection and
+batch-end rollback. The throwing macro remains available but is insufficient
+for captured DML transaction fidelity. The native checked tests prove this
+mechanism; they do not implement or claim the shell lifecycle.
 
 Source inspection found native scalar registration in `src/scalar.rs`, rather
 than `src/lib.rs`. Error translation and transaction lifecycle are owned by the
