@@ -2763,7 +2763,7 @@
     {
       "id": "concat-ws-translate-core-v1",
       "title": "Add deterministic CONCAT_WS and TRANSLATE rules",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner goal of 2026-09-26: continue development, keep claiming work, run multiple PRs in parallel and coordinate through the shared registry. Deterministic successor proposed by the first-party reference document; evidence is the retained first-party fixture. No external submission is input.",
       "scope": [
         "crates/msduck-sql/src/concat_ws.rs",
@@ -9737,6 +9737,27 @@
         "Prove shard discovery and actual Node reporter file/name identities match for the moved regressions and assess reports3 passes without unexpected/missing cases. Execute actual standard-entry regressions under shared Linux lock against identified cached build. Source/diff checks, exact-head required CI and completed verified review/fallback, claiming worker owns existing PR810 merge and completion. Old809 staysblocked, receipt/checkpoint retained; reuse same completed worktree, no additional Cargo targets or agents."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pjym8"
+    },
+    {
+      "id": "concat-ws-translate-core-recovery-v1",
+      "title": "Implement deterministic CONCAT_WS and TRANSLATE from recovered evidence",
+      "issue": 812,
+      "state": "ready",
+      "authorization": "Owner continuing goal; actual merged recovered reference806/807 replaces blocked253 predecessor.",
+      "scope": [
+        "crates/msduck-sql/src/concat_ws.rs",
+        "crates/msduck-sql/tests/concat_ws_translate.rs",
+        "docs/concat-ws-translate-core.md"
+      ],
+      "dependencies": [
+        "concat-ws-translate-reference-recovery-v1"
+      ],
+      "acceptance": [
+        "Implement pure declaration/arity/collation/error and already-SQL-converted text evaluation rules from retained116-program/four-capture groundtruth: CONCAT_WS literalNULL/typed widths, separator gaps, emptystrings/NULLskipping, VARCHAR/NVARCHAR/MAX result and bounded truncation; TRANSLATE fixedwidth/MAX-first, NULLpropagation, firstmapping/nochaining, UTF16/nonSC versusSC units and length9828 states. Keep conversion formatting explicit in calleradapter, uncaptured per-type widths/weights unsupported, preserve complete captured diagnostics. No compile metadata from currentvalues, hiddeneffects/backend/parser changes.",
+        "Use existing validated core character/types/collation/error/encoding helpers. Keep module unregistered while805 ownsSQLlib; standalone path integration test imports only std/external crates, never crate::. Tests cover every applicable captured character case across allfour observations including prepared binding changes, declarationflags/collation/rawerror identity, valueinputimmutability and bounded payloads. Explicitly enumerate noncharacter formatting, uncaptured comparison/width and root execution/export gaps rather than guessing.",
+        "Fresh own receipt/branch in completed existing session-control worktree; no newworktree/localCargo caches/implementationagents. Private deterministic Linux tests use read-only cached deps and isolated terminal-cleaned outputs, honor sharednative runnerlock for full gates. Required exact-head formatter/Clippy/workspace/alltarget/client/audit appropriately, CI and verified independent/Codexreview or ownerfallback; worker owns PRmerge/completion. Runtime/export separate successors; no fullcompatibility claim."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjzuI"
     }
   ]
 }
