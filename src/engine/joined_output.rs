@@ -397,6 +397,7 @@ impl Session {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: self.transactions,
+            options_mask: self.options_mask(),
             transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
             clock: crate::current_time::now(),

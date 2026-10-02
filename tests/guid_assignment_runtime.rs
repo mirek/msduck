@@ -185,3 +185,50 @@ fn transaction_option_controls_report_the_live_supported_set_mask() {
         "IF @@OPTIONS<>5496 THROW 51000,'incorrect login mask',1; SET XACT_ABORT ON; SET NOCOUNT ON; SET ANSI_WARNINGS OFF; IF @@OPTIONS<>22384 THROW 51001,'incorrect changed mask',1; SET XACT_ABORT OFF; SET NOCOUNT OFF; SET ANSI_WARNINGS ON; IF @@OPTIONS<>5496 THROW 51002,'incorrect restored mask',1",
     );
 }
+
+#[test]
+fn checked_guid_write_plans_evaluate_volatile_assignments_once_across_chunks() {
+    use sqlparser::{dialect::DuckDbDialect, parser::Parser};
+    let server = Server::open(":memory:").unwrap();
+    let session = Session::new(server.connection().unwrap()).unwrap();
+    session.db.execute_batch("CREATE TABLE dbo.guid_runtime(id INT,g UUID,n INT); CREATE SEQUENCE guid_insert_calls; CREATE SEQUENCE guid_update_calls").unwrap();
+    let insert=Parser::parse_sql(&DuckDbDialect{}, &format!("INSERT INTO dbo.guid_runtime SELECT i,__msduck_guid_assignment(CASE WHEN nextval('guid_insert_calls')%3=0 THEN NULL ELSE '{GUID}EXTRA' END),0 FROM range(6000) t(i)")).unwrap().remove(0);
+    assert_eq!(
+        msduck::guid_assignment::checked_insert(&session.db, &insert, &[]).unwrap(),
+        Some(6000)
+    );
+    let update=Parser::parse_sql(&DuckDbDialect{}, &format!("UPDATE dbo.guid_runtime SET g=__msduck_guid_assignment(CASE WHEN nextval('guid_update_calls')%5=0 THEN NULL ELSE '{{{GUID}}}EXTRA' END),n=n+1 WHERE id<5000")).unwrap().remove(0);
+    assert_eq!(
+        msduck::guid_assignment::checked_update(&session.db, &update, &[]).unwrap(),
+        Some(5000)
+    );
+    let calls: (i64, i64) = session
+        .db
+        .query_row(
+            "SELECT currval('guid_insert_calls'),currval('guid_update_calls')",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(calls, (6000, 5000));
+    let counts: (i64, i64) = session
+        .db
+        .query_row(
+            "SELECT count(g),sum(n) FROM dbo.guid_runtime WHERE id<5000",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(counts, (4000, 5000));
+    let remaining: i64 = session
+        .db
+        .query_row(
+            "SELECT sum(n) FROM dbo.guid_runtime WHERE id>=5000",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(remaining, 0);
+    let stages:i64=session.db.query_row("SELECT count(*) FROM duckdb_tables() WHERE database_name='temp' AND table_name LIKE '__msduck_checked_guid_assignment_%'",[],|row|row.get(0)).unwrap();
+    assert_eq!(stages, 0);
+}
