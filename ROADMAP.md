@@ -920,8 +920,9 @@ FOR JSON PATH now has a deterministic typed planner/row writer in the core,
 adapting upstream ordered path trees. It validates aliases, retains exact numeric
 and JSON text, distinguishes SQL NULL from JSON null, and supports omission,
 ROOT and array-wrapper options. This is a serialization foundation only: SQL
-binding/execution, logical SQL value conversion, correlated queries, AUTO mode,
-metadata/wire output and live comparison remain open. See [FOR JSON](docs/for-json.md).
+binding/execution, logical SQL value conversion, correlated queries,
+metadata/wire output and live comparison remained open at that stage. AUTO mode
+is now supported ([FOR JSON AUTO](docs/gaps-json_string.md)). See [FOR JSON](docs/for-json.md).
 
 RPC parameters and local variable bindings now carry backend-independent core
 scalar values, including validated exact decimals with retained precision/scale.
@@ -957,8 +958,9 @@ syntax policy in `msduck-sql`, Base64 in `msduck-core`, and catalog/Arrow/TDS wo
 in the root adapter. DESCRIBE binds aliases and expands stars without evaluating
 source rows; source ordering and row limits remain in existing lowering. Typed
 client coverage includes options, metadata, prepared queries, errors, temporal
-values and 6000-row results. Nested/correlated queries, AUTO, expression-level
-fragment/money provenance, set operations and SQL Server row chunking remain open.
+values and 6000-row results. Expression-level fragment/money provenance, set
+operations and SQL Server row chunking remain open; nested/correlated queries and
+AUTO were added later.
 
 Nested and correlated FOR JSON PATH now lower to typed native row serialization
 and DuckDB aggregation, preserving source ordering, DISTINCT and paging. Scalar

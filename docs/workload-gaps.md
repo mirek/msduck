@@ -29,7 +29,7 @@ lists its remaining limits.
 | Bulk load (`INSERT BULK`, BulkLoadBCP) | [gaps-bulk](gaps-bulk.md) | Views can't be bulk targets. `SCOPE_IDENTITY` is unchanged when identity values are kept. |
 | Contextual identifiers (`offset`, `at`, ...), database-qualified errors | [gaps-identifiers](gaps-identifiers.md) | T-SQL reserved words are not rejected with 156. |
 | Constraint, module and file catalogs, INFORMATION_SCHEMA, OBJECT_DEFINITION, sp_pkeys/sp_fkeys/sp_rename | [gaps-catalog](gaps-catalog.md) | The new views report DuckDB column types. DROP/ALTER COLUMN with a generated-name DEFAULT is not refused. |
-| Constraint-backed rows in `sys.indexes`/`sys.index_columns` | [index catalog](index-catalog.md) | WITH options such as `fill_factor` show their defaults. |
+| Constraint-backed rows in `sys.indexes`/`sys.index_columns` | [gaps-catalog](gaps-catalog.md) | WITH options such as `fill_factor` show their defaults. |
 
 Transactions still run on DuckDB snapshot isolation. Accepting a lock hint or
 an isolation level is not the same as SQL Server's locking semantics. The

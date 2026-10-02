@@ -146,7 +146,7 @@ Later work fixed the other differences listed here earlier:
 
 - `CREATE [UNIQUE] CLUSTERED INDEX` ([keys](gaps-keys.md));
 - `ALTER TABLE ... ADD CONSTRAINT ... PRIMARY KEY | UNIQUE` ([constraints](gaps-constraints.md));
-- constraint-backed rows in `sys.indexes` ([index catalog](index-catalog.md)).
+- constraint-backed rows in `sys.indexes` ([catalogs](gaps-catalog.md)).
 
 ## Table hints
 
