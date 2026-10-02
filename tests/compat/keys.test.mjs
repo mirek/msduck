@@ -411,7 +411,6 @@ const differences = {
     6: 'nvarchar comparison with a literal in WHERE is unsupported (comparison lowering)',
     7: 'the case-insensitive duplicate was accepted in step 3',
     8: 'NOT NULL violations keep the backend message (engine)',
-    9: 'sys.indexes does not yet model key constraints (index catalog)',
   },
   'datetimeoffset-keys': {
     2: 'the message shows the UTC instant, not the inserted offset',
