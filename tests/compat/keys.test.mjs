@@ -415,7 +415,6 @@ const differences = {
   },
   'datetimeoffset-keys': {
     2: 'the message shows the UTC instant, not the inserted offset',
-    6: 'a column named at is a DuckDB keyword (identifiers)', 7: 'follows step 6', 8: 'follows step 6', 9: 'follows step 6', 10: 'follows step 6',
   },
   'unique-index-null': {
     5: 'keys compare with BIN2 equality, not the case-insensitive default collation',
