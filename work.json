@@ -9528,7 +9528,7 @@
     {
       "id": "quoted-checked-operands-v1",
       "title": "Keep quoted columns in checked arithmetic row binding",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct continuing owner compatibility goal, two matching merged 30-record SQL Server quoted-session captures and deterministic source inspection; fresh bounded task excluding other worker reservations.",
       "scope": [
         "crates/msduck-sql/src/checked_expression.rs",
