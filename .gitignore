@@ -1,6 +1,7 @@
 /target/
 /node_modules/
 /artifacts/
+/.tmp/
 *.duckdb
 *.duckdb.wal
 .DS_Store
