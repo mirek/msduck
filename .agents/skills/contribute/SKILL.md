@@ -183,6 +183,36 @@ in `docs/agent-work.md`. Report the resolution afterwards. Sessions often run
 unattended for days, so keep progressing and do not idle while waiting for
 approval.
 
+### Unresponsive-worker takeover
+
+The owner additionally authorizes taking over an unresponsive worker without
+another approval request or a mandatory six-hour delay. This procedure governs
+when older recovery wording would require confirmation that the worker stopped.
+Do not halt unrelated work while recovering one task.
+
+- Check the latest approved checkpoint and available worker/job status, attempt
+  contact through an available owner-approved coordination channel, and record
+  the evidence of unresponsiveness. Mere age, a pending review or an actively
+  progressing build is not enough. Do not wait indefinitely for a reply once
+  evidence establishes unresponsiveness.
+- Retain the old branch, receipt and verification evidence. Use `publish` to
+  mark the old task `blocked` and add a new bounded successor under a new ID,
+  recording this standing authorization and the recovery evidence. Keep scopes
+  disjoint from remaining ready tasks. Never mark incomplete dependencies done
+  merely to make a successor claimable.
+- Run `claim NEW-ID`; begin only after `acquired: true`. Never adopt the old
+  receipt or delete its permanent claim. Displaced workers must verify before
+  their next write and stop immediately when their task is revoked.
+- Inspect and stop local/remote jobs attributable to the displaced task where
+  accessible. Do not kill unrelated jobs or guess ownership. Isolate successor
+  outputs and honor shared build locks so an old job cannot overwrite them.
+  An unreachable old worker does not require another owner confirmation;
+  registry revocation and verification govern subsequent writes.
+
+The successor owns review follow-up, exact-head checks, merge and completion
+under the usual gates. Recovery does not approve third-party content or relax
+required CI or unresolved review findings.
+
 ## Verification and shared resources
 
 Follow `AGENTS.md` checks appropriate to the changed behavior. Do not run multiple
