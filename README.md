@@ -99,8 +99,10 @@ Version 0.2.5 adds the features an mssql/tedious application workload needed:
 - application locks, BACKUP/RESTORE and msdb history;
 - ALTER TABLE constraints and foreign-key actions;
 - keys and indexes on every SQL Server-indexable column type, including
-  nvarchar and datetimeoffset (MAX, text, ntext, image and XML keys fail with
-  1919, as in SQL Server);
+  nvarchar and datetimeoffset, when created by CREATE TABLE or CREATE INDEX.
+  Keys added by ALTER TABLE cannot yet use nvarchar, nchar, datetime2 or
+  datetimeoffset columns. MAX, text, ntext, image and XML keys fail with
+  1919, as in SQL Server;
 - rowversion, decimal identity and `SCOPE_IDENTITY`;
 - constraint, module and index catalogs;
 - isolation levels, savepoints and WAITFOR;

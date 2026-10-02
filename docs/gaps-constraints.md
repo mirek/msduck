@@ -194,11 +194,11 @@ The feature uses the extension hooks (docs/extension-hooks.md):
 - Character keys match binary, like msduck's other comparisons and native
   keys: case-insensitive collation and trailing-space equivalence do not
   apply to foreign keys.
-- `sys.check_constraints.definition` is the expression as written, in
-  parentheses, not SQL Server's normalized text (`([value]>(0))`).
-  `key_index_id` and `unique_index_id` are NULL, and sys.indexes does not
-  list constraint indexes. Unnamed DEFAULT constraints are not cataloged
-  (existing behavior), so they cannot be dropped by a generated name.
+- Catalog rows: the later catalog work ([catalogs](gaps-catalog.md)) replaced
+  this feature's interim limits. CHECK and DEFAULT definitions now use SQL
+  Server's normalized text, constraint indexes appear in `sys.indexes`, and
+  unnamed DEFAULT, CHECK and FOREIGN KEY constraints get generated names. That
+  page lists what remains.
 - A failed ADD UNIQUE or PRIMARY KEY reports 1505 and 1750 without the
   informational 3621 that SQL Server adds. The 4145 message lacks
   "near ')'". DEFAULT expressions are not checked for implicit conversion
