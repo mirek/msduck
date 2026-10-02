@@ -83,7 +83,7 @@ pub fn plan(query: &Query, scope: &Scope) -> Option<Plan> {
     // values. The adapter evaluates bound scalars in projection order.
     let constants = select.projection.iter().all(|item| {
         visit_expressions(item, |expr| {
-            if matches!(expr, Expr::Identifier(id) if !id.value.starts_with('@'))
+            if matches!(expr, Expr::Identifier(id) if id.quote_style.is_some() || !id.value.starts_with('@'))
                 || matches!(expr, Expr::CompoundIdentifier(_))
             {
                 std::ops::ControlFlow::Break(())

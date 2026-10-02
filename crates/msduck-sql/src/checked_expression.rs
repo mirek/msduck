@@ -222,7 +222,9 @@ impl Builder<'_> {
 /// are read separately. Original leaf ASTs are inserted without text reparsing.
 pub fn plan(expression: &Expr, parameters: &HashMap<String, Kind>) -> Option<Plan> {
     build(expression, &|expr| match expr {
-        Expr::Identifier(id) => parameters.get(&id.value.to_lowercase()).copied(),
+        Expr::Identifier(id) if id.quote_style.is_none() => {
+            parameters.get(&id.value.to_lowercase()).copied()
+        }
         _ => None,
     })
     .filter(|plan| plan.checked)
@@ -247,13 +249,14 @@ pub(crate) fn projection_operand(
             Expr::CompoundIdentifier(ids) => ids.iter().collect(),
             _ => return None,
         };
-        let info = if ids.len() == 1 && ids[0].value.starts_with('@') {
-            scope.parameters.get(&ids[0].value.to_lowercase())?
-        } else {
-            crate::binding_scope::resolve(&ids, &[], &scope.rows)?
-                .info
-                .as_ref()?
-        };
+        let info =
+            if ids.len() == 1 && ids[0].quote_style.is_none() && ids[0].value.starts_with('@') {
+                scope.parameters.get(&ids[0].value.to_lowercase())?
+            } else {
+                crate::binding_scope::resolve(&ids, &[], &scope.rows)?
+                    .info
+                    .as_ref()?
+            };
         match info.system_type_id? {
             56 => Some(Kind::Int),
             127 => Some(Kind::BigInt),
