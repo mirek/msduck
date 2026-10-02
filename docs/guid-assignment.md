@@ -36,15 +36,21 @@ preserves the complete observations without normalizing them.
 ## Runtime integration remains pending
 
 The existing core parser in `msduck-core::types::uniqueidentifier` provides
-deterministic character conversion and mixed-endian GUID bytes. Root assignment
-still needs an adapter that preserves typed NULL, raw Unicode units, single
-operand evaluation, UUID layout, diagnostics and the captured transaction
-effects. Neither this capture nor the earlier core tests establish root support.
+deterministic character conversion and mixed-endian GUID bytes.
+`src/guid_assignment.rs` now provides an explicitly registered native adapter
+for character/Unicode conversion, NULL and UUID passthrough. It emits canonical
+text from the core's mixed-endian bytes and lets DuckDB own UUID slot layout.
+Three native regressions cover byte layout, raw UTF-16 suffixes and single
+evaluation across 6,000 rows. Root assignment still needs wiring, diagnostics
+and the captured transaction effects. These native tests do not establish server
+assignment support.
 
 Source inspection found native scalar registration in `src/scalar.rs`, rather
 than `src/lib.rs`. Error translation and transaction lifecycle are owned by the
 engine shell. The current task does not authorize editing those files; any
 necessary registration companion must be exclusively claimed, and integration
 with the owner's separately reserved `engine.rs` must be coordinated before
-edits. Scalar CAST/TRY_CONVERT, GUID ordering and uncaptured source types remain
+edits. Backlog issue #773 / `guid-assignment-shell-integration-v1` records that
+coordination and reserves no files. Scalar CAST/TRY_CONVERT, GUID ordering and
+uncaptured source types remain
 separate compatibility gaps.
