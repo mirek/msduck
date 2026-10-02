@@ -4514,7 +4514,7 @@
     {
       "id": "prepared-handle-wire-v1",
       "title": "Emit SQL Server's prepared-handle RETURNVALUE name and flags",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner handoff of returnvalue-codec-v1 to this session (2026-09-27) with instruction to address review feedback. No external submission is input.",
       "scope": [
         "crates/msduck-tds/src/lib.rs",
