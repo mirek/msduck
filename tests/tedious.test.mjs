@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs'
 import { TYPES, Request, Connection } from 'tedious'
 import { start as startClient, query } from './support/client.mjs'
 import { capture, canonical } from '../scripts/lib/compatibility.mjs'
+// Keep these focused regressions in npm test and the CI shard inventory.
+import './quoted_identifier_translation.test.mjs'
 
 // The two-worker GitHub runner takes about 2.7 times as long as the previous
 // catalog-free revision. Preserve the same assertions while allowing its
