@@ -100,7 +100,7 @@ pub fn kind(
                 None
             }
         }
-        Expr::Identifier(id) if id.value.starts_with('@') => parameters
+        Expr::Identifier(id) if id.quote_style.is_none() && id.value.starts_with('@') => parameters
             .get(&id.value.to_lowercase())
             .map(|p| p.ast_type())
             .or_else(|| column(expr)),
