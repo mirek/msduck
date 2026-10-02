@@ -9623,6 +9623,24 @@
       "dependencies": [],
       "issue": 801,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjpFE"
+    },
+    {
+      "id": "quoted-identifier-translation-review-v1",
+      "title": "Preserve delimited parameter-like columns through root translation",
+      "state": "ready",
+      "issue": 803,
+      "authorization": "Direct owner continuing goal and verified confirmed review4170177892; bounded companion to797/799.",
+      "scope": [
+        "src/engine.rs",
+        "tests/quoted_identifier_translation.rs",
+        "tests/quoted_identifier_translation.test.mjs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Guard root variable/globalcounter rewrites with quote_style.is_none(); preserve quoted columns including NULL rows through DATALENGTH storage lowering with conflicting RPC parameters. Verify genuine unquoted parameters and session counters remain functional.",
+        "Add meaningful fullpath native/client regressions against exact raw quoted SQLServer evidence, including batch/RPC/prepared metadata/value paths. RequiredAGENTSfmt/workspacetests/strictClippy/alltargetbuild/npmtest/audit on finalhead; independentreviewandfreshverifiedCodexreview/fallback. ExistingPR798 owns allthreeclaimsthroughmerge/completion. No unrelatedenginechanges; reuseexistingworktree/cache andsharedLinuxlock."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjqC-"
     }
   ]
 }
