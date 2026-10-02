@@ -3053,7 +3053,7 @@
     {
       "id": "identity-alter-preflight-v1",
       "title": "Preflight dependent IDENTITY columns before ALTER DDL",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner continuing full SQL Server compatibility goal. First-party macOS explicit-transaction reproduction during owner-authored identity-sequence-dependency-v1 review; no external submission approved.",
       "scope": [
         "src/table_alter.rs"
@@ -9310,6 +9310,22 @@
       ],
       "issue": 779,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjDlm"
+    },
+    {
+      "id": "guid-alter-target-routing-v1",
+      "title": "Route GUID ALTER COLUMN through the validated assignment executor",
+      "state": "ready",
+      "authorization": "Direct continuing owner compatibility goal, GUID tasks771/777 and explicit standing instruction to claim successor work instead of halting. First-party failed GUID ALTER regression: table_alter validator correctly rejects pre-injected USING; target conversion must be added inside existing validated executor. Existing identity-alter-preflight-v1 is unclaimed, owner issue321 last updated2026-09-26T14:04:48Z (>6days), no worker holds it. Defer this stale unclaimed reservation, retain its unfinished acceptance, and claim bounded GUID routing; restore original ready state after this companion completes.",
+      "scope": [
+        "src/table_alter.rs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Recognize native UUID target columns in the existing ALTER assignment conversion condition; use the claimed assignment::convert GUID adapter after structural validation. Preserve all existing transaction, identity and catalog behavior.",
+        "Use the companion777 checked ALTER validation before effects. Verify valid suffix/NULL ALTER and invalid multirow source preservation, current-head full Rust/client/audit checks with PR772; complete after merge and restore unclaimed identity-alter-preflight-v1 to ready."
+      ],
+      "issue": 780,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjEqC"
     }
   ]
 }
