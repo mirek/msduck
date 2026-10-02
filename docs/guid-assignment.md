@@ -17,6 +17,20 @@ in a new artifact. A successful replay command means observations were retained;
 it does not mean compatibility passed. No supplementary setup or excluded
 requests hide unsupported behavior.
 
+The complete local replay at `4e8c97c` retained 36 requests and 339 raw
+differences. Artifact SHA-256:
+`e512778991822022ef4fd41bc88a2f985e31dd0ae4dfdece9c24a48918677338`.
+Canonical and braced assignments succeed, but suffixed INSERT and UPDATE
+assignments fail with native error 245/state 1 instead of succeeding. Malformed
+assignments likewise emit native 245/state 1 instead of the captured
+8169/state 2. `@@OPTIONS` is explicitly unsupported (40515), so the original
+post-BEGIN options probe produces no result. The later transaction-state and
+TRY/CATCH probes encounter an aborted DuckDB transaction; subsequent parameter
+and ALTER requests inherit that failure. They were retained rather than repaired
+or skipped, and do not independently establish local parameter/ALTER behavior.
+Server integration must repair both conversion and session lifecycle, then
+repeat the complete replay. No compatibility pass is claimed.
+
 The capture observes canonical, braced and suffixed VARCHAR/NVARCHAR assignments,
 typed GUID passthrough and typed NULL. Malformed single-row INSERT, multirow
 INSERT and multirow UPDATE report 8169/state 2/severity 16. Readbacks retain
