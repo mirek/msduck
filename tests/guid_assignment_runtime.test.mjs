@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises'
 import {start} from './support/client.mjs'
 import {observe,verifyObservations} from '../scripts/capture-guid-assignment.mjs'
 
-test('GUID assignment rows, diagnostics and transaction effects match pinned reference captures',async t=>{
+test('GUID assignment rows, diagnostics, completion fields and transaction effects match pinned captures',async t=>{
  const reference=JSON.parse(await readFile(new URL('../reference/guid-assignment.json',import.meta.url)))
  assert.deepEqual(reference.runs[0],reference.runs[1],'fresh reference agreement')
  const connection=await start(t)
@@ -21,5 +21,7 @@ test('GUID assignment rows, diagnostics and transaction effects match pinned ref
   assert.deepEqual(record.result.sets.map(set=>set.rows),expected.sets.map(set=>set.rows),record.name+' rows')
   assert.deepEqual(record.result.errors,expected.errors,record.name+' errors')
   assert.deepEqual(record.result.info,expected.info,record.name+' information')
+  assert.deepEqual(record.result.doneTokens,expected.doneTokens,record.name+' completion fields')
+  if(expected.sets.length===0)assert.deepEqual(record.result.events,expected.events,record.name+' non-result event order')
  }
 })
