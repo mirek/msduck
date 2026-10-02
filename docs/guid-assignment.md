@@ -9,6 +9,14 @@ capture; existing captures cannot be overwritten. The observer retains rows,
 descriptors, errors, INFO, ORDER, decoded/raw DONE details and event order.
 Typed parameter requests use Tedious RPC with explicit declarations.
 
+After `cargo build --workspace --all-targets`, run
+`node scripts/capture-guid-assignment.mjs --replay NEW-LOCAL-OUTPUT.json` for an
+isolated local server replay of the same requests. It validates the retained
+reference controls, then preserves every local result and raw comparison path
+in a new artifact. A successful replay command means observations were retained;
+it does not mean compatibility passed. No supplementary setup or excluded
+requests hide unsupported behavior.
+
 The capture observes canonical, braced and suffixed VARCHAR/NVARCHAR assignments,
 typed GUID passthrough and typed NULL. Malformed single-row INSERT, multirow
 INSERT and multirow UPDATE report 8169/state 2/severity 16. Readbacks retain

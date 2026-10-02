@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // Owner-controlled assignment evidence; captured SQL/diagnostics are data.
-import {mkdir} from 'node:fs/promises'
+import {mkdir,readFile} from 'node:fs/promises'
+import {createHash} from 'node:crypto'
 import {dirname,resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {TYPES} from 'tedious'
-import {canonical} from './lib/compatibility.mjs'
+import {canonical,differences} from './lib/compatibility.mjs'
 import {connect,assertSameCapture,refuseExistingFixture,writeNewFixture} from './lib/reference.mjs'
 import {referenceImage,withReferenceContainer} from './lib/reference-container.mjs'
 import {captureBatch,captureRpc} from './capture-order-token.mjs'
+import {start} from '../tests/support/client.mjs'
 
 const guid='00112233-4455-6677-8899-aabbccddeeff'
 export const plan=[
@@ -83,22 +85,45 @@ export function verifyObservations(records){
  const upper='00112233-4455-6677-8899-AABBCCDDEEFF'
  assertSameCapture(rows('parameter readback'),[[[40,upper],[41,upper],[42,upper],[43,null]]],'typed parameter assignments')
 }
+export async function observe(connection){
+ const records=[]
+ for(const [name,sql,parameter] of plan){
+  const result=canonical(await (parameter?parameterCapture(connection,sql,parameter):captureBatch(connection,sql)))
+  records.push({name,sql,...(parameter?{parameter}:{}),result})
+ }
+ return records
+}
+async function replay(output){
+ await refuseExistingFixture(output)
+ const raw=await readFile(new URL('../reference/guid-assignment.json',import.meta.url))
+ const reference=JSON.parse(raw)
+ assertSameCapture(reference.runs[0],reference.runs[1],'retained reference runs')
+ verifyObservations(reference.runs[0])
+ const cleanup=[]
+ try{
+  // A new ephemeral listener/database belongs to this invocation. No shared
+  // test port, supplementary setup or reference normalization is used.
+  const connection=await start({after:callback=>cleanup.push(callback)})
+  const records=await observe(connection)
+  const delta=differences(records,reference.runs[0])
+  await mkdir(dirname(output),{recursive:true})
+  await writeNewFixture(output,{
+   contract:'Complete local replay; raw differences are compatibility gaps, not a passing comparison.',
+   referenceSha256:createHash('sha256').update(raw).digest('hex'),records,differences:delta,
+  })
+  console.log(JSON.stringify({output,records:records.length,differences:delta.length}))
+ }finally{for(const callback of cleanup.reverse())await callback()}
+}
 async function run(){
  return withReferenceContainer(async(config,metadata)=>{
   assertSameCapture(metadata.image,referenceImage,'pinned image')
   const connection=await connect(config)
-  try{
-   const records=[]
-   for(const [name,sql,parameter] of plan){
-    const result=canonical(await (parameter?parameterCapture(connection,sql,parameter):captureBatch(connection,sql)))
-    records.push({name,sql,...(parameter?{parameter}:{}),result})
-   }
-   return records
-  }finally{connection.close()}
+  try{return await observe(connection)}finally{connection.close()}
  },{image:referenceImage})
 }
 async function main(args){
- if(args.length!==1)throw Error('usage: capture-guid-assignment.mjs new-output.json')
+ if(args.length===2&&args[0]==='--replay')return replay(resolve(args[1]))
+ if(args.length!==1)throw Error('usage: capture-guid-assignment.mjs [--replay] new-output.json')
  const output=resolve(args[0]);await refuseExistingFixture(output)
  const runs=[await run(),await run()]
  assertSameCapture(runs[0],runs[1],'complete GUID assignment observations')
