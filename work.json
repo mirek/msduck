@@ -9326,6 +9326,22 @@
       ],
       "issue": 780,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjEqC"
+    },
+    {
+      "id": "gaps-catalog-v2-keys-ratchet",
+      "title": "Retire the keys reference difference fixed by recorded key constraints in sys.indexes (gaps-catalog-v2)",
+      "state": "ready",
+      "authorization": "Owner standing authorization for stale claims; successor of stale gaps-catalog-v1 and catalog-key-identities-v1 (evidence in the registry change), umbrella #710, issue #728. companion of gaps-catalog-v2",
+      "scope": [
+        "tests/compat/keys.test.mjs"
+      ],
+      "acceptance": [
+        "The nvarchar-primary-key step 9 difference ('sys.indexes does not yet model key constraints') is removed now that sys.indexes matches SQL Server there; other keys differences stay.",
+        "Covered by gaps-catalog-v2 verification in the same PR."
+      ],
+      "dependencies": [],
+      "issue": 728,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PdQvA"
     }
   ]
 }
