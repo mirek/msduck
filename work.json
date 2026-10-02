@@ -9382,7 +9382,7 @@
     {
       "id": "session-control-declarations-core-v1",
       "title": "Preserve captured @@OPTIONS and session control declarations",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal in this session; first-party complete GUID replay atd071921 and two agreeing pinned captures in reference/guid-assignment.json and reference/session-property-context.json. No external intake. Existing projection.rs claim is excluded; GUID shell/native files stay in their current claims.",
       "scope": [
         "crates/msduck-sql/src/session_function.rs",
@@ -9402,7 +9402,7 @@
     {
       "id": "session-control-projection-properties-v1",
       "title": "Preserve computed SESSIONPROPERTY metadata in logical projection",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct continuing owner SQL Server compatibility goal; owner explicitly said to take over unresponsive workers without halting. Existing set-result-properties-v1 parent PR703 last update2026-10-01T10:21:31Z at4205c487211fa5f3bd38d675f82f92b2689a722e (>33hours). Its branch has no attached worktree; former worktree now runs another claimed branch. No live old session agent or attributable Linux process remains. Recovery contact/evidence in owner comment5959984713. Keep incomplete set acceptance, old claim and branch; do not adopt receipt or mark done.",
       "scope": [
         "crates/msduck-sql/src/projection.rs"
@@ -9420,7 +9420,7 @@
       "id": "session-control-client-ratchet-v1",
       "title": "Ratchet successful session option replay against captured descriptors",
       "issue": 787,
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server compatibility goal; first-party exact5088aa2 raw replay proves former @@OPTIONS errors are now successes with only existing flags1 versus33 descriptor gaps. No external intake. Companion of claims784/785 in PR786.",
       "scope": [
         "tests/session_property_context.test.mjs"
