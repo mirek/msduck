@@ -9254,7 +9254,7 @@
     {
       "id": "unresponsive-worker-recovery-v1",
       "title": "Allow authorized successor claims for unresponsive workers",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction in this session: \"just claim it, put in instructions that if worker is not responsive, just take over, don't halt the whole factory\". Owner explicitly authorizes successor recovery without a further stopped-worker confirmation; retains permanent claims and verified owner-only intake.",
       "scope": [
         ".agents/skills/contribute/SKILL.md",
