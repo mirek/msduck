@@ -3065,7 +3065,7 @@ impl Session {
             return Ok(Execution::statement(vec![], None, 0));
         }
         if let Statement::AlterTable(table) = &statement {
-            crate::guid_assignment::validate_alter(&self.db, table).map_err(|error| {
+            crate::guid_assignment::validate_alter(&self.db, table).inspect_err(|error| {
                 if self.transactions > 0
                     && error
                         .downcast_ref::<SqlError>()
@@ -3073,7 +3073,6 @@ impl Session {
                 {
                     self.transaction_doomed = true;
                 }
-                error
             })?;
             ensure!(
                 translator.values.is_empty(),
