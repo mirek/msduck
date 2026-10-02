@@ -9237,7 +9237,7 @@
     {
       "id": "worker-tmp-dir-v1",
       "title": "Use a git-ignored .tmp directory for worker temporary files",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01), issue #774.",
       "scope": [
         ".gitignore",
