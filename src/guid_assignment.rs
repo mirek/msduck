@@ -428,6 +428,7 @@ pub fn prepare_alter(db: &Connection, table: &mut AlterTable) -> anyhow::Result<
                 AlterColumnOperation::SetDataType {
                     data_type: DataType::Uuid,
                     using,
+                    ..
                 },
         } = operation
         else {
