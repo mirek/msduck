@@ -571,6 +571,45 @@ function validateTokens(run) {
       if (!Array.isArray(phase.tokens) || !phase.tokens.length || !/^DONE(PROC)?$/.test(phase.tokens.at(-1).token)) {
         throw new Error(record.name + ': missing complete ordered token evidence')
       }
+      // Cross-check independent public events against the ordered handler tap.
+      // Four matching copies alone cannot detect identically missing tokens.
+      let setIndex = 0, doneIndex = 0, errorIndex = 0, infoIndex = 0
+      let activeSet = null, rows = 0
+      const finishSet = () => {
+        if (activeSet !== null) {
+          assert.equal(rows, activeSet.rows.length, record.name + ': ordered row count')
+          activeSet = null
+        }
+      }
+      for (const token of phase.tokens) {
+        if (token.token === 'COLMETADATA') {
+          finishSet()
+          activeSet = phase.sets[setIndex++]
+          assert(activeSet, record.name + ': unexpected COLMETADATA')
+          assert.deepEqual(token.columns, activeSet.columns.map(column => column.name), record.name + ': ordered column names')
+          rows = 0
+        } else if (token.token === 'ROW' || token.token === 'NBCROW') {
+          assert(activeSet, record.name + ': row outside result metadata')
+          rows++
+        } else if (token.token === 'ERROR' || token.token === 'INFO') {
+          const captured = token.token === 'ERROR' ? phase.errors[errorIndex++] : phase.info[infoIndex++]
+          assert(captured, record.name + ': unexpected ordered message')
+          for (const key of Object.keys(captured)) assert.deepEqual(token[key], captured[key], record.name + ': ordered message ' + key)
+        } else if (/^DONE(INPROC|PROC)?$/.test(token.token)) {
+          finishSet()
+          const captured = phase.done[doneIndex++]
+          assert(captured, record.name + ': unexpected ordered completion')
+          const kind = { DONE: 'done', DONEINPROC: 'doneInProc', DONEPROC: 'doneProc' }[token.token]
+          assert.equal(kind, captured.kind, record.name + ': completion kind')
+          assert.equal(Boolean(token.status & 1), captured.more, record.name + ': completion MORE')
+          assert.equal(token.status & 16 ? Number(token.count) : null, captured.rowCount, record.name + ': completion row count')
+        }
+      }
+      finishSet()
+      assert.equal(setIndex, phase.sets.length, record.name + ': missing COLMETADATA')
+      assert.equal(doneIndex, phase.done.length, record.name + ': missing completion')
+      assert.equal(errorIndex, phase.errors.length, record.name + ': missing ERROR')
+      assert.equal(infoIndex, phase.info.length, record.name + ': missing INFO')
       for (const token of phase.tokens) {
         if (/^DONE(INPROC|PROC)?$/.test(token.token)) {
           if (!Number.isInteger(token.status) || token.status < 0 || token.status > 65535 ||
