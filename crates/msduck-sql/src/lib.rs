@@ -16,6 +16,7 @@ pub mod expression_metadata;
 pub mod for_json;
 pub mod function_args;
 pub mod generate_series;
+pub mod greatest_least;
 pub mod grouping;
 pub mod grouping_syntax;
 pub mod merge;
