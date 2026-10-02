@@ -9378,6 +9378,26 @@
       ],
       "issue": 783,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjJK1"
+    },
+    {
+      "id": "session-control-declarations-core-v1",
+      "title": "Preserve captured @@OPTIONS and session control declarations",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal in this session; first-party complete GUID replay atd071921 and two agreeing pinned captures in reference/guid-assignment.json and reference/session-property-context.json. No external intake. Existing projection.rs claim is excluded; GUID shell/native files stay in their current claims.",
+      "scope": [
+        "crates/msduck-sql/src/session_function.rs",
+        "crates/msduck-sql/src/result_properties.rs",
+        "crates/msduck-sql/tests/session_control_declarations.rs",
+        "docs/session-control-declarations.md"
+      ],
+      "dependencies": [],
+      "issue": 784,
+      "acceptance": [
+        "Declare @@OPTIONS as fixed nonnullable INT from the original logical AST. Use the two matching session-property-context captures (SHA33450a4d0d89328b979e31552da642487fbe8e03ca4a021634adc1387c297307) and GUID control query rather than runtime values to establish exact declaration and result properties. Session functions retain their captured nullable sql_variant expression properties. Keep unresolved inputs explicit and do not generalize unproven arithmetic nullability.",
+        "Compare complete declaration lists for the captured control query, direct/mixed/cased/nested options and session functions, empty/CTE/derived shapes and declaration-only parameters. Captured @@OPTIONS&16384 must have INT flags32; derive any bounded rule from explicit proven operand declarations, never observed values. Do not edit active projection.rs, engine.rs, RPC or backend files.",
+        "Keep code deterministic and independent of session state, DuckDB, TDS or clocks. Run the fast SQL crate loop with meaningful captured-reference tests; final exact-head formatting/full workspace/strict Clippy/all-targets/client/audit validation uses the existing Linux cache when the runner lock is available. The worker owns verified review or availability fallback, CI, merge and prompt registry/issue/project completion. Runtime raw replay and any further shell adaptation need disjoint claimed work after GUID integration is merged."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjPfG"
     }
   ]
 }
