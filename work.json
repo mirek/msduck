@@ -9362,6 +9362,22 @@
       "dependencies": [],
       "issue": 781,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjGps"
+    },
+    {
+      "id": "guid-assignment-client-ci-v1",
+      "title": "Discover the GUID assignment client regression in periodic CI",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal, claimed GUID assignment integration771/777. The focused client regression passes but periodic CI discovers tests/compat/*.test.mjs rather than this standalone file. Add a disjoint wrapper using the existing registered-client-test pattern; package.json belongs to another claimed worker and is untouched.",
+      "scope": [
+        "tests/compat/guid_assignment.test.mjs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Register the existing claimed GUID client regression through a tests/compat wrapper so the periodic CI glob discovers it exactly once, preserving every existing assertion.",
+        "Validate actual run-client-shards discovery, selection and result accounting plus standalone execution on the final revision. No new native build/cache or changes to package.json/other worker files. Complete with focused PR772."
+      ],
+      "issue": 783,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjJK1"
     }
   ]
 }
