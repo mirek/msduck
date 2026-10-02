@@ -17,6 +17,7 @@ pub fn storage_kind(name: &str) -> Option<DataType> {
         .or_else(|| crate::variant_pack::storage_kind(name))
         .or_else(|| match name.to_ascii_uppercase().as_str() {
             "DATE" => Some(DataType::Date),
+            "UUID" | "UNIQUEIDENTIFIER" => Some(DataType::Uuid),
             "TIME_NS" => Some(DataType::Time(None, TimezoneInfo::None)),
             "MONEY" | "SMALLMONEY" => Some(DataType::Custom(
                 ObjectName::from(vec![Ident::new(name.to_ascii_lowercase())]),
@@ -37,6 +38,9 @@ pub fn convert(value: Expr, kind: &DataType, money: bool) -> Expr {
             value
         };
         return crate::character_storage::convert(value, kind).unwrap();
+    }
+    if matches!(kind, DataType::Uuid) {
+        return crate::engine::unary_function("__msduck_guid_assignment", value);
     }
     if matches!(kind, DataType::Date) {
         return crate::engine::unary_function("__msduck_cast_date", value);

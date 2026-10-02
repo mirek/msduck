@@ -179,7 +179,8 @@ fn percentile_binding(
 }
 
 fn runtime_diagnostic(message: &str) -> Option<SqlError> {
-    rand::diagnostic(message)
+    crate::guid_assignment::diagnostic(message)
+        .or_else(|| rand::diagnostic(message))
         .or_else(|| crate::json_extract::diagnostic(message))
         .or_else(|| crate::integer_conversion::diagnostic(message))
         .or_else(|| crate::binary_unicode::diagnostic(message))
@@ -2088,7 +2089,9 @@ impl Session {
         // Retain the transaction for CATCH reads and explicit ROLLBACK. The
         // pinned 17.0.4065.4 reference also dooms caught RAISERROR 11/16;
         // informational severity 10 never enters this path.
-        if self.xact_abort && self.transactions > 0 && caught.severity >= 11 {
+        if self.transactions > 0
+            && ((self.xact_abort && caught.severity >= 11) || caught.number == 8169)
+        {
             self.transaction_doomed = true;
         }
         let Some(index) = pending
@@ -3119,6 +3122,34 @@ impl Session {
                 .map(|(plan, _, _)| self.db.prepare(&plan.projection.to_string()))
                 .transpose()?
         };
+        if !is_query && output.is_none() {
+            let checked = match write_command {
+                Some(0xc3) => {
+                    crate::guid_assignment::checked_insert(&self.db, &statement, &translator.values)
+                }
+                Some(0xc5) => {
+                    crate::guid_assignment::checked_update(&self.db, &statement, &translator.values)
+                }
+                _ => Ok(None),
+            };
+            let count = checked.map_err(|error| {
+                if self.transactions > 0
+                    && error
+                        .downcast_ref::<SqlError>()
+                        .is_some_and(|e| e.number == 8169)
+                {
+                    self.transaction_doomed = true;
+                }
+                error
+            })?;
+            if let Some(count) = count {
+                return Ok(Execution::statement(
+                    vec![],
+                    Some(count),
+                    write_command.expect("checked GUID DML"),
+                ));
+            }
+        }
         if self.transactions > 0 && !is_query && output.is_none() {
             let checked = match write_command {
                 Some(0xc3) => crate::storage_diagnostic::checked_insert(

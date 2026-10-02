@@ -134,6 +134,288 @@ impl<const CHECK: bool> VScalar for CharacterGuid<CHECK> {
     }
 }
 
+use sqlparser::ast::*;
+
+#[derive(Clone, Copy)]
+enum Stored {
+    Guid,
+    Ansi,
+    Unicode,
+}
+
+fn checked_conversion(value: &mut Expr) -> Option<Stored> {
+    let Expr::Function(function) = value else {
+        return None;
+    };
+    let (name, kind) = match function.name.to_string().as_str() {
+        "__msduck_guid_assignment" => ("__msduck_guid_assignment_check", Stored::Guid),
+        "__msduck_store_context_varchar" => ("__msduck_check_store_varchar", Stored::Ansi),
+        "__msduck_store_context_char" => ("__msduck_check_store_char", Stored::Ansi),
+        "__msduck_store_context_nvarchar" => ("__msduck_check_store_nvarchar", Stored::Unicode),
+        "__msduck_store_context_nchar" => ("__msduck_check_store_nchar", Stored::Unicode),
+        _ => return None,
+    };
+    function.name = ObjectName::from(vec![Ident::new(name)]);
+    Some(kind)
+}
+
+fn restore_value(value: &str, kind: Stored) -> String {
+    match kind {
+        Stored::Guid => format!("CAST({value}.value AS UUID)"),
+        Stored::Ansi => format!("decode({value}.value)"),
+        Stored::Unicode => format!("__msduck_unicode_from_le({value}.value)"),
+    }
+}
+
+/// GUID-containing DML stages all target conversions before effects. Character
+/// targets share the existing checked adapter so mixed assignments cannot throw
+/// expected conversion errors while building this stage. GUID-free statements
+/// remain owned by the ordinary storage path.
+pub fn checked_insert(
+    db: &duckdb::Connection,
+    statement: &Statement,
+    values: &[duckdb::types::Value],
+) -> anyhow::Result<Option<u64>> {
+    let Statement::Insert(original) = statement else {
+        return Ok(None);
+    };
+    if original.returning.is_some() || original.on.is_some() {
+        return Ok(None);
+    }
+    let Some(source) = &original.source else {
+        return Ok(None);
+    };
+    let mut source = source.clone();
+    let SetExpr::Select(select) = source.body.as_mut() else {
+        return Ok(None);
+    };
+    let mut checked = Vec::new();
+    let mut aliases = Vec::new();
+    for (index, item) in select.projection.iter_mut().enumerate() {
+        let value = match item {
+            SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } => expr,
+            _ => return Ok(None),
+        };
+        let alias = Ident::with_quote('"', format!("__guid_store_col_{index}"));
+        if let Some(kind) = checked_conversion(value) {
+            checked.push((index, kind));
+        }
+        *item = SelectItem::ExprWithAlias {
+            expr: value.clone(),
+            alias: alias.clone(),
+        };
+        aliases.push(alias);
+    }
+    if checked.is_empty() {
+        return Ok(None);
+    }
+    if !checked.iter().any(|(_, kind)| matches!(kind, Stored::Guid)) {
+        return Ok(None);
+    }
+    let mut stage = stage(db, &source, values, &checked, &aliases)?;
+    let projection = aliases
+        .iter()
+        .enumerate()
+        .map(
+            |(index, alias)| match checked.iter().find(|(i, _)| *i == index) {
+                Some((_, kind)) => restore_value(&alias.to_string(), *kind),
+                None => alias.to_string(),
+            },
+        )
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut parsed = sqlparser::parser::Parser::parse_sql(
+        &sqlparser::dialect::DuckDbDialect {},
+        &format!("SELECT {projection} FROM {}", stage.1),
+    )?;
+    let Statement::Query(query) = parsed.remove(0) else {
+        unreachable!("generated query");
+    };
+    let mut write = original.clone();
+    write.source = Some(query);
+    let count = db.execute(&Statement::Insert(write).to_string(), [])? as u64;
+    // On success, surface cleanup failures. On a write failure the enclosing
+    // transaction may already be aborted; rollback removes its temporary table.
+    db.execute_batch(&format!("DROP TABLE {}", stage.1))?;
+    stage.2 = false;
+    Ok(Some(count))
+}
+
+struct Stage<'a>(&'a duckdb::Connection, ObjectName, bool);
+impl Drop for Stage<'_> {
+    fn drop(&mut self) {
+        if self.2 {
+            let _ = self.0.execute_batch(&format!("DROP TABLE {}", self.1));
+        }
+    }
+}
+
+fn stage<'a>(
+    db: &'a duckdb::Connection,
+    source: &Query,
+    values: &[duckdb::types::Value],
+    checked: &[(usize, Stored)],
+    aliases: &[Ident],
+) -> anyhow::Result<Stage<'a>> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT_STAGE: AtomicU64 = AtomicU64::new(1);
+    let name = ObjectName::from(vec![
+        Ident::new("temp"),
+        Ident::new("main"),
+        Ident::with_quote(
+            '"',
+            format!(
+                "__msduck_checked_guid_assignment_{}",
+                NEXT_STAGE.fetch_add(1, Ordering::Relaxed)
+            ),
+        ),
+    ]);
+    db.execute(
+        &format!("CREATE TEMP TABLE {name} AS {source}"),
+        duckdb::params_from_iter(values.iter()),
+    )?;
+    let stage = Stage(db, name, true);
+    for &(index, kind) in checked {
+        let alias = &aliases[index];
+        let mut query = db.prepare(&format!(
+            "SELECT {alias}.error FROM {} WHERE {alias}.error IS NOT NULL LIMIT 1",
+            stage.1
+        ))?;
+        let mut rows = query.query([])?;
+        if let Some(row) = rows.next()? {
+            let encoded: String = row.get(0)?;
+            let error = match kind {
+                Stored::Guid => checked_diagnostic(&encoded),
+                Stored::Ansi | Stored::Unicode => crate::storage_diagnostic::diagnostic(&format!(
+                    "Invalid Input Error: {encoded}"
+                )),
+            }
+            .ok_or_else(|| anyhow::anyhow!("invalid staged assignment diagnostic"))?;
+            return Err(error.into());
+        }
+    }
+    Ok(stage)
+}
+
+/// Capture selected physical rows and all assignments together. The final write
+/// uses only row IDs and captured values; neither predicates nor assignments run
+/// a second time. Joined/CTE/OUTPUT plans require their own identity proofs.
+pub fn checked_update(
+    db: &duckdb::Connection,
+    statement: &Statement,
+    values: &[duckdb::types::Value],
+) -> anyhow::Result<Option<u64>> {
+    let Statement::Update(original) = statement else {
+        return Ok(None);
+    };
+    if original.or.is_some()
+        || !original.optimizer_hints.is_empty()
+        || original.from.is_some()
+        || original.returning.is_some()
+        || original.output.is_some()
+        || !original.table.joins.is_empty()
+        || original.limit.is_some()
+        || !original.order_by.is_empty()
+    {
+        return Ok(None);
+    }
+    let TableFactor::Table { name, alias, .. } = &original.table.relation else {
+        return Ok(None);
+    };
+    if alias.as_ref().is_some_and(|a| !a.columns.is_empty()) {
+        return Ok(None);
+    }
+    let parts = name
+        .0
+        .iter()
+        .map(|p| p.as_ident().map(|i| i.value.as_str()))
+        .collect::<Option<Vec<_>>>();
+    let Some(parts) = parts else {
+        return Ok(None);
+    };
+    let (schema, table) = match parts.as_slice() {
+        [table] => ("dbo", *table),
+        [schema, table] => (*schema, *table),
+        _ => return Ok(None),
+    };
+    // A user column named rowid shadows DuckDB's physical identity. Never use it
+    // as though it were a hidden unique row identifier.
+    let shadowed:bool=db.query_row("SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_catalog=current_database() AND table_schema=? COLLATE NOCASE AND table_name=? COLLATE NOCASE AND column_name='rowid' COLLATE NOCASE)",[schema,table],|r|r.get(0))?;
+    if shadowed {
+        return Ok(None);
+    }
+    let qualifier = alias
+        .as_ref()
+        .map(|a| a.name.clone())
+        .unwrap_or_else(|| Ident::with_quote('"', table));
+    let rowid = Expr::CompoundIdentifier(vec![qualifier, Ident::new("rowid")]);
+    let mut checked = Vec::new();
+    let mut aliases = Vec::new();
+    let mut projection = Vec::new();
+    for (index, assignment) in original.assignments.iter().enumerate() {
+        if !matches!(assignment.target, AssignmentTarget::ColumnName(_)) {
+            return Ok(None);
+        }
+        let mut value = assignment.value.clone();
+        if let Some(kind) = checked_conversion(&mut value) {
+            checked.push((index, kind));
+        }
+        let alias = Ident::with_quote('"', format!("__guid_store_col_{index}"));
+        if !checked.iter().any(|(_, kind)| matches!(kind, Stored::Guid)) {
+            return Ok(None);
+        }
+        projection.push(SelectItem::ExprWithAlias {
+            expr: value,
+            alias: alias.clone(),
+        });
+        aliases.push(alias);
+    }
+    if checked.is_empty() {
+        return Ok(None);
+    }
+    projection.push(SelectItem::ExprWithAlias {
+        expr: rowid.clone(),
+        alias: Ident::new("__target_rowid"),
+    });
+    let mut parsed =
+        sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::DuckDbDialect {}, "SELECT 1")?;
+    let Statement::Query(mut source) = parsed.remove(0) else {
+        unreachable!();
+    };
+    let SetExpr::Select(select) = source.body.as_mut() else {
+        unreachable!();
+    };
+    select.projection = projection;
+    select.from = vec![original.table.clone()];
+    select.selection = original.selection.clone();
+    let mut stage = stage(db, &source, values, &checked, &aliases)?;
+    let stage_qualifier = stage.1.0.last().and_then(|p| p.as_ident()).unwrap().clone();
+    let assignments = original
+        .assignments
+        .iter()
+        .enumerate()
+        .map(|(index, assignment)| {
+            let value = format!("{stage_qualifier}.{}", aliases[index]);
+            let value = match checked.iter().find(|(i, _)| *i == index) {
+                Some((_, kind)) => restore_value(&value, *kind),
+                None => value,
+            };
+            format!("{}={value}", assignment.target)
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let count = db.execute(
+        &format!(
+            "UPDATE {} SET {assignments} FROM {} WHERE {rowid}={stage_qualifier}.__target_rowid",
+            original.table, stage.1
+        ),
+        [],
+    )? as u64;
+    db.execute_batch(&format!("DROP TABLE {}", stage.1))?;
+    stage.2 = false;
+    Ok(Some(count))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
