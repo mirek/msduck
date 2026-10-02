@@ -626,7 +626,7 @@
     {
       "id": "unicode-for-json-metadata-v1",
       "title": "Retain FOR JSON subquery declarations through scalar consumers",
-      "state": "review",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. Native UTF16 FOR JSON integration under #56/#62 exposes a first-party DATALENGTH failure: FOR JSON subqueries have an unconditional logical NVARCHAR(MAX) result, but shared storage inference drops that declaration. This is a disjoint companion; no external content was used. Start from owner-pushed b40ce1d or this worker continuation.",
       "scope": [
         "crates/msduck-sql/src/expression_metadata/storage.rs",
@@ -719,7 +719,7 @@
     {
       "id": "character-declaration-metadata-v1",
       "title": "Preserve character aggregate declarations and accept column COLLATE syntax",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner full SQL Server compatibility goal. First-party task69/70 client replay exposed missing character MIN/MAX metadata in scalar consumers and ADD COLUMN preflight rejecting COLLATE. This worker has finished and stops modifying the predecessor unicode-for-json-metadata-v1 snapshot (ab9e870); its scope is now review-only and its receipt must not be used for new edits. No external content used.",
       "scope": [
         "crates/msduck-sql/src/expression_metadata/storage.rs",
