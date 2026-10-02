@@ -70,6 +70,17 @@ pub fn variant_function(function: &Function) -> Option<VariantFunction> {
         None
     }
 }
+
+/// Parentheses do not change the captured session-property expression identity.
+pub fn is_session_property(expr: &Expr) -> bool {
+    match expr {
+        Expr::Nested(inner) => is_session_property(inner),
+        Expr::Function(function) => {
+            variant_function(function) == Some(VariantFunction::SessionProperty)
+        }
+        _ => false,
+    }
+}
 pub fn variant_type() -> DataType {
     DataType::Custom(ObjectName::from(vec![Ident::new("SQL_VARIANT")]), vec![])
 }

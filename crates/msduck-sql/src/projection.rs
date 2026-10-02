@@ -709,7 +709,7 @@ fn body_fields(
                     && !matches!(e, Expr::Function(f) if crate::result_properties::fromparts_arguments(f).is_some())
                     // Captured SESSIONPROPERTY projections retain fComputed;
                     // ordinary sql_variant casts retain their separate rule.
-                    && !matches!(e, Expr::Function(f) if crate::session_function::variant_function(f) == Some(crate::session_function::VariantFunction::SessionProperty))
+                    && !crate::session_function::is_session_property(e)
                     && info
                         .as_ref()
                         .is_some_and(|info| matches!(info.system_type_id, Some(41 | 42 | 43 | 98)))
@@ -744,7 +744,7 @@ fn body_fields(
                                 || source_info
                                     .as_ref()
                                     .is_some_and(|i| i.system_type_id == Some(98))
-                                    && !matches!(input, Expr::Function(f) if crate::session_function::variant_function(f) == Some(crate::session_function::VariantFunction::SessionProperty)))
+                                    && !crate::session_function::is_session_property(input))
                         {
                             properties.origin = msduck_core::result::Origin::Derived;
                         } else if source_info.is_none()

@@ -51,8 +51,7 @@ fn complete_control_declarations_match_both_fresh_reference_runs() {
                     Parser::parse_sql(&msduck_sql::dialect::ServerDialect, sql)
                         .unwrap()
                         .into_iter()
-                        .filter(|statement| matches!(statement, Statement::Query(_)))
-                        .last()
+                        .rfind(|statement| matches!(statement, Statement::Query(_)))
                         .unwrap()
                 else {
                     panic!("not a query: {sql}")
@@ -183,4 +182,36 @@ fn option_mask_proof_does_not_use_nullable_parameters_or_quoted_columns() {
     assert_eq!(fields[0].name, declared.name);
     assert_eq!(fields[0].info, declared.info);
     assert_eq!(fields[0].properties, declared.properties);
+}
+
+#[test]
+fn parentheses_preserve_captured_property_and_cast_flags() {
+    let catalog = catalog();
+    for (sql, id) in [
+        ("SELECT (SESSIONPROPERTY('ANSI_WARNINGS')) AS s", 98),
+        (
+            "SELECT ((SESSIONPROPERTY('ANSI_WARNINGS'))) AS s WHERE 1=0",
+            98,
+        ),
+        (
+            "SELECT CAST((SESSIONPROPERTY('ANSI_WARNINGS')) AS INT) AS s",
+            56,
+        ),
+        (
+            "SELECT CAST(((SESSIONPROPERTY('ANSI_WARNINGS'))) AS INT) AS s WHERE 1=0",
+            56,
+        ),
+    ] {
+        let fields = fields(sql, &catalog, &Scope::default());
+        assert_eq!(
+            fields[0].info.as_ref().and_then(|info| info.system_type_id),
+            Some(id),
+            "{sql}"
+        );
+        assert_eq!(
+            fields[0].properties,
+            msduck_core::result::Properties::expression(true),
+            "{sql}"
+        );
+    }
 }
