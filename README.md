@@ -154,8 +154,10 @@ fresh values using the stored declarations. Ordinary and compound SELECT
 assignments can update input bindings within an execution. Released or foreign handles return
 8179. The current implementation retains SQL and declarations, recompiling at
 execution rather than retaining native DuckDB plans. Prepare-time result
-metadata (`sp_prepare` option 1), application OUTPUT parameters, and prepared
-DDL batches remain unsupported. Supported session settings are validated without
+metadata (`sp_prepare` option 1) and prepared DDL batches remain unsupported.
+Application OUTPUT parameters work through `sp_executesql`, `sp_prepexec`,
+`sp_execute` and RPC procedure calls; see
+[RPC procedures](docs/gaps-rpc-procedures.md). Supported session settings are validated without
 applying them during preparation. Supported control flow is
 validated without executing branches or loops. Each connection is limited to 1024
 handles and 16 MiB of retained SQL/declaration text.
@@ -200,7 +202,9 @@ variables, including scalar subqueries and use in queries/DML. RPC inputs share
 the batch scope; local values do not leak into later requests. Duplicate names
 are rejected before DML execution. SELECT assignment retains the last row,
 preserves the variable on an empty result, and sends no result set. All eight
-compound SELECT assignment operators are accepted. Table/cursor variables remain unsupported. See
+compound SELECT assignment operators are accepted. Cursor variables remain unsupported.
+Table variables (`DECLARE @t TABLE(...)`) are supported, with the limits in
+[temp tables and table variables](docs/gaps-temp_tables.md). See
 [local variable behavior](docs/local-variables.md) for validation and limits.
 
 `IF/ELSE` and plain `BEGIN/END` blocks execute selected statements with shared
@@ -686,8 +690,9 @@ Typed serialization preserves integer/decimal precision, binary Base64, known
 currency numbers and temporal values; prepared execution and multi-batch results
 are covered. Nested/correlated PATH queries now also work as scalar expressions,
 including prepared queries, variables, INSERT and views. Nested arrays are embedded;
-WITHOUT_ARRAY_WRAPPER output stays text unless promoted by JSON_QUERY. AUTO,
-complete correlated/recursive catalog and expression provenance and SQL Server row
+WITHOUT_ARRAY_WRAPPER output stays text unless promoted by JSON_QUERY. FOR JSON
+AUTO is supported; see [FOR JSON AUTO](docs/gaps-json_string.md). Complete
+correlated/recursive catalog and expression provenance and SQL Server row
 chunking remain open. Inherited nonrecursive CTE stars now retain renamed columns,
 MONEY numbers and TIME scale in nested JSON. Correlated named-column references
 and qualified stars retain those logical types through enclosing row scopes, with
