@@ -9546,6 +9546,27 @@
         "Keep expression_metadata/storage.rs metadata mismatch and root runtime/preflight/wire gaps explicit and unmodified. No local Cargo/native cache; exact-head fmt/strict Clippy/workspace/alltargets/independent clients/audit under shared Linux lock, required CI and verified review/fallback, worker-owned PR merge and prompt registry/project/issue completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pjf8M"
+    },
+    {
+      "id": "quoted-storage-declarations-v1",
+      "title": "Keep quoted column storage declarations separate from scalar parameters",
+      "state": "ready",
+      "issue": 797,
+      "authorization": "Direct owner continuing compatibility goal and owner-run inspection of deterministic storage::kind, with retained matching SQLServer quoted-variable/column reference observations. Disjoint from active quoted preflight793 and checked operands795; engine.rs stays unreserved.",
+      "scope": [
+        "crates/msduck-sql/src/expression_metadata/storage.rs",
+        "crates/msduck-sql/tests/quoted_storage_declarations.rs",
+        "docs/quoted-storage-declarations.md"
+      ],
+      "dependencies": [
+        "quoted-session-identifiers-reference-v1"
+      ],
+      "acceptance": [
+        "Only unquoted expression identifiers use scalar parameter declarations during storage::kind inference. Quoted @named identifiers resolve through the explicit column callback, retain unknown declarations and qualified-name semantics, and never borrow conflicting same-name scalar types. Preserve existing unquoted parameter behavior, AST/parameter immutability and deterministic explicit-input crate boundaries.",
+        "Add meaningful failing-before/passing-after pure regressions for bracket/doublequote/qualified/nested consumers, conflicting parameter/column types (including BIGINTparameter against retainedINTcolumn), absent/unknown column declarations, captured quoted counter character metadata, bound42/NULL/value independence. Keep raw runtime/wire gaps explicit; no root lowering/catalog/engine or reserved checked/preflight edits. Consult owner-pinned mssqlite AST variable/column separation as conceptual reuse with attribution where useful.",
+        "Reuse an existing worker worktree after completion or otherwise isolate safely; own fresh exclusive receipt/branch, no localCargo cache. Focused proof plus exact-head fmt/strictworkspaceClippy/fullworkspace/alltargets/independentclients/audit under sharedLinuxlock, requiredCI and verified review or recorded authorized availability fallback. Claimingworker owns PR follow-up, merge and prompt registry/project/issue completion; no claimed fullSQLServer compatibility from compiler-only correction."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjhP0"
     }
   ]
 }
