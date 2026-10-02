@@ -9700,6 +9700,24 @@
         "Freshclaim/receipt in reusedcompletedrootworktree fromapprovedmain; privateLinuxreferenceworkspace/read-onlyNodecacheddeps/randomownedports; no newworktrees/localCargo/newimplementationagents/nativecache reset orsharedlockbypass. ExactrequiredCI andverifiedCodexreview/fallback; ownPRthroughmerge andpromptregistry/project/issue completion. Old253 staysblocked/legacyclaimretained; releasecore successor afteractualreferencecompletion only."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjsxT"
+    },
+    {
+      "id": "quoted-client-registration-v1",
+      "title": "Run quoted identifier client regressions in standard npm and CI suites",
+      "state": "ready",
+      "authorization": "Owner continuing goal and first-party test-registration gap in merged798.",
+      "scope": [
+        "tests/tedious.test.mjs"
+      ],
+      "dependencies": [
+        "quoted-identifier-translation-review-v1"
+      ],
+      "acceptance": [
+        "Import the merged standalone quoted_identifier_translation client tests from the standard tedious entry point so npm test and CI shard discovery include all three without duplicate registration or port conflicts. No implementation changes or unclaimed package/CI edits.",
+        "Prove shard inventory includes all three exactly once and execute the imported regressions through the standard entry point against identified build; source/diff checks, required exact-head CI, verified review/fallback, worker owns merge and registry completion. Reuse completed worker tree, no new Cargo target or extra agents; shared Linux lock respected."
+      ],
+      "issue": 809,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjxGk"
     }
   ]
 }
