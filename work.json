@@ -9550,7 +9550,7 @@
     {
       "id": "quoted-storage-declarations-v1",
       "title": "Keep quoted column storage declarations separate from scalar parameters",
-      "state": "ready",
+      "state": "done",
       "issue": 797,
       "authorization": "Direct owner continuing compatibility goal and owner-run inspection of deterministic storage::kind, with retained matching SQLServer quoted-variable/column reference observations. Disjoint from active quoted preflight793 and checked operands795; engine.rs stays unreserved.",
       "scope": [
@@ -9571,7 +9571,7 @@
     {
       "id": "quoted-storage-column-resolution-v1",
       "title": "Resolve quoted at-sign columns in the actual catalog operand pass",
-      "state": "ready",
+      "state": "done",
       "issue": 799,
       "authorization": "Owner continuing goal and verified scoped first-party Codex review finding4170044781. Same worker under ownstorageclaim797 combines bounded resolver repair into PR798; individual scopes are disjoint. Rootengine remains unreserved.",
       "scope": [
@@ -9627,7 +9627,7 @@
     {
       "id": "quoted-identifier-translation-review-v1",
       "title": "Preserve delimited parameter-like columns through root translation",
-      "state": "ready",
+      "state": "done",
       "issue": 803,
       "authorization": "Direct owner continuing goal and verified confirmed review4170177892; bounded companion to797/799.",
       "scope": [
