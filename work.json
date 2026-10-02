@@ -9415,6 +9415,22 @@
         "Use the companion784 captured-reference pure tests, complete SQL crate loop, exact-head required Rust/client/audit checks under the shared Linux lock, independent review or owner-authorized fallback, CI, worker-owned merge and prompt registry/project/issue completion. Same branch/PR as784; no new native cache."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjQjz"
+    },
+    {
+      "id": "session-control-client-ratchet-v1",
+      "title": "Ratchet successful session option replay against captured descriptors",
+      "issue": 787,
+      "state": "ready",
+      "authorization": "Direct owner continuing SQL Server compatibility goal; first-party exact5088aa2 raw replay proves former @@OPTIONS errors are now successes with only existing flags1 versus33 descriptor gaps. No external intake. Companion of claims784/785 in PR786.",
+      "scope": [
+        "tests/session_property_context.test.mjs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Replace only obsolete login options and SET ANSI_WARNINGS OFF expected-error classifications with the existing explicit flags-gap comparison. Preserve exact remaining rows, errors, tokens and other differences; do not claim flags fixed or weaken expected-error checks for still unsupported statements.",
+        "Verify the complete raw session replay against two agreeing retained reference runs, focused clients and required current-head full Rust/client/audit checks under existing Linux lock. Same PR786; owner-run independent review, required CI, merge and prompt completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjWdV"
     }
   ]
 }
