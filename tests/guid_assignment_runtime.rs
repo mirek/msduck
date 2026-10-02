@@ -137,6 +137,41 @@ fn caught_guid_failure_allows_reads_then_rejects_commit_and_rolls_back_at_batch_
 }
 
 #[test]
+fn caught_guid_update_failure_preserves_reads_in_both_assignment_orders() {
+    for assignments in ["n=n+1,g='bad'", "g='bad',n=n+1"] {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        ok(
+            &mut session,
+            &format!(
+                "CREATE TABLE dbo.guid_runtime(id INT,g UNIQUEIDENTIFIER,n INT); INSERT dbo.guid_runtime VALUES(1,'{GUID}',10),(2,NULL,20); SET XACT_ABORT OFF"
+            ),
+        );
+        ok(
+            &mut session,
+            &format!(
+                "BEGIN TRAN; INSERT dbo.guid_runtime VALUES(3,'{GUID}',30); BEGIN TRY UPDATE dbo.guid_runtime SET {assignments}; THROW 51000,'expected conversion failure',1; END TRY BEGIN CATCH IF ERROR_NUMBER()<>8169 OR ERROR_STATE()<>2 THROW 51001,'incorrect conversion error',1; IF @@TRANCOUNT<>1 OR XACT_STATE()<>-1 THROW 51002,'incorrect transaction state',1; IF (SELECT COUNT(*) FROM dbo.guid_runtime)<>3 THROW 51003,'prior writes lost',1; IF EXISTS(SELECT 1 FROM dbo.guid_runtime WHERE n<>id*10) THROW 51004,'partial update',1; ROLLBACK; END CATCH"
+            ),
+        );
+        assert_eq!(ids(&session), vec![1, 2]);
+        assert_eq!(session.transactions, 0);
+        ok(
+            &mut session,
+            &format!("UPDATE dbo.guid_runtime SET n=n+1,g='{GUID}EXTRA'"),
+        );
+        let values: Vec<(i32, String)> = session
+            .db
+            .prepare("SELECT n,CAST(g AS VARCHAR) FROM dbo.guid_runtime ORDER BY id")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<duckdb::Result<_>>()
+            .unwrap();
+        assert_eq!(values, vec![(11, GUID.into()), (21, GUID.into())]);
+    }
+}
+
+#[test]
 fn guid_alter_applies_suffix_rules_and_failed_multirow_change_preserves_storage() {
     for bad in [false, true] {
         let server = Server::open(":memory:").unwrap();
@@ -198,7 +233,7 @@ fn checked_guid_write_plans_evaluate_volatile_assignments_once_across_chunks() {
         msduck::guid_assignment::checked_insert(&session.db, &insert, &[]).unwrap(),
         Some(6000)
     );
-    let update=Parser::parse_sql(&DuckDbDialect{}, &format!("UPDATE dbo.guid_runtime SET g=__msduck_guid_assignment(CASE WHEN nextval('guid_update_calls')%5=0 THEN NULL ELSE '{{{GUID}}}EXTRA' END),n=n+1 WHERE id<5000")).unwrap().remove(0);
+    let update=Parser::parse_sql(&DuckDbDialect{}, &format!("UPDATE dbo.guid_runtime SET n=n+1,g=__msduck_guid_assignment(CASE WHEN nextval('guid_update_calls')%5=0 THEN NULL ELSE '{{{GUID}}}EXTRA' END) WHERE id<5000")).unwrap().remove(0);
     assert_eq!(
         msduck::guid_assignment::checked_update(&session.db, &update, &[]).unwrap(),
         Some(5000)
