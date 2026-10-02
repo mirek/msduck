@@ -522,6 +522,7 @@ function validate(run) {
     if (record.prepared) {
       assert.equal(record.prepared.prepare.prepared, true, record.name + ': preparation failed')
       assert.equal(record.prepared.prepare.errors.length, 0, record.name + ': prepare error')
+      assert.equal(record.prepared.prepare.returnStatus, 0, record.name + ': prepare return status')
       for (const [index, execution] of record.prepared.executions.entries()) {
         const expectedFailure = (record.name === 'prepared tr' && index === 2) ||
           (record.name === 'prepared tr ansi' && index === 1)
@@ -531,6 +532,7 @@ function validate(run) {
         }
       }
       assert.equal(record.prepared.unprepare.errors.length, 0, record.name + ': unprepare error')
+      assert.equal(record.prepared.unprepare.returnStatus, 0, record.name + ': unprepare return status')
       for (const phase of [record.prepared.prepare, ...record.prepared.executions.map(e => e.result), record.prepared.unprepare]) {
         assert(phase.done.length > 0, record.name + ': no prepared completion')
       }
