@@ -21,24 +21,32 @@ fn encode(parameter: &Parameter<'_>) -> Vec<u8> {
     out
 }
 
-// This is msduck's existing prepared-handle vector, preserved by the codec
-// refactor. It is not SQL Server's: the first-party capture in
-// `reference/rpc-output-wire.json` (PR #303) shows the wire name `@handle` and
-// flags 0 (`ac0000074000680061006e0064006c0065000100000000000026040401000000`).
-// Task `prepared-handle-wire-v1` switches the helper to the captured bytes.
+// SQL Server's named preparation handle from the owner capture in PR #303.
+// The captured handle is 1; this vector uses 42 to check the INT payload too.
 #[test]
-fn prepared_handle_remains_the_exact_int_returnvalue_vector() {
-    let mut old = Vec::new();
-    msduck_tds::return_handle(&mut old, "@handle", 42);
+fn prepared_handle_matches_sql_server_named_returnvalue() {
+    let mut out = Vec::new();
+    msduck_tds::return_handle(&mut out, "@handle", 42);
     let expected = [
-        0xac, 0, 0, 6, b'h', 0, b'a', 0, b'n', 0, b'd', 0, b'l', 0, b'e', 0, 1, 0, 0, 0, 0, 1, 0,
-        0x26, 4, 4, 42, 0, 0, 0,
+        0xac, 0, 0, 7, b'@', 0, b'h', 0, b'a', 0, b'n', 0, b'd', 0, b'l', 0, b'e', 0, 1, 0, 0, 0,
+        0, 0, 0, 0x26, 4, 4, 42, 0, 0, 0,
     ];
-    assert_eq!(old, expected);
-    let name: Vec<_> = "handle".encode_utf16().collect();
+    assert_eq!(out, expected);
+    let name: Vec<_> = "@handle".encode_utf16().collect();
     let mut p = parameter(Declaration::Int(4), Value::Int(42));
     p.name = &name;
+    p.flags = 0;
     assert_eq!(encode(&p), expected);
+}
+
+#[test]
+fn unnamed_prepared_handle_has_zero_flags() {
+    let mut out = Vec::new();
+    msduck_tds::return_handle(&mut out, "", 42);
+    assert_eq!(
+        out,
+        [0xac, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0x26, 4, 4, 42, 0, 0, 0]
+    );
 }
 
 #[test]

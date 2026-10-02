@@ -1132,11 +1132,7 @@ mod transaction_tests {
 /// RETURNVALUE for the integer OUTPUT handle returned by preparation RPCs.
 pub fn return_handle(out: &mut Vec<u8>, name: &str, value: i32) {
     use return_value::{Declaration, Parameter, Status, Value};
-    let units: Vec<_> = name
-        .trim_start_matches('@')
-        .encode_utf16()
-        .take(128)
-        .collect();
+    let units: Vec<_> = name.encode_utf16().take(128).collect();
     let mut token = Vec::new();
     return_value::encode(
         &mut token,
@@ -1145,7 +1141,7 @@ pub fn return_handle(out: &mut Vec<u8>, name: &str, value: i32) {
             name: &units,
             status: Status::Output,
             user_type: 0,
-            flags: 1,
+            flags: 0,
             declaration: Declaration::Int(4),
             value: Value::Int(i64::from(value)),
         },

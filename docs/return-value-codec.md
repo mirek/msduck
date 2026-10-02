@@ -8,11 +8,19 @@ OUTPUT/UDF status, ULONG user type, USHORT flags, TYPE_INFO, then the typed
 TYPE_VARBYTE value. There is no outer token-length field. The owner-controlled
 `mirek/mssqlite` reference uses the same field order in
 `packages/tds/src/token/return-value.ts` and delegates TYPE_INFO/value encoding
-to its typed codecs. The existing prepared-handle token's exact byte vector is
-preserved through the new encoder. That vector strips `@` from the name and uses
-flags 1, but SQL Server sends `@handle` with flags 0 (captured in
-`reference/rpc-output-wire.json`, PR #303). Task `prepared-handle-wire-v1`
-changes the helper and the root RPC test that fixes the old bytes.
+to its typed codecs. The prepared-handle helper retains the wire name's `@`
+prefix and emits flags 0. Named `@handle` and unnamed integer vectors cover
+the public helper and its root-side unit test. Production preparation already
+uses `src/rpc/procedures.rs::with_handle`, whose generic encoder retains names
+and uses flags 0; its existing completion-order test checks the captured
+`@handle` token. This change makes the public helper consistent with that path. SQL Server's named handle was captured in two matching fresh runs
+and two independent runs in the owner-authored [PR #303 checkpoint](https://github.com/mirek/msduck/blob/f0824b5271b7d551462567e2625d96b7aa58a60e/reference/rpc-output-wire.json).
+The capture SHA-256 is
+`f4c304f84b0d76295b90bfdf74b7aae99e5b9a1a25f428fd58326061cb3c3c15`.
+Its exact handle-1 token is
+`ac0000074000680061006e0064006c0065000100000000000026040401000000`.
+The unnamed vector checks the same header fields with an empty name; the
+reference capture establishes the named token, not an unnamed SQL Server run.
 
 The codec accepts nullable INTN (1/2/4/8 bytes), BITN, NVARCHAR/NCHAR,
 VARCHAR/CHAR, VARBINARY/BINARY and DECIMALN. It handles raw UTF-16 units,
@@ -25,10 +33,9 @@ DECIMAL's TYPE_INFO storage length is explicit (5, 9, 13 or 17 bytes): compact
 parameter declarations and the 17-byte result form can be represented without
 guessing which form a future RPC path should emit.
 
-The new codec does **not** mean application OUTPUT parameters work. `src/rpc.rs`
-currently accepts only the integer OUTPUT handle for prepare RPCs; it still
-needs declaration-aware binding, execution updates, and correct RETURNVALUE /
-RETURNSTATUS / DONEPROC ordering. That root integration needs SQL Server captures
-of NULL, character/MAX, decimal, errors, repeated execution and Tedious output
-events. The pure vectors here prove the byte layout for supported declarations;
-they do not prove those application semantics or full TDS compatibility.
+Root RPC procedure integration in `src/rpc/procedures.rs` supports application
+OUTPUT parameters and has separate captured token and completion-order tests.
+The pure vectors here prove byte layout for supported declarations and the
+public preparation helper; they do not establish full application semantics or
+TDS compatibility. Unsupported declarations and remaining differences still
+need explicit reference evidence.

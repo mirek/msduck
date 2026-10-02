@@ -856,7 +856,16 @@ mod tests {
         tds::return_handle(&mut out, "", 42);
         assert_eq!(
             out,
-            [0xac, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0x26, 4, 4, 42, 0, 0, 0]
+            [0xac, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0x26, 4, 4, 42, 0, 0, 0]
+        );
+        out.clear();
+        tds::return_handle(&mut out, "@handle", 1);
+        assert_eq!(
+            out,
+            [
+                0xac, 0, 0, 7, b'@', 0, b'h', 0, b'a', 0, b'n', 0, b'd', 0, b'l', 0, b'e', 0, 1, 0,
+                0, 0, 0, 0, 0, 0x26, 4, 4, 1, 0, 0, 0,
+            ]
         );
     }
 }
