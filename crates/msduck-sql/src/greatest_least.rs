@@ -178,6 +178,12 @@ pub fn plan(function: Function, arguments: &[Argument]) -> Result<Plan, Error> {
         }
         known.push((arg, kind));
     }
+    if known
+        .iter()
+        .any(|(a, kind)| matches!(kind, Type::Character(_)) && a.collation.is_none())
+    {
+        return Err(Error::Unsupported(Unsupported::UnknownCollation));
+    }
     let winner = known
         .iter()
         .max_by_key(|(_, kind)| precedence(*kind))

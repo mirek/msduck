@@ -1048,3 +1048,33 @@ fn catalog_rows_aggregates_binary_integer_and_variant_inputs_match_captures() {
         }
     }
 }
+
+#[test]
+fn missing_collation_never_inherits_another_operands_known_comparison() {
+    let missing = Argument::typed(character(Family::Varchar, 1), Some(false));
+    for label in [
+        Label::CoercibleDefault(CI.into()),
+        Label::Implicit(CI.into()),
+        Label::Explicit("Latin1_General_CS_AS".into()),
+    ] {
+        let mut known = missing.clone();
+        known.collation = Some(label);
+        for inputs in [
+            vec![missing.clone(), known.clone()],
+            vec![known, missing.clone()],
+        ] {
+            let original = inputs.clone();
+            for function in [Function::Greatest, Function::Least] {
+                assert_eq!(
+                    plan(function, &inputs),
+                    Err(Error::Unsupported(Unsupported::UnknownCollation))
+                );
+            }
+            assert_eq!(inputs, original);
+        }
+    }
+    assert_eq!(
+        plan(Function::Greatest, &[missing]),
+        Err(Error::Unsupported(Unsupported::UnknownCollation))
+    );
+}

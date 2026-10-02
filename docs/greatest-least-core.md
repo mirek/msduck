@@ -35,7 +35,9 @@ Collation labels use the existing deterministic coercion rules. Conflicts retain
 error 468, including argument-order-dependent names in the captured message.
 Arity errors retain 189; XML/TEXT/NTEXT/IMAGE retain 8116 and the one-based
 argument position; the captured DATE/INT and TIME/DATE clashes retain 206.
-Only captured cross-family temporal and character conversions are admitted.
+A missing character collation label returns explicit `UnknownCollation`; it is
+never replaced by another operand's known label. Only captured cross-family
+temporal and character conversions are admitted.
 Other conversion pairs return `Unsupported::UncapturedConversion`.
 
 Nullability and descriptor flags are declaration properties. The retained direct
