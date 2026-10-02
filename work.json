@@ -2419,7 +2419,7 @@
     {
       "id": "greatest-least-reference-v1",
       "title": "Capture SQL Server GREATEST and LEAST reference behavior",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner continuing implementation goal and 2026-09-26 owner request to utilize this host with parallel independent agents. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
       "scope": [
         "scripts/capture-greatest-least.mjs",
@@ -9588,6 +9588,25 @@
         "Same claimingworker may combine with its owned797 onPR798 using freshreceipt and bothverifiedclaims; immutable oldtasks/scopes/receipts are not adopted. Exactrevisedhead privatefocusedproof plus fmt/strictworkspaceClippy/fullworkspace/alltargets/independentclients/audit underLinuxlock, requiredCI and completeverifiedreview/fallback; address and resolve confirmed4170044781 finding afterfixverification. No engine/preflight/checked-operand edits or localCargo cache. Worker owns merge and prompt bothregistry/project/issue completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pjk2B"
+    },
+    {
+      "id": "greatest-least-reference-recovery-v1",
+      "title": "Recover complete GREATEST and LEAST SQL Server reference evidence",
+      "state": "ready",
+      "issue": 800,
+      "authorization": "Direct owner continuing compatibility goal and standing takeover instruction. Recover verifiedownerPR260 checkpoint23344 with fresh exclusive receipt, preserve legacyclaims/rawevidence and correct fidelity/safety gaps. Unpushedlocalce2dropsRETURNVALUErawfields and is not adopted.",
+      "scope": [
+        "scripts/capture-greatest-least.mjs",
+        "reference/greatest-least.json",
+        "docs/greatest-least.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Inspect and correct complete token observation including ORDER and rawRETURNVALUE name/status/metadata/bytes, keeping bounded fragments/reads and exact rows/descriptors/errors/info/completions/wireorder. Preserve input/output nonoverwrite safety including fixture alias/hardlink checks and exclusive output writing; failing captures must not damage existing fixtures. Avoid unboundedAssertionError dumps or normalizing differences away.",
+        "Use original221program plan and pinnedSQLServer2025 image in two freshDBs in each of two independent ownedcontainers; retain and compare all4complete rawcaptures with boundeddiagnostics, inspect every difference, and document actual value/type/error/nullability rules versus unsupported unknowns. No Rust/parser/engine/backend/coremodule edits or runtimecompatibility completion claim. Keep oldfixture/checkpoint available separately.",
+        "Freshexclusiveclaim and receipt in reused isolatedworkerworktree; no localCargo caches or additional implementationagents. Capture in ownremote reference workspace with randomownedports/read-onlyexistingnode dependencies and no shared native source/cache writes or lock bypass. Source/negativeCLI checks, actualreproduction and exactrequiredCI plus verifiedreview/fallback; own focusedPRthroughmerge and prompt registry/project/issue completion. Original254 staysblocked until acceptanceisactuallyreached; publish/release core successors onlyafter evidence rather than marking incomplete dependenciesdone."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjowT"
     }
   ]
 }
