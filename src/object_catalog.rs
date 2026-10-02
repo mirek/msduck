@@ -33,6 +33,12 @@ pub fn register(db: &Connection) -> Result<()> {
         CREATE OR REPLACE MACRO main.__msduck_object_id(value,kind) AS map_extract_value((SELECT map(list(key),list(object_id)) FROM (SELECT lower(s.name)||chr(0)||lower(o.name)||chr(0)||k.kind AS key,o.object_id FROM sys.all_objects o JOIN main.__msduck_schemas s USING(schema_id) CROSS JOIN LATERAL (VALUES (''),(rtrim(o.type))) k(kind))),__msduck_identity_key(CAST(value AS VARCHAR))||chr(0)||upper(rtrim(coalesce(CAST(kind AS VARCHAR),''))));
         CREATE OR REPLACE MACRO main.__msduck_object_name(value) AS map_extract_value((SELECT map(list(object_id),list(name)) FROM (SELECT object_id,name FROM sys.all_objects UNION ALL SELECT object_id,name FROM main.__msduck_hidden_column_owners)),value);
         CREATE OR REPLACE MACRO main.__msduck_object_schema_name(value) AS map_extract_value((SELECT map(list(object_id),list(schema_name)) FROM (SELECT o.object_id,s.name AS schema_name FROM sys.all_objects o JOIN main.__msduck_schemas s USING(schema_id) UNION ALL SELECT object_id,schema_name FROM main.__msduck_hidden_column_owners)),value)")?;
+    // Declared source text of DEFAULT constraints and computed columns, for
+    // the catalog views (src/engine/ext/catalog). A NULL source is unknown.
+    db.execute_batch(
+        "CREATE TABLE IF NOT EXISTS main.__msduck_default_sources(object_id INTEGER NOT NULL,source VARCHAR,is_system_named BOOLEAN);
+        CREATE TABLE IF NOT EXISTS main.__msduck_computed_sources(object_id INTEGER NOT NULL,column_id INTEGER NOT NULL,source VARCHAR,is_nullable BOOLEAN)",
+    )?;
     crate::column_catalog::register(db)?;
     db.execute_batch(include_str!("table_catalog.sql"))?;
     Ok(sync(db)?)
@@ -42,6 +48,8 @@ pub fn sync(db: &Connection) -> duckdb::Result<()> {
     db.execute_batch("DELETE FROM main.__msduck_objects o WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_live_objects l WHERE l.schema_id=o.schema_id AND lower(l.name)=lower(o.name) AND l.type_code=o.type_code);
         INSERT INTO main.__msduck_objects SELECT CAST(nextval('main.__msduck_object_ids') AS INTEGER),l.schema_id,l.name,l.type_code,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP) FROM main.__msduck_live_objects l WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_objects o WHERE o.schema_id=l.schema_id AND lower(o.name)=lower(l.name))")?;
     crate::column_catalog::sync(db)?;
+    db.execute_batch("DELETE FROM main.__msduck_default_sources s WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_default_constraints d WHERE d.object_id=s.object_id);
+        DELETE FROM main.__msduck_computed_sources s WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_column_info c WHERE c.object_id=s.object_id AND c.column_id=s.column_id)")?;
     sync_lob(db)
 }
 
@@ -72,7 +80,8 @@ pub fn is_ddl(statement: &Statement) -> bool {
 }
 
 pub fn touch(db: &Connection, statement: &Statement) -> Result<()> {
-    record_named_defaults(db, statement)?;
+    record_defaults(db, statement)?;
+    record_computed(db, statement)?;
     let name = match statement {
         Statement::AlterTable(table) => &table.name,
         Statement::AlterView { name, .. } => name,
@@ -95,9 +104,16 @@ pub fn touch(db: &Connection, statement: &Statement) -> Result<()> {
     Ok(())
 }
 
-/// A named DEFAULT has a separate SQL Server object identity. Keep its row and
-/// column link in the caller's DDL transaction, after column IDs are synced.
-fn record_named_defaults(db: &Connection, statement: &Statement) -> Result<()> {
+/// Every DEFAULT has a separate SQL Server object identity: a named one
+/// keeps its name, an unnamed one gets SQL Server's generated name
+/// (`DF__table__column__XXXXXXXX`, from its object ID). Keep the rows,
+/// column links and declared text in the caller's DDL transaction, after
+/// column IDs are synced. For ALTER TABLE ... ADD the constraints feature
+/// runs the columns without their DEFAULT names and then gives the
+/// generated objects their declared names. DEFAULTs that other features add
+/// as identity and rowversion allocators are not SQL Server objects.
+fn record_defaults(db: &Connection, statement: &Statement) -> Result<()> {
+    use msduck_sql::dialect::ext::catalog::declarations;
     let (table, columns): (&ObjectName, Vec<&ColumnDef>) = match statement {
         Statement::CreateTable(table) => (&table.name, table.columns.iter().collect()),
         Statement::AlterTable(table) => (
@@ -124,14 +140,19 @@ fn record_named_defaults(db: &Connection, statement: &Statement) -> Result<()> {
     let Some(object_id) = object_id else {
         return Ok(());
     };
+    let table_name: String = db.query_row(
+        "SELECT name FROM main.__msduck_objects WHERE object_id=?",
+        [object_id],
+        |row| row.get(0),
+    )?;
     for column in columns {
         for option in &column.options {
-            if !matches!(option.option, ColumnOption::Default(_)) {
-                continue;
-            }
-            let Some(name) = &option.name else {
+            let ColumnOption::Default(expression) = &option.option else {
                 continue;
             };
+            if option.name.is_none() && declarations::allocator(expression) {
+                continue;
+            }
             let column_id: Option<i32> = db.query_row(
                 "SELECT column_id FROM main.__msduck_column_info WHERE object_id=? AND lower(name)=lower(?)",
                 duckdb::params![object_id, column.name.value],
@@ -146,23 +167,123 @@ fn record_named_defaults(db: &Connection, statement: &Statement) -> Result<()> {
                 |row| row.get(0),
             )?;
             if let Some(existing) = existing {
-                anyhow::ensure!(
-                    existing.to_lowercase() == name.value.to_lowercase(),
-                    "column already has a differently named DEFAULT constraint"
-                );
+                if let Some(name) = &option.name {
+                    anyhow::ensure!(
+                        existing.to_lowercase() == name.value.to_lowercase(),
+                        "column already has a differently named DEFAULT constraint"
+                    );
+                }
                 continue;
             }
-            let conflict: i64 = db.query_row(
-                "SELECT count(*) FROM sys.all_objects WHERE schema_id=(SELECT schema_id FROM main.__msduck_objects WHERE object_id=?) AND lower(name)=lower(?)",
-                duckdb::params![object_id, name.value],
+            if let Some(name) = &option.name {
+                let conflict: i64 = db.query_row(
+                    "SELECT count(*) FROM sys.all_objects WHERE schema_id=(SELECT schema_id FROM main.__msduck_objects WHERE object_id=?) AND lower(name)=lower(?)",
+                    duckdb::params![object_id, name.value],
+                    |row| row.get(0),
+                )?;
+                anyhow::ensure!(
+                    conflict == 0,
+                    "DEFAULT constraint name already exists in schema"
+                );
+            }
+            let id: i32 = db.query_row(
+                "SELECT CAST(nextval('main.__msduck_object_ids') AS INTEGER)",
+                [],
                 |row| row.get(0),
             )?;
-            anyhow::ensure!(
-                conflict == 0,
-                "DEFAULT constraint name already exists in schema"
-            );
-            db.execute("INSERT INTO main.__msduck_default_constraints SELECT CAST(nextval('main.__msduck_object_ids') AS INTEGER),?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP) WHERE NOT EXISTS(SELECT 1 FROM main.__msduck_default_constraints WHERE parent_object_id=? AND column_id=?)",duckdb::params![object_id,column_id,name.value,object_id,column_id])?;
+            let name = match &option.name {
+                Some(name) => name.value.clone(),
+                None => declarations::default_name(&table_name, &column.name.value, id),
+            };
+            db.execute(
+                "INSERT INTO main.__msduck_default_constraints(object_id,parent_object_id,column_id,name,create_date,modify_date) VALUES(?,?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP))",
+                duckdb::params![id, object_id, column_id, name],
+            )?;
+            db.execute(
+                "INSERT INTO main.__msduck_default_sources VALUES(?,?,?)",
+                duckdb::params![
+                    id,
+                    declarations::declared_source(expression),
+                    option.name.is_none()
+                ],
+            )?;
         }
+    }
+    Ok(())
+}
+
+/// Keep the expression of each computed column as declared, when the
+/// statement still has it (another feature may have lowered it already;
+/// the catalog feature then records the batch's text).
+fn record_computed(db: &Connection, statement: &Statement) -> Result<()> {
+    let (table, columns): (&ObjectName, Vec<&ColumnDef>) = match statement {
+        Statement::CreateTable(table) => (&table.name, table.columns.iter().collect()),
+        Statement::AlterTable(table) => (
+            &table.name,
+            table
+                .operations
+                .iter()
+                .filter_map(|operation| match operation {
+                    AlterTableOperation::AddColumn { column_def, .. } => Some(column_def),
+                    _ => None,
+                })
+                .collect(),
+        ),
+        _ => return Ok(()),
+    };
+    use msduck_sql::dialect::ext::catalog::declarations;
+    let computed: Vec<(&ColumnDef, &Expr)> = columns
+        .into_iter()
+        .filter_map(|column| {
+            msduck_sql::dialect::computed_column::computed(column)
+                .map(|(expression, _)| (column, expression))
+        })
+        .collect();
+    if computed.is_empty() {
+        return Ok(());
+    }
+    let object_id: Option<i32> = db.query_row(
+        "SELECT __msduck_object_id(?,'U')",
+        [table.to_string()],
+        |row| row.get(0),
+    )?;
+    let Some(object_id) = object_id else {
+        return Ok(());
+    };
+    let nullability: std::collections::HashMap<String, bool> = db
+        .prepare("SELECT lower(name),is_nullable FROM main.__msduck_column_info WHERE object_id=?")?
+        .query_map([object_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<duckdb::Result<_>>()?;
+    for (column, expression) in computed {
+        let source = declarations::declared_source(expression);
+        let nullable = source.as_ref().map(|_| {
+            !column
+                .options
+                .iter()
+                .any(|option| matches!(option.option, ColumnOption::NotNull))
+                && declarations::computed_nullable(expression, &|name| {
+                    nullability
+                        .get(&name.to_lowercase())
+                        .copied()
+                        .unwrap_or(true)
+                })
+        });
+        let column_id: Option<i32> = db.query_row(
+            "SELECT column_id FROM main.__msduck_column_info WHERE object_id=? AND lower(name)=lower(?)",
+            duckdb::params![object_id, column.name.value],
+            |row| row.get(0),
+        )?;
+        let Some(column_id) = column_id else {
+            continue;
+        };
+        db.execute(
+            "DELETE FROM main.__msduck_computed_sources WHERE object_id=? AND column_id=?",
+            duckdb::params![object_id, column_id],
+        )?;
+        db.execute(
+            "INSERT INTO main.__msduck_computed_sources VALUES(?,?,?,?)",
+            duckdb::params![object_id, column_id, source, nullable],
+        )?;
     }
     Ok(())
 }

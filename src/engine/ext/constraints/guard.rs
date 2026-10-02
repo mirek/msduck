@@ -128,18 +128,29 @@ pub(crate) fn truncate(session: &mut Session, statement: &Statement) -> Result<(
     Ok(())
 }
 
-/// Objects that depend on `column`: named defaults first, then constraints,
-/// each in creation order.
+/// What an object that depends on a column is.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Dependency {
+    /// A DEFAULT, and whether SQL Server generated its name.
+    Default {
+        generated: bool,
+    },
+    Check,
+    Foreign,
+}
+
+/// Objects that depend on `column`: defaults first, then constraints, each
+/// in creation order.
 fn dependents(
     session: &Session,
     constraints: &[Constraint],
     table: &Table,
     column: &str,
-) -> Result<Vec<(i32, String)>> {
-    let mut objects: Vec<(i32, String)> = catalog::defaults_of(&session.db, table)?
+) -> Result<Vec<(i32, String, Dependency)>> {
+    let mut objects: Vec<(i32, String, Dependency)> = catalog::defaults_of(&session.db, table)?
         .into_iter()
-        .filter(|(_, _, c)| c.eq_ignore_ascii_case(column))
-        .map(|(id, name, _)| (id, name))
+        .filter(|(_, _, c, _)| c.eq_ignore_ascii_case(column))
+        .map(|(id, name, _, generated)| (id, name, Dependency::Default { generated }))
         .collect();
     // Key constraints are checked by the keys feature, which allows widening
     // a key column.
@@ -162,17 +173,48 @@ fn dependents(
                 .iter()
                 .any(|c| c.eq_ignore_ascii_case(column));
         if own || referenced {
-            objects.push((constraint.id, constraint.name.clone()));
+            let dependency = if constraint.kind == Type::Check {
+                Dependency::Check
+            } else {
+                Dependency::Foreign
+            };
+            objects.push((constraint.id, constraint.name.clone(), dependency));
         }
     }
     // The reference lists the most recently created object first.
-    objects.sort_by_key(|(id, _)| std::cmp::Reverse(*id));
+    objects.sort_by_key(|(id, _, _)| std::cmp::Reverse(*id));
     Ok(objects)
 }
 
+/// Whether ALTER COLUMN from `old` to `new` keeps a dependent object, as
+/// SQL Server allows: a DEFAULT allows another length, precision or scale
+/// of the same type, a CHECK another length of the same variable-length
+/// type.
+fn allowed(dependency: Dependency, old: &DataType, new: &DataType) -> bool {
+    let (Some(old), Some(new)) = (
+        msduck_sql::catalog_shape::declaration(old),
+        msduck_sql::catalog_shape::declaration(new),
+    ) else {
+        return false;
+    };
+    if old.name != new.name {
+        return false;
+    }
+    match dependency {
+        Dependency::Default { .. } => true,
+        Dependency::Check => {
+            matches!(old.name, "varchar" | "nvarchar" | "varbinary")
+                && old.precision == new.precision
+                && old.scale == new.scale
+        }
+        Dependency::Foreign => false,
+    }
+}
+
 /// ALTER TABLE DROP COLUMN and ALTER COLUMN on columns that CHECK or FOREIGN
-/// KEY constraints or named defaults use fail with 5074 and 4922. Changing
-/// only nullability is allowed. Key columns are the keys feature's.
+/// KEY constraints or defaults use fail with 5074 and 4922. Changing only
+/// nullability is allowed, and the changes [`allowed`] lists. Key columns
+/// are the keys feature's.
 pub(crate) fn alter_table(session: &mut Session, statement: &mut Statement) -> Result<()> {
     let Statement::AlterTable(alter) = statement else {
         return Ok(());
@@ -185,9 +227,17 @@ pub(crate) fn alter_table(session: &mut Session, statement: &mut Statement) -> R
         match operation {
             AlterTableOperation::DropColumn { column_names, .. } => {
                 for column in column_names {
-                    let objects = dependents(session, &constraints, &table, &column.value)?;
+                    // A DEFAULT without a declared name goes with its column:
+                    // msduck has always dropped such columns, although SQL
+                    // Server refuses them (5074) too.
+                    let objects: Vec<_> = dependents(session, &constraints, &table, &column.value)?
+                        .into_iter()
+                        .filter(|(_, _, dependency)| {
+                            !matches!(dependency, Dependency::Default { generated: true })
+                        })
+                        .collect();
                     if !objects.is_empty() {
-                        let names: Vec<String> = objects.into_iter().map(|(_, n)| n).collect();
+                        let names: Vec<String> = objects.into_iter().map(|(_, n, _)| n).collect();
                         return Err(errors::dependent_column(
                             &column.value,
                             &names,
@@ -205,18 +255,32 @@ pub(crate) fn alter_table(session: &mut Session, statement: &mut Statement) -> R
                     continue;
                 }
                 let columns = catalog::columns(&session.db, &table)?;
-                let unchanged = columns
+                let declared = columns
                     .iter()
                     .find(|c| c.name.eq_ignore_ascii_case(&column_name.value))
                     .map(|column| translate::declared_type(session, &table, column))
-                    .transpose()?
-                    .is_some_and(|declared| {
-                        declared
-                            .to_string()
-                            .eq_ignore_ascii_case(&data_type.to_string())
-                    });
-                if !unchanged {
-                    let names: Vec<String> = objects.into_iter().map(|(_, n)| n).collect();
+                    .transpose()?;
+                let unchanged = declared.as_ref().is_some_and(|declared| {
+                    declared
+                        .to_string()
+                        .eq_ignore_ascii_case(&data_type.to_string())
+                });
+                if unchanged {
+                    continue;
+                }
+                // As for DROP COLUMN, a DEFAULT without a declared name
+                // follows its column, as msduck always allowed.
+                let names: Vec<String> = objects
+                    .into_iter()
+                    .filter(|(_, _, dependency)| {
+                        !matches!(dependency, Dependency::Default { generated: true })
+                            && !declared
+                                .as_ref()
+                                .is_some_and(|declared| allowed(*dependency, declared, data_type))
+                    })
+                    .map(|(_, n, _)| n)
+                    .collect();
+                if !names.is_empty() {
                     return Err(errors::dependent_column(
                         &column_name.value,
                         &names,

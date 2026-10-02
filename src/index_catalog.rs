@@ -454,15 +454,21 @@ pub fn acquire_complete(db: &Connection) -> Result<Vec<Index>> {
 
 /// The keys feature's record (`main.__msduck_keys`) as this catalog reads it:
 /// one row per PRIMARY KEY or UNIQUE constraint (`PK`, `UQ`) and per index the
-/// keys feature created (`IX`), with column lists decoded from JSON.
+/// keys feature created (`IX`), with column lists decoded from JSON, and the
+/// declared layout of key constraints (`main.__msduck_key_layout`): the
+/// CLUSTERED or NONCLUSTERED keyword, NULL when neither was written, and the
+/// ordinals of DESC key columns.
 const KEY_INDEXES: &str = r#"CREATE OR REPLACE MACRO main.__msduck_index_names(list) AS
       list_transform(regexp_extract_all(list,'"((?:[^"\\]|\\.)*)"',1),
         lambda x: replace(replace(x,'\"','"'),'\\','\'));
     CREATE OR REPLACE VIEW main.__msduck_key_indexes AS
-    SELECT tag,object_id,name,kind,is_unique,is_clustered,is_native,backend_name,incarnation,
-      main.__msduck_index_names(key_columns) AS key_columns,
-      main.__msduck_index_names(included_columns) AS included_columns,filter_definition
-    FROM main.__msduck_keys"#;
+    SELECT k.tag,k.object_id,k.name,k.kind,k.is_unique,k.is_clustered,k.is_native,k.backend_name,k.incarnation,
+      main.__msduck_index_names(k.key_columns) AS key_columns,
+      main.__msduck_index_names(k.included_columns) AS included_columns,k.filter_definition,
+      l.clustered AS declared_clustered,coalesce(l.descending,CAST([] AS INTEGER[])) AS descending
+    FROM main.__msduck_keys k
+    LEFT JOIN (SELECT tag,first(clustered) AS clustered,first(descending) AS descending
+      FROM main.__msduck_key_layout GROUP BY tag) l ON l.tag=k.tag"#;
 
 /// The same columns while the keys feature has not bootstrapped this
 /// database yet: [`publish_views`] runs before feature bootstraps, and a view
@@ -472,20 +478,40 @@ const NO_KEY_INDEXES: &str = "CREATE OR REPLACE VIEW main.__msduck_key_indexes A
       CAST(NULL AS VARCHAR) AS kind,CAST(NULL AS BOOLEAN) AS is_unique,CAST(NULL AS BOOLEAN) AS is_clustered,
       CAST(NULL AS BOOLEAN) AS is_native,CAST(NULL AS VARCHAR) AS backend_name,CAST(NULL AS BIGINT) AS incarnation,
       CAST(NULL AS VARCHAR[]) AS key_columns,CAST(NULL AS VARCHAR[]) AS included_columns,
-      CAST(NULL AS VARCHAR) AS filter_definition
+      CAST(NULL AS VARCHAR) AS filter_definition,CAST(NULL AS BOOLEAN) AS declared_clustered,
+      CAST(NULL AS INTEGER[]) AS descending
     WHERE false";
 
-/// Whether the keys record exists, and whether `main.__msduck_key_indexes`
-/// reads it (`None` while the view is missing).
-fn key_indexes_state(db: &Connection) -> Result<(bool, Option<bool>)> {
-    Ok(db.query_row(
-        "SELECT EXISTS(SELECT 1 FROM duckdb_tables() WHERE database_name=current_database()
-           AND schema_name='main' AND table_name='__msduck_keys'),
-         (SELECT contains(sql,'__msduck_keys') FROM duckdb_views() WHERE database_name=current_database()
+/// What `main.__msduck_key_indexes` reads.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum KeyIndexes {
+    Placeholder,
+    /// The keys record without its layout, as an earlier version defined it.
+    Outdated,
+    Current,
+}
+
+/// Whether the keys record and its layout exist, and what
+/// `main.__msduck_key_indexes` reads (`None` while the view is missing).
+fn key_indexes_state(db: &Connection) -> Result<(bool, Option<KeyIndexes>)> {
+    let (exists, view): (bool, Option<String>) = db.query_row(
+        "SELECT (SELECT count(*)=2 FROM duckdb_tables() WHERE database_name=current_database()
+           AND schema_name='main' AND table_name IN ('__msduck_keys','__msduck_key_layout')),
+         (SELECT sql FROM duckdb_views() WHERE database_name=current_database()
            AND schema_name='main' AND view_name='__msduck_key_indexes')",
         [],
         |r| Ok((r.get(0)?, r.get(1)?)),
-    )?)
+    )?;
+    let view = view.map(|sql| {
+        if sql.contains("__msduck_key_layout") {
+            KeyIndexes::Current
+        } else if sql.contains("__msduck_keys") {
+            KeyIndexes::Outdated
+        } else {
+            KeyIndexes::Placeholder
+        }
+    });
+    Ok((exists, view))
 }
 
 /// Point `main.__msduck_key_indexes` at the keys record, or at the
@@ -496,7 +522,12 @@ fn key_indexes_state(db: &Connection) -> Result<(bool, Option<bool>)> {
 /// that concurrent transactions share.
 fn publish_key_indexes(db: &Connection, replace: bool) -> Result<()> {
     let (exists, view) = key_indexes_state(db)?;
-    if view.is_none() || (replace && view != Some(exists)) {
+    let wanted = if exists {
+        KeyIndexes::Current
+    } else {
+        KeyIndexes::Placeholder
+    };
+    if view.is_none() || view == Some(KeyIndexes::Outdated) || (replace && view != Some(wanted)) {
         db.execute_batch(if exists { KEY_INDEXES } else { NO_KEY_INDEXES })?;
     }
     Ok(())
@@ -512,12 +543,14 @@ fn publish_key_indexes(db: &Connection, replace: bool) -> Result<()> {
 /// `main.__msduck_index_ids`; until then it is computed the same way. Every
 /// DDL statement synchronizes, so the indexes awaiting an ID come from the
 /// latest statement: its constraints first, in reverse declaration order as
-/// SQL Server creates them, then its indexes. A PRIMARY KEY is clustered
-/// unless the table has a clustered index, and stays nonclustered once it
-/// has had one; UNIQUE constraints are nonclustered. These are SQL Server's
-/// defaults: an explicit CLUSTERED or NONCLUSTERED on a constraint is not
-/// recorded. A physical index or native key constraint that neither catalog
-/// records fails explicitly rather than being omitted.
+/// SQL Server creates them, then its indexes. A constraint declared
+/// CLUSTERED or NONCLUSTERED keeps that; otherwise, as SQL Server defaults, a
+/// PRIMARY KEY is clustered unless the table has a clustered index or a
+/// constraint declared CLUSTERED, and stays nonclustered once it has had
+/// one, and UNIQUE constraints are nonclustered. Key columns declared DESC
+/// are descending in sys.index_columns. A physical index or native key
+/// constraint that neither catalog records fails explicitly rather than
+/// being omitted.
 pub fn publish_views(db: &Connection) -> Result<()> {
     publish_key_indexes(db, true)?;
     db.execute_batch("CREATE OR REPLACE MACRO main.__msduck_index_catalog_ready() AS
@@ -549,7 +582,9 @@ pub fn publish_views(db: &Connection) -> Result<()> {
             coalesce(k.included_columns,CAST([] AS VARCHAR[])) AS included,k.filter_definition AS filter
           FROM main.__msduck_live_indexes l
           LEFT JOIN main.__msduck_key_indexes k ON k.kind='IX' AND k.incarnation=l.incarnation AND k.object_id=l.object_id),
-        cx AS (SELECT DISTINCT object_id FROM ix WHERE clustered),
+        -- Tables with a clustered index or a constraint declared CLUSTERED.
+        cx AS (SELECT DISTINCT object_id FROM ix WHERE clustered
+          UNION SELECT object_id FROM main.__msduck_key_indexes WHERE kind IN ('PK','UQ') AND declared_clustered),
         -- Concurrent transactions can each record the same assignment.
         ids AS (SELECT object_id,tag,incarnation,min(index_id) AS index_id,min(fallback) AS fallback,max(txn) AS txn
           FROM main.__msduck_index_ids GROUP BY object_id,tag,incarnation),
@@ -557,7 +592,9 @@ pub fn publish_views(db: &Connection) -> Result<()> {
           SELECT k.object_id,k.tag,CAST(NULL AS BIGINT) AS incarnation,CAST(NULL AS INTEGER) AS stored_id,
             k.name,k.kind,true AS is_unique,k.key_columns,CAST(NULL AS VARCHAR) AS filter,
             CAST([] AS VARCHAR[]) AS included,p.index_id AS persisted,p.fallback,
-            k.kind='PK' AND k.object_id NOT IN (SELECT object_id FROM cx) AND coalesce(p.index_id,1)=1 AS clustered
+            coalesce(k.declared_clustered,
+              k.kind='PK' AND k.object_id NOT IN (SELECT object_id FROM cx) AND coalesce(p.index_id,1)=1) AS clustered,
+            k.descending
           FROM main.__msduck_key_indexes k
           JOIN sys.objects o ON o.object_id=k.object_id AND rtrim(o.type)='U'
           -- Constraints given IDs by this transaction may belong to the same
@@ -568,7 +605,7 @@ pub fn publish_views(db: &Connection) -> Result<()> {
           WHERE k.kind IN ('PK','UQ')
           UNION ALL
           SELECT ix.object_id,NULL,ix.incarnation,ix.stored_id,ix.name,'IX',ix.is_unique,NULL,ix.filter,ix.included,
-            p.index_id,p.fallback,ix.clustered
+            p.index_id,p.fallback,ix.clustered,CAST(NULL AS INTEGER[])
           FROM ix LEFT JOIN ids p ON p.object_id=ix.object_id AND p.incarnation=ix.incarnation),
         -- A PRIMARY KEY that held ID 1 on a table that now has a clustered
         -- index was nonclustered: it takes its fallback ID, and the IDs
@@ -600,7 +637,8 @@ pub fn publish_views(db: &Connection) -> Result<()> {
           CAST(CASE WHEN v.clustered THEN 1 ELSE coalesce(v.current,f.id) END AS INTEGER) AS index_id,
           v.name,v.clustered,v.is_unique,v.kind='PK' AS is_primary_key,v.kind='UQ' AS is_unique_constraint,
           v.filter,v.key_columns,v.incarnation,v.included,v.tag,v.persisted,
-          CAST(CASE WHEN v.kind='PK' AND v.clustered AND v.persisted IS NULL THEN a.id ELSE v.fallback END AS INTEGER) AS fallback
+          CAST(CASE WHEN v.kind='PK' AND v.clustered AND v.persisted IS NULL THEN a.id ELSE v.fallback END AS INTEGER) AS fallback,
+          v.descending
         FROM v
         LEFT JOIN pending p ON p.object_id=v.object_id AND p.tag IS NOT DISTINCT FROM v.tag
           AND p.incarnation IS NOT DISTINCT FROM v.incarnation
@@ -632,7 +670,8 @@ pub fn publish_views(db: &Connection) -> Result<()> {
               WHERE d.incarnation=k.incarnation AND d.ordinal=k.ordinal) AS descending,false AS included
           FROM main.__msduck_index_entries e JOIN main.__msduck_index_keys k ON k.incarnation=e.incarnation
           UNION ALL
-          SELECT e.object_id,e.index_id,c.column_id,n.ordinal,n.ordinal,false,false
+          SELECT e.object_id,e.index_id,c.column_id,n.ordinal,n.ordinal,
+            list_contains(coalesce(e.descending,CAST([] AS INTEGER[])),CAST(n.ordinal AS INTEGER)),false
           FROM main.__msduck_index_entries e
           CROSS JOIN LATERAL (SELECT unnest(e.key_columns) AS name,unnest(generate_series(1,len(e.key_columns))) AS ordinal) n
           JOIN sys.columns c ON c.object_id=e.object_id AND lower(c.name)=lower(n.name)

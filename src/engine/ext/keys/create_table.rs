@@ -35,9 +35,18 @@ pub(super) fn run(
         return Ok(None);
     }
     let table = table.clone();
+    // The CLUSTERED or NONCLUSTERED keyword each key was declared with,
+    // which tokenizing drops (see the catalog feature).
+    let declared = session.ext.catalog.take_keys(&table.name);
     let owned = session.transactions == 0;
     match atomically(session, |session| {
-        create(session, &table, constraints.clone(), parameters)
+        create(
+            session,
+            &table,
+            constraints.clone(),
+            declared.clone(),
+            parameters,
+        )
     }) {
         // A user-defined type can hide unindexable storage; enforce every key
         // through managed indexes then.
@@ -51,7 +60,7 @@ pub(super) fn run(
                 })
                 .collect();
             atomically(session, |session| {
-                create(session, &table, managed, parameters)
+                create(session, &table, managed, declared, parameters)
             })
             .map(Some)
         }
@@ -79,6 +88,7 @@ fn create(
     session: &mut Session,
     table: &CreateTable,
     constraints: Vec<Constraint>,
+    declared: Vec<msduck_sql::dialect::ext::catalog::declarations::Key>,
     parameters: &mut HashMap<String, Parameter>,
 ) -> Result<Execution> {
     catalog::prune(&session.db)?;
@@ -103,6 +113,7 @@ fn create(
             return Err(duplicate_name(name));
         }
     }
+    let mut declared = declared;
     let mut native = table.clone();
     plan::strip(&mut native, &constraints);
     let execution = ext::reenter(session, "keys", |session| {
@@ -136,6 +147,7 @@ fn create(
         } else {
             None
         };
+        let clustered = declared_clustering(&mut declared, constraint);
         catalog::insert(
             &session.db,
             &catalog::Key {
@@ -150,7 +162,9 @@ fn create(
                 }),
                 kind: if constraint.primary { "PK" } else { "UQ" }.into(),
                 unique: true,
-                clustered: false,
+                // Only an explicit CLUSTERED: a PRIMARY KEY that is clustered
+                // by default gives way to a later clustered index.
+                clustered: clustered == Some(true),
                 native: constraint.native,
                 backend_name: backend,
                 incarnation: None,
@@ -160,6 +174,54 @@ fn create(
                 filter_columns: vec![],
             },
         )?;
+        catalog::record_layout(&session.db, tag, clustered, &descending(table, constraint))?;
     }
     Ok(execution)
+}
+
+/// The keyword a key was declared with: the first declared key of the same
+/// kind over the same columns.
+fn declared_clustering(
+    declared: &mut Vec<msduck_sql::dialect::ext::catalog::declarations::Key>,
+    constraint: &Constraint,
+) -> Option<bool> {
+    use msduck_sql::dialect::ext::catalog::declarations::KeyKind;
+    let kind = if constraint.primary {
+        KeyKind::Primary
+    } else {
+        KeyKind::Unique
+    };
+    let position = declared.iter().position(|key| {
+        key.kind == kind
+            && key.columns.len() == constraint.columns.len()
+            && key
+                .columns
+                .iter()
+                .zip(&constraint.columns)
+                .all(|(a, b)| a.eq_ignore_ascii_case(b))
+    })?;
+    declared.remove(position).clustered
+}
+
+/// The 1-based ordinals of a table constraint's DESC key columns.
+fn descending(table: &CreateTable, constraint: &Constraint) -> Vec<i32> {
+    let plan::Origin::Table(index) = constraint.origin else {
+        return Vec::new();
+    };
+    let columns = match table.constraints.get(index) {
+        Some(sqlparser::ast::TableConstraint::PrimaryKey(key)) => &key.columns,
+        Some(sqlparser::ast::TableConstraint::Unique(key)) => &key.columns,
+        _ => return Vec::new(),
+    };
+    columns
+        .iter()
+        .enumerate()
+        .filter(|(_, column)| {
+            matches!(
+                column.column.options.sort,
+                Some(sqlparser::ast::OrderBySort::Desc)
+            )
+        })
+        .map(|(ordinal, _)| ordinal as i32 + 1)
+        .collect()
 }

@@ -244,17 +244,18 @@ through a separate connection.
   - A Unicode or ANSI key value is shown without trailing spaces. SQL
     Server shows the inserted text.
 - **Clustering of constraints.** The CLUSTERED/NONCLUSTERED keyword on
-  PRIMARY KEY and UNIQUE is still dropped at tokenization. A CLUSTERED index
-  is therefore not rejected with 1902 when a clustered primary key exists.
-  Two clustered constraints are not rejected with 8112.
+  PRIMARY KEY and UNIQUE, and DESC key columns, are recorded for the
+  catalogs (`main.__msduck_key_layout`, read by `sys.indexes` and
+  `sys.index_columns`; see docs/gaps-catalog.md). Only an explicit CLUSTERED
+  constraint makes a later CLUSTERED index fail with 1902; a primary key that
+  is clustered by default gives way to the index instead. Two clustered
+  constraints are not rejected with 8112.
 - **IGNORE_DUP_KEY = ON** on a unique index is unsupported.
 - **Catalogs.**
-  - `sys.indexes` and `sys.index_columns` come from the index catalog. They
-    still reject any key constraint or keys-managed constraint index.
-  - Registered indexes appear without clustering, included columns or
-    filters.
-  - `sys.key_constraints` and constraint rows in `sys.objects` belong to the
-    catalog work, which can read `main.__msduck_keys`.
+  - `sys.indexes` and `sys.index_columns` come from the index catalog,
+    including key constraints and keys-managed indexes (docs/index-catalog.md).
+  - `sys.key_constraints`, constraint rows in `sys.objects` and `sp_pkeys`
+    read `main.__msduck_keys` (docs/gaps-catalog.md).
 - **Foreign keys.** DuckDB requires a native PRIMARY KEY or UNIQUE
   constraint on the referenced columns. A foreign key cannot reference a key
   over STRUCT storage, such as an NVARCHAR or DATETIMEOFFSET primary key.

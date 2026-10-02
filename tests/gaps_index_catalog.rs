@@ -304,11 +304,11 @@ fn same_named_tables_in_two_databases_keep_their_own_rows() {
     assert_eq!(msduck::index_catalog::acquire(&s.db).unwrap().len(), 1);
 }
 
-/// Differences from SQL Server that remain: the CLUSTERED and NONCLUSTERED
-/// keywords of PRIMARY KEY and UNIQUE constraints, and the key order of a
-/// constraint, are not recorded, so SQL Server's defaults apply.
+/// The CLUSTERED and NONCLUSTERED keywords of PRIMARY KEY and UNIQUE
+/// constraints, and the key order of a constraint, as SQL Server records
+/// them (the catalog feature keeps them; docs/gaps-catalog.md).
 #[test]
-fn unrecorded_constraint_options_use_sql_server_defaults() {
+fn constraint_options_follow_their_declaration() {
     let server = Server::open(":memory:").unwrap();
     let mut s = session(&server);
     for sql in [
@@ -318,10 +318,7 @@ fn unrecorded_constraint_options_use_sql_server_defaults() {
     ] {
         run(&mut s, sql);
     }
-    // SQL Server:
-    //   a|NULL|0|HEAP, a|pk_a|2|NONCLUSTERED
-    //   b|uq_b_code|1|CLUSTERED
-    //   c|pk_c|1|CLUSTERED
+    // SQL Server: the same rows.
     assert_eq!(
         rows(
             &s,
@@ -329,9 +326,9 @@ fn unrecorded_constraint_options_use_sql_server_defaults() {
              WHERE rtrim(o.type)='U' ORDER BY o.name,i.index_id"
         ),
         [
-            "a|pk_a|1|CLUSTERED",
-            "b|NULL|0|HEAP",
-            "b|uq_b_code|2|NONCLUSTERED",
+            "a|NULL|0|HEAP",
+            "a|pk_a|2|NONCLUSTERED",
+            "b|uq_b_code|1|CLUSTERED",
             "c|pk_c|1|CLUSTERED",
         ]
     );
@@ -342,7 +339,7 @@ fn unrecorded_constraint_options_use_sql_server_defaults() {
             "SELECT ic.index_column_id,ic.column_id,ic.key_ordinal,ic.is_descending_key FROM sys.index_columns ic
              JOIN sys.objects o ON o.object_id=ic.object_id WHERE o.name='c' ORDER BY ic.index_column_id"
         ),
-        ["1|1|2|0", "2|2|1|0"]
+        ["1|1|2|1", "2|2|1|0"]
     );
 }
 

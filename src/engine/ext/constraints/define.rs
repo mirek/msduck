@@ -34,29 +34,14 @@ fn truncated(text: &str, length: usize) -> String {
 
 /// SQL Server's generated name for an unnamed constraint.
 fn system_name(kind: &Kind, table: &str, column: Option<&str>, id: i32) -> String {
-    let id = id as u32;
+    use msduck_sql::dialect::ext::catalog::declarations::constraint_name;
     match kind {
-        Kind::Check(_) => match column {
-            Some(column) => format!(
-                "CK__{}__{}__{id:08X}",
-                truncated(table, 9),
-                truncated(column, 5)
-            ),
-            None => format!("CK__{}__{id:08X}", truncated(table, 116)),
-        },
+        Kind::Check(_) => constraint_name("CK", table, column, id),
         Kind::ForeignKey(key) => {
             let column = key.columns.first().map_or("", |c| c.value.as_str());
-            format!(
-                "FK__{}__{}__{id:08X}",
-                truncated(table, 9),
-                truncated(column, 5)
-            )
+            constraint_name("FK", table, Some(column), id)
         }
-        Kind::Default { column, .. } => format!(
-            "DF__{}__{}__{id:08X}",
-            truncated(table, 9),
-            truncated(&column.value, 5)
-        ),
+        Kind::Default { column, .. } => constraint_name("DF", table, Some(&column.value), id),
         Kind::PrimaryKey(_) | Kind::Unique(_) => {
             let prefix = if matches!(kind, Kind::PrimaryKey(_)) {
                 "PK"
@@ -66,7 +51,11 @@ fn system_name(kind: &Kind, table: &str, column: Option<&str>, id: i32) -> Strin
             let hash = table.bytes().fold(0x811c9dc5u32, |h, b| {
                 (h ^ b as u32).wrapping_mul(0x01000193)
             });
-            format!("{prefix}__{}__{hash:08X}{id:08X}", truncated(table, 8))
+            format!(
+                "{prefix}__{}__{hash:08X}{:08X}",
+                truncated(table, 8),
+                id as u32
+            )
         }
     }
 }
@@ -1111,8 +1100,8 @@ pub(crate) fn alter(
 }
 
 /// ADD items: column definitions without their constraints, the
-/// constraints, and named column defaults as (name, column).
-type Split = (Vec<ColumnDef>, Vec<Item>, Vec<(Ident, Ident)>);
+/// constraints, and named column defaults as (name, column, value).
+type Split = (Vec<ColumnDef>, Vec<Item>, Vec<(Ident, Ident, Expr)>);
 
 /// Split ADD items into column definitions (without their constraints),
 /// constraints, and named column defaults.
@@ -1156,7 +1145,11 @@ fn split_add(items: Vec<AddItem>) -> Result<Split> {
                             kind: Kind::Unique(vec![owner.clone()]),
                         }),
                         ColumnOption::Default(value) if option.name.is_some() => {
-                            defaults.push((option.name.clone().unwrap(), owner.clone()));
+                            defaults.push((
+                                option.name.clone().unwrap(),
+                                owner.clone(),
+                                value.clone(),
+                            ));
                             kept.push(ColumnOptionDef {
                                 name: None,
                                 option: ColumnOption::Default(value),
@@ -1193,7 +1186,7 @@ fn add(
     let names = constraints
         .iter()
         .filter_map(|item| item.name.as_ref())
-        .chain(defaults.iter().map(|(name, _)| name));
+        .chain(defaults.iter().map(|(name, _, _)| name));
     for name in names {
         if !seen.insert(name.value.to_lowercase()) {
             return Err(errors::duplicate_in_statement(&name.value));
@@ -1225,8 +1218,8 @@ fn add(
         ext::reenter(session, "constraints", |session| {
             session.execute(statement, parameters)
         })?;
-        for (name, column) in &defaults {
-            catalog::record_default(&session.db, table, &column.value, &name.value)?;
+        for (name, column, value) in &defaults {
+            catalog::record_default(&session.db, table, &column.value, &name.value, value)?;
         }
     }
     let planned = plan(session, table, constraints, false)?;
@@ -1404,6 +1397,7 @@ fn apply_default(
         "INSERT INTO main.__msduck_default_constraints VALUES(?,?,?,?,CAST(current_timestamp AS TIMESTAMP),CAST(current_timestamp AS TIMESTAMP))",
         duckdb::params![planned.id, table.id, column.id, planned.name],
     )?;
+    catalog::record_default_source(&session.db, planned.id, value, planned.system_named)?;
     Ok(())
 }
 
