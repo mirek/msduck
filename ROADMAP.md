@@ -54,7 +54,9 @@ by the initial smoke tests.
 - Compound SELECT variable assignments with typed conversion and empty-result
   preservation; dependent evaluation order and full operand typing remain unfinished.
 - Prepared ordinary/compound SELECT assignments to RPC inputs, validated without
-  execution and rebound per invocation; application OUTPUT parameters remain unfinished.
+  execution and rebound per invocation; application OUTPUT parameters now work
+  through sp_executesql, sp_prepexec, sp_execute and RPC procedure calls
+  ([RPC procedures](docs/gaps-rpc-procedures.md)).
 - Prepared scalar DECLARE/SET batches with nonexecuting initializer validation
   and fresh local scope; prepared DDL remains unfinished.
 - Prepared IF/WHILE/block/TRY-CATCH traversal, loop control, RETURN/THROW/PRINT
@@ -66,7 +68,8 @@ by the initial smoke tests.
   searched CASE, rejecting scalar BIT/numeric coercion; specialized contexts
   and complete scalar/predicate operand rules remain unfinished.
 - CREATE TABLE CHECK predicate validation, UNKNOWN acceptance and error 547
-  with atomic failed writes; ALTER/trust/catalog and full constraint semantics remain unfinished.
+  with atomic failed writes. ALTER TABLE constraint lifecycle, trust and catalogs now
+  exist ([constraints](docs/gaps-constraints.md)); full constraint semantics remain unfinished.
 - IIF-to-CASE lowering, predicate and NULL-constant validation, and ten-level
   CASE/IIF nesting; complete result coercion and evaluation semantics remain unfinished.
 - CASE/IIF known integer/character result precedence using declared/cast/literal
@@ -228,15 +231,18 @@ by the initial smoke tests.
 - FLOAT precision buckets and REAL widths across casts, declarations, storage
   and ALTER COLUMN; full floating-point range/formatting semantics remain unfinished.
 - Integer INSERT target conversion for VALUES/SELECT/CTE sources, defaults,
-  prepared inputs and atomic failures; full source-type inference and MERGE conversions remain unfinished.
+  prepared inputs and atomic failures; full source-type inference and complete MERGE
+  conversion fidelity remain unfinished.
 - Integer UPDATE assignment conversion, defaults, CTE completion and atomic
-  failure checks; full target resolution and MERGE remain unfinished.
+  failure checks; full target resolution and complete MERGE conversion fidelity remain unfinished.
 - Compound UPDATE arithmetic, bitwise and known-string assignments with catalog
   target typing; full operand inference and numeric promotion remain unfinished.
 - UPDATE target aliases in flat INNER/CROSS FROM join trees with preserved
-  predicates; outer/lateral trees and updatable view/CTE targets remain unfinished.
+  predicates. Outer and lateral trees now work ([outer-join DML](docs/gaps-outer_dml.md));
+  updatable view/CTE targets remain unfinished.
 - MERGE parse-time terminator and match-family action validation, including
-  CTE-prefixed statements, nested blocks and preparation; execution remains pending.
+  CTE-prefixed statements, nested blocks and preparation. MERGE now executes
+  ([MERGE](docs/gaps-merge.md)); preparing it with sp_prepare remains unfinished.
 - DELETE optional/two-FROM syntax, flat INNER/CROSS target aliases and CTE
   completion counts; TOP and writable CTE/view targets remain unfinished.
 - OUTPUT native inserted/deleted images, typed OUTPUT INTO destinations and
@@ -961,8 +967,9 @@ SQL wrapper avoids alias capture; core aggregate framing preserves lexical value
 Nested WITHOUT_ARRAY_WRAPPER remains text unless JSON_QUERY promotes it, correcting
 an over-broad promotion rule in the upstream reference approach. Source annotation
 must precede generated wrapper lowering to preserve native variant payloads.
-AUTO, set operations, complete inherited catalog and fragment/money provenance,
-large-result row chunking and live SQL Server comparison remain open.
+FOR JSON AUTO is now supported ([FOR JSON AUTO](docs/gaps-json_string.md)). Set
+operations, complete inherited catalog and fragment/money provenance, large-result
+row chunking and live SQL Server comparison remain open.
 
 Nested FOR JSON now binds inherited nonrecursive CTE projections through explicit
 catalog snapshots, preserving declaration order, renamed columns, MONEY identity

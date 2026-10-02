@@ -98,7 +98,9 @@ Version 0.2.5 adds the features an mssql/tedious application workload needed:
 - `#temp` tables and table variables;
 - application locks, BACKUP/RESTORE and msdb history;
 - ALTER TABLE constraints and foreign-key actions;
-- keys and indexes on every column type;
+- keys and indexes on every SQL Server-indexable column type, including
+  nvarchar and datetimeoffset (MAX, text, ntext, image and XML keys fail with
+  1919, as in SQL Server);
 - rowversion, decimal identity and `SCOPE_IDENTITY`;
 - constraint, module and index catalogs;
 - isolation levels, savepoints and WAITFOR;
