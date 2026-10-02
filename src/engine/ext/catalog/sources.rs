@@ -13,9 +13,10 @@
 //!   records their clustering and key order (`take_keys`);
 //! - after the batch, DEFAULT and computed-column text replaces what the
 //!   rewritten statements left, for objects the batch created, and the
-//!   clustering of keys that ALTER TABLE added is recorded. An unnamed
-//!   DEFAULT that ALTER TABLE ... ADD declared gets its SQL Server object
-//!   here too.
+//!   clustering of keys that ALTER TABLE added is recorded;
+//! - a batch that names `tempdb.sys.*` or `tempdb.INFORMATION_SCHEMA.*`
+//!   sees temporary objects in the catalog views (`visible`), since the
+//!   temporary tables feature reads those views from the current database.
 //!
 //! Object IDs only grow, so "created by this batch" means an ID above the
 //! one observed when the batch started. Bodies of procedures and other
@@ -43,6 +44,8 @@ struct Frame {
     watermark: Option<(i64, i64)>,
     /// Columns that ALTER TABLE ... ADD declares and that already existed.
     existing: Vec<(i32, String)>,
+    /// Whether the batch names tempdb's catalog.
+    tempdb: bool,
 }
 
 /// Whether two names denote the same table: the same last part, and the
@@ -69,6 +72,12 @@ fn same_table(written: &[String], name: &ObjectName) -> bool {
 }
 
 impl State {
+    /// Whether the current batch names `tempdb.sys.*` or
+    /// `tempdb.INFORMATION_SCHEMA.*`.
+    pub(super) fn tempdb(&self) -> bool {
+        self.frames.last().is_some_and(|frame| frame.tempdb)
+    }
+
     /// The key constraints the first not yet executed CREATE TABLE of
     /// `table` in the current batch declares, with their clustering.
     pub(in crate::engine) fn take_keys(&mut self, table: &ObjectName) -> Vec<Key> {
@@ -108,6 +117,15 @@ pub(super) fn batch(session: &mut Session, sql: &str) {
         session.ext.catalog.frames.push(Frame::default());
     }
     let mut frame = Frame::default();
+    if contains(sql, "tempdb") {
+        let compact: String = sql
+            .chars()
+            .filter(|c| !matches!(c, '[' | ']' | '"') && !c.is_whitespace())
+            .collect::<String>()
+            .to_ascii_lowercase();
+        frame.tempdb =
+            compact.contains("tempdb.sys.") || compact.contains("tempdb.information_schema.");
+    }
     if contains(sql, "VIEW") {
         let words = msduck_sql::dialect::ext::leading_words(sql, 4);
         let words: Vec<&str> = words.iter().map(String::as_str).collect();
@@ -367,6 +385,14 @@ pub(in crate::engine) fn record_layout(db: &duckdb::Connection, tag: i64, key: &
         ),
         duckdb::params![tag, key.clustered],
     )?;
+    if key.clustered == Some(true) {
+        // A declared CLUSTERED key is the table's clustered index for later
+        // CREATE CLUSTERED INDEX statements (1902) too.
+        db.execute(
+            "UPDATE main.__msduck_keys SET is_clustered=true WHERE tag=?",
+            [tag],
+        )?;
+    }
     Ok(())
 }
 

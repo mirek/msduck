@@ -100,8 +100,8 @@ SQL Server, ALTER COLUMN keeps a DEFAULT only when the type stays the same
 (another length, precision or scale is allowed) and a CHECK only when a
 variable-length type changes its length, and a column with a named DEFAULT
 cannot be dropped (5074, 4922). A column whose DEFAULT has a generated name
-is still dropped together with it, as msduck did before (SQL Server refuses
-that too).
+is still dropped or altered together with it, as msduck did before (SQL
+Server refuses that too).
 
 ### Modules and views
 
@@ -143,9 +143,13 @@ tempdb, so in a user query each `sys.objects`, `sys.all_objects` and
 `sys.tables` of a SELECT gets a condition that leaves them, their
 constraints and their triggers out: in WHERE for a FROM item, in ON for an
 inner or left join. The result's metadata stays the system view's. Where a
-condition cannot apply (the preserved side of an outer join, APPLY, a join
-without ON) the view becomes a filtered derived table instead. The views
-defined here leave them out too.
+condition cannot apply (a FROM item that a RIGHT or FULL join preserves,
+the preserved side of other joins, APPLY, a join without ON, an alias with
+column names) the view becomes a filtered derived table instead. A batch
+that names `tempdb.sys.*` or `tempdb.INFORMATION_SCHEMA.*` sees the
+temporary objects in every catalog view it reads, since those names read
+the current database's catalog. The views defined here leave them out
+too.
 
 ## INFORMATION_SCHEMA
 
@@ -255,8 +259,13 @@ renames and definitions, and key identities through the keys lifecycle.
   as are temporary tables. Schema-bound views and functions are not recorded
   as dependencies, so the 15336 SQL Server raises for their tables and
   columns is not.
-- DROP COLUMN of a column whose DEFAULT has a generated name drops the
-  DEFAULT too; SQL Server fails with 5074 and 4922.
+- DROP COLUMN and ALTER COLUMN of a column whose DEFAULT has a generated
+  name keep working with the DEFAULT; SQL Server fails with 5074 and 4922.
+- Unnamed DEFAULTs that a database created before this version have no
+  object (they are recorded when DDL declares them).
+- The clustering of a key that ALTER TABLE adds is recorded when the batch
+  ends: a CREATE CLUSTERED INDEX later in the same batch, or an existing
+  clustered index, does not fail with 1902.
 - `OBJECT_DEFINITION` of system objects is NULL.
 - `sys.sql_modules` reports the session's SET options rather than those at
   creation, and `execute_as_principal_id` is NULL.

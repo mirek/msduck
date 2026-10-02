@@ -162,3 +162,26 @@ test('system procedures run as RPC requests', async t => {
   assert.ok(renamed.messages.includes(15477))
   assert.deepEqual((await query(connection, "SELECT name FROM sys.tables WHERE name LIKE 'rpc%'")).rows, [['rpc_renamed']])
 })
+
+test('temporary objects stay hidden without changing what joins return', async t => {
+  const connection = await database(t)
+  await query(connection, 'CREATE SCHEMA empty_schema')
+  // A temporary table lives as long as the sp_executesql call that creates it.
+  const hidden = sql => query(connection, `CREATE TABLE #hidden(id INT CONSTRAINT pk_hidden PRIMARY KEY); ${sql}`)
+  // A RIGHT or FULL join keeps the schema without objects.
+  assert.deepEqual((await hidden("SELECT s.name, o.name FROM sys.objects o RIGHT JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'empty_schema'")).rows, [['empty_schema', null]])
+  assert.deepEqual((await hidden("SELECT s.name FROM sys.objects o FULL JOIN sys.schemas s ON s.schema_id = o.schema_id WHERE s.name = 'empty_schema'")).rows, [['empty_schema']])
+  // Unaliased views keep their qualified column names.
+  assert.deepEqual((await hidden("SELECT COUNT(sys.objects.name) FROM sys.schemas s CROSS JOIN sys.objects WHERE sys.objects.name LIKE '%hidden%'")).rows, [[0]])
+  assert.deepEqual((await hidden("SELECT COUNT(*) FROM sys.objects WHERE name LIKE '%hidden%'")).rows, [[0]])
+  // tempdb's catalog shows the temporary table, as in SQL Server.
+  assert.deepEqual((await hidden("SELECT COUNT(*) FROM tempdb.sys.tables WHERE object_id = OBJECT_ID('tempdb..#hidden')")).rows, [[1]])
+})
+
+test('a CLUSTERED key added by ALTER TABLE is the clustered index', async t => {
+  const connection = await database(t)
+  await query(connection, 'CREATE TABLE dbo.altered_key(id INT NOT NULL, x INT)')
+  await query(connection, 'ALTER TABLE dbo.altered_key ADD CONSTRAINT pk_altered_key PRIMARY KEY CLUSTERED(id)')
+  await assert.rejects(query(connection, 'CREATE CLUSTERED INDEX ix_altered_key ON dbo.altered_key(x)'), error => error.number === 1902)
+  assert.deepEqual((await query(connection, "SELECT name, index_id, type_desc FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.altered_key') ORDER BY index_id")).rows, [['pk_altered_key', 1, 'CLUSTERED']])
+})

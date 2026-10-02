@@ -319,15 +319,18 @@ fn bound_defaults_and_checks_follow_sql_server_alter_column_rules() {
     let mut session = Session::new(server.connection().unwrap()).unwrap();
     run(
         &mut session,
-        "CREATE TABLE dbo.a(id INT, t TIME(3) DEFAULT '12:00:00.1249', v INT DEFAULT 1,
+        "CREATE TABLE dbo.a(id INT, t TIME(3) CONSTRAINT df_t DEFAULT '12:00:00.1249',
+           d INT CONSTRAINT df_d DEFAULT 1, v INT DEFAULT 1,
            s VARCHAR(10) CONSTRAINT ck_s CHECK (s <> ''), n INT CONSTRAINT ck_n CHECK (n > 0))",
     );
     // A DEFAULT allows another precision of the same type, not another type.
     run(&mut session, "ALTER TABLE dbo.a ALTER COLUMN t TIME(2)");
     assert!(fails(
         &mut session,
-        "ALTER TABLE dbo.a ALTER COLUMN v BIGINT"
+        "ALTER TABLE dbo.a ALTER COLUMN d BIGINT"
     ));
+    // An unnamed DEFAULT follows its column, as msduck always allowed.
+    run(&mut session, "ALTER TABLE dbo.a ALTER COLUMN v BIGINT");
     // A CHECK allows another length of a variable-length type only.
     run(&mut session, "ALTER TABLE dbo.a ALTER COLUMN s VARCHAR(20)");
     assert!(fails(

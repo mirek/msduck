@@ -49,6 +49,14 @@ pub(super) fn record_layout(
         ),
         params![tag, clustered],
     )?;
+    if clustered == Some(true) {
+        // A declared CLUSTERED key is the table's clustered index for later
+        // CREATE CLUSTERED INDEX statements (1902) too.
+        db.execute(
+            "UPDATE main.__msduck_keys SET is_clustered=true WHERE tag=?",
+            [tag],
+        )?;
+    }
     Ok(())
 }
 

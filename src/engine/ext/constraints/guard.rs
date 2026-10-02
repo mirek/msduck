@@ -268,12 +268,15 @@ pub(crate) fn alter_table(session: &mut Session, statement: &mut Statement) -> R
                 if unchanged {
                     continue;
                 }
+                // As for DROP COLUMN, a DEFAULT without a declared name
+                // follows its column, as msduck always allowed.
                 let names: Vec<String> = objects
                     .into_iter()
                     .filter(|(_, _, dependency)| {
-                        !declared
-                            .as_ref()
-                            .is_some_and(|declared| allowed(*dependency, declared, data_type))
+                        !matches!(dependency, Dependency::Default { generated: true })
+                            && !declared
+                                .as_ref()
+                                .is_some_and(|declared| allowed(*dependency, declared, data_type))
                     })
                     .map(|(_, n, _)| n)
                     .collect();

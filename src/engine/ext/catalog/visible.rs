@@ -563,24 +563,63 @@ fn conjoin(left: Option<Expr>, right: Expr) -> Expr {
     }
 }
 
+/// Whether a join keeps the rows of the items before it (RIGHT or FULL),
+/// so that a condition on them in WHERE would drop the rows it preserves.
+fn preserves_right(join: &Join) -> bool {
+    matches!(
+        join.join_operator,
+        JoinOperator::Right(_)
+            | JoinOperator::RightOuter(_)
+            | JoinOperator::FullOuter(_)
+            | JoinOperator::RightSemi(_)
+            | JoinOperator::RightAnti(_)
+    )
+}
+
+/// Replace a system view by the filtered derived table, keeping its alias;
+/// an unaliased view is recorded in `renamed` for `Qualified`.
+fn derive(factor: &mut TableFactor, view: &str, renamed: &mut Vec<(String, String)>) {
+    let alias = match factor {
+        TableFactor::Table { alias, .. } => alias.clone(),
+        _ => None,
+    };
+    if let Some(derived) = filtered(view, alias.clone()) {
+        if alias.is_none() {
+            renamed.push(("sys".to_owned(), view.to_owned()));
+        }
+        *factor = derived;
+    }
+}
+
+/// Whether a factor's alias lists column names, which a condition on the
+/// view's own column names cannot use.
+fn renames_columns(factor: &TableFactor) -> bool {
+    matches!(factor, TableFactor::Table { alias: Some(alias), .. } if !alias.columns.is_empty())
+}
+
 /// Filter the system views of one SELECT: a condition in WHERE for a FROM
 /// item, in ON for an inner or left-joined one, and a derived table where
-/// neither applies. Conditions keep the result's metadata, which a derived
-/// table changes.
-fn filter_select(select: &mut Select) {
+/// neither applies (a FROM item that a RIGHT or FULL join preserves, the
+/// preserved side of other joins, APPLY, joins without ON). Conditions keep
+/// the result's metadata, which a derived table changes.
+fn filter_select(select: &mut Select, renamed: &mut Vec<(String, String)>) {
     let mut conditions = Vec::new();
     for item in &mut select.from {
         if let Some((view, qualifier)) = system_view(&item.relation) {
-            match visible_rows(&qualifier) {
+            let condition = (!item.joins.iter().any(preserves_right)
+                && !renames_columns(&item.relation))
+            .then(|| visible_rows(&qualifier))
+            .flatten();
+            match condition {
                 Some(condition) => conditions.push(condition),
-                None => continue,
+                None => derive(&mut item.relation, &view, renamed),
             }
-            let _ = view;
         }
         for join in &mut item.joins {
             let Some((view, qualifier)) = system_view(&join.relation) else {
                 continue;
             };
+            let columns = renames_columns(&join.relation);
             let constraint = match &mut join.join_operator {
                 JoinOperator::Join(constraint)
                 | JoinOperator::Inner(constraint)
@@ -589,18 +628,10 @@ fn filter_select(select: &mut Select) {
                 _ => None,
             };
             match (constraint, visible_rows(&qualifier)) {
-                (Some(JoinConstraint::On(on)), Some(condition)) => {
+                (Some(JoinConstraint::On(on)), Some(condition)) if !columns => {
                     *on = conjoin(Some(on.clone()), condition);
                 }
-                _ => {
-                    let alias = match &join.relation {
-                        TableFactor::Table { alias, .. } => alias.clone(),
-                        _ => None,
-                    };
-                    if let Some(derived) = filtered(&view, alias) {
-                        join.relation = derived;
-                    }
-                }
+                _ => derive(&mut join.relation, &view, renamed),
             }
         }
     }
@@ -664,28 +695,35 @@ pub(super) fn rewrite(session: &Session, statement: &mut Statement) {
             ControlFlow::Continue(())
         }
     }
-    struct Selects;
+    // A batch that reads tempdb's catalog sees the temporary objects that
+    // the temporary tables feature redirected there; it keeps the backend
+    // views.
+    if session.ext.catalog.tempdb() {
+        return;
+    }
+    struct Selects(Vec<(String, String)>);
     impl VisitorMut for Selects {
         type Break = ();
         fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
-            fn body(set: &mut SetExpr) {
+            fn body(set: &mut SetExpr, renamed: &mut Vec<(String, String)>) {
                 match set {
-                    SetExpr::Select(select) => filter_select(select),
+                    SetExpr::Select(select) => filter_select(select, renamed),
                     SetExpr::SetOperation { left, right, .. } => {
-                        body(left);
-                        body(right);
+                        body(left, renamed);
+                        body(right, renamed);
                     }
                     _ => {}
                 }
             }
-            body(&mut query.body);
+            body(&mut query.body, &mut self.0);
             ControlFlow::Continue(())
         }
     }
-    let _ = statement.visit(&mut Selects);
+    let mut selects = Selects(Vec::new());
+    let _ = statement.visit(&mut selects);
     let mut rewrite = Rewrite {
         database: &session.database.name,
-        renamed: Vec::new(),
+        renamed: selects.0,
     };
     let _ = statement.visit(&mut rewrite);
     if rewrite.renamed.is_empty() {
