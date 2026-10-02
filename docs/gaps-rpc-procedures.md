@@ -192,7 +192,8 @@ later successful statement resets the RPC status to 0, as SQL Server does.
 
 The replay test asserts each of these:
 
-- BEGIN TRANSACTION, ROLLBACK and `SET XACT_ABORT` complete with CurCmd 0.
+- ROLLBACK and `SET XACT_ABORT` complete with CurCmd 0. BEGIN TRANSACTION
+  now sends SQL Server's 212.
   SQL Server sends 212, 210, 185 and 186. These completions come from the
   engine.
 - An RPC batch that the engine's own RPC path aborts ends with DONEPROC
@@ -202,7 +203,8 @@ The replay test asserts each of these:
 - sp_prepare sends no DONEINPROC (`0x11`, CurCmd 193) before its
   RETURNSTATUS. Preparation metadata belongs to the prepared-statement
   work.
-- `SERVERPROPERTY` is not supported (the version observation is skipped).
+- `SERVERPROPERTY('ProductVersion')` reports msduck's `16.0.0.0`, not the
+  captured server's build, so the version observation is skipped.
 
 Message texts and other details differ, without affecting numbers or
 tokens:

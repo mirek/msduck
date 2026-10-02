@@ -40,13 +40,13 @@ const command = (index, value) => expected => {
 // Differences that remain (docs/gaps-rpc-procedures.md). Each must still
 // differ, so a fix is noticed.
 const known = {
-  // SERVERPROPERTY is not supported.
+  // SERVERPROPERTY('ProductVersion') reports msduck's 16.0.0.0, not the
+  // captured server's build number.
   'server version': null,
-  // BEGIN TRANSACTION, ROLLBACK and SET XACT_ABORT complete with CurCmd 0
-  // (SQL Server: 212, 210, 185 and 186).
-  'transaction count': command(0, 0),
+  // ROLLBACK and SET XACT_ABORT complete with CurCmd 0 (SQL Server: 210,
+  // 185 and 186). BEGIN TRANSACTION now sends 212 like SQL Server.
   'rollback after transaction count': command(-1, 0),
-  'xact_abort on': expected => command(1, 0)(command(0, 0)(expected)),
+  'xact_abort on': command(0, 0),
   'after xact_abort': command(-1, 0),
   // An aborted engine RPC batch ends with DONEPROC CurCmd 0, not 224.
   'prepexec throw without outputs': command(-1, 0),
