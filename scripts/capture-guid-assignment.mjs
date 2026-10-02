@@ -25,11 +25,14 @@ export const plan=[
  ['multirow malformed update',`UPDATE dbo.guid_assignments SET g=CASE WHEN id=1 THEN '${guid}' ELSE 'bad' END WHERE id IN(1,2)`],
  ['update readback','SELECT id,g FROM dbo.guid_assignments ORDER BY id'],
  ['transaction begin','BEGIN TRANSACTION'],
+ ['transaction state after begin','SELECT @@TRANCOUNT AS transaction_count,XACT_STATE() AS transaction_state,SESSIONPROPERTY(\'ANSI_WARNINGS\') AS ansi_warnings'],
  ['transaction prior write',`INSERT dbo.guid_assignments VALUES(20,'${guid}')`],
+ ['transaction state after prior write','SELECT @@TRANCOUNT AS transaction_count,XACT_STATE() AS transaction_state'],
  ['transaction malformed insert',"INSERT dbo.guid_assignments VALUES(21,'bad')"],
  ['transaction state','SELECT @@TRANCOUNT AS transaction_count,XACT_STATE() AS transaction_state'],
  ['transaction commit','COMMIT'],
  ['transaction readback','SELECT id,g FROM dbo.guid_assignments ORDER BY id'],
+ ['caught conversion transaction',`BEGIN TRANSACTION; INSERT dbo.guid_assignments VALUES(30,'${guid}'); BEGIN TRY INSERT dbo.guid_assignments VALUES(31,'bad'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS error_number,ERROR_STATE() AS error_state,ERROR_MESSAGE() AS error_message,@@TRANCOUNT AS transaction_count,XACT_STATE() AS transaction_state; END CATCH; IF @@TRANCOUNT>0 COMMIT; SELECT id,g FROM dbo.guid_assignments WHERE id IN(30,31) ORDER BY id`],
  ['alter setup',`CREATE TABLE dbo.guid_alter(id INT PRIMARY KEY,g VARCHAR(100)); INSERT dbo.guid_alter VALUES(1,'{${guid}}EXTRA'),(2,NULL)`],
  ['valid alter','ALTER TABLE dbo.guid_alter ALTER COLUMN g UNIQUEIDENTIFIER NULL'],
  ['alter readback','SELECT id,g FROM dbo.guid_alter ORDER BY id'],
@@ -46,7 +49,6 @@ async function run(){
    const records=[]
    for(const [name,sql] of plan){
     const result=canonical(await captureBatch(connection,sql))
-    if(Boolean(result.errors.length)!==failures.has(name))throw Error(name+': unexpected outcome '+JSON.stringify(result.errors))
     records.push({name,sql,result})
    }
    return records
@@ -60,6 +62,9 @@ async function main(args){
  assertSameCapture(runs[0],runs[1],'complete GUID assignment observations')
  await mkdir(dirname(output),{recursive:true})
  await writeNewFixture(output,{image:referenceImage,contract:'Two fresh complete GUID assignment runs agree without normalization.',runs})
+ const unexpected=runs[0].filter(record=>Boolean(record.result.errors.length)!==failures.has(record.name))
+ // Preserve every observation before rejecting a mistaken success/error control.
+ if(unexpected.length)throw Error('Retained unexpected outcomes: '+JSON.stringify(unexpected.map(({name,result})=>({name,errors:result.errors}))))
  console.log(JSON.stringify({output,records:runs.map(run=>run.length)}))
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))await main(process.argv.slice(2))
