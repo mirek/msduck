@@ -62,6 +62,9 @@ for (const name of ['sessionproperty uncast', 'sessionproperty names', 'sessionp
   'set context bigint variable', 'set context read_only null', 'set context read_only two',
   'set context in transaction', 'after reset',
   ...OPTIONS.flatMap(o => o === 'NUMERIC_ROUNDABORT' ? [`after set ${o} ON`, `restore ${o} OFF`] : [`after set ${o} OFF`, `restore ${o} ON`])]) add(name, 'flags')
+// @@OPTIONS now succeeds. Raw replay matches these complete records except
+// for the existing SESSIONPROPERTY computed-descriptor gap.
+for (const name of ['login options', 'set ANSI_WARNINGS OFF']) add(name, 'flags')
 // Diagnostics carry no procedure name, and ERROR_PROCEDURE() is NULL.
 for (const name of ['set context null key', 'set context long key', 'set context empty key', 'set context missing value',
   'set context extra argument', 'set context nvarchar max value', 'set context read_only violation rpc',
@@ -72,7 +75,6 @@ for (const [index, option] of OPTIONS.entries()) if (option !== 'ANSI_WARNINGS')
 
 // Must still differ, as an explicit error or a known pre-existing defect:
 const divergent = new Map([
-  ['login options', 'error: @@OPTIONS is unsupported'],
   ['set context return status', 'error: EXEC @status = procedure does not parse'],
   ['set context varchar value', 'error: varchar session values are unsupported'],
   ['read context value', 'error: an nvarchar value has no sql_variant carrier'],
@@ -83,7 +85,7 @@ const divergent = new Map([
   ['set context read_only violation batch', 'error: an nvarchar value has no sql_variant carrier'],
   ['before reset', 'error: an nvarchar value has no sql_variant carrier'],
   ['read_only after reset', 'error: an nvarchar value has no sql_variant carrier'],
-  ...OPTIONS.filter(o => o !== 'NUMERIC_ROUNDABORT').map(o => [`set ${o} OFF`, 'error: @@OPTIONS (and SET OFF except ANSI_WARNINGS) is unsupported']),
+  ...OPTIONS.filter(o => !['NUMERIC_ROUNDABORT', 'ANSI_WARNINGS'].includes(o)).map(o => [`set ${o} OFF`, 'error: SET OFF is unsupported']),
   ['set NUMERIC_ROUNDABORT ON', 'error: SET NUMERIC_ROUNDABORT ON is unsupported'],
   ['sessionproperty base types', 'value: CAST(SQL_VARIANT_PROPERTY(..., \'BaseType\') AS NVARCHAR) returns struct text'],
   ['read context int', 'value: CAST(SQL_VARIANT_PROPERTY(..., \'BaseType\') AS NVARCHAR) returns struct text'],
