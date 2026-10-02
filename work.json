@@ -2401,7 +2401,7 @@
     {
       "id": "concat-ws-translate-reference-v1",
       "title": "Capture SQL Server CONCAT_WS and TRANSLATE reference behavior",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner continuing implementation goal and 2026-09-26 owner request to utilize this host with parallel independent agents. First-party source audit found no implementation, fixture or task for these functions; no external submission is input.",
       "scope": [
         "scripts/capture-concat-ws-translate.mjs",
@@ -9681,6 +9681,25 @@
         "Workerfreshclaim/receiptinexistingcompletedisolatedworktree,nonewworktrees/localCargocaches; Linuxread-onlycacheddeps/privateoutputsforthefastloop,removeterminalcompiledoutputs. Sharednativeverificationhonorsrunnerlock. Exactheadfmt/workspacetests/strictClippy/alltargetbuild/npm/auditappropriatechecks, requiredCI, verifiedCodexrevieworownerfallback. WorkerownsPRreviewfollowup/merge/promptregistryprojectissuecompletion. Preserveold245/289claims/checkpoints; do notpretendunfinisheddepsdone."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pjrmb"
+    },
+    {
+      "id": "concat-ws-translate-reference-recovery-v1",
+      "title": "Recover complete CONCAT_WS and TRANSLATE reference evidence",
+      "state": "ready",
+      "issue": 806,
+      "authorization": "Direct owner continuing goal and standingstale/unresponsive takeover; verifiedownerPR268checkpoint retained and inspected. Completecapturedgroundtruthperoldscope plus fidelity/safety repairs; noexternalcontent.",
+      "scope": [
+        "scripts/capture-concat-ws-translate.mjs",
+        "reference/concat-ws-translate.json",
+        "docs/concat-ws-translate.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Retain original116program plan and rawrows/descriptors/errors/info/completions while capturing complete requesttokenorder includingORDER, rawDONE16bit/currentcommand/64count andfragment-safe bounded RETURNVALUErawname/status/metadata/completepayload fromapproved804hook. Preserveoriginalfixture separately and inspect everyrawdifference; do notnormalize away differences. Hardlink/symlink/fixturealias guards pluspreDockerexistingoutputrejection/exclusivecreation; failedcapturecannotdamageexistingfixtures.",
+        "Capture116programs across twofreshDBsin each of two independentowned pinnedSQL2025containers; compareallfour completecaptures with bounded diagnostics and correctdocumentactualvalue/type/error/nullability/collationrules anduncapturedunknowns. Source/negativeCLI/fragmentchecks andactualreproduction; noRust/core/parser/engine/metadata/clienttestchanges or runtimecompatibilityclaim.",
+        "Freshclaim/receipt in reusedcompletedrootworktree fromapprovedmain; privateLinuxreferenceworkspace/read-onlyNodecacheddeps/randomownedports; no newworktrees/localCargo/newimplementationagents/nativecache reset orsharedlockbypass. ExactrequiredCI andverifiedCodexreview/fallback; ownPRthroughmerge andpromptregistry/project/issue completion. Old253 staysblocked/legacyclaimretained; releasecore successor afteractualreferencecompletion only."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjsxT"
     }
   ]
 }
