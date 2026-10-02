@@ -1,10 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFile} from 'node:fs/promises'
+import {resolve} from 'node:path'
+import {fileURLToPath} from 'node:url'
 import {start} from './support/client.mjs'
 import {observe,verifyObservations} from '../scripts/capture-guid-assignment.mjs'
 
-test('GUID assignment rows, diagnostics, completion fields and transaction effects match pinned captures',async t=>{
+export function registerGuidAssignment(register) {
+register('GUID assignment rows, diagnostics, completion fields and transaction effects match pinned captures',{timeout:60000},async t=>{
  const reference=JSON.parse(await readFile(new URL('../reference/guid-assignment.json',import.meta.url)))
  assert.deepEqual(reference.runs[0],reference.runs[1],'fresh reference agreement')
  const connection=await start(t)
@@ -25,3 +28,6 @@ test('GUID assignment rows, diagnostics, completion fields and transaction effec
   if(expected.sets.length===0)assert.deepEqual(record.result.events,expected.events,record.name+' non-result event order')
  }
 })
+}
+
+if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))registerGuidAssignment(test)
