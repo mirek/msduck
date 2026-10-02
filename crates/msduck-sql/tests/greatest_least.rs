@@ -257,15 +257,31 @@ fn every_capture_declaration_and_compile_error_uses_explicit_inputs() {
             let env = environment(record);
             let calls = scalar_calls(&statements);
             assert!(!calls.is_empty(), "{}", record["name"]);
-            for (call_index, c) in calls.iter().enumerate() {
+            for c in &calls {
                 let a: Vec<_> = args(c).iter().map(|e| operand(e, &env)).collect();
                 let before = a.clone();
                 let p = call(c, &env);
                 assert_eq!(a, before);
-                if let Err(Error::Sql(e)) = &p {
-                    if call_index == 0 {
-                        error_matches(e, &record["result"]["errors"][0]);
-                    }
+                let raw_error = &record["result"]["errors"][0];
+                if raw_error["number"]
+                    .as_i64()
+                    .is_some_and(|n| matches!(n, 189 | 206 | 468 | 8116))
+                {
+                    let Err(Error::Sql(e)) = &p else {
+                        panic!(
+                            "{}: expected captured compile error, got {p:?}",
+                            record["name"]
+                        );
+                    };
+                    let mut expected = raw_error.clone();
+                    // A batch stops at its first compile failure. The retained
+                    // standalone LEAST cases independently establish the same
+                    // diagnostic grammar for later calls in these batches.
+                    expected["message"] = json!(expected["message"].as_str().unwrap().replace(
+                        "greatest function",
+                        &format!("{} function", c.name.to_string().to_lowercase())
+                    ));
+                    error_matches(e, &expected);
                 } else {
                     assert!(p.is_ok(), "{}: {p:?}", record["name"]);
                 }
