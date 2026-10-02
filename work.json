@@ -9456,6 +9456,25 @@
         "Activate through protected registry only after dependencies are done and remaining ready scopes are disjoint; exclusive new claim, own worktree/receipt, owner-authored PR, exact-head required fmt/Clippy/workspace/alltargets/client/audit checks under shared Linux lock, verified review or authorized availability fallback, merge and prompt registry/project/issue completion. Backlog does not reserve engine.rs from the owner."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjXcP"
+    },
+    {
+      "id": "quoted-session-identifiers-reference-v1",
+      "title": "Capture quoted session-counter and parameter-like identifiers",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal; first-party quoted-column regression in PR786 and inspected root lowering leave public behavior unverified. Gather independent pinned SQL Server ground truth without engine edits or native builds; no external intake.",
+      "scope": [
+        "scripts/capture-quoted-session-identifiers.mjs",
+        "reference/quoted-session-identifiers.json",
+        "docs/quoted-session-identifiers.md"
+      ],
+      "issue": 790,
+      "dependencies": [],
+      "acceptance": [
+        "Capture complete rows, descriptors, errors and DONE/event order for quoted @@OPTIONS/@@TRANCOUNT/@p columns versus actual counters and local/bound parameters, bracket and QUOTED_IDENTIFIER ON double quotes, qualified/CTE/derived/empty shapes. Include missing quoted-name diagnostics to distinguish column binding from parameter lookup. No guessed metadata or normalization.",
+        "Use the pinned owned reference container and bounded existing full-token observer; capture twice in fresh databases and compare all observations exactly. Preserve generator and raw fixture; refuse overwriting an existing fixture. Verify expected successes/diagnostics and document observed behavior versus unverified root behavior.",
+        "Reference-only changes: no engine/Rust/backend edits or local Cargo cache. Use isolated remote reference sources and random owned container ports, preserve other workers and shared native runner lock. Source review plus actual capture verification and required deterministic CI, verified review/fallback, owner PR merge and registry/project completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjYz5"
     }
   ]
 }
