@@ -5139,7 +5139,7 @@ impl VisitorMut for Translator<'_> {
             {
                 *expr = msduck_sql::session_function::system_user(self.original_login);
             }
-            Expr::Identifier(id) if id.value.starts_with("@@") => {
+            Expr::Identifier(id) if id.quote_style.is_none() && id.value.starts_with("@@") => {
                 *expr = match id.value.to_uppercase().as_str() {
                     "@@DATEFIRST" => Expr::Cast {
                         kind: CastKind::Cast,
@@ -5179,7 +5179,7 @@ impl VisitorMut for Translator<'_> {
                     _ => return ControlFlow::Break(format!("unsupported global {}", id.value)),
                 };
             }
-            Expr::Identifier(id) if id.value.starts_with('@') => {
+            Expr::Identifier(id) if id.quote_style.is_none() && id.value.starts_with('@') => {
                 let name = id.value.to_lowercase();
                 let Some(value) = self.parameters.get(&name) else {
                     return ControlFlow::Break(format!("Must declare the scalar variable {name}"));
