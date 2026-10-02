@@ -8,11 +8,16 @@ OUTPUT/UDF status, ULONG user type, USHORT flags, TYPE_INFO, then the typed
 TYPE_VARBYTE value. There is no outer token-length field. The owner-controlled
 `mirek/mssqlite` reference uses the same field order in
 `packages/tds/src/token/return-value.ts` and delegates TYPE_INFO/value encoding
-to its typed codecs. The existing prepared-handle token's exact byte vector is
-preserved through the new encoder. That vector strips `@` from the name and uses
-flags 1, but SQL Server sends `@handle` with flags 0 (captured in
-`reference/rpc-output-wire.json`, PR #303). Task `prepared-handle-wire-v1`
-changes the helper and the root RPC test that fixes the old bytes.
+to its typed codecs. The prepared-handle helper retains the wire name's `@`
+prefix and emits flags 0. Named `@handle` and unnamed integer vectors cover the helper and root
+RPC adapter. SQL Server's named handle was captured in two matching fresh runs
+and two independent runs in the owner-authored [PR #303 checkpoint](https://github.com/mirek/msduck/blob/f0824b5271b7d551462567e2625d96b7aa58a60e/reference/rpc-output-wire.json).
+The capture SHA-256 is
+`f4c304f84b0d76295b90bfdf74b7aae99e5b9a1a25f428fd58326061cb3c3c15`.
+Its exact handle-1 token is
+`ac0000074000680061006e0064006c0065000100000000000026040401000000`.
+The unnamed vector checks the same header fields with an empty name; the
+reference capture establishes the named token, not an unnamed SQL Server run.
 
 The codec accepts nullable INTN (1/2/4/8 bytes), BITN, NVARCHAR/NCHAR,
 VARCHAR/CHAR, VARBINARY/BINARY and DECIMALN. It handles raw UTF-16 units,
