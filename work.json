@@ -9291,6 +9291,25 @@
       ],
       "issue": 777,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjACl"
+    },
+    {
+      "id": "session-options-translator-input-v1",
+      "title": "Pass explicit SET option snapshots to extension translators",
+      "state": "ready",
+      "authorization": "Direct continuing owner SQL Server compatibility goal and claimed GUID shell task777: the full reference replay observes @@OPTIONS for XACT_ABORT controls. Root Translator now takes an explicit session options snapshot; four extension/output constructors need the same input. Approved registry shows no ready scope overlap. First-party compiler evidence, not external content.",
+      "scope": [
+        "src/engine/ext/computed/columns.rs",
+        "src/engine/ext/constraints/translate.rs",
+        "src/engine/ext/merge.rs",
+        "src/engine/joined_output.rs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Pass the same explicit live session options mask to each existing Translator constructor in these four files, without changing their execution plans.",
+        "Verify current-head formatting, strict Clippy and workspace/client tests together with claimed GUID shell integration; merge and complete with the owning integration PR."
+      ],
+      "issue": 779,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjDlm"
     }
   ]
 }
