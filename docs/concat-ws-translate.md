@@ -28,7 +28,10 @@ output paths that alias the retained fixture through symlinks or hardlinks are
 rejected before any container starts. Existing output destinations, including
 dangling symlinks, are also refused, and outputs are created exclusively. Offline
 validation additionally requires complete ordered tokens and verifies prepare
-handle payload bytes against their decoded header, declaration and value. `--one-database` is a diagnostic mode only.
+handle payload bytes against their decoded header, declaration and value.
+It requires successful RPC return status 0 and an agreeing raw RETURNSTATUS
+token. Every prepared execution descriptor is checked against the documented
+flags and the preparation descriptor, independently of its bound values. `--one-database` is a diagnostic mode only.
 
 The programs cover 49 ordinary CONCAT_WS batches, 45 ordinary TRANSLATE
 batches, 15 sp_executesql RPC calls, three prepared statements (sp_prepare,

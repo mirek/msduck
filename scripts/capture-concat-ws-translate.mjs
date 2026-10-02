@@ -498,16 +498,25 @@ function validate(run) {
     'tr supplementary default collation mismatch', 'tr supplementary sc collation pair', 'tr column mismatch row',
     'rpc tr length mismatch', 'rpc tr mismatch then select'])
   for (const record of run) {
-    if (record.result && !expectedErrors.has(record.name)) assert.equal(record.result.errors.length, 0, record.name + ': unexpected error')
+    if (record.result && !expectedErrors.has(record.name)) {
+      assert.equal(record.result.errors.length, 0, record.name + ': unexpected error')
+      if (record.parameters) assert.equal(record.result.returnStatus, 0, record.name + ': successful RPC return status')
+    }
   }
-  // Documented descriptor flags for the value column.
+  // Documented descriptor flags apply to each independently captured result.
   for (const record of run) {
-    const result = record.result ?? record.prepared.prepare
-    const column = result.sets[0]?.columns.find(c => c.name === 'value')
-    if (!column) continue
-    const concat = /^(cws|rpc cws|prepared cws)/.test(record.name)
-    const explicit = ['cws explicit collation', 'tr binary collation', 'tr case sensitive collation'].includes(record.name)
-    assert.equal(column.flags, (concat ? 32 : 33) | (explicit ? 2 : 0), record.name + ': value flags')
+    const results = record.result ? [record.result] :
+      [record.prepared.prepare, ...record.prepared.executions.map(execution => execution.result)]
+    for (const result of results) for (const set of result.sets) {
+      const column = set.columns.find(c => c.name === 'value')
+      if (!column) continue
+      const concat = /^(cws|rpc cws|prepared cws)/.test(record.name)
+      const explicit = ['cws explicit collation', 'tr binary collation', 'tr case sensitive collation'].includes(record.name)
+      assert.equal(column.flags, (concat ? 32 : 33) | (explicit ? 2 : 0), record.name + ': value flags')
+      if (record.prepared && !isDeepStrictEqual(set.columns, record.prepared.prepare.sets[0].columns)) {
+        throw new Error(record.name + ': prepared execution descriptor differs from preparation')
+      }
+    }
   }
   for (const record of run) {
     if (record.prepared) {
@@ -551,6 +560,12 @@ function validateTokens(run) {
       throw new Error(record.name + ': expected exactly one prepare handle token')
     }
     for (const phase of phases) {
+      if (record.parameters || record.prepared) {
+        const statuses = phase.tokens?.filter(token => token.token === 'RETURNSTATUS')
+        if (statuses?.length !== 1 || statuses[0].value !== phase.returnStatus) {
+          throw new Error(record.name + ': missing or inconsistent raw RETURNSTATUS token')
+        }
+      }
       if (!Array.isArray(phase.tokens) || !phase.tokens.length || !/^DONE(PROC)?$/.test(phase.tokens.at(-1).token)) {
         throw new Error(record.name + ': missing complete ordered token evidence')
       }
