@@ -9607,6 +9607,22 @@
         "Freshexclusiveclaim and receipt in reused isolatedworkerworktree; no localCargo caches or additional implementationagents. Capture in ownremote reference workspace with randomownedports/read-onlyexistingnode dependencies and no shared native source/cache writes or lock bypass. Source/negativeCLI checks, actualreproduction and exactrequiredCI plus verifiedreview/fallback; own focusedPRthroughmerge and prompt registry/project/issue completion. Original254 staysblocked until acceptanceisactuallyreached; publish/release core successors onlyafter evidence rather than marking incomplete dependenciesdone."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjowT"
+    },
+    {
+      "id": "gaps-rpc-ratchet-v1",
+      "title": "Ratchet rpc_procedures compat: transaction count now matches",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01), issue #801, umbrella #710.",
+      "scope": [
+        "tests/compat/rpc_procedures.test.mjs",
+        "docs/gaps-rpc-procedures.md"
+      ],
+      "acceptance": [
+        "The 'transaction count' known difference is removed because it now matches SQL Server; the compat suite passes on main; docs no longer list it."
+      ],
+      "dependencies": [],
+      "issue": 801,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjpFE"
     }
   ]
 }
