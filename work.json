@@ -9475,6 +9475,34 @@
         "Reference-only changes: no engine/Rust/backend edits or local Cargo cache. Use isolated remote reference sources and random owned container ports, preserve other workers and shared native runner lock. Source review plus actual capture verification and required deterministic CI, verified review/fallback, owner PR merge and registry/project completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjYz5"
+    },
+    {
+      "id": "quoted-session-identifiers-shell-v1",
+      "title": "Preserve quoted counter and parameter column bindings in runtime",
+      "state": "backlog",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal. First-party30-record SQLServer ground truth and exacted16439 native replay prove quoted-column binding corruption. Backlog only keeps engine.rs available for owner work; no external intake.",
+      "scope": [
+        "crates/msduck-sql/src/preflight.rs",
+        "crates/msduck-sql/src/result_types.rs",
+        "src/engine.rs",
+        "src/engine/session_context.rs",
+        "src/query_catalog.rs",
+        "tests/quoted_session_identifiers.rs",
+        "tests/quoted_session_identifiers.test.mjs",
+        "docs/quoted-session-runtime.md"
+      ],
+      "issue": 792,
+      "dependencies": [
+        "quoted-session-identifiers-reference-v1",
+        "session-control-declarations-core-v1",
+        "session-control-projection-properties-v1"
+      ],
+      "acceptance": [
+        "Keep delimited names in column binding through preflight, counter/session substitution, parameter binding and result-type inference. Only unquoted scalar/global references use variable/counter semantics. Fix actual stored-value and descriptor corruption for bound42/NULL, mixedcounters, bracket/doublequote/parentheses/CTE/derived/empty and qualified shapes; never infer compile metadata from bound values or result rows. Preserve exactly-once volatile evaluation and existing transaction/statement atomicity.",
+        "Replay complete retained30-record fixture against finalrevision and inspect every raw difference. Match quoted success rows/descriptors and missing-column207diagnostics; preserve the distinction from real unquoted137 variables. Keep unrelated SETcompletion/other diagnostic differences explicit and record them without patching or hiding rows/metadata/errors to pass. Add meaningful failing-before-fix root tests and independent client checks, retaining qualified and empty shapes that already match.",
+        "Activate only after merged/done dependencies and nonoverlapping ready scopes; newexclusive claim/worktree/receipt. Publish disjoint companion scopes if necessary instead of crossing another worker reservation. Exact-head fmt/strictClippy/workspace/alltargets/client/audit and complete rawreplay, verifiedreview/fallback/CI, workerownedPRmerge and prompt registry/project/issue completion. Backlog reserves no engine files."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjbXv"
     }
   ]
 }
