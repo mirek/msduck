@@ -139,13 +139,14 @@ DuckDB rejects. Key order (`ASC`/`DESC`) has no effect.
 
 Known differences:
 
-- msduck does not record which index SQL Server would make clustered.
 - Two `CLUSTERED` constraints are not rejected with 8112.
-- `CREATE [UNIQUE] CLUSTERED INDEX` still fails to parse.
 - `WITH (FILLFACTOR = ...)` on a constraint is not supported.
-- `ALTER TABLE ... ADD [CONSTRAINT name] PRIMARY KEY | UNIQUE ...` is not
-  supported, with or without the keywords. This predates the change.
-- `sys.indexes` still refuses tables with constraint-backed indexes.
+
+Later work fixed the other differences listed here earlier:
+
+- `CREATE [UNIQUE] CLUSTERED INDEX` ([keys](gaps-keys.md));
+- `ALTER TABLE ... ADD CONSTRAINT ... PRIMARY KEY | UNIQUE` ([constraints](gaps-constraints.md));
+- constraint-backed rows in `sys.indexes` ([index catalog](index-catalog.md)).
 
 ## Table hints
 

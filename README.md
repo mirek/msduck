@@ -91,9 +91,33 @@ Joined DELETE, writable derived targets, generated-column images,
 partial failure streams and statement undo inside explicit transactions remain unfinished; see
 [OUTPUT coverage and verification](docs/output.md).
 
+Version 0.2.5 adds the features an mssql/tedious application workload needed:
+- stored procedures, `EXEC (string)` and `sp_executesql` with OUTPUT, plus RPC
+  procedure calls and OUTPUT parameters;
+- scalar and table-valued functions, DML triggers and MERGE;
+- `#temp` tables and table variables;
+- application locks, BACKUP/RESTORE and msdb history;
+- ALTER TABLE constraints and foreign-key actions;
+- keys and indexes on every column type;
+- rowversion, decimal identity and `SCOPE_IDENTITY`;
+- constraint, module and index catalogs;
+- isolation levels, savepoints and WAITFOR;
+- bulk load;
+- COLLATE, styled CONVERT and FORMAT;
+- FOR JSON AUTO, JSON_MODIFY, STRING_SPLIT and HASHBYTES;
+- nvarchar predicates and contextual identifiers.
+
+[Workload compatibility gaps](docs/workload-gaps.md) links each area's page,
+with the limits that remain.
+
 [ROADMAP.md](ROADMAP.md) tracks the full remaining objective. Current gaps
-include SQL-managed logins and permissions, advanced TLS modes, catalogs, stored procedures, savepoints, distributed
-transactions, bulk load, MARS, cancellation, and substantial T-SQL semantic details.
+include:
+- SQL-managed logins and permissions;
+- advanced TLS modes;
+- distributed transactions;
+- SQL Server locking semantics (all isolation levels run on DuckDB snapshots);
+- MARS and active-query cancellation;
+- substantial T-SQL semantic details.
 Result metadata currently derives from DuckDB types (strings use nvarchar(max),
 all columns are nullable); widths, collation, nullability, integer arithmetic,
 error numbers, and statement completion behavior need SQL Server differential
@@ -119,7 +143,9 @@ transaction. SQL batches and driver calls share state and descriptor
 notifications. Stale descriptors and malformed requests are rejected before
 execution. Current/read-committed/snapshot requests use DuckDB snapshot
 isolation; SQL Server's locking/read-committed semantics remain to be emulated.
-Other isolation levels and savepoints are explicitly rejected.
+All five isolation levels and transaction-manager savepoints are accepted. Each
+level runs on DuckDB snapshot isolation. See
+[isolation levels, savepoints and WAITFOR](docs/gaps-transactions.md).
 
 Prepared RPCs support `sp_prepare`, `sp_execute`, `sp_prepexec`, and
 `sp_unprepare` by name or TDS procedure ID. Handles are connection-local;

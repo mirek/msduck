@@ -264,9 +264,17 @@ for concrete evidence and observed failures.
 2. Complete typed SQL semantics: catalog of declarations, exact character and
    numeric widths, nullability, conversion/precedence, collation/padding,
    aggregates, arithmetic, dates/timezone, GUIDs, money, XML and variant.
-3. Complete language: error control flow, dynamic SQL, stored procedures,
-   scalar/table functions, views, triggers, cursors, identity/sequences,
-   OUTPUT/MERGE, temp objects, error handling, all supported session settings.
+3. Complete language. Several pieces exist, with limits listed in
+   [workload gaps](docs/workload-gaps.md):
+   - stored procedures, dynamic SQL, scalar/table functions and triggers;
+   - MERGE, temp tables, table variables and identity/rowversion.
+
+   Still open:
+   - cursors and sequences;
+   - procedure line and name context in errors;
+   - loops and recursion in functions with column arguments;
+   - triggers fired by MERGE and cascades;
+   - all supported session settings.
 4. SQL Server catalogs and information schema, metadata procedures, databases,
    schema/object resolution and persistence/restart coverage. User databases,
    USE, DB_NAME/DB_ID, sys.databases and LOGIN7 selection exist
@@ -275,16 +283,20 @@ for concrete evidence and observed failures.
    sys.dm_exec_sessions and @@SPID ([ALTER DATABASE](docs/alter-database-sessions.md)),
    and sys.server_principals for the logins seen since startup
    ([tedious gaps](docs/tedious-compat-gaps.md)).
-   Still open: a login catalog (CREATE LOGIN, default databases), sys.computed_columns,
-   clustered-index catalog state and CREATE CLUSTERED INDEX, computed columns over
-   carrier types and non-deterministic computed columns, table hint index
-   validation, tempdb/model/msdb, other ALTER DATABASE options, the remaining
+   Constraint, module, file and index catalogs, msdb backup history,
+   BACKUP/RESTORE and CREATE CLUSTERED INDEX now exist
+   ([workload gaps](docs/workload-gaps.md)).
+   Still open: a login catalog (CREATE LOGIN, default databases), non-deterministic
+   computed columns, table hint index validation, tempdb/model as real databases,
+   other ALTER DATABASE options, the remaining
    sys.dm_exec_sessions columns, cross-database references and transactions,
    compile-time USE and three-part name resolution, and sys.databases
    descriptor fidelity.
-5. Remaining RPC types and application output parameters, prepare-time result
-   metadata/native plan caching, TVPs, transaction
-   manager savepoints/distributed transactions and full isolation/error semantics.
+5. Remaining RPC types, prepare-time result metadata/native plan caching, TVPs,
+   distributed transactions and full isolation/error semantics. RPC procedure
+   calls, output parameters and transaction-manager savepoints exist
+   ([RPC procedures](docs/gaps-rpc-procedures.md),
+   [transactions](docs/gaps-transactions.md)).
 6. TLS and SQL authentication, negotiated features/version handling, MARS,
    bulk-load streaming/atomicity, cancellation/interrupt, reset semantics.
 7. SQL Server transaction/error behavior, isolation/concurrency, rollback and
