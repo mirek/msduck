@@ -9507,7 +9507,7 @@
     {
       "id": "quoted-session-identifiers-preflight-v1",
       "title": "Keep quoted parameter-like columns out of scalar preflight",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing full SQL Server compatibility goal; first-party captured30records in PR791 and exacted16439 runtime failure trace identify quote-blind deterministic scalar preflight. This disjoint compile-stage fix composes with full runtime task792; no engine reservation or external intake.",
       "scope": [
         "crates/msduck-sql/src/preflight.rs",
