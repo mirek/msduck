@@ -23,8 +23,9 @@ snapshot with the same task ID, exact file scope, acceptance criteria,
 dependencies, issue and project item. It follows the protected publication
 procedure in `docs/agent-work.md`. If a task needs files held by another live
 worker, the publisher creates a non-overlapping task or coordinates a handoff.
-For an unresponsive worker, use the standing recovery authorization below. Creating an issue, assigning it, or moving a project card never
-authorizes work or reserves files. A draft project item is not a task.
+For an unresponsive worker, use the standing recovery authorization below.
+Creating an issue, assigning it, or moving a project card never authorizes work
+or reserves files. A draft project item is not a task.
 
 Workers can report a newly found gap in their PR or to the owner/integrator.
 They may publish a follow-up only when the owner has authorized that session to
