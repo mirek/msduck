@@ -9704,7 +9704,7 @@
     {
       "id": "quoted-client-registration-v1",
       "title": "Run quoted identifier client regressions in standard npm and CI suites",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Owner continuing goal and first-party test-registration gap in merged798.",
       "scope": [
         "tests/tedious.test.mjs"
@@ -9718,6 +9718,25 @@
       ],
       "issue": 809,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjxGk"
+    },
+    {
+      "id": "quoted-client-standard-entry-v1",
+      "title": "Register quoted regressions with matching CI shard identities",
+      "issue": 811,
+      "state": "ready",
+      "authorization": "Direct owner continuing goal and verified Codex P1 on ownerPR810.",
+      "scope": [
+        "tests/tedious.test.mjs",
+        "tests/quoted_identifier_translation.test.mjs"
+      ],
+      "dependencies": [
+        "quoted-identifier-translation-review-v1"
+      ],
+      "acceptance": [
+        "Move all three quoted-column regression registrations into the standard tedious suite and remove the standalone file; preserve all row/descriptor/NULL/parameter/counter/prepared assertions and isolated ports. Avoid cross-file registration attribution or duplicate tests. No package/workflow/runtime edits.",
+        "Prove shard discovery and actual Node reporter file/name identities match for the moved regressions and assess reports3 passes without unexpected/missing cases. Execute actual standard-entry regressions under shared Linux lock against identified cached build. Source/diff checks, exact-head required CI and completed verified review/fallback, claiming worker owns existing PR810 merge and completion. Old809 staysblocked, receipt/checkpoint retained; reuse same completed worktree, no additional Cargo targets or agents."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pjym8"
     }
   ]
 }
