@@ -361,16 +361,13 @@ pub fn checked_update(
             checked.push((index, kind));
         }
         let alias = Ident::with_quote('"', format!("__guid_store_col_{index}"));
-        if !checked.iter().any(|(_, kind)| matches!(kind, Stored::Guid)) {
-            return Ok(None);
-        }
         projection.push(SelectItem::ExprWithAlias {
             expr: value,
             alias: alias.clone(),
         });
         aliases.push(alias);
     }
-    if checked.is_empty() {
+    if !checked.iter().any(|(_, kind)| matches!(kind, Stored::Guid)) {
         return Ok(None);
     }
     projection.push(SelectItem::ExprWithAlias {
