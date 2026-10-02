@@ -32,10 +32,22 @@ class 16. Unquoted `@missing` instead reports variable error 137, state 2,
 class 15. Complete diagnostic text and completion tokens remain in the fixture.
 
 These are SQL Server observations. PR #786 verifies bounded logical inference
-for quoted columns; this capture does not establish msduck runtime fidelity.
-Root session substitution, variable binding and physical descriptor propagation
-must be replayed against every retained observation before claiming support.
-No engine scope is reserved by this reference task.
+for quoted columns. A complete msduck replay at
+`ed164392af87e3e6c3249c33820dc0160f082705` retained 267 raw differences with
+no transport errors. Qualified projections match completely in both modes,
+but unqualified `[@p]` is treated as a parameter: a bound 42 produces `[42,42]`
+instead of `[42,7]`. Quoted counters likewise become live values and lose their
+stored-column types. Missing quoted names report variable/global errors instead
+of 207. The raw replay SHA-256 is
+`87eb09d02cdf33bed7c0f0a5e13564096df4990a5060f417a69ea650d89e9e69`.
+The replay used a private copy of the exact verified executable, with binary
+SHA-256 `5928be6fac7127e801b2a939e2a7327474c35217c0e2c2b844ea315c5cd333c3`;
+it did not modify the shared builder source or executable.
+
+[Runtime follow-up #792](https://github.com/mirek/msduck/issues/792) retains
+these failures and the separate SET completion and unquoted-variable diagnostic
+differences. It is unreserved backlog, and this reference task reserves no
+engine files or claims runtime fidelity.
 
 To reproduce without changing the retained fixture:
 
