@@ -1946,6 +1946,13 @@ impl Session {
                         tds::done(&mut out, if rpc { 0xff } else { 0xfd }, 2 | more, 213, 0);
                         continue;
                     }
+                    if self.last_error == 3902
+                        && !rpc
+                        && matches!(statement, Statement::Commit { .. })
+                    {
+                        tds::done(&mut out, 0xfd, 2, 213, 0);
+                        return (out, false);
+                    }
                     if self.last_error == 8169 {
                         self.rowcount = 0;
                         if matches!(statement, Statement::AlterTable(_)) {
@@ -1961,7 +1968,13 @@ impl Session {
                             );
                         }
                         self.rollback_doomed(&mut out);
-                        tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 253, 0);
+                        tds::done(
+                            &mut out,
+                            if rpc { 0xfe } else { 0xfd },
+                            2,
+                            if rpc { 224 } else { 253 },
+                            0,
+                        );
                         return (out, false);
                     }
                     if self.transaction_doomed {
@@ -2089,8 +2102,8 @@ impl Session {
             if let Some(offset) = last_done {
                 out[offset + 1] |= 1;
             }
-            self.rollback_doomed(&mut out);
             self.error(&mut out, 3998, "Uncommittable transaction is detected at the end of the batch. The transaction is rolled back.");
+            self.rollback_doomed(&mut out);
             tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 253, 0);
             self.caught_error = None;
             return (out, false);
@@ -2218,10 +2231,14 @@ impl Session {
     }
     pub fn commit_transaction(&mut self) -> Result<Vec<u8>> {
         self.require_committable()?;
-        ensure!(
-            self.transactions > 0,
-            "COMMIT has no corresponding BEGIN TRANSACTION"
-        );
+        if self.transactions == 0 {
+            return Err(SqlError::new(
+                3902,
+                1,
+                "The COMMIT TRANSACTION request has no corresponding BEGIN TRANSACTION.",
+            )
+            .into());
+        }
         let mut out = Vec::new();
         if self.transactions == 1 {
             self.db.execute_batch("COMMIT")?;
@@ -2769,11 +2786,11 @@ impl Session {
                 return Ok(Execution::statement(
                     self.begin_transaction(0, "")?,
                     None,
-                    0,
+                    212,
                 ));
             }
             Statement::Commit { .. } => {
-                return Ok(Execution::statement(self.commit_transaction()?, None, 0));
+                return Ok(Execution::statement(self.commit_transaction()?, None, 213));
             }
             Statement::Rollback { savepoint, .. } => {
                 let name = savepoint.as_ref().map(|id| id.value.as_str()).unwrap_or("");
