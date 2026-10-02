@@ -9233,6 +9233,23 @@
         "Run exact-head AGENTS.md workspace fmt/tests/strictClippy/alltargets build, independent clients and semantic audit; requiredCI and verified review or authorized availability fallback; claiming worker owns merge and prompt registry/project/issue completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PhQwy"
+    },
+    {
+      "id": "worker-tmp-dir-v1",
+      "title": "Use a git-ignored .tmp directory for worker temporary files",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01), issue #774.",
+      "scope": [
+        ".gitignore",
+        "AGENTS.md",
+        "docs/agent-work.md"
+      ],
+      "acceptance": [
+        ".tmp/ is git-ignored; AGENTS.md and the parallel-workers section of docs/agent-work.md tell workers to create ./.tmp in their worktree root, export TMPDIR there, and keep builds, checkouts, logs and captures inside it instead of /tmp (a small shared per-user tmpfs quota) or shared scratch directories."
+      ],
+      "dependencies": [],
+      "issue": 774,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pi_kV"
     }
   ]
 }
