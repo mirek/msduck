@@ -7879,7 +7879,7 @@
     {
       "id": "set-result-properties-v1",
       "title": "Preserve captured result properties for SQL set operators",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Owner continuing full SQL Server compatibility goal; first-party exact-head INTERSECT/EXCEPT flag mismatch in PR703 and immutable temporal set capture. No external submission input. Same worker/worktree/PR703; capture wiring/public tests remain in already-owned parent scope.",
       "issue": 707,
       "dependencies": [],
@@ -9398,6 +9398,23 @@
         "Keep code deterministic and independent of session state, DuckDB, TDS or clocks. Run the fast SQL crate loop with meaningful captured-reference tests; final exact-head formatting/full workspace/strict Clippy/all-targets/client/audit validation uses the existing Linux cache when the runner lock is available. The worker owns verified review or availability fallback, CI, merge and prompt registry/issue/project completion. Runtime raw replay and any further shell adaptation need disjoint claimed work after GUID integration is merged."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjPfG"
+    },
+    {
+      "id": "session-control-projection-properties-v1",
+      "title": "Preserve computed SESSIONPROPERTY metadata in logical projection",
+      "state": "ready",
+      "authorization": "Direct continuing owner SQL Server compatibility goal; owner explicitly said to take over unresponsive workers without halting. Existing set-result-properties-v1 parent PR703 last update2026-10-01T10:21:31Z at4205c487211fa5f3bd38d675f82f92b2689a722e (>33hours). Its branch has no attached worktree; former worktree now runs another claimed branch. No live old session agent or attributable Linux process remains. Recovery contact/evidence in owner comment5959984713. Keep incomplete set acceptance, old claim and branch; do not adopt receipt or mark done.",
+      "scope": [
+        "crates/msduck-sql/src/projection.rs"
+      ],
+      "dependencies": [],
+      "issue": 785,
+      "acceptance": [
+        "Companion of claimed session-control-declarations-core-v1 (#784). Resolve the exact SESSIONPROPERTY nullable sql_variant expression flags33 from two agreeing reference/session-property-context.json captures and GUID control query. Current projection.rs blanket exclusion of variant fComputed clears that fact. Preserve captured distinctions for ordinary sql_variant casts/columns/derived results, SESSION_CONTEXT and other unproven functions instead of assuming every variant is computed.",
+        "Work only on the bounded session-function provenance exception. Do not alter UNION/INTERSECT/EXCEPT associativity/type/nullability, wider projection rules or the unfinished old task acceptance. Preserve old707 branch/claim and raw evidence; it remains incomplete and blocked after revocation.",
+        "Use the companion784 captured-reference pure tests, complete SQL crate loop, exact-head required Rust/client/audit checks under the shared Linux lock, independent review or owner-authorized fallback, CI, worker-owned merge and prompt registry/project/issue completion. Same branch/PR as784; no new native cache."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjQjz"
     }
   ]
 }
