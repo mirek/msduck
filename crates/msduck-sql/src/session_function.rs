@@ -6,7 +6,7 @@ use std::ops::ControlFlow;
 mod session_context;
 pub use session_context::*;
 
-/// Session values named without parentheses: the non-null INT counters, the
+/// Session values named without parentheses: the non-null INT counters/options, the
 /// SMALLINT @@SPID and the nullable nvarchar(128) SYSTEM_USER. Runtime values
 /// are supplied by the shell.
 pub fn counter_type(name: &str) -> Option<DataType> {
@@ -16,10 +16,37 @@ pub fn counter_type(name: &str) -> Option<DataType> {
     if name.eq_ignore_ascii_case("@@SPID") {
         return Some(DataType::SmallInt(None));
     }
-    ["@@ROWCOUNT", "@@TRANCOUNT", "@@ERROR"]
+    ["@@ROWCOUNT", "@@TRANCOUNT", "@@ERROR", "@@OPTIONS"]
         .iter()
         .any(|candidate| name.eq_ignore_ascii_case(candidate))
         .then_some(DataType::Int(None))
+}
+
+/// The captured @@OPTIONS & INT-mask expression has a nonnullable INT
+/// declaration. Recognize explicit syntax only, never actual session bits or
+/// parameter values. Other arithmetic and potentially NULL operands remain
+/// outside this proof.
+pub fn is_options_mask(expr: &Expr) -> bool {
+    fn options(expr: &Expr) -> bool {
+        match expr {
+            Expr::Identifier(id) => {
+                id.quote_style.is_none() && id.value.eq_ignore_ascii_case("@@OPTIONS")
+            }
+            Expr::Nested(inner) => options(inner),
+            _ => is_options_mask(expr),
+        }
+    }
+    fn mask(expr: &Expr) -> bool {
+        match expr {
+            Expr::Value(value) => {
+                matches!(&value.value, Value::Number(digits, false) if digits.parse::<i32>().is_ok())
+            }
+            Expr::Nested(inner) => mask(inner),
+            _ => false,
+        }
+    }
+    matches!(expr, Expr::BinaryOp { left, op: BinaryOperator::BitwiseAnd, right }
+        if options(left) && mask(right) || mask(left) && options(right))
 }
 
 pub fn is_xact_state(function: &Function) -> bool {

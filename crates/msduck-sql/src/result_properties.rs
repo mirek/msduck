@@ -21,10 +21,15 @@ pub fn expression_with(
         Expr::Value(v) => {
             Properties::expression(matches!(v.value, Value::Null | Value::Placeholder(_)))
         }
-        Expr::Identifier(id) if crate::session_function::counter_type(&id.value).is_some() => {
+        Expr::Identifier(id)
+            if id.quote_style.is_none()
+                && crate::session_function::counter_type(&id.value).is_some() =>
+        {
             Properties::expression(crate::session_function::is_system_user(&id.value))
         }
-        Expr::Identifier(id) if id.value.starts_with('@') => Properties::expression(true),
+        Expr::Identifier(id) if id.quote_style.is_none() && id.value.starts_with('@') => {
+            Properties::expression(true)
+        }
         Expr::Identifier(id) => binding_scope::resolve(&[id], sources, outer)
             .map(|f| f.properties)
             .unwrap_or_default(),
@@ -150,6 +155,9 @@ pub fn expression_with(
             // Function provenance is not universally fComputed in SQL Server.
             // Preserve unknown rather than guessing from scalar syntax alone.
             Properties::default()
+        }
+        Expr::BinaryOp { .. } if crate::session_function::is_options_mask(expr) => {
+            Properties::expression(false)
         }
         Expr::Cast { .. } | Expr::Convert { .. } | Expr::BinaryOp { .. } => {
             Properties::expression(true)

@@ -21,7 +21,9 @@ pub use collation_validation::{
 /// SQL result labels are independent of backend-generated expression names.
 pub(crate) fn expression_name(expr: &Expr) -> Option<String> {
     match expr {
-        Expr::Identifier(id) if !id.value.starts_with('@') => Some(id.value.clone()),
+        Expr::Identifier(id) if id.quote_style.is_some() || !id.value.starts_with('@') => {
+            Some(id.value.clone())
+        }
         Expr::CompoundIdentifier(ids) => ids.last().map(|id| id.value.clone()),
         Expr::Nested(expr)
         | Expr::UnaryOp {
@@ -354,7 +356,7 @@ fn expression_collation(
         {
             default()
         }
-        Expr::Identifier(id) if id.value.starts_with('@') => {
+        Expr::Identifier(id) if id.quote_style.is_none() && id.value.starts_with('@') => {
             character(expr).then(default).flatten()
         }
         Expr::Identifier(id) => crate::binding_scope::resolve(&[id], sources, &scope.rows)?
@@ -705,6 +707,9 @@ fn body_fields(
                     // constructors even though their result is a temporal
                     // family whose ordinary casts omit it.
                     && !matches!(e, Expr::Function(f) if crate::result_properties::fromparts_arguments(f).is_some())
+                    // Captured SESSIONPROPERTY projections retain fComputed;
+                    // ordinary sql_variant casts retain their separate rule.
+                    && !matches!(e, Expr::Function(f) if crate::session_function::variant_function(f) == Some(crate::session_function::VariantFunction::SessionProperty))
                     && info
                         .as_ref()
                         .is_some_and(|info| matches!(info.system_type_id, Some(41 | 42 | 43 | 98)))
@@ -738,7 +743,8 @@ fn body_fields(
                             && (aggregate
                                 || source_info
                                     .as_ref()
-                                    .is_some_and(|i| i.system_type_id == Some(98)))
+                                    .is_some_and(|i| i.system_type_id == Some(98))
+                                    && !matches!(input, Expr::Function(f) if crate::session_function::variant_function(f) == Some(crate::session_function::VariantFunction::SessionProperty)))
                         {
                             properties.origin = msduck_core::result::Origin::Derived;
                         } else if source_info.is_none()
@@ -1364,9 +1370,13 @@ fn expression(
         return catalog.cast_info(&kind);
     }
     if let Expr::Identifier(id) = e
+        && id.quote_style.is_none()
         && let Some(kind) = crate::session_function::counter_type(&id.value)
     {
         return catalog.cast_info(&kind);
+    }
+    if crate::session_function::is_options_mask(e) {
+        return catalog.cast_info(&DataType::Int(None));
     }
     if let Expr::BinaryOp { left, op, right } = e {
         let mut left_info = member_expression(catalog, left, sources, scope);
@@ -1401,7 +1411,7 @@ fn expression(
         return crate::expression_metadata::arithmetic::result(catalog, op, &left, &right);
     }
     let ids = match e {
-        Expr::Identifier(i) if i.value.starts_with('@') => {
+        Expr::Identifier(i) if i.quote_style.is_none() && i.value.starts_with('@') => {
             return scope.parameters.get(&i.value.to_lowercase()).cloned();
         }
         Expr::Identifier(i) => vec![i],
