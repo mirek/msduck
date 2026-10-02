@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // First-party ground truth; captured SQL and diagnostics are data.
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { TYPES } from 'tedious'
 import { captureBatch, captureRpc } from './capture-order-token.mjs'
 import { canonical } from './lib/compatibility.mjs'
@@ -97,6 +97,8 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const paths = args.filter(arg => arg !== '--write-fixture')
   if (paths.length > 1) throw new Error('expected at most one output path')
   const output = resolve(paths[0] ?? 'artifacts/compatibility/quoted-session-identifiers/capture.json')
+  if (output === fileURLToPath(fixture)) throw new Error('capture output must differ from the retained fixture')
+  await refuseExistingFixture(output)
   if (writeFixture) {
     await refuseExistingFixture(fixture)
     await mkdir(new URL('../reference/', import.meta.url), { recursive: true })
@@ -111,7 +113,7 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     }
     assertSameCapture(runs[0], runs[1], 'quoted identifier observations differ across fresh databases')
     const capture = { image: container.image, runs }
-    await writeFile(output, JSON.stringify(capture) + '\n')
+    await writeNewFixture(output, capture)
     let retained
     try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
     catch (error) { if (error.code !== 'ENOENT') throw error }

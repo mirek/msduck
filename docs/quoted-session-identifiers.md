@@ -44,6 +44,8 @@ node scripts/capture-quoted-session-identifiers.mjs artifacts/compatibility/quot
 ```
 
 The initial `--write-fixture` operation refuses an existing fixture before
-starting a container. The generator restores its temporary typed-parameter
+starting a container. Existing output files are also refused, new outputs use
+exclusive creation, and the output cannot be the retained fixture path.
+The generator restores its temporary typed-parameter
 hook, closes both fresh database connections and removes only its owned
 random-port reference container.
