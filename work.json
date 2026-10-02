@@ -9342,6 +9342,26 @@
       "dependencies": [],
       "issue": 728,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQvA"
+    },
+    {
+      "id": "gaps-release-docs-v1",
+      "title": "Release docs and v0.2.5 for the workload gap features",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-01), issue #781, umbrella #710.",
+      "scope": [
+        "README.md",
+        "ROADMAP.md",
+        "docs/workload-gaps.md",
+        "docs/tedious-compat-gaps.md"
+      ],
+      "acceptance": [
+        "README.md and ROADMAP.md describe the newly supported features (procedures, functions, triggers, MERGE, temp tables/table variables, applocks, backup/restore, constraints, keys, catalogs, isolation/savepoints/WAITFOR, bulk load, RPC procedures, conversions, JSON/string functions, rowversion/identity, computed columns, identifiers) with links to docs/gaps-*.md and keep remaining gaps explicit.",
+        "docs/workload-gaps.md indexes the gap docs with their main remaining limits; stale statements in docs/tedious-compat-gaps.md are corrected.",
+        "After merge, v0.2.5 is tagged on main, the Docker publish run succeeds, and the published image passes a smoke test of the workload repros."
+      ],
+      "dependencies": [],
+      "issue": 781,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjGps"
     }
   ]
 }
