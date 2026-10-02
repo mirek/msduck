@@ -9567,6 +9567,27 @@
         "Reuse an existing worker worktree after completion or otherwise isolate safely; own fresh exclusive receipt/branch, no localCargo cache. Focused proof plus exact-head fmt/strictworkspaceClippy/fullworkspace/alltargets/independentclients/audit under sharedLinuxlock, requiredCI and verified review or recorded authorized availability fallback. Claimingworker owns PR follow-up, merge and prompt registry/project/issue completion; no claimed fullSQLServer compatibility from compiler-only correction."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjhP0"
+    },
+    {
+      "id": "quoted-storage-column-resolution-v1",
+      "title": "Resolve quoted at-sign columns in the actual catalog operand pass",
+      "state": "ready",
+      "issue": 799,
+      "authorization": "Owner continuing goal and verified scoped first-party Codex review finding4170044781. Same worker under ownstorageclaim797 combines bounded resolver repair into PR798; individual scopes are disjoint. Rootengine remains unreserved.",
+      "scope": [
+        "crates/msduck-sql/src/aggregate_columns.rs",
+        "crates/msduck-sql/tests/quoted_storage_column_resolution.rs",
+        "docs/quoted-storage-column-resolution.md"
+      ],
+      "dependencies": [
+        "quoted-session-identifiers-reference-v1"
+      ],
+      "acceptance": [
+        "Make production snapshot column/source-column and related simple-expression classification predicates distinguish quoted @named columns from actual unquoted scalars. Preserve source qualification, correlated/temporal/join annotation, unknown/ambiguous/shadowed declaration barriers and explicit-input deterministic boundaries. No hidden catalog reads or operand evaluation.",
+        "Demonstrate failure through aggregate_columns::resolve with real explicit snapshots, not a substitute column callback. Regress quoted INT column versus conflicting BIGINTparameter42/NULL, qualified/parenthesized/derived/CTE/empty shapes, captured quoted counter character metadata, unknown/ambiguous and shadowed local sources, real unquoted scalar declaration retention and original operand preservation. Combine with separatelyownedstorage797, keeping raw root/wire differences explicit.",
+        "Same claimingworker may combine with its owned797 onPR798 using freshreceipt and bothverifiedclaims; immutable oldtasks/scopes/receipts are not adopted. Exactrevisedhead privatefocusedproof plus fmt/strictworkspaceClippy/fullworkspace/alltargets/independentclients/audit underLinuxlock, requiredCI and completeverifiedreview/fallback; address and resolve confirmed4170044781 finding afterfixverification. No engine/preflight/checked-operand edits or localCargo cache. Worker owns merge and prompt bothregistry/project/issue completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pjk2B"
     }
   ]
 }
