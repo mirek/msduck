@@ -83,7 +83,10 @@ impl Scope {
     }
     fn source_column(&self, expr: &Expr) -> Option<(usize, usize)> {
         let ids = match expr {
-            Expr::Identifier(id) if !id.value.starts_with('@') && !self.unknown_source => {
+            Expr::Identifier(id)
+                if (id.quote_style.is_some() || !id.value.starts_with('@'))
+                    && !self.unknown_source =>
+            {
                 vec![id.value.to_lowercase()]
             }
             Expr::CompoundIdentifier(ids) => ids.iter().map(|id| id.value.to_lowercase()).collect(),
@@ -160,7 +163,10 @@ impl Scope {
     }
     fn column(&self, expr: &Expr) -> Option<DataType> {
         let key = match expr {
-            Expr::Identifier(id) if !id.value.starts_with('@') && !self.unknown_source => {
+            Expr::Identifier(id)
+                if (id.quote_style.is_some() || !id.value.starts_with('@'))
+                    && !self.unknown_source =>
+            {
                 vec![id.value.to_lowercase()]
             }
             Expr::CompoundIdentifier(ids) => ids.iter().map(|id| id.value.to_lowercase()).collect(),
@@ -1778,7 +1784,7 @@ impl VisitorMut for Resolver<'_> {
                 .last()
                 .is_some_and(|depth| depth.is_some_and(|start| self.expr_depth >= start))
             && let Expr::Identifier(id) = expr
-            && !id.value.starts_with('@')
+            && (id.quote_style.is_some() || !id.value.starts_with('@'))
             && let Some(frame) = self.on_frames.last()
         {
             let key = vec![id.value.to_lowercase()];
@@ -2102,7 +2108,9 @@ impl VisitorMut for TemporalArguments<'_> {
             return ControlFlow::Continue(());
         }
         let key: Vec<String> = match expr {
-            Expr::Identifier(id) if !id.value.starts_with('@') => vec![id.value.to_lowercase()],
+            Expr::Identifier(id) if id.quote_style.is_some() || !id.value.starts_with('@') => {
+                vec![id.value.to_lowercase()]
+            }
             Expr::CompoundIdentifier(ids) => ids.iter().map(|id| id.value.to_lowercase()).collect(),
             _ => return ControlFlow::Continue(()),
         };
