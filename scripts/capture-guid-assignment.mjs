@@ -59,6 +59,30 @@ async function parameterCapture(connection,sql,parameter){
  }
  try{return await captureRpc(connection,sql)}finally{connection.execSql=execSql}
 }
+export function verifyObservations(records){
+ const result=name=>{
+  const record=records.find(record=>record.name===name)
+  if(!record)throw Error('Missing GUID assignment observation: '+name)
+  return record.result
+ }
+ const rows=name=>result(name).sets.map(set=>set.rows)
+ for(const record of records){
+  if(Boolean(record.result.errors.length)!==failures.has(record.name))throw Error('Unexpected outcome: '+record.name)
+  if(failures.has(record.name)&&!['transaction commit','caught conversion transaction'].includes(record.name)){
+   assertSameCapture(record.result.errors,[{number:8169,state:2,class:16,lineNumber:1,message:'Conversion failed when converting from a character string to uniqueidentifier.'}],record.name+' diagnostics')
+  }
+ }
+ assertSameCapture(rows('transaction state after begin'),[[[1,1,1,0]]],'transaction begin and XACT_ABORT OFF')
+ assertSameCapture(rows('transaction state after prior write'),[[[1,1]]],'transaction prior write remains active')
+ assertSameCapture(rows('transaction state'),[[[0,0]]],'conversion aborts explicit transaction')
+ assertSameCapture(rows('transaction readback'),rows('update readback'),'aborted transaction preserves pre-transaction rows only')
+ assertSameCapture(rows('caught conversion readback'),[[[0,0]],[]],'caught failed commit rolls back prior write')
+ assertSameCapture(result('transaction commit').errors.map(error=>error.number),[3902],'COMMIT after rollback')
+ assertSameCapture(result('caught conversion transaction').errors.map(error=>error.number),[3930,3998],'uncommittable transaction completion')
+ assertSameCapture(rows('invalid alter readback'),[[[1,guid],[2,'bad']]],'failed ALTER preserves source storage')
+ const upper='00112233-4455-6677-8899-AABBCCDDEEFF'
+ assertSameCapture(rows('parameter readback'),[[[40,upper],[41,upper],[42,upper],[43,null]]],'typed parameter assignments')
+}
 async function run(){
  return withReferenceContainer(async(config,metadata)=>{
   assertSameCapture(metadata.image,referenceImage,'pinned image')
@@ -80,9 +104,8 @@ async function main(args){
  assertSameCapture(runs[0],runs[1],'complete GUID assignment observations')
  await mkdir(dirname(output),{recursive:true})
  await writeNewFixture(output,{image:referenceImage,contract:'Two fresh complete GUID assignment runs agree without normalization.',runs})
- const unexpected=runs[0].filter(record=>Boolean(record.result.errors.length)!==failures.has(record.name))
  // Preserve every observation before rejecting a mistaken success/error control.
- if(unexpected.length)throw Error('Retained unexpected outcomes: '+JSON.stringify(unexpected.map(({name,result})=>({name,errors:result.errors}))))
+ verifyObservations(runs[0])
  console.log(JSON.stringify({output,records:runs.map(run=>run.length)}))
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))await main(process.argv.slice(2))
