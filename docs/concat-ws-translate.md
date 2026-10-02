@@ -29,6 +29,16 @@ rejected before any container starts. Existing output destinations, including
 dangling symlinks, are also refused, and outputs are created exclusively. Offline
 validation additionally requires complete ordered tokens and verifies prepare
 handle payload bytes against their decoded header, declaration and value.
+Ordered metadata/row groups, messages and DONE-family events are reconciled
+with the independently captured result sets and public completion events. A
+pinned SHA-256 of each complete observation run also protects every retained
+row, descriptor field, diagnostic and token against identical corruption in all
+four copies. The digest is over `JSON.stringify(run)` without sorting or
+normalization: `8cf0ad277c8717c44aafd1acdf57bd743c378b43ca2cc66e6ad1f4da5dff3512`.
+It comes from the independently reproduced pinned-image observations; updating
+that contract requires deliberate review of new reference evidence. This is an
+integrity check on observed behavior, not independent proof of SQL semantics.
+
 It requires successful RPC return status 0 and an agreeing raw RETURNSTATUS
 token. Every prepared execution descriptor is checked against the documented
 flags and the preparation descriptor, independently of its bound values. `--one-database` is a diagnostic mode only.

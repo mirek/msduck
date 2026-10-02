@@ -4,6 +4,7 @@
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { createHash } from 'node:crypto'
 import { lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -639,12 +640,22 @@ function validateTokens(run) {
   }
 }
 
+// Pin the complete, independently reproduced observation contract, including
+// rows, every descriptor field and exact diagnostics. Cross-copy agreement is
+// insufficient if all four copies are corrupted together. No fields are
+// sorted, projected, repaired or normalized before hashing.
+function validateContract(run) {
+  const expected = '8cf0ad277c8717c44aafd1acdf57bd743c378b43ca2cc66e6ad1f4da5dff3512'
+  const actual = createHash('sha256').update(JSON.stringify(run)).digest('hex')
+  assert.equal(actual, expected, 'complete pinned CONCAT_WS/TRANSLATE observation contract')
+}
+
 function validateFourCaptures(actual) {
   if (actual.containers.length !== 2) throw new Error('expected two containers')
   for (const container of actual.containers) {
     if (container.image !== referenceImage) throw new Error('unexpected reference image ' + container.image)
     if (container.runs.length !== 2) throw new Error('expected two fresh databases per container')
-    for (const run of container.runs) { validate(run); validateTokens(run) }
+    for (const run of container.runs) { validate(run); validateTokens(run); validateContract(run) }
     requireSame(container.runs[0], container.runs[1], 'across fresh databases')
   }
   requireSame(actual.containers[0].runs[0], actual.containers[1].runs[0], 'across containers')
@@ -680,7 +691,7 @@ if (checkFixture) {
   const actual = { containers }
   // Retain the raw artifact before validation so a failing capture can be inspected.
   await writeFile(output, JSON.stringify(actual) + '\n', { flag: 'wx' })
-  if (oneDatabase) { validate(containers[0].runs[0]); validateTokens(containers[0].runs[0]) }
+  if (oneDatabase) { validate(containers[0].runs[0]); validateTokens(containers[0].runs[0]); validateContract(containers[0].runs[0]) }
   else validateFourCaptures(actual)
   const retained = writeFixture ? undefined : await readRetained()
   if (retained && !oneDatabase) {
