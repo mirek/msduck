@@ -648,7 +648,10 @@ impl Plan {
                 if let (Type::Character(c), Comparable::Character { units, .. }) =
                     (base_type, value.as_ref())
                 {
-                    matches!(c.length(), Length::Bounded(max) if units.len() <= usize::from(max))
+                    matches!(c.length(), Length::Bounded(max)
+                        if units.len() <= usize::from(max)
+                            && (!matches!(c.family(), Family::Char | Family::Nchar)
+                                || units.len() == usize::from(max)))
                 } else {
                     self.validate(value, *base_type)?;
                     true

@@ -1094,3 +1094,41 @@ fn missing_collation_never_inherits_another_operands_known_comparison() {
         Err(Error::Unsupported(Unsupported::UnknownCollation))
     );
 }
+
+#[test]
+fn fixed_width_variant_payloads_must_already_be_padded() {
+    for family in [Family::Char, Family::Nchar] {
+        for function in [Function::Greatest, Function::Least] {
+            let p = plan(function, &[Argument::typed(Type::Variant, Some(true))]).unwrap();
+            let key = |text: &str| {
+                Ok(Comparable::Variant {
+                    base_type: character(family, 3),
+                    value: Box::new(Comparable::Character {
+                        units: text.encode_utf16().collect(),
+                        sort_key: vec![97],
+                        collation: CI.into(),
+                    }),
+                })
+            };
+            assert_eq!(
+                p.select(&[key("a")]),
+                Err(Error::Unsupported(Unsupported::ComparableShape))
+            );
+            assert_eq!(p.select(&[key("a  ")]), Ok(Some(0)));
+        }
+    }
+    let p = plan(
+        Function::Greatest,
+        &[Argument::typed(Type::Variant, Some(true))],
+    )
+    .unwrap();
+    let key = Comparable::Variant {
+        base_type: character(Family::Varchar, 3),
+        value: Box::new(Comparable::Character {
+            units: vec![97],
+            sort_key: vec![97],
+            collation: CI.into(),
+        }),
+    };
+    assert_eq!(p.select(&[Ok(key)]), Ok(Some(0)));
+}
