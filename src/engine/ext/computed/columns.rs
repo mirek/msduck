@@ -194,6 +194,7 @@ fn translate(
         values: vec![],
         parameter_slots: HashMap::new(),
         transactions: session.transactions,
+        options_mask: session.options_mask(),
         transaction_doomed: session.transaction_doomed,
         original_login: &session.original_login,
         clock: crate::current_time::now(),

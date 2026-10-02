@@ -179,7 +179,8 @@ fn percentile_binding(
 }
 
 fn runtime_diagnostic(message: &str) -> Option<SqlError> {
-    rand::diagnostic(message)
+    crate::guid_assignment::diagnostic(message)
+        .or_else(|| rand::diagnostic(message))
         .or_else(|| crate::json_extract::diagnostic(message))
         .or_else(|| crate::integer_conversion::diagnostic(message))
         .or_else(|| crate::binary_unicode::diagnostic(message))
@@ -393,6 +394,22 @@ impl Drop for Session {
     }
 }
 impl Session {
+    /// Current supported SET state. All remaining bits are fixed login options
+    /// because session_setting explicitly refuses changes to those options.
+    fn options_mask(&self) -> i32 {
+        let options = self.session_options();
+        1024 // ANSI_NULL_DFLT_ON, established at login
+            | if options.ansi_warnings { 8 } else { 0 }
+            | if options.ansi_padding { 16 } else { 0 }
+            | if options.ansi_nulls { 32 } else { 0 }
+            | if options.arithabort { 64 } else { 0 }
+            | if options.quoted_identifier { 256 } else { 0 }
+            | if self.nocount { 512 } else { 0 }
+            | if options.concat_null_yields_null { 4096 } else { 0 }
+            | if options.numeric_roundabort { 8192 } else { 0 }
+            | if self.xact_abort { 16384 } else { 0 }
+    }
+
     pub fn new(connection: crate::server::Connection) -> Result<Self> {
         let (db, diagnostics, databases, sessions) = connection.into_parts();
         let database = databases.enter(&db, crate::database_catalog::MASTER)?;
@@ -1123,6 +1140,7 @@ impl Session {
                 values: Vec::new(),
                 parameter_slots: HashMap::new(),
                 transactions: self.transactions,
+                options_mask: self.options_mask(),
                 transaction_doomed: self.transaction_doomed,
                 original_login: &self.original_login,
                 clock: crate::current_time::now(),
@@ -1225,6 +1243,7 @@ impl Session {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: self.transactions,
+            options_mask: self.options_mask(),
             transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
             clock: crate::current_time::now(),
@@ -1916,6 +1935,48 @@ impl Session {
                     }
                     preserve_return_status = false;
                     self.last_error = emit_error(&mut out, &e);
+                    if self.last_error == 3930 && matches!(statement, Statement::Commit { .. }) {
+                        // Captured GUID failure: an uncaught COMMIT rejection
+                        // ends COMMIT, while subsequent reads still see prior
+                        // writes until the doomed-transaction batch epilogue.
+                        had_runtime_error = true;
+                        return_status = self.last_error;
+                        self.rowcount = 0;
+                        last_done = Some(out.len());
+                        tds::done(&mut out, if rpc { 0xff } else { 0xfd }, 2 | more, 213, 0);
+                        continue;
+                    }
+                    if self.last_error == 3902
+                        && !rpc
+                        && matches!(statement, Statement::Commit { .. })
+                    {
+                        tds::done(&mut out, 0xfd, 2, 213, 0);
+                        return (out, false);
+                    }
+                    if self.last_error == 8169 {
+                        self.rowcount = 0;
+                        if matches!(statement, Statement::AlterTable(_)) {
+                            tds::diagnostic_utf16(
+                                &mut out,
+                                tds::DiagnosticKind::Information,
+                                0,
+                                0,
+                                3621,
+                                &"The statement has been terminated."
+                                    .encode_utf16()
+                                    .collect::<Vec<_>>(),
+                            );
+                        }
+                        self.rollback_doomed(&mut out);
+                        tds::done(
+                            &mut out,
+                            if rpc { 0xfe } else { 0xfd },
+                            2,
+                            if rpc { 224 } else { 253 },
+                            0,
+                        );
+                        return (out, false);
+                    }
                     if self.transaction_doomed {
                         self.rollback_doomed(&mut out);
                         tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
@@ -2041,9 +2102,9 @@ impl Session {
             if let Some(offset) = last_done {
                 out[offset + 1] |= 1;
             }
-            self.rollback_doomed(&mut out);
             self.error(&mut out, 3998, "Uncommittable transaction is detected at the end of the batch. The transaction is rolled back.");
-            tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
+            self.rollback_doomed(&mut out);
+            tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 253, 0);
             self.caught_error = None;
             return (out, false);
         }
@@ -2088,7 +2149,9 @@ impl Session {
         // Retain the transaction for CATCH reads and explicit ROLLBACK. The
         // pinned 17.0.4065.4 reference also dooms caught RAISERROR 11/16;
         // informational severity 10 never enters this path.
-        if self.xact_abort && self.transactions > 0 && caught.severity >= 11 {
+        if self.transactions > 0
+            && ((self.xact_abort && caught.severity >= 11) || caught.number == 8169)
+        {
             self.transaction_doomed = true;
         }
         let Some(index) = pending
@@ -2168,10 +2231,14 @@ impl Session {
     }
     pub fn commit_transaction(&mut self) -> Result<Vec<u8>> {
         self.require_committable()?;
-        ensure!(
-            self.transactions > 0,
-            "COMMIT has no corresponding BEGIN TRANSACTION"
-        );
+        if self.transactions == 0 {
+            return Err(SqlError::new(
+                3902,
+                1,
+                "The COMMIT TRANSACTION request has no corresponding BEGIN TRANSACTION.",
+            )
+            .into());
+        }
         let mut out = Vec::new();
         if self.transactions == 1 {
             self.db.execute_batch("COMMIT")?;
@@ -2719,11 +2786,11 @@ impl Session {
                 return Ok(Execution::statement(
                     self.begin_transaction(0, "")?,
                     None,
-                    0,
+                    212,
                 ));
             }
             Statement::Commit { .. } => {
-                return Ok(Execution::statement(self.commit_transaction()?, None, 0));
+                return Ok(Execution::statement(self.commit_transaction()?, None, 213));
             }
             Statement::Rollback { savepoint, .. } => {
                 let name = savepoint.as_ref().map(|id| id.value.as_str()).unwrap_or("");
@@ -2815,6 +2882,7 @@ impl Session {
                 values: vec![],
                 parameter_slots: HashMap::new(),
                 transactions: self.transactions,
+                options_mask: self.options_mask(),
                 transaction_doomed: self.transaction_doomed,
                 original_login: &self.original_login,
                 clock: crate::current_time::now(),
@@ -2948,6 +3016,7 @@ impl Session {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: self.transactions,
+            options_mask: self.options_mask(),
             transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
             clock: crate::current_time::now(),
@@ -3013,6 +3082,15 @@ impl Session {
             return Ok(Execution::statement(vec![], None, 0));
         }
         if let Statement::AlterTable(table) = &statement {
+            crate::guid_assignment::validate_alter(&self.db, table).inspect_err(|error| {
+                if self.transactions > 0
+                    && error
+                        .downcast_ref::<SqlError>()
+                        .is_some_and(|e| e.number == 8169)
+                {
+                    self.transaction_doomed = true;
+                }
+            })?;
             ensure!(
                 translator.values.is_empty(),
                 "unsupported bound values in ALTER TABLE"
@@ -3060,6 +3138,7 @@ impl Session {
                 values: vec![],
                 parameter_slots: HashMap::new(),
                 transactions: self.transactions,
+                options_mask: self.options_mask(),
                 transaction_doomed: self.transaction_doomed,
                 original_login: &self.original_login,
                 clock: crate::current_time::now(),
@@ -3119,6 +3198,39 @@ impl Session {
                 .map(|(plan, _, _)| self.db.prepare(&plan.projection.to_string()))
                 .transpose()?
         };
+        if !is_query && output.is_none() {
+            let checked = match write_command {
+                Some(0xc3) => {
+                    crate::guid_assignment::checked_insert(&self.db, &statement, &translator.values)
+                }
+                Some(0xc5) => {
+                    crate::guid_assignment::checked_update(&self.db, &statement, &translator.values)
+                }
+                _ => Ok(None),
+            };
+            let count = checked.map_err(|error| {
+                let number = error.downcast_ref::<SqlError>().map(|e| e.number);
+                if self.transactions > 0 && number == Some(8169) {
+                    self.transaction_doomed = true;
+                }
+                if matches!(number, Some(8169 | 2628)) {
+                    crate::query_error::attach_context(
+                        error,
+                        vec![],
+                        write_command.expect("checked GUID DML"),
+                    )
+                } else {
+                    error
+                }
+            })?;
+            if let Some(count) = count {
+                return Ok(Execution::statement(
+                    vec![],
+                    Some(count),
+                    write_command.expect("checked GUID DML"),
+                ));
+            }
+        }
         if self.transactions > 0 && !is_query && output.is_none() {
             let checked = match write_command {
                 Some(0xc3) => crate::storage_diagnostic::checked_insert(
@@ -3724,6 +3836,7 @@ impl Session {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: self.transactions,
+            options_mask: self.options_mask(),
             transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
             clock: crate::current_time::now(),
@@ -4225,6 +4338,7 @@ struct Translator<'a> {
     values: Vec<Value>,
     parameter_slots: HashMap<String, usize>,
     transactions: u32,
+    options_mask: i32,
     transaction_doomed: bool,
     original_login: &'a str,
     /// Read once per translated statement for current-time functions.
@@ -5042,6 +5156,12 @@ impl VisitorMut for Translator<'_> {
                         format: None,
                     },
                     "@@TRANCOUNT" => number(self.transactions),
+                    "@@OPTIONS" => Expr::Cast {
+                        kind: CastKind::Cast,
+                        expr: Box::new(number(self.options_mask)),
+                        data_type: DataType::Int(None),
+                        format: None,
+                    },
                     "@@SPID" => Expr::Cast {
                         kind: CastKind::Cast,
                         expr: Box::new(number(self.spid)),
@@ -6165,6 +6285,7 @@ mod tests {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: 0,
+            options_mask: 5496,
             transaction_doomed: false,
             original_login: "sa",
             clock: crate::current_time::now(),

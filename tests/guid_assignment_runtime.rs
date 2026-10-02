@@ -1,0 +1,270 @@
+use msduck::{engine::Session, server::Server};
+const GUID: &str = "00112233-4455-6677-8899-aabbccddeeff";
+
+fn run(session: &mut Session, sql: &str) -> (Vec<u8>, bool) {
+    session.batch_response(sql, &Default::default(), false, None)
+}
+fn ok(session: &mut Session, sql: &str) {
+    let (tokens, success) = run(session, sql);
+    assert!(success, "{sql}: {tokens:?}");
+}
+fn ids(session: &Session) -> Vec<i32> {
+    session
+        .db
+        .prepare("SELECT id FROM dbo.guid_runtime ORDER BY id")
+        .unwrap()
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap()
+}
+
+#[test]
+fn guid_assignment_character_parameters_nulls_and_updates_use_core_rules() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    ok(
+        &mut session,
+        "CREATE TABLE dbo.guid_runtime(id INT,g UNIQUEIDENTIFIER,s VARCHAR(1),u NVARCHAR(3))",
+    );
+    ok(
+        &mut session,
+        &format!(
+            "DECLARE @g NVARCHAR(100)=N'{{{GUID}}}EXTRA'; INSERT dbo.guid_runtime VALUES(1,@g,'x',N'🦆'),(2,NULL,NULL,NULL); UPDATE dbo.guid_runtime SET g='{GUID}EXTRA' WHERE id=1"
+        ),
+    );
+    type StoredRow = (i32, Option<String>, Option<String>, Option<Vec<u8>>);
+    let values: Vec<StoredRow> = session
+        .db
+        .prepare(
+            "SELECT id,CAST(g AS VARCHAR),s,u.__msduck_utf16le FROM dbo.guid_runtime ORDER BY id",
+        )
+        .unwrap()
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(
+        values,
+        vec![
+            (
+                1,
+                Some(GUID.into()),
+                Some("x".into()),
+                Some(vec![0x3e, 0xd8, 0x86, 0xdd])
+            ),
+            (2, None, None, None)
+        ]
+    );
+}
+
+#[test]
+fn malformed_multirow_guid_insert_and_update_have_no_partial_effects() {
+    for write in [
+        format!("INSERT dbo.guid_runtime VALUES(2,'{GUID}'),(3,'bad')"),
+        format!("UPDATE dbo.guid_runtime SET g=CASE WHEN id=1 THEN '{GUID}EXTRA' ELSE 'bad' END"),
+    ] {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        ok(
+            &mut session,
+            &format!(
+                "CREATE TABLE dbo.guid_runtime(id INT,g UNIQUEIDENTIFIER); INSERT dbo.guid_runtime VALUES(1,'{GUID}'),(4,NULL)"
+            ),
+        );
+        assert!(!run(&mut session, &write).1);
+        assert_eq!(session.last_error, 8169, "{write}");
+        assert_eq!(ids(&session), vec![1, 4]);
+        let value: Option<String> = session
+            .db
+            .query_row(
+                "SELECT CAST(g AS VARCHAR) FROM dbo.guid_runtime WHERE id=4",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(value, None, "failed UPDATE must preserve NULL");
+    }
+}
+
+#[test]
+fn uncaught_guid_failure_rolls_back_prior_explicit_writes_with_xact_abort_off() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    ok(
+        &mut session,
+        &format!(
+            "CREATE TABLE dbo.guid_runtime(id INT,g UNIQUEIDENTIFIER); SET XACT_ABORT OFF; BEGIN TRAN; INSERT dbo.guid_runtime VALUES(20,'{GUID}')"
+        ),
+    );
+    assert_eq!(session.transactions, 1);
+    assert!(!run(&mut session, "INSERT dbo.guid_runtime VALUES(21,'bad')").1);
+    assert_eq!(session.last_error, 8169);
+    assert_eq!(session.transactions, 0);
+    assert_eq!(ids(&session), Vec::<i32>::new());
+    assert!(!run(&mut session, "COMMIT").1);
+    assert_eq!(session.last_error, 3902);
+    ok(
+        &mut session,
+        &format!("BEGIN TRAN; INSERT dbo.guid_runtime VALUES(22,'{GUID}EXTRA'); COMMIT"),
+    );
+    assert_eq!(ids(&session), vec![22]);
+}
+
+#[test]
+fn caught_guid_failure_allows_reads_then_rejects_commit_and_rolls_back_at_batch_end() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    ok(
+        &mut session,
+        "CREATE TABLE dbo.guid_runtime(id INT,g UNIQUEIDENTIFIER); SET XACT_ABORT OFF",
+    );
+    let (tokens, success) = run(
+        &mut session,
+        &format!(
+            "BEGIN TRAN; INSERT dbo.guid_runtime VALUES(30,'{GUID}'); BEGIN TRY INSERT dbo.guid_runtime VALUES(31,'bad'); END TRY BEGIN CATCH SELECT ERROR_NUMBER(),ERROR_STATE(),@@TRANCOUNT,XACT_STATE(); END CATCH; IF @@TRANCOUNT>0 COMMIT; SELECT id,g FROM dbo.guid_runtime WHERE id=30"
+        ),
+    );
+    assert!(!success, "{tokens:?}");
+    assert_eq!(
+        session.last_error, 3998,
+        "CATCH and post-COMMIT reads must remain executable: {tokens:?}"
+    );
+    assert_eq!(session.transactions, 0);
+    assert_eq!(ids(&session), Vec::<i32>::new());
+}
+
+#[test]
+fn caught_guid_update_failure_preserves_reads_in_both_assignment_orders() {
+    for assignments in ["n=n+1,g='bad'", "g='bad',n=n+1"] {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        ok(
+            &mut session,
+            &format!(
+                "CREATE TABLE dbo.guid_runtime(id INT,g UNIQUEIDENTIFIER,n INT); INSERT dbo.guid_runtime VALUES(1,'{GUID}',10),(2,NULL,20); SET XACT_ABORT OFF"
+            ),
+        );
+        ok(
+            &mut session,
+            &format!(
+                "BEGIN TRAN; INSERT dbo.guid_runtime VALUES(3,'{GUID}',30); BEGIN TRY UPDATE dbo.guid_runtime SET {assignments}; THROW 51000,'expected conversion failure',1; END TRY BEGIN CATCH IF ERROR_NUMBER()<>8169 OR ERROR_STATE()<>2 THROW 51001,'incorrect conversion error',1; IF @@TRANCOUNT<>1 OR XACT_STATE()<>-1 THROW 51002,'incorrect transaction state',1; IF (SELECT COUNT(*) FROM dbo.guid_runtime)<>3 THROW 51003,'prior writes lost',1; IF EXISTS(SELECT 1 FROM dbo.guid_runtime WHERE n<>id*10) THROW 51004,'partial update',1; ROLLBACK; END CATCH"
+            ),
+        );
+        assert_eq!(ids(&session), vec![1, 2]);
+        assert_eq!(session.transactions, 0);
+        ok(
+            &mut session,
+            &format!("UPDATE dbo.guid_runtime SET n=n+1,g='{GUID}EXTRA'"),
+        );
+        let values: Vec<(i32, String)> = session
+            .db
+            .prepare("SELECT n,CAST(g AS VARCHAR) FROM dbo.guid_runtime ORDER BY id")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<duckdb::Result<_>>()
+            .unwrap();
+        assert_eq!(values, vec![(11, GUID.into()), (21, GUID.into())]);
+    }
+}
+
+#[test]
+fn guid_alter_applies_suffix_rules_and_failed_multirow_change_preserves_storage() {
+    for bad in [false, true] {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        ok(
+            &mut session,
+            &format!(
+                "CREATE TABLE dbo.guid_runtime(id INT,g VARCHAR(100)); INSERT dbo.guid_runtime VALUES(1,'{{{GUID}}}EXTRA'),(2,{})",
+                if bad { "'bad'" } else { "NULL" }
+            ),
+        );
+        let (tokens, success) = run(
+            &mut session,
+            "ALTER TABLE dbo.guid_runtime ALTER COLUMN g UNIQUEIDENTIFIER NULL",
+        );
+        assert_eq!(success, !bad, "{tokens:?}");
+        if bad {
+            assert_eq!(session.last_error, 8169);
+        }
+        let (kind, value): (String, String) = session
+            .db
+            .query_row(
+                "SELECT typeof(g),CAST(g AS VARCHAR) FROM dbo.guid_runtime WHERE id=1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(kind, if bad { "VARCHAR" } else { "UUID" });
+        assert_eq!(
+            value,
+            if bad {
+                format!("{{{GUID}}}EXTRA")
+            } else {
+                GUID.into()
+            }
+        );
+        assert_eq!(ids(&session), vec![1, 2]);
+    }
+}
+
+#[test]
+fn transaction_option_controls_report_the_live_supported_set_mask() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    ok(
+        &mut session,
+        "IF @@OPTIONS<>5496 THROW 51000,'incorrect login mask',1; SET XACT_ABORT ON; SET NOCOUNT ON; SET ANSI_WARNINGS OFF; IF @@OPTIONS<>22384 THROW 51001,'incorrect changed mask',1; SET XACT_ABORT OFF; SET NOCOUNT OFF; SET ANSI_WARNINGS ON; IF @@OPTIONS<>5496 THROW 51002,'incorrect restored mask',1",
+    );
+}
+
+#[test]
+fn checked_guid_write_plans_evaluate_volatile_assignments_once_across_chunks() {
+    use sqlparser::{dialect::DuckDbDialect, parser::Parser};
+    let server = Server::open(":memory:").unwrap();
+    let session = Session::new(server.connection().unwrap()).unwrap();
+    session.db.execute_batch("CREATE TABLE dbo.guid_runtime(id INT,g UUID,n INT); CREATE SEQUENCE guid_insert_calls; CREATE SEQUENCE guid_update_calls").unwrap();
+    let insert=Parser::parse_sql(&DuckDbDialect{}, &format!("INSERT INTO dbo.guid_runtime SELECT i,__msduck_guid_assignment(CASE WHEN nextval('guid_insert_calls')%3=0 THEN NULL ELSE '{GUID}EXTRA' END),0 FROM range(6000) t(i)")).unwrap().remove(0);
+    assert_eq!(
+        msduck::guid_assignment::checked_insert(&session.db, &insert, &[]).unwrap(),
+        Some(6000)
+    );
+    let update=Parser::parse_sql(&DuckDbDialect{}, &format!("UPDATE dbo.guid_runtime SET n=n+1,g=__msduck_guid_assignment(CASE WHEN nextval('guid_update_calls')%5=0 THEN NULL ELSE '{{{GUID}}}EXTRA' END) WHERE id<5000")).unwrap().remove(0);
+    assert_eq!(
+        msduck::guid_assignment::checked_update(&session.db, &update, &[]).unwrap(),
+        Some(5000)
+    );
+    let calls: (i64, i64) = session
+        .db
+        .query_row(
+            "SELECT currval('guid_insert_calls'),currval('guid_update_calls')",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(calls, (6000, 5000));
+    let counts: (i64, i64) = session
+        .db
+        .query_row(
+            "SELECT count(g),CAST(sum(n) AS BIGINT) FROM dbo.guid_runtime WHERE id<5000",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(counts, (4000, 5000));
+    let remaining: i64 = session
+        .db
+        .query_row(
+            "SELECT CAST(sum(n) AS BIGINT) FROM dbo.guid_runtime WHERE id>=5000",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(remaining, 0);
+    let stages:i64=session.db.query_row("SELECT count(*) FROM duckdb_tables() WHERE database_name='temp' AND table_name LIKE '__msduck_checked_guid_assignment_%'",[],|row|row.get(0)).unwrap();
+    assert_eq!(stages, 0);
+}

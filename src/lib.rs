@@ -44,6 +44,7 @@ mod datetimeoffset_cast;
 mod datetimeoffset_compare;
 mod datetimeoffsetfromparts;
 mod declared_columns;
+pub mod guid_assignment;
 mod output_image;
 pub mod output_join;
 mod output_sink;
