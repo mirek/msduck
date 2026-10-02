@@ -8482,7 +8482,7 @@
     {
       "id": "gaps-identifiers-v1",
       "title": "Contextual identifiers and database-qualified errors",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input.",
       "scope": [
         "src/engine/ext/identifiers.rs",
@@ -8593,7 +8593,7 @@
     {
       "id": "gaps-identifiers-v1-dialect",
       "title": "Dialect delegation for contextual identifiers (aliases, prefix words, table versioning)",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-identifiers-v1",
       "scope": [
         "crates/msduck-sql/src/dialect.rs"
@@ -9153,7 +9153,7 @@
     {
       "id": "gaps-identifiers-v1-keys-ratchet",
       "title": "Retire the keys reference differences fixed by contextual identifiers",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01): address every finding of an owner-supplied mssql/tedious workload report against v0.2.4 via parallel claimed tasks, done when a container is published. Umbrella issue #710. No external submission is input. companion of gaps-identifiers-v1",
       "scope": [
         "tests/compat/keys.test.mjs"
