@@ -413,7 +413,7 @@ fn compatible(source: Type, target: Type) -> Result<(), Error> {
     {
         return Ok(());
     }
-    if target == Type::Date && (numeric(source) || matches!(source, Type::Time(_))) {
+    if target == Type::Date && (source == Type::Int || matches!(source, Type::Time(_))) {
         return Err(SqlError::new(
             206,
             2,
@@ -616,7 +616,8 @@ impl Plan {
                 {
                     return Err(Error::Unsupported(Unsupported::UnknownCollation));
                 }
-                true
+                !matches!(c.family(), Family::Char | Family::Nchar)
+                    || units.len() == usize::from(max)
             }
             (Type::Binary(b), Comparable::Binary(bytes)) => {
                 let Length::Bounded(max) = b.length() else {

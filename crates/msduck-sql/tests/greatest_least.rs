@@ -833,6 +833,36 @@ fn unknowns_and_invalid_shapes_remain_explicit_and_no_values_choose_metadata() {
         plan(Function::Greatest, &[a]).unwrap().declaration.flags(),
         None
     );
+    assert!(matches!(
+        plan(
+            Function::Greatest,
+            &[
+                Argument::typed(Type::Float, Some(false)),
+                Argument::typed(Type::Date, Some(false))
+            ]
+        ),
+        Err(Error::Unsupported(Unsupported::UncapturedConversion { .. }))
+    ));
+    let p = plan(
+        Function::Greatest,
+        &[Argument::typed(Type::Float, Some(false))],
+    )
+    .unwrap();
+    assert_eq!(
+        p.select(&[Ok(Comparable::Float(f64::NAN))]),
+        Err(Error::Unsupported(Unsupported::NonFiniteFloat))
+    );
+    let mut fixed = Argument::typed(character(Family::Char, 3), Some(false));
+    fixed.collation = Some(Label::CoercibleDefault(CI.into()));
+    let p = plan(Function::Greatest, &[fixed]).unwrap();
+    assert_eq!(
+        p.select(&[Ok(Comparable::Character {
+            units: vec![97],
+            sort_key: vec![97],
+            collation: CI.into()
+        })]),
+        Err(Error::Unsupported(Unsupported::ComparableShape))
+    );
     let f = fixture();
     for records in runs(&f) {
         for (i, len) in [(195, 9000), (197, 5000)] {
@@ -858,6 +888,163 @@ fn unknowns_and_invalid_shapes_remain_explicit_and_no_values_choose_metadata() {
                 panic!("truncation")
             };
             error_matches(&e, &records[i]["result"]["errors"][0]);
+        }
+    }
+}
+
+#[test]
+fn catalog_rows_aggregates_binary_integer_and_variant_inputs_match_captures() {
+    let f = fixture();
+    for records in runs(&f) {
+        for i in [159, 161, 163, 165, 169, 171, 187] {
+            let record = &records[i];
+            let env = environment(record);
+            let calls = scalar_calls(&parsed(record));
+            let source = if i == 187 {
+                vec![(0, 0, json!(4), json!(3), "", "")]
+            } else if [159, 163, 169, 171].contains(&i) {
+                vec![(1, 2, Json::Null, json!(5), "a", "a")]
+            } else {
+                vec![
+                    (1, 2, Json::Null, json!(5), "a", "a"),
+                    (3, 4, json!(4), Json::Null, "b", "B"),
+                    (5, 6, json!(1), json!(3), "c", "c"),
+                ]
+            };
+            for (row, (nn1, nn2, n1, n2, cs, bin)) in source.into_iter().enumerate() {
+                let values = HashMap::from([
+                    ("nn1".into(), json!(nn1)),
+                    ("nn2".into(), json!(nn2)),
+                    ("n1".into(), n1),
+                    ("n2".into(), n2),
+                    ("cs".into(), json!(cs)),
+                    ("bin".into(), json!(bin)),
+                ]);
+                for (j, c) in calls.iter().enumerate() {
+                    let p = call(c, &env).unwrap();
+                    let raw: Vec<_> = args(c)
+                        .iter()
+                        .map(|e| {
+                            if i == 187
+                                && let Expr::Function(fun) = e
+                            {
+                                raw_value(args(fun)[0], &env, &values)
+                            } else {
+                                raw_value(e, &env, &values)
+                            }
+                        })
+                        .collect();
+                    let keys: Vec<_> = raw.iter().map(|v| Ok(convert(v, &p.declaration))).collect();
+                    let got = p.select(&keys).unwrap().map_or(Json::Null, |n| {
+                        captured_value(keys[n].as_ref().unwrap(), p.declaration.data_type)
+                    });
+                    assert_eq!(
+                        got, record["result"]["sets"][0]["rows"][row][j],
+                        "{} row {row} col {j}",
+                        record["name"]
+                    );
+                }
+            }
+        }
+        for i in [139, 143, 145, 216] {
+            for (j, c) in scalar_calls(&parsed(&records[i])).iter().enumerate() {
+                let env = environment(&records[i]);
+                let p = call(c, &env).unwrap();
+                let keys: Vec<_> = (1..=2)
+                    .map(|n| {
+                        Ok(match i {
+                            143 | 145 => Comparable::Variant {
+                                base_type: Type::Int,
+                                value: Box::new(Comparable::Exact {
+                                    coefficient: n,
+                                    scale: 0,
+                                }),
+                            },
+                            216 => Comparable::Binary(vec![n as u8]),
+                            _ => Comparable::Exact {
+                                coefficient: n,
+                                scale: 0,
+                            },
+                        })
+                    })
+                    .collect();
+                let n = p.select(&keys).unwrap().unwrap();
+                let got = if i == 216 {
+                    json!({"kind":"binary","value":format!("{:02x}",n+1)})
+                } else {
+                    json!(n + 1)
+                };
+                assert_eq!(got, records[i]["result"]["sets"][0]["rows"][0][j]);
+            }
+        }
+        // Caller-supplied exact ticks and converted payloads remain separate.
+        // These text observations retain offsets and legacy datetime widening
+        // which JavaScript Date observations alone cannot express.
+        for (i, keys, payloads) in [
+            (
+                192,
+                vec![8, 9],
+                vec![
+                    "2024-01-01 10:00:00.000 +02:00",
+                    "2024-01-01 09:00:00.000 +00:00",
+                ],
+            ),
+            (
+                194,
+                vec![33333, 20000],
+                vec!["2024-01-01 00:00:00.0033333", "2024-01-01 00:00:00.0020000"],
+            ),
+        ] {
+            for (j, c) in scalar_calls(&parsed(&records[i])).iter().enumerate() {
+                let p = call(c, &HashMap::new()).unwrap();
+                let n = p
+                    .select(
+                        &keys
+                            .iter()
+                            .map(|n| Ok(Comparable::Temporal(*n)))
+                            .collect::<Vec<_>>(),
+                    )
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(
+                    json!(payloads[n]),
+                    records[i]["result"]["sets"][0]["rows"][0][j]
+                );
+            }
+        }
+        for (j, c) in scalar_calls(&parsed(&records[193])).iter().enumerate() {
+            let p = call(c, &HashMap::new()).unwrap();
+            let n = p
+                .select(&[Ok(Comparable::Temporal(8)), Ok(Comparable::Temporal(8))])
+                .unwrap()
+                .unwrap();
+            let payloads = if j == 0 {
+                ["2024-01-01 10:00:00 +02:00", "2024-01-01 08:00:00 +00:00"]
+            } else {
+                ["2024-01-01 08:00:00 +00:00", "2024-01-01 10:00:00 +02:00"]
+            };
+            assert_eq!(
+                json!(payloads[n]),
+                records[193]["result"]["sets"][0]["rows"][0][j]
+            );
+        }
+        for (j, c) in scalar_calls(&parsed(&records[191])).iter().enumerate() {
+            let p = call(c, &HashMap::new()).unwrap();
+            let coefficients = if j == 0 { vec![1, 1, 1] } else { vec![2, -1] };
+            let keys: Vec<_> = coefficients
+                .iter()
+                .map(|n| {
+                    Ok(Comparable::Exact {
+                        coefficient: *n,
+                        scale: 0,
+                    })
+                })
+                .collect();
+            let n = p.select(&keys).unwrap().unwrap();
+            assert_eq!(
+                json!(coefficients[n].to_string()),
+                records[191]["result"]["sets"][0]["rows"][0][j]
+            );
         }
     }
 }
