@@ -73,9 +73,16 @@ Several local resources are already safe to share:
 
 Shared machine state needs discipline:
 
-- Keep temporary files inside the worktree (the ignored `artifacts/`) or in a
-  directory named after the task. Workers on one host often share a scratch or
-  temp directory.
+- Keep temporary files in the git-ignored `.tmp/` directory at your worktree
+  root: run `mkdir -p .tmp && export TMPDIR=$PWD/.tmp` before building or
+  testing. This covers builds, baseline checkouts, logs and captures; durable
+  evidence still goes in the ignored `artifacts/`.
+  - `/tmp` is often a small per-user tmpfs quota shared by every worker, and
+    filling it breaks all sessions on the host.
+  - `.tmp/` lives under the harness root, so harnesses that confine file
+    access to the working directory accept it without extra permissions.
+  - Never use a shared scratch directory. Delete `.tmp/` contents you no
+    longer need.
 - Remove only reference containers whose names you recorded, or that carry your
   `msduck.owner` label. Never remove one by guessing from its start time.
 - Never pass whole captures or fixtures to `node:assert`. A failing assertion on
