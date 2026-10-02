@@ -9085,7 +9085,7 @@
     {
       "id": "gaps-catalog-v2",
       "title": "Constraint, module and file catalogs, OBJECT_DEFINITION, sp_pkeys, sp_fkeys, sp_rename (successor)",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner standing authorization for stale claims; successor of stale gaps-catalog-v1 and catalog-key-identities-v1 (evidence in the registry change), umbrella #710, issue #728.",
       "scope": [
         "src/engine/ext/catalog.rs",
@@ -9135,7 +9135,7 @@
     {
       "id": "gaps-catalog-v2-index",
       "title": "sys.indexes and sys.index_columns read recorded constraint clustering and key order (gaps-catalog-v2)",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner standing authorization for stale claims; successor of stale gaps-catalog-v1 and catalog-key-identities-v1 (evidence in the registry change), umbrella #710, issue #728. companion of gaps-catalog-v2",
       "scope": [
         "src/index_catalog.rs",
@@ -9168,7 +9168,7 @@
     {
       "id": "gaps-catalog-v2-constraints",
       "title": "Unnamed DEFAULT objects and SQL Server's ALTER COLUMN rules for bound constraints (gaps-catalog-v2)",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner standing authorization for stale claims; successor of stale gaps-catalog-v1 and catalog-key-identities-v1 (evidence in the registry change), umbrella #710, issue #728. companion of gaps-catalog-v2",
       "scope": [
         "src/engine/ext/constraints/catalog.rs",
@@ -9330,7 +9330,7 @@
     {
       "id": "gaps-catalog-v2-keys-ratchet",
       "title": "Retire the keys reference difference fixed by recorded key constraints in sys.indexes (gaps-catalog-v2)",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner standing authorization for stale claims; successor of stale gaps-catalog-v1 and catalog-key-identities-v1 (evidence in the registry change), umbrella #710, issue #728. companion of gaps-catalog-v2",
       "scope": [
         "tests/compat/keys.test.mjs"
