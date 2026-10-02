@@ -416,6 +416,45 @@ pub fn checked_update(
     Ok(Some(count))
 }
 
+/// Validate character-to-GUID column changes before DDL effects. SQL Server
+/// ALTER COLUMN uses the existing column as its operand, so this path contains
+/// no caller-supplied volatile USING expression. The enclosing DDL executor
+/// owns transaction atomicity; a rejected conversion remains a typed SQL error.
+pub fn prepare_alter(db: &Connection, table: &mut AlterTable) -> anyhow::Result<()> {
+    for operation in &mut table.operations {
+        let AlterTableOperation::AlterColumn {
+            column_name,
+            op:
+                AlterColumnOperation::SetDataType {
+                    data_type: DataType::Uuid,
+                    using,
+                },
+        } = operation
+        else {
+            continue;
+        };
+        anyhow::ensure!(
+            using.is_none(),
+            "unsupported explicit GUID ALTER USING expression"
+        );
+        let mut statement = db.prepare(&format!(
+            "WITH converted AS MATERIALIZED (SELECT __msduck_guid_assignment_check({column_name}) AS g FROM {}) SELECT g.error FROM converted WHERE g.error IS NOT NULL LIMIT 1", table.name
+        ))?;
+        let mut rows = statement.query([])?;
+        if let Some(row) = rows.next()? {
+            let encoded: String = row.get(0)?;
+            return Err(checked_diagnostic(&encoded)
+                .ok_or_else(|| anyhow::anyhow!("invalid GUID ALTER diagnostic"))?
+                .into());
+        }
+        *using = Some(crate::engine::unary_function(
+            "__msduck_guid_assignment",
+            Expr::Identifier(column_name.clone()),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

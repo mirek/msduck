@@ -134,3 +134,44 @@ fn caught_guid_failure_allows_reads_then_rejects_commit_and_rolls_back_at_batch_
     assert_eq!(session.transactions, 0);
     assert_eq!(ids(&session), Vec::<i32>::new());
 }
+
+#[test]
+fn guid_alter_applies_suffix_rules_and_failed_multirow_change_preserves_storage() {
+    for bad in [false, true] {
+        let server = Server::open(":memory:").unwrap();
+        let mut session = Session::new(server.connection().unwrap()).unwrap();
+        ok(
+            &mut session,
+            &format!(
+                "CREATE TABLE dbo.guid_runtime(id INT,g VARCHAR(100)); INSERT dbo.guid_runtime VALUES(1,'{{{GUID}}}EXTRA'),(2,{})",
+                if bad { "'bad'" } else { "NULL" }
+            ),
+        );
+        let (tokens, success) = run(
+            &mut session,
+            "ALTER TABLE dbo.guid_runtime ALTER COLUMN g UNIQUEIDENTIFIER NULL",
+        );
+        assert_eq!(success, !bad, "{tokens:?}");
+        if bad {
+            assert_eq!(session.last_error, 8169);
+        }
+        let (kind, value): (String, String) = session
+            .db
+            .query_row(
+                "SELECT typeof(g),CAST(g AS VARCHAR) FROM dbo.guid_runtime WHERE id=1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(kind, if bad { "VARCHAR" } else { "UUID" });
+        assert_eq!(
+            value,
+            if bad {
+                format!("{{{GUID}}}EXTRA")
+            } else {
+                GUID.into()
+            }
+        );
+        assert_eq!(ids(&session), vec![1, 2]);
+    }
+}

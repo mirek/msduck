@@ -1917,6 +1917,35 @@ impl Session {
                     }
                     preserve_return_status = false;
                     self.last_error = emit_error(&mut out, &e);
+                    if self.last_error == 3930 && matches!(statement, Statement::Commit { .. }) {
+                        // Captured GUID failure: an uncaught COMMIT rejection
+                        // ends COMMIT, while subsequent reads still see prior
+                        // writes until the doomed-transaction batch epilogue.
+                        had_runtime_error = true;
+                        return_status = self.last_error;
+                        self.rowcount = 0;
+                        last_done = Some(out.len());
+                        tds::done(&mut out, if rpc { 0xff } else { 0xfd }, 2 | more, 213, 0);
+                        continue;
+                    }
+                    if self.last_error == 8169 {
+                        self.rowcount = 0;
+                        if matches!(statement, Statement::AlterTable(_)) {
+                            tds::diagnostic_utf16(
+                                &mut out,
+                                tds::DiagnosticKind::Information,
+                                0,
+                                0,
+                                3621,
+                                &"The statement has been terminated."
+                                    .encode_utf16()
+                                    .collect::<Vec<_>>(),
+                            );
+                        }
+                        self.rollback_doomed(&mut out);
+                        tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 253, 0);
+                        return (out, false);
+                    }
                     if self.transaction_doomed {
                         self.rollback_doomed(&mut out);
                         tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
@@ -2044,7 +2073,7 @@ impl Session {
             }
             self.rollback_doomed(&mut out);
             self.error(&mut out, 3998, "Uncommittable transaction is detected at the end of the batch. The transaction is rolled back.");
-            tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
+            tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 253, 0);
             self.caught_error = None;
             return (out, false);
         }
@@ -3015,7 +3044,17 @@ impl Session {
             crate::truncate::execute(&self.db, truncate, autocommit)?;
             return Ok(Execution::statement(vec![], None, 0));
         }
-        if let Statement::AlterTable(table) = &statement {
+        if let Statement::AlterTable(table) = &mut statement {
+            crate::guid_assignment::prepare_alter(&self.db, table).map_err(|error| {
+                if self.transactions > 0
+                    && error
+                        .downcast_ref::<SqlError>()
+                        .is_some_and(|e| e.number == 8169)
+                {
+                    self.transaction_doomed = true;
+                }
+                error
+            })?;
             ensure!(
                 translator.values.is_empty(),
                 "unsupported bound values in ALTER TABLE"
@@ -3133,14 +3172,19 @@ impl Session {
                 _ => Ok(None),
             };
             let count = checked.map_err(|error| {
-                if self.transactions > 0
-                    && error
-                        .downcast_ref::<SqlError>()
-                        .is_some_and(|e| e.number == 8169)
-                {
+                let number = error.downcast_ref::<SqlError>().map(|e| e.number);
+                if self.transactions > 0 && number == Some(8169) {
                     self.transaction_doomed = true;
                 }
-                error
+                if matches!(number, Some(8169 | 2628)) {
+                    crate::query_error::attach_context(
+                        error,
+                        vec![],
+                        write_command.expect("checked GUID DML"),
+                    )
+                } else {
+                    error
+                }
             })?;
             if let Some(count) = count {
                 return Ok(Execution::statement(
