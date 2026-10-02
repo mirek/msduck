@@ -3,10 +3,11 @@
 import {mkdir} from 'node:fs/promises'
 import {dirname,resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
+import {TYPES} from 'tedious'
 import {canonical} from './lib/compatibility.mjs'
 import {connect,assertSameCapture,refuseExistingFixture,writeNewFixture} from './lib/reference.mjs'
 import {referenceImage,withReferenceContainer} from './lib/reference-container.mjs'
-import {captureBatch} from './capture-order-token.mjs'
+import {captureBatch,captureRpc} from './capture-order-token.mjs'
 
 const guid='00112233-4455-6677-8899-aabbccddeeff'
 export const plan=[
@@ -25,7 +26,7 @@ export const plan=[
  ['multirow malformed update',`UPDATE dbo.guid_assignments SET g=CASE WHEN id=1 THEN '${guid}' ELSE 'bad' END WHERE id IN(1,2)`],
  ['update readback','SELECT id,g FROM dbo.guid_assignments ORDER BY id'],
  ['transaction begin','BEGIN TRANSACTION'],
- ['transaction state after begin','SELECT @@TRANCOUNT AS transaction_count,XACT_STATE() AS transaction_state,SESSIONPROPERTY(\'ANSI_WARNINGS\') AS ansi_warnings'],
+ ['transaction state after begin','SELECT @@TRANCOUNT AS transaction_count,XACT_STATE() AS transaction_state,SESSIONPROPERTY(\'ANSI_WARNINGS\') AS ansi_warnings,@@OPTIONS&16384 AS xact_abort'],
  ['transaction prior write',`INSERT dbo.guid_assignments VALUES(20,'${guid}')`],
  ['transaction state after prior write','SELECT @@TRANCOUNT AS transaction_count,XACT_STATE() AS transaction_state'],
  ['transaction malformed insert',"INSERT dbo.guid_assignments VALUES(21,'bad')"],
@@ -33,6 +34,13 @@ export const plan=[
  ['transaction commit','COMMIT'],
  ['transaction readback','SELECT id,g FROM dbo.guid_assignments ORDER BY id'],
  ['caught conversion transaction',`BEGIN TRANSACTION; INSERT dbo.guid_assignments VALUES(30,'${guid}'); BEGIN TRY INSERT dbo.guid_assignments VALUES(31,'bad'); END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS error_number,ERROR_STATE() AS error_state,ERROR_MESSAGE() AS error_message,@@TRANCOUNT AS transaction_count,XACT_STATE() AS transaction_state; END CATCH; IF @@TRANCOUNT>0 COMMIT; SELECT id,g FROM dbo.guid_assignments WHERE id IN(30,31) ORDER BY id`],
+ ['caught conversion readback','SELECT @@TRANCOUNT AS transaction_count,XACT_STATE() AS transaction_state; SELECT id,g FROM dbo.guid_assignments WHERE id IN(30,31) ORDER BY id'],
+ ['parameter varchar','INSERT dbo.guid_assignments VALUES(40,@g)',{type:'VarChar',value:guid+'EXTRA',length:100}],
+ ['parameter nvarchar','INSERT dbo.guid_assignments VALUES(41,@g)',{type:'NVarChar',value:'{'+guid+'}EXTRA',length:100}],
+ ['parameter guid','INSERT dbo.guid_assignments VALUES(42,@g)',{type:'UniqueIdentifier',value:guid}],
+ ['parameter null','INSERT dbo.guid_assignments VALUES(43,@g)',{type:'NVarChar',value:null,length:100}],
+ ['parameter malformed','INSERT dbo.guid_assignments VALUES(44,@g)',{type:'NVarChar',value:'bad',length:100}],
+ ['parameter readback','SELECT id,g FROM dbo.guid_assignments WHERE id>=40 ORDER BY id'],
  ['alter setup',`CREATE TABLE dbo.guid_alter(id INT PRIMARY KEY,g VARCHAR(100)); INSERT dbo.guid_alter VALUES(1,'{${guid}}EXTRA'),(2,NULL)`],
  ['valid alter','ALTER TABLE dbo.guid_alter ALTER COLUMN g UNIQUEIDENTIFIER NULL'],
  ['alter readback','SELECT id,g FROM dbo.guid_alter ORDER BY id'],
@@ -40,16 +48,26 @@ export const plan=[
  ['invalid alter','ALTER TABLE dbo.guid_alter_bad ALTER COLUMN g UNIQUEIDENTIFIER NULL'],
  ['invalid alter readback','SELECT id,g FROM dbo.guid_alter_bad ORDER BY id'],
 ]
-const failures=new Set(['malformed insert','multirow malformed insert','multirow malformed update','transaction malformed insert','invalid alter'])
+const failures=new Set(['malformed insert','multirow malformed insert','multirow malformed update','transaction malformed insert','transaction commit','caught conversion transaction','parameter malformed','invalid alter'])
+async function parameterCapture(connection,sql,parameter){
+ // Supply typed parameters to the existing full token observer's Request.
+ // The temporary hook belongs to this single sequential connection only.
+ const execSql=connection.execSql
+ connection.execSql=function(request){
+  request.addParameter('g',TYPES[parameter.type],parameter.value,parameter.length?{length:parameter.length}:{})
+  return execSql.call(this,request)
+ }
+ try{return await captureRpc(connection,sql)}finally{connection.execSql=execSql}
+}
 async function run(){
  return withReferenceContainer(async(config,metadata)=>{
   assertSameCapture(metadata.image,referenceImage,'pinned image')
   const connection=await connect(config)
   try{
    const records=[]
-   for(const [name,sql] of plan){
-    const result=canonical(await captureBatch(connection,sql))
-    records.push({name,sql,result})
+   for(const [name,sql,parameter] of plan){
+    const result=canonical(await (parameter?parameterCapture(connection,sql,parameter):captureBatch(connection,sql)))
+    records.push({name,sql,...(parameter?{parameter}:{}),result})
    }
    return records
   }finally{connection.close()}
