@@ -9182,6 +9182,33 @@
       "dependencies": [],
       "issue": 728,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PdQvA"
+    },
+    {
+      "id": "guid-storage-assignment-v1",
+      "title": "Apply captured SQL Server GUID character conversion to storage assignments",
+      "state": "ready",
+      "authorization": "Direct owner continuing goal in this session (2026-10-02): implement a fully functional SQL Server-compatible Rust server backed by DuckDB. Owner-approved main2f88e888a5f444a6c3ed798b22ee54e3591d23b1 docs/guid-conversion-order.md says root execution still needs existing core GUID character conversion; src/assignment.rs leaves GUID storage targets on native casts. This is first-party gap evidence, not external content. Old catalog claims are blocked with a claimed successor; this task excludes those scopes and engine.rs.",
+      "scope": [
+        "src/assignment.rs",
+        "src/guid_assignment.rs",
+        "src/lib.rs",
+        "tests/guid_assignment.rs",
+        "tests/guid_assignment.test.mjs",
+        "scripts/capture-guid-assignment.mjs",
+        "reference/guid-assignment.json",
+        "docs/guid-assignment.md"
+      ],
+      "dependencies": [
+        "guid-character-conversion-core-v1"
+      ],
+      "acceptance": [
+        "Capture GUID-target INSERT/UPDATE/ALTER assignment semantics twice in fresh pinned SQL Server instances, retaining exact rows, metadata, errors and transaction continuation; reuse the completed owner character-conversion core references. Include valid canonical/braced/suffixed character inputs, malformed/NULL inputs, typed GUID passthrough, parameters and failed multirow assignment atomicity. Uncaptured source-type contexts stay explicitly unsupported or unknown, not guessed.",
+        "Integrate existing deterministic core GUID character parsing into root storage assignments with registration through src/lib.rs and lowering through src/assignment.rs only; no engine.rs/catalog/other-worker file changes. Keep inputs bound, native UUID layout correct, result declarations fixed independently of values, UTF-16 units preserved, and operand evaluation single. Separate deterministic conversion from the DuckDB adapter.",
+        "Focused Rust and tedious tests compare captured observations for INSERT/UPDATE/ALTER targets, NULL/malformed values, rollback/restart and multirow failures. Preserve raw captures rather than normalize errors/descriptors/transaction effects. Explicit scalar CAST/TRY_CONVERT and ordering integration remain separate gaps if not reached through the assignment API.",
+        "Run current-revision AGENTS.md formatting, workspace Rust tests, strict1.95 Clippy, all-targets build, independent clients and local diagnostic audit. Open focused PR with exact evidence, complete verified Codex review or recorded authorized fallback, address findings, merge under required gates, and promptly complete issue/project/registry."
+      ],
+      "issue": 771,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PhMXx"
     }
   ]
 }
