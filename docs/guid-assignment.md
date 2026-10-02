@@ -56,47 +56,64 @@ exposed the rollback and uncommittable-transaction controls. No successful
 transaction continuation is claimed for those requests. The final fixture
 preserves the complete observations without normalizing them.
 
-## Runtime integration remains pending
+## Runtime assignment integration
 
-The existing core parser in `msduck-core::types::uniqueidentifier` provides
-deterministic character conversion and mixed-endian GUID bytes.
-`src/guid_assignment.rs` now provides an explicitly registered native adapter
-for character/Unicode conversion, NULL and UUID passthrough. It emits canonical
-text from the core's mixed-endian bytes and lets DuckDB own UUID slot layout.
-Seven native regressions cover byte layout, raw UTF-16 suffixes, single
-evaluation across 6,000 rows, native diagnostic translation and checked
-conversion without poisoning native transaction reads.
-`guid_assignment::diagnostic` recognizes only this adapter's canonical marked
-DuckDB error envelope and returns the core error identity (8169/state 2/severity
-16). Application text, unrelated backend errors, malformed carriers and appended
-error text are not reclassified. Root assignment still needs wiring, diagnostics
-and the captured transaction effects. These native tests do not establish server
-assignment support.
+The deterministic parser in `msduck-core::types::uniqueidentifier` supplies
+character conversion and mixed-endian GUID bytes. The root
+`src/guid_assignment.rs` adapter emits canonical text from those bytes and
+lets DuckDB own native UUID slot layout. Registration now runs through
+`src/scalar.rs`; `src/assignment.rs` recognizes UUID storage targets.
 
-For DML, use `__msduck_guid_assignment_check(input)` and materialize its result
-once. It returns fixed VARCHAR fields `value` (canonical GUID text or NULL) and
-`error` (marked conversion diagnostic or NULL). UUID passthrough and supported
-typed NULL inputs retain those same fields. The shell must inspect every error
-before changing target rows; an error's NULL value is not a successful NULL
-assignment. Decode a known adapter error cell with
-`guid_assignment::checked_diagnostic`, then cast error-free values to native UUID
-when applying the staged mutation. Reusing materialized values and diagnostics
-avoids evaluating volatile operands again.
+GUID-containing ordinary INSERT and unjoined UPDATE plans materialize all
+operands once before mutation. `__msduck_guid_assignment_check(input)` returns
+fixed VARCHAR fields `value` (canonical GUID text or NULL) and `error` (marked
+conversion diagnostic or NULL). The shell checks every error before changing
+rows, then casts successful values to native UUID. An error's NULL value is
+never accepted as a successful NULL assignment. Mixed character targets use
+the existing checked storage adapters within the same stage.
 
-The checked adapter treats expected character conversion failures as data;
-malformed physical carriers and unsupported source types remain explicit native
-failures. Prior transaction writes stay readable after checked conversion, and
-the shell owns SQL Server's logical uncommittable state, commit rejection and
-batch-end rollback. The throwing macro remains available but is insufficient
-for captured DML transaction fidelity. The native checked tests prove this
-mechanism; they do not implement or claim the shell lifecycle.
+Expected malformed character conversion is returned as data, preserving the
+native transaction for reads. The session owns logical transaction dooming,
+commit rejection and rollback. With XACT_ABORT OFF, the captured uncaught8169
+failure rolls back prior explicit writes. CATCH observes1/-1 transaction state;
+COMMIT fails with3930 but subsequent reads still see prior writes, followed by
+batch-end3998 and rollback. The supported live SET state supplies@@OPTIONS
+for the XACT_ABORT capture controls; extension translators receive that same
+explicit snapshot.
 
-Source inspection found native scalar registration in `src/scalar.rs`, rather
-than `src/lib.rs`. Error translation and transaction lifecycle are owned by the
-engine shell. The current task does not authorize editing those files; any
-necessary registration companion must be exclusively claimed, and integration
-with the owner's separately reserved `engine.rs` must be coordinated before
-edits. Backlog issue #773 / `guid-assignment-shell-integration-v1` records that
-coordination and reserves no files. Scalar CAST/TRY_CONVERT, GUID ordering and
-uncaptured source types remain
-separate compatibility gaps.
+ALTER COLUMN checks the current column's conversion before DDL effects and
+applies successful UUID conversion inside the existing validated, atomic ALTER
+executor. The ALTER operand is the existing column, with no caller-supplied
+volatile USING expression. Native malformed carriers and uncaptured source
+types remain explicit adapter failures rather than invented8169 conversions.
+`guid_assignment::diagnostic` accepts only the adapter's exact marked native
+error envelope; checked error-cell decoding is restricted to producing plans
+controlled by this adapter. Unrelated messages retain their own identities.
+
+At revision7dfeee89115d2c4264e1c98c1ceef9f3150e3001, seven runtime tests passed,
+covering suffixes, typed Unicode parameters/NULLs, mixed character targets,
+failed multirow INSERT/UPDATE atomicity, uncaught rollback, CATCH reads,
+ALTER source preservation, live SET masks and single evaluation across6000
+rows. Nine existing storage tests, four transaction tests and seven native
+GUID tests also passed. Strict Clippy then reported a manual-inspect style
+finding; subsequent fixes use `inspect_err` and name the runtime test row type
+rather than suppressing strict Clippy findings.
+Current-head complete replay, independent client comparison, full workspace,
+client suite and diagnostic audit are still required before merge.
+
+The independent GUID client regression compares captured assignment rows,
+errors, information messages and transaction effects. The complete local
+replay separately retains all raw descriptors, token events and completion
+fields; those differences must not be normalized or presented as a full wire
+compatibility pass. ProductVersion reports the emulated server version rather
+than the reference installation's build version.
+
+Checked mutation currently covers ordinary INSERT SELECT and unjoined UPDATE
+without OUTPUT and with an unshadowed physical row ID. Joined/CTE/OUTPUT write
+paths need further integration; the checked transaction contract is not claimed
+for those paths. Scalar CAST/TRY_CONVERT, GUID ordering and uncaptured source
+types remain separate compatibility work. Claims771/777 and bounded
+companions779/780 authorize the root integration in PR772. The earlier
+backlog773 and stale scalar reservation35 were superseded under explicit
+owner authorization. Restore the deferred, unclaimed identity ALTER preflight
+reservation321 after companion780 completes.

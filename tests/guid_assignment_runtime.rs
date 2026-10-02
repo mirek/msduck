@@ -33,7 +33,8 @@ fn guid_assignment_character_parameters_nulls_and_updates_use_core_rules() {
             "DECLARE @g NVARCHAR(100)=N'{{{GUID}}}EXTRA'; INSERT dbo.guid_runtime VALUES(1,@g,'x',N'🦆'),(2,NULL,NULL,NULL); UPDATE dbo.guid_runtime SET g='{GUID}EXTRA' WHERE id=1"
         ),
     );
-    let values: Vec<(i32, Option<String>, Option<String>, Option<Vec<u8>>)> = session
+    type StoredRow = (i32, Option<String>, Option<String>, Option<Vec<u8>>);
+    let values: Vec<StoredRow> = session
         .db
         .prepare(
             "SELECT id,CAST(g AS VARCHAR),s,u.__msduck_utf16le FROM dbo.guid_runtime ORDER BY id",
