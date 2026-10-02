@@ -394,6 +394,22 @@ impl Drop for Session {
     }
 }
 impl Session {
+    /// Current supported SET state. All remaining bits are fixed login options
+    /// because session_setting explicitly refuses changes to those options.
+    fn options_mask(&self) -> i32 {
+        let options = self.session_options();
+        1024 // ANSI_NULL_DFLT_ON, established at login
+            | if options.ansi_warnings { 8 } else { 0 }
+            | if options.ansi_padding { 16 } else { 0 }
+            | if options.ansi_nulls { 32 } else { 0 }
+            | if options.arithabort { 64 } else { 0 }
+            | if options.quoted_identifier { 256 } else { 0 }
+            | if self.nocount { 512 } else { 0 }
+            | if options.concat_null_yields_null { 4096 } else { 0 }
+            | if options.numeric_roundabort { 8192 } else { 0 }
+            | if self.xact_abort { 16384 } else { 0 }
+    }
+
     pub fn new(connection: crate::server::Connection) -> Result<Self> {
         let (db, diagnostics, databases, sessions) = connection.into_parts();
         let database = databases.enter(&db, crate::database_catalog::MASTER)?;
@@ -1124,6 +1140,7 @@ impl Session {
                 values: Vec::new(),
                 parameter_slots: HashMap::new(),
                 transactions: self.transactions,
+                options_mask: self.options_mask(),
                 transaction_doomed: self.transaction_doomed,
                 original_login: &self.original_login,
                 clock: crate::current_time::now(),
@@ -1226,6 +1243,7 @@ impl Session {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: self.transactions,
+            options_mask: self.options_mask(),
             transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
             clock: crate::current_time::now(),
@@ -2847,6 +2865,7 @@ impl Session {
                 values: vec![],
                 parameter_slots: HashMap::new(),
                 transactions: self.transactions,
+                options_mask: self.options_mask(),
                 transaction_doomed: self.transaction_doomed,
                 original_login: &self.original_login,
                 clock: crate::current_time::now(),
@@ -2980,6 +2999,7 @@ impl Session {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: self.transactions,
+            options_mask: self.options_mask(),
             transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
             clock: crate::current_time::now(),
@@ -3102,6 +3122,7 @@ impl Session {
                 values: vec![],
                 parameter_slots: HashMap::new(),
                 transactions: self.transactions,
+                options_mask: self.options_mask(),
                 transaction_doomed: self.transaction_doomed,
                 original_login: &self.original_login,
                 clock: crate::current_time::now(),
@@ -3799,6 +3820,7 @@ impl Session {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: self.transactions,
+            options_mask: self.options_mask(),
             transaction_doomed: self.transaction_doomed,
             original_login: &self.original_login,
             clock: crate::current_time::now(),
@@ -4300,6 +4322,7 @@ struct Translator<'a> {
     values: Vec<Value>,
     parameter_slots: HashMap<String, usize>,
     transactions: u32,
+    options_mask: i32,
     transaction_doomed: bool,
     original_login: &'a str,
     /// Read once per translated statement for current-time functions.
@@ -5117,6 +5140,12 @@ impl VisitorMut for Translator<'_> {
                         format: None,
                     },
                     "@@TRANCOUNT" => number(self.transactions),
+                    "@@OPTIONS" => Expr::Cast {
+                        kind: CastKind::Cast,
+                        expr: Box::new(number(self.options_mask)),
+                        data_type: DataType::Int(None),
+                        format: None,
+                    },
                     "@@SPID" => Expr::Cast {
                         kind: CastKind::Cast,
                         expr: Box::new(number(self.spid)),
@@ -6240,6 +6269,7 @@ mod tests {
             values: vec![],
             parameter_slots: HashMap::new(),
             transactions: 0,
+            options_mask: 5496,
             transaction_doomed: false,
             original_login: "sa",
             clock: crate::current_time::now(),

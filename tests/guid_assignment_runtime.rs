@@ -175,3 +175,13 @@ fn guid_alter_applies_suffix_rules_and_failed_multirow_change_preserves_storage(
         assert_eq!(ids(&session), vec![1, 2]);
     }
 }
+
+#[test]
+fn transaction_option_controls_report_the_live_supported_set_mask() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    ok(
+        &mut session,
+        "IF @@OPTIONS<>5496 THROW 51000,'incorrect login mask',1; SET XACT_ABORT ON; SET NOCOUNT ON; SET ANSI_WARNINGS OFF; IF @@OPTIONS<>22384 THROW 51001,'incorrect changed mask',1; SET XACT_ABORT OFF; SET NOCOUNT OFF; SET ANSI_WARNINGS ON; IF @@OPTIONS<>5496 THROW 51002,'incorrect restored mask',1",
+    );
+}
