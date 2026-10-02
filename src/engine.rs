@@ -3064,8 +3064,8 @@ impl Session {
             crate::truncate::execute(&self.db, truncate, autocommit)?;
             return Ok(Execution::statement(vec![], None, 0));
         }
-        if let Statement::AlterTable(table) = &mut statement {
-            crate::guid_assignment::prepare_alter(&self.db, table).map_err(|error| {
+        if let Statement::AlterTable(table) = &statement {
+            crate::guid_assignment::validate_alter(&self.db, table).map_err(|error| {
                 if self.transactions > 0
                     && error
                         .downcast_ref::<SqlError>()

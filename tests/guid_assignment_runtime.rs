@@ -214,7 +214,7 @@ fn checked_guid_write_plans_evaluate_volatile_assignments_once_across_chunks() {
     let counts: (i64, i64) = session
         .db
         .query_row(
-            "SELECT count(g),sum(n) FROM dbo.guid_runtime WHERE id<5000",
+            "SELECT count(g),CAST(sum(n) AS BIGINT) FROM dbo.guid_runtime WHERE id<5000",
             [],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
@@ -223,7 +223,7 @@ fn checked_guid_write_plans_evaluate_volatile_assignments_once_across_chunks() {
     let remaining: i64 = session
         .db
         .query_row(
-            "SELECT sum(n) FROM dbo.guid_runtime WHERE id>=5000",
+            "SELECT CAST(sum(n) AS BIGINT) FROM dbo.guid_runtime WHERE id>=5000",
             [],
             |row| row.get(0),
         )

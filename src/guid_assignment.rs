@@ -420,8 +420,9 @@ pub fn checked_update(
 /// ALTER COLUMN uses the existing column as its operand, so this path contains
 /// no caller-supplied volatile USING expression. The enclosing DDL executor
 /// owns transaction atomicity; a rejected conversion remains a typed SQL error.
-pub fn prepare_alter(db: &Connection, table: &mut AlterTable) -> anyhow::Result<()> {
-    for operation in &mut table.operations {
+pub fn validate_alter(db: &Connection, table: &AlterTable) -> anyhow::Result<()> {
+    crate::table_alter::validate(table)?;
+    for operation in &table.operations {
         let AlterTableOperation::AlterColumn {
             column_name,
             op:
@@ -448,10 +449,6 @@ pub fn prepare_alter(db: &Connection, table: &mut AlterTable) -> anyhow::Result<
                 .ok_or_else(|| anyhow::anyhow!("invalid GUID ALTER diagnostic"))?
                 .into());
         }
-        *using = Some(crate::engine::unary_function(
-            "__msduck_guid_assignment",
-            Expr::Identifier(column_name.clone()),
-        ));
     }
     Ok(())
 }

@@ -152,7 +152,8 @@ pub fn execute_declared(
             AlterTableOperation::AlterColumn { column_name, op } => {
                 let mut operation = operation.clone();
                 if let AlterColumnOperation::SetDataType { data_type, .. } = op
-                    && (crate::engine::integral_type(data_type)
+                    && (matches!(data_type, DataType::Uuid)
+                        || crate::engine::integral_type(data_type)
                         || crate::datetime2_cast::storage_scale(data_type).is_some()
                         || crate::datetimeoffset_cast::storage_scale(data_type).is_some()
                         || crate::variant_pack::is_storage(data_type))
