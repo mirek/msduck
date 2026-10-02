@@ -9431,6 +9431,31 @@
         "Verify the complete raw session replay against two agreeing retained reference runs, focused clients and required current-head full Rust/client/audit checks under existing Linux lock. Same PR786; owner-run independent review, required CI, merge and prompt completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjWdV"
+    },
+    {
+      "id": "session-control-logical-shell-v1",
+      "title": "Preserve session function logical metadata before root lowering",
+      "state": "backlog",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal; first-party exact5088aa2/ed16439 raw replay and inspected root source identify remaining descriptor provenance loss after session-function substitution. Backlog only, no engine reservation; no external intake.",
+      "scope": [
+        "src/engine.rs",
+        "src/engine/session_context.rs",
+        "tests/session_property_context.rs",
+        "tests/session_property_context.test.mjs",
+        "docs/session-control-runtime.md"
+      ],
+      "issue": 788,
+      "dependencies": [
+        "session-control-declarations-core-v1",
+        "session-control-projection-properties-v1",
+        "session-control-client-ratchet-v1"
+      ],
+      "acceptance": [
+        "Preserve SESSIONPROPERTY and captured INT-cast logical metadata from original AST before root session substitution. Keep computed/nullable declarations independent of option state, argument or parameter values, empty rows and volatile execution. Retain effectful session evaluation exactly once and existing error/binding precedence. Source acquisition remains root-side; no hidden effects in deterministic crates.",
+        "Replay both matching retained session-property-context and GUID references completely, including direct/cased/parenthesized/session-property casts, argument variable/parameter/NULL shapes, empty/derived/CTE results and transaction controls. Correct only proven flags1-to33 paths, retain raw remaining rows/metadata/errors/tokens/ORDER gaps and ordinary variant/SESSION_CONTEXT distinctions; remove corresponding known client flag patches only when whole records actually match.",
+        "Activate through protected registry only after dependencies are done and remaining ready scopes are disjoint; exclusive new claim, own worktree/receipt, owner-authored PR, exact-head required fmt/Clippy/workspace/alltargets/client/audit checks under shared Linux lock, verified review or authorized availability fallback, merge and prompt registry/project/issue completion. Backlog does not reserve engine.rs from the owner."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjXcP"
     }
   ]
 }
