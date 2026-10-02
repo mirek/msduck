@@ -9209,6 +9209,30 @@
       ],
       "issue": 771,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PhMXx"
+    },
+    {
+      "id": "guid-assignment-shell-integration-v1",
+      "title": "Wire GUID assignment registration and captured transaction diagnostics",
+      "state": "backlog",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal in this session (2026-10-02), first-party source and two owner-run GUID assignment captures in PR772. Backlog only, no reservation or authorization to edit the owner's separate engine.rs work or live unicode-trim-v1 scalar.rs scope.",
+      "issue": 773,
+      "scope": [
+        "src/scalar.rs",
+        "src/engine.rs",
+        "tests/guid_assignment_runtime.rs",
+        "tests/guid_assignment_runtime.test.mjs"
+      ],
+      "dependencies": [
+        "guid-character-conversion-core-v1",
+        "unicode-trim-v1"
+      ],
+      "acceptance": [
+        "Backlog reserves no files. Publish ready only after current owners complete or explicit owner-authorized stopped-worker handoffs, then exclusively claim. Coordinate root assignment lowering with task771 and its owner; never adopt receipts or edit its scopes.",
+        "Register the native adapter from owner PR772 on root connections, translate malformed character GUID conversion to exact8169/state2/severity16, and implement the captured transaction lifecycle with explicit shell state. XACT_ABORT OFF malformed assignment rolls back prior writes; TRY/CATCH observes uncommittable1/-1 state followed by3930/3998 on attempted COMMIT and batch-end rollback. Preserve capture distinctions rather than guess behavior from native UDF exceptions.",
+        "Replay reference/guid-assignment.json two agreeing36-request fresh pinned captures (SHAc02022f008d61b11e550e5d17a3f13db55c4fa7836ff6fec00ce6534ef6bed77), including exact errors, typed parameters, multirow/ALTER atomicity, raw descriptors and token event/completion order. Add integration Rust/tedious coverage and retain unsupported/uncaptured source contexts explicitly.",
+        "Run exact-head AGENTS.md workspace fmt/tests/strictClippy/alltargets build, independent clients and semantic audit; requiredCI and verified review or authorized availability fallback; claiming worker owns merge and prompt registry/project/issue completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PhQwy"
     }
   ]
 }
