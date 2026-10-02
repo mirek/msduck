@@ -311,7 +311,7 @@
     {
       "id": "unicode-trim-v1",
       "title": "Preserve UTF16 carriers through trim consumers",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner full compatibility goal; first-party recursive concatenation failures expose unsupported carrier trim consumers.",
       "scope": [
         "src/unicode_trim.rs",
@@ -9213,7 +9213,7 @@
     {
       "id": "guid-assignment-shell-integration-v1",
       "title": "Wire GUID assignment registration and captured transaction diagnostics",
-      "state": "backlog",
+      "state": "blocked",
       "authorization": "Direct owner continuing full SQL Server compatibility goal in this session (2026-10-02), first-party source and two owner-run GUID assignment captures in PR772. Backlog only, no reservation or authorization to edit the owner's separate engine.rs work or live unicode-trim-v1 scalar.rs scope.",
       "issue": 773,
       "scope": [
@@ -9250,6 +9250,47 @@
       "dependencies": [],
       "issue": 774,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pi_kV"
+    },
+    {
+      "id": "unresponsive-worker-recovery-v1",
+      "title": "Allow authorized successor claims for unresponsive workers",
+      "state": "ready",
+      "authorization": "Direct owner instruction in this session: \"just claim it, put in instructions that if worker is not responsive, just take over, don't halt the whole factory\". Owner explicitly authorizes successor recovery without a further stopped-worker confirmation; retains permanent claims and verified owner-only intake.",
+      "scope": [
+        ".agents/skills/contribute/SKILL.md",
+        "docs/parallel-collaboration.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Document standing owner authorization to recover demonstrably unresponsive workers without another owner approval, preserving immutable old claims, atomic registry revocation and new exclusive claims.",
+        "Require displaced workers to verify and stop, retain evidence and coordinate attributable local/remote jobs; keep unrelated work moving. Preserve owner-only trust and exact-head merge gates.",
+        "Keep portable skill format and worker merge ownership consistent; validate documentation and skill format, open focused PR and complete required checks/review or authorized fallback."
+      ],
+      "issue": 776,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjACN"
+    },
+    {
+      "id": "guid-assignment-shell-integration-v2",
+      "title": "Wire GUID assignment registration and captured transaction diagnostics",
+      "state": "ready",
+      "authorization": "Direct owner instruction in this session: \"just claim it, put in instructions that if worker is not responsive, just take over, don't halt the whole factory\". Owner explicitly authorizes successor recovery without a further stopped-worker confirmation; retains permanent claims and verified owner-only intake.",
+      "scope": [
+        "src/scalar.rs",
+        "src/engine.rs",
+        "tests/guid_assignment_runtime.rs",
+        "tests/guid_assignment_runtime.test.mjs"
+      ],
+      "dependencies": [
+        "guid-character-conversion-core-v1"
+      ],
+      "acceptance": [
+        "Supersedes backlog task guid-assignment-shell-integration-v1 (#773) and the old unicode-trim-v1 scalar registration reservation under explicit owner takeover authorization. Acquire a fresh exclusive claim, retain original evidence, and coordinate with guid-storage-assignment-v1. Work only in declared scope.",
+        "Register the native adapter from owner PR772 on root connections, translate malformed character GUID conversion to exact8169/state2/severity16, and implement the captured transaction lifecycle with explicit shell state. XACT_ABORT OFF malformed assignment rolls back prior writes; TRY/CATCH observes uncommittable1/-1 state followed by3930/3998 on attempted COMMIT and batch-end rollback. Preserve capture distinctions rather than guess behavior from native UDF exceptions.",
+        "Replay reference/guid-assignment.json two agreeing36-request fresh pinned captures (SHAc02022f008d61b11e550e5d17a3f13db55c4fa7836ff6fec00ce6534ef6bed77), including exact errors, typed parameters, multirow/ALTER atomicity, raw descriptors and token event/completion order. Add integration Rust/tedious coverage and retain unsupported/uncaptured source contexts explicitly.",
+        "Run exact-head AGENTS.md workspace fmt/tests/strictClippy/alltargets build, independent clients and semantic audit; requiredCI and verified review or authorized availability fallback; claiming worker owns merge and prompt registry/project/issue completion."
+      ],
+      "issue": 777,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjACl"
     }
   ]
 }
