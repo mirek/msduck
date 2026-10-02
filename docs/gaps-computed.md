@@ -186,7 +186,8 @@ that uses them sees the session that queries or inserts.
     flags 1 instead of 33).
   - `INFORMATION_SCHEMA.COLUMNS.COLUMN_DEFAULT` shows the backend expression,
     as for other lowered defaults.
-  - `sys.computed_columns` and `sys.default_constraints` are not implemented.
+  - `sys.computed_columns` and `sys.default_constraints` now exist; see
+    [catalogs](gaps-catalog.md).
   - Descriptor differences of `sys.columns` itself are outside this task.
 - **Unpaired surrogates.** Unicode computed values are stored as UTF-8, so an
   unpaired surrogate becomes U+FFFD.
@@ -195,15 +196,8 @@ that uses them sees the session that queries or inserts.
     add generated columns.
   - `PERSISTED NOT NULL` is reported as nullable.
   - Non-persisted non-deterministic expressions are refused.
-- **General Unicode gaps in plain queries.** These affect every stored
-  `nvarchar`/`nchar` column and are not specific to computed columns:
-  - Comparing a column with a literal (`WHERE name = N'x'`) fails with a
-    conversion error.
-  - Concatenating a column (`name + N'!'`) stringifies the UTF-16 carrier.
-  - `CONVERT(nvarchar(n), expr)` stringifies a carrier-valued operand. The
-    operand can be a column, `JSON_VALUE`, `LEFT` or a `datetime2` value.
-  - Styled `CONVERT` of `datetime2` and binary values is not supported.
-  - `CONVERT(nvarchar, bit)` returns `true`/`false` instead of `1`/`0`. This
-    also applies to a `bit` session context value in a converting DEFAULT.
-
-  Computed columns avoid the first three through the layout described above.
+- **General Unicode gaps in plain queries** (comparisons with literals,
+  concatenation and CONVERT over nvarchar columns, styled CONVERT, and bit to
+  text) were fixed by later work. See
+  [Unicode predicates](gaps-unicode-predicates.md) and
+  [conversions](gaps-conversion.md).

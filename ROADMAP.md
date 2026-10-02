@@ -54,7 +54,9 @@ by the initial smoke tests.
 - Compound SELECT variable assignments with typed conversion and empty-result
   preservation; dependent evaluation order and full operand typing remain unfinished.
 - Prepared ordinary/compound SELECT assignments to RPC inputs, validated without
-  execution and rebound per invocation; application OUTPUT parameters remain unfinished.
+  execution and rebound per invocation; application OUTPUT parameters now work
+  through sp_executesql, sp_prepexec, sp_execute and RPC procedure calls
+  ([RPC procedures](docs/gaps-rpc-procedures.md)).
 - Prepared scalar DECLARE/SET batches with nonexecuting initializer validation
   and fresh local scope; prepared DDL remains unfinished.
 - Prepared IF/WHILE/block/TRY-CATCH traversal, loop control, RETURN/THROW/PRINT
@@ -66,7 +68,8 @@ by the initial smoke tests.
   searched CASE, rejecting scalar BIT/numeric coercion; specialized contexts
   and complete scalar/predicate operand rules remain unfinished.
 - CREATE TABLE CHECK predicate validation, UNKNOWN acceptance and error 547
-  with atomic failed writes; ALTER/trust/catalog and full constraint semantics remain unfinished.
+  with atomic failed writes. ALTER TABLE constraint lifecycle, trust and catalogs now
+  exist ([constraints](docs/gaps-constraints.md)); full constraint semantics remain unfinished.
 - IIF-to-CASE lowering, predicate and NULL-constant validation, and ten-level
   CASE/IIF nesting; complete result coercion and evaluation semantics remain unfinished.
 - CASE/IIF known integer/character result precedence using declared/cast/literal
@@ -228,15 +231,18 @@ by the initial smoke tests.
 - FLOAT precision buckets and REAL widths across casts, declarations, storage
   and ALTER COLUMN; full floating-point range/formatting semantics remain unfinished.
 - Integer INSERT target conversion for VALUES/SELECT/CTE sources, defaults,
-  prepared inputs and atomic failures; full source-type inference and MERGE conversions remain unfinished.
+  prepared inputs and atomic failures; full source-type inference and complete MERGE
+  conversion fidelity remain unfinished.
 - Integer UPDATE assignment conversion, defaults, CTE completion and atomic
-  failure checks; full target resolution and MERGE remain unfinished.
+  failure checks; full target resolution and complete MERGE conversion fidelity remain unfinished.
 - Compound UPDATE arithmetic, bitwise and known-string assignments with catalog
   target typing; full operand inference and numeric promotion remain unfinished.
 - UPDATE target aliases in flat INNER/CROSS FROM join trees with preserved
-  predicates; outer/lateral trees and updatable view/CTE targets remain unfinished.
+  predicates. Outer and lateral trees now work ([outer-join DML](docs/gaps-outer_dml.md));
+  updatable view/CTE targets remain unfinished.
 - MERGE parse-time terminator and match-family action validation, including
-  CTE-prefixed statements, nested blocks and preparation; execution remains pending.
+  CTE-prefixed statements, nested blocks and preparation. MERGE now executes
+  ([MERGE](docs/gaps-merge.md)); preparing it with sp_prepare remains unfinished.
 - DELETE optional/two-FROM syntax, flat INNER/CROSS target aliases and CTE
   completion counts; TOP and writable CTE/view targets remain unfinished.
 - OUTPUT native inserted/deleted images, typed OUTPUT INTO destinations and
@@ -264,9 +270,17 @@ for concrete evidence and observed failures.
 2. Complete typed SQL semantics: catalog of declarations, exact character and
    numeric widths, nullability, conversion/precedence, collation/padding,
    aggregates, arithmetic, dates/timezone, GUIDs, money, XML and variant.
-3. Complete language: error control flow, dynamic SQL, stored procedures,
-   scalar/table functions, views, triggers, cursors, identity/sequences,
-   OUTPUT/MERGE, temp objects, error handling, all supported session settings.
+3. Complete language. Several pieces exist, with limits listed in
+   [workload gaps](docs/workload-gaps.md):
+   - stored procedures, dynamic SQL, scalar/table functions and triggers;
+   - MERGE, temp tables, table variables and identity/rowversion.
+
+   Still open:
+   - cursors and sequences;
+   - procedure line and name context in errors;
+   - loops and recursion in functions with column arguments;
+   - triggers fired by MERGE and cascades;
+   - all supported session settings.
 4. SQL Server catalogs and information schema, metadata procedures, databases,
    schema/object resolution and persistence/restart coverage. User databases,
    USE, DB_NAME/DB_ID, sys.databases and LOGIN7 selection exist
@@ -275,16 +289,20 @@ for concrete evidence and observed failures.
    sys.dm_exec_sessions and @@SPID ([ALTER DATABASE](docs/alter-database-sessions.md)),
    and sys.server_principals for the logins seen since startup
    ([tedious gaps](docs/tedious-compat-gaps.md)).
-   Still open: a login catalog (CREATE LOGIN, default databases), sys.computed_columns,
-   clustered-index catalog state and CREATE CLUSTERED INDEX, computed columns over
-   carrier types and non-deterministic computed columns, table hint index
-   validation, tempdb/model/msdb, other ALTER DATABASE options, the remaining
+   Constraint, module, file and index catalogs, msdb backup history,
+   BACKUP/RESTORE and CREATE CLUSTERED INDEX now exist
+   ([workload gaps](docs/workload-gaps.md)).
+   Still open: a login catalog (CREATE LOGIN, default databases), non-deterministic
+   computed columns, table hint index validation, tempdb/model as real databases,
+   other ALTER DATABASE options, the remaining
    sys.dm_exec_sessions columns, cross-database references and transactions,
    compile-time USE and three-part name resolution, and sys.databases
    descriptor fidelity.
-5. Remaining RPC types and application output parameters, prepare-time result
-   metadata/native plan caching, TVPs, transaction
-   manager savepoints/distributed transactions and full isolation/error semantics.
+5. Remaining RPC types, prepare-time result metadata/native plan caching, TVPs,
+   distributed transactions and full isolation/error semantics. RPC procedure
+   calls, output parameters and transaction-manager savepoints exist
+   ([RPC procedures](docs/gaps-rpc-procedures.md),
+   [transactions](docs/gaps-transactions.md)).
 6. TLS and SQL authentication, negotiated features/version handling, MARS,
    bulk-load streaming/atomicity, cancellation/interrupt, reset semantics.
 7. SQL Server transaction/error behavior, isolation/concurrency, rollback and
@@ -902,8 +920,9 @@ FOR JSON PATH now has a deterministic typed planner/row writer in the core,
 adapting upstream ordered path trees. It validates aliases, retains exact numeric
 and JSON text, distinguishes SQL NULL from JSON null, and supports omission,
 ROOT and array-wrapper options. This is a serialization foundation only: SQL
-binding/execution, logical SQL value conversion, correlated queries, AUTO mode,
-metadata/wire output and live comparison remain open. See [FOR JSON](docs/for-json.md).
+binding/execution, logical SQL value conversion, correlated queries,
+metadata/wire output and live comparison remained open at that stage. AUTO mode
+is now supported ([FOR JSON AUTO](docs/gaps-json_string.md)). See [FOR JSON](docs/for-json.md).
 
 RPC parameters and local variable bindings now carry backend-independent core
 scalar values, including validated exact decimals with retained precision/scale.
@@ -939,8 +958,9 @@ syntax policy in `msduck-sql`, Base64 in `msduck-core`, and catalog/Arrow/TDS wo
 in the root adapter. DESCRIBE binds aliases and expands stars without evaluating
 source rows; source ordering and row limits remain in existing lowering. Typed
 client coverage includes options, metadata, prepared queries, errors, temporal
-values and 6000-row results. Nested/correlated queries, AUTO, expression-level
-fragment/money provenance, set operations and SQL Server row chunking remain open.
+values and 6000-row results. Expression-level fragment/money provenance, set
+operations and SQL Server row chunking remain open; nested/correlated queries and
+AUTO were added later.
 
 Nested and correlated FOR JSON PATH now lower to typed native row serialization
 and DuckDB aggregation, preserving source ordering, DISTINCT and paging. Scalar
@@ -949,8 +969,9 @@ SQL wrapper avoids alias capture; core aggregate framing preserves lexical value
 Nested WITHOUT_ARRAY_WRAPPER remains text unless JSON_QUERY promotes it, correcting
 an over-broad promotion rule in the upstream reference approach. Source annotation
 must precede generated wrapper lowering to preserve native variant payloads.
-AUTO, set operations, complete inherited catalog and fragment/money provenance,
-large-result row chunking and live SQL Server comparison remain open.
+FOR JSON AUTO is now supported ([FOR JSON AUTO](docs/gaps-json_string.md)). Set
+operations, complete inherited catalog and fragment/money provenance, large-result
+row chunking and live SQL Server comparison remain open.
 
 Nested FOR JSON now binds inherited nonrecursive CTE projections through explicit
 catalog snapshots, preserving declaration order, renamed columns, MONEY identity

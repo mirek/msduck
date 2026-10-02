@@ -253,7 +253,7 @@ through a separate connection.
 - **IGNORE_DUP_KEY = ON** on a unique index is unsupported.
 - **Catalogs.**
   - `sys.indexes` and `sys.index_columns` come from the index catalog,
-    including key constraints and keys-managed indexes (docs/index-catalog.md).
+    including key constraints and keys-managed indexes (docs/gaps-catalog.md).
   - `sys.key_constraints`, constraint rows in `sys.objects` and `sp_pkeys`
     read `main.__msduck_keys` (docs/gaps-catalog.md).
 - **Foreign keys.** DuckDB requires a native PRIMARY KEY or UNIQUE

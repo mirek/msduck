@@ -91,9 +91,37 @@ Joined DELETE, writable derived targets, generated-column images,
 partial failure streams and statement undo inside explicit transactions remain unfinished; see
 [OUTPUT coverage and verification](docs/output.md).
 
+Version 0.2.5 adds the features an mssql/tedious application workload needed:
+- stored procedures, `EXEC (string)` and `sp_executesql` with OUTPUT, plus RPC
+  procedure calls and OUTPUT parameters;
+- scalar and table-valued functions, DML triggers and MERGE;
+- `#temp` tables and table variables;
+- application locks, BACKUP/RESTORE and msdb history;
+- ALTER TABLE constraints and foreign-key actions;
+- keys and indexes on every SQL Server-indexable column type, including
+  nvarchar and datetimeoffset, when created by CREATE TABLE or CREATE INDEX.
+  Keys added by ALTER TABLE cannot yet use nvarchar, nchar, datetime2 or
+  datetimeoffset columns. MAX, text, ntext, image and XML keys fail with
+  1919, as in SQL Server;
+- rowversion, decimal identity and `SCOPE_IDENTITY`;
+- constraint, module and index catalogs;
+- isolation levels, savepoints and WAITFOR;
+- bulk load;
+- COLLATE, styled CONVERT and FORMAT;
+- FOR JSON AUTO, JSON_MODIFY, STRING_SPLIT and HASHBYTES;
+- nvarchar predicates and contextual identifiers.
+
+[Workload compatibility gaps](docs/workload-gaps.md) links each area's page,
+with the limits that remain.
+
 [ROADMAP.md](ROADMAP.md) tracks the full remaining objective. Current gaps
-include SQL-managed logins and permissions, advanced TLS modes, catalogs, stored procedures, savepoints, distributed
-transactions, bulk load, MARS, cancellation, and substantial T-SQL semantic details.
+include:
+- SQL-managed logins and permissions;
+- advanced TLS modes;
+- distributed transactions;
+- SQL Server locking semantics (all isolation levels run on DuckDB snapshots);
+- MARS and active-query cancellation;
+- substantial T-SQL semantic details.
 Result metadata currently derives from DuckDB types (strings use nvarchar(max),
 all columns are nullable); widths, collation, nullability, integer arithmetic,
 error numbers, and statement completion behavior need SQL Server differential
@@ -119,7 +147,9 @@ transaction. SQL batches and driver calls share state and descriptor
 notifications. Stale descriptors and malformed requests are rejected before
 execution. Current/read-committed/snapshot requests use DuckDB snapshot
 isolation; SQL Server's locking/read-committed semantics remain to be emulated.
-Other isolation levels and savepoints are explicitly rejected.
+All five isolation levels and transaction-manager savepoints are accepted. Each
+level runs on DuckDB snapshot isolation. See
+[isolation levels, savepoints and WAITFOR](docs/gaps-transactions.md).
 
 Prepared RPCs support `sp_prepare`, `sp_execute`, `sp_prepexec`, and
 `sp_unprepare` by name or TDS procedure ID. Handles are connection-local;
@@ -128,8 +158,10 @@ fresh values using the stored declarations. Ordinary and compound SELECT
 assignments can update input bindings within an execution. Released or foreign handles return
 8179. The current implementation retains SQL and declarations, recompiling at
 execution rather than retaining native DuckDB plans. Prepare-time result
-metadata (`sp_prepare` option 1), application OUTPUT parameters, and prepared
-DDL batches remain unsupported. Supported session settings are validated without
+metadata (`sp_prepare` option 1) and prepared DDL batches remain unsupported.
+Application OUTPUT parameters work through `sp_executesql`, `sp_prepexec`,
+`sp_execute` and RPC procedure calls; see
+[RPC procedures](docs/gaps-rpc-procedures.md). Supported session settings are validated without
 applying them during preparation. Supported control flow is
 validated without executing branches or loops. Each connection is limited to 1024
 handles and 16 MiB of retained SQL/declaration text.
@@ -174,7 +206,9 @@ variables, including scalar subqueries and use in queries/DML. RPC inputs share
 the batch scope; local values do not leak into later requests. Duplicate names
 are rejected before DML execution. SELECT assignment retains the last row,
 preserves the variable on an empty result, and sends no result set. All eight
-compound SELECT assignment operators are accepted. Table/cursor variables remain unsupported. See
+compound SELECT assignment operators are accepted. Cursor variables remain unsupported.
+Table variables (`DECLARE @t TABLE(...)`) are supported, with the limits in
+[temp tables and table variables](docs/gaps-temp_tables.md). See
 [local variable behavior](docs/local-variables.md) for validation and limits.
 
 `IF/ELSE` and plain `BEGIN/END` blocks execute selected statements with shared
@@ -660,8 +694,9 @@ Typed serialization preserves integer/decimal precision, binary Base64, known
 currency numbers and temporal values; prepared execution and multi-batch results
 are covered. Nested/correlated PATH queries now also work as scalar expressions,
 including prepared queries, variables, INSERT and views. Nested arrays are embedded;
-WITHOUT_ARRAY_WRAPPER output stays text unless promoted by JSON_QUERY. AUTO,
-complete correlated/recursive catalog and expression provenance and SQL Server row
+WITHOUT_ARRAY_WRAPPER output stays text unless promoted by JSON_QUERY. FOR JSON
+AUTO is supported; see [FOR JSON AUTO](docs/gaps-json_string.md). Complete
+correlated/recursive catalog and expression provenance and SQL Server row
 chunking remain open. Inherited nonrecursive CTE stars now retain renamed columns,
 MONEY numbers and TIME scale in nested JSON. Correlated named-column references
 and qualified stars retain those logical types through enclosing row scopes, with

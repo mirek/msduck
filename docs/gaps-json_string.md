@@ -147,10 +147,10 @@ json_string syntax checks instead of rejecting them.
 
 ## Remaining limits
 
-- Procedure and trigger bodies are not implemented on `main` yet (separate
-  gap tasks). The lowerings run in the ordinary statement and scalar
-  evaluation hooks that those bodies execute through, so they apply there
-  once bodies run, but that has not been exercised yet.
+- Procedure and trigger bodies run these lowerings through the same statement
+  and scalar hooks; FOR JSON AUTO inside a trigger body is exercised by the
+  release end-to-end check. See [procedures](gaps-procedures.md) and
+  [triggers](gaps-triggers.md).
 - FOR JSON AUTO grouping approximates collation equality, as described
   above. Accent-insensitive and other named collations are not modeled.
   `ROOT` without a name (`FOR JSON AUTO, ROOT`) does not parse, for PATH
