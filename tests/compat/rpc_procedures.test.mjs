@@ -41,8 +41,8 @@ const command = (index, value) => expected => {
 // differ, so a fix is noticed.
 const known = {
   // SERVERPROPERTY('ProductVersion') reports msduck's 16.0.0.0, not the
-  // captured server's build number.
-  'server version': null,
+  // captured server's build number; everything else must match.
+  'server version': expected => ({ ...expected, sets: [[['16.0.0.0']]] }),
   // ROLLBACK and SET XACT_ABORT complete with CurCmd 0 (SQL Server: 210,
   // 185 and 186). BEGIN TRANSACTION now sends 212 like SQL Server.
   'rollback after transaction count': command(-1, 0),
