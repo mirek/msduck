@@ -62,8 +62,12 @@ deterministic character conversion and mixed-endian GUID bytes.
 `src/guid_assignment.rs` now provides an explicitly registered native adapter
 for character/Unicode conversion, NULL and UUID passthrough. It emits canonical
 text from the core's mixed-endian bytes and lets DuckDB own UUID slot layout.
-Three native regressions cover byte layout, raw UTF-16 suffixes and single
-evaluation across 6,000 rows. Root assignment still needs wiring, diagnostics
+Four native regressions cover byte layout, raw UTF-16 suffixes, single
+evaluation across 6,000 rows and native diagnostic translation.
+`guid_assignment::diagnostic` recognizes only this adapter's canonical marked
+DuckDB error envelope and returns the core error identity (8169/state 2/severity
+16). Application text, unrelated backend errors, malformed carriers and appended
+error text are not reclassified. Root assignment still needs wiring, diagnostics
 and the captured transaction effects. These native tests do not establish server
 assignment support.
 
