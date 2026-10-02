@@ -9503,6 +9503,27 @@
         "Activate only after merged/done dependencies and nonoverlapping ready scopes; newexclusive claim/worktree/receipt. Publish disjoint companion scopes if necessary instead of crossing another worker reservation. Exact-head fmt/strictClippy/workspace/alltargets/client/audit and complete rawreplay, verifiedreview/fallback/CI, workerownedPRmerge and prompt registry/project/issue completion. Backlog reserves no engine files."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjbXv"
+    },
+    {
+      "id": "quoted-session-identifiers-preflight-v1",
+      "title": "Keep quoted parameter-like columns out of scalar preflight",
+      "state": "ready",
+      "authorization": "Direct owner continuing full SQL Server compatibility goal; first-party captured30records in PR791 and exacted16439 runtime failure trace identify quote-blind deterministic scalar preflight. This disjoint compile-stage fix composes with full runtime task792; no engine reservation or external intake.",
+      "scope": [
+        "crates/msduck-sql/src/preflight.rs",
+        "crates/msduck-sql/tests/quoted_session_identifiers.rs",
+        "docs/quoted-session-preflight.md"
+      ],
+      "issue": 793,
+      "dependencies": [
+        "quoted-session-identifiers-reference-v1"
+      ],
+      "acceptance": [
+        "Classify only unquoted expression identifiers as scalar variable references during deterministic preflight. Delimited @p/@missing column references defer to column binding, while unquoted @missing still produces the existing first missing-variable error. Preserve realbound/declaration/argument-name/DDL behavior and first-error sequencing; do not evaluate or mutate inputs.",
+        "Use both matching retained30recordSQLServer captures as regressioninputs; cover bracket/doublequote/parenthesized/qualified/derived/CTE/empty and bound42/NULL/localparam shapes. Demonstrate prefailure on unbound quoted columns, preserve actual true-variable failure and immutable parameter/AST inputs. Source/catalog column validation remains later; no claim that root substitution/wire diagnostics/data corruption are fixed.",
+        "No engine/backend edits, no localCargo cache. Required currenthead fmt/strictClippy/fullworkspace/alltargets/independentclients/audit under existingLinuxrunnerlock; exactrequiredCI, verifiedreview/fallback, focusedownerPR, merge and prompt registry/project/issue completion. Fullruntimefollowup792 remains incomplete/unreserved; do not markitdone or hide raw gaps."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PjcNS"
     }
   ]
 }
