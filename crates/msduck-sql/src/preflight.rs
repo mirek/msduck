@@ -305,7 +305,9 @@ pub fn variables(
             if self.argument_names.contains(&(expression as *const Expr)) {
                 return ControlFlow::Continue(());
             }
-            if let Expr::Identifier(id) = expression {
+            if let Expr::Identifier(id) = expression
+                && id.quote_style.is_none()
+            {
                 let name = id.value.to_lowercase();
                 if name.starts_with('@')
                     && !name.starts_with("@@")
