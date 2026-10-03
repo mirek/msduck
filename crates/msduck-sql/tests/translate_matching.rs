@@ -93,6 +93,21 @@ fn matching_context_rejects_contradictory_plan_case_metadata() {
         Err(Error::ContradictoryContext)
     );
 }
+
+#[test]
+fn matching_context_requires_complete_translate_descriptor_flags() {
+    let context = default_context();
+    let mut plan = core_plan(&context, &context_properties());
+    context.validate_plan(&plan).unwrap();
+    for flags in [32, 1, 0, 33 | 4, 33 | 16, 33 | 64, 33 | 0x8000] {
+        plan.flags = flags;
+        assert_eq!(
+            context.validate_plan(&plan),
+            Err(Error::ContradictoryContext),
+            "flags {flags}"
+        );
+    }
+}
 fn hex(value: &str) -> Vec<u8> {
     assert_eq!(value.len() % 2, 0);
     value

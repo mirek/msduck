@@ -53,8 +53,8 @@ The adapter must preserve original source declarations and perform admitted
 SQL conversion/native decoding before this boundary. It must use a TRANSLATE
 plan, validate context/plan before NULL, and preserve the existing core's
 payload validation, character-length 9828 diagnostic and empty-input precedence.
-The validation checks the stored plan operation and case-sensitivity result
-flag as well as domain, encoding and SC properties. Collation record identity
+The validation checks the stored plan operation and exact TRANSLATE descriptor
+flags (readonly, nullable and case sensitivity) as well as domain, encoding and SC properties. Collation record identity
 uses ASCII case-insensitive names; every supplied catalog property still must
 match its retained profile. Public result flags cannot change plan operation.
 When evaluation requires matching, the certificate's `key` can be passed to
@@ -91,7 +91,7 @@ rows and 624 retained diagnostics. The additional 64 #841 prepared programs
 retain all 416 bindings: 260 admitted matching results, 12 explicit unknowns and
 80 exact SQL errors; NULL outcomes and descriptor-stable repeats remain intact.
 Six complete replay/context tests, the native 0081/client U+FFFD regression and
-three plan/context validation regressions cover the public boundary. Full
-workspace/client/audit gates remain pending. Further
-focused test/gate evidence is recorded on the implementation PR. No general linguistic matching or runtime
+four plan/context validation regressions cover the public boundary. Focused
+test evidence and full workspace/client/audit results are recorded on the
+implementation PR with their exact revisions. No general linguistic matching or runtime
 compatibility completion is claimed.

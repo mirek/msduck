@@ -171,7 +171,7 @@ impl Context {
                 .is_some_and(|name| name.eq_ignore_ascii_case(&self.properties.collation.name))
             || plan.supplementary != self.properties.collation.supplementary
             || plan.encoding != self.properties.collation.encoding
-            || (plan.flags & 2 != 0) != self.properties.collation.case_sensitive
+            || plan.flags != 32 | 1 | (u16::from(self.properties.collation.case_sensitive) << 1)
         {
             return Err(Error::ContradictoryContext);
         }
