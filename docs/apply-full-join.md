@@ -63,6 +63,11 @@ The following FULL JOINs are left unchanged:
 
 The unchanged cases still fail with DuckDB's error.
 
+The lowering has no catalog, so it cannot see volatility hidden inside a
+named view operand (for example a view filtered by NEWID()). Such a view is
+evaluated more than once after the rewrite, and the evaluations can
+disagree. Base tables, which are the common case, are unaffected.
+
 A join counts as correlated when it uses a qualifier that its operands do
 not define in scope, or any unqualified column in its operands or condition
 (for example `OPENJSON(lhs)`). Without a catalog, an unqualified column may
