@@ -76,7 +76,8 @@ process group immediately. POSIX is required for sharding and strict full accoun
 `npm test` with unset/1 client jobs retains the previous direct `node --test`
 invocation over the same six manifest files and Node's ordinary exit status;
 parallel jobs are explicitly unsupported. This portable serial path clears the
-inherited worker marker and forwards cancellation, without claiming the POSIX
+inherited worker marker and cancels the full process tree (Windows `taskkill /T /F`,
+POSIX process groups with bounded escalation), without claiming the POSIX
 runner's strict inventory/provenance guarantees on Windows. Platform-selection
 and actual portable-command failure/cancellation regressions run on the available
 Linux/macOS harnesses; they do not establish a Windows native-server pass.
@@ -161,7 +162,7 @@ each run. Raw evidence was copied before the shared builder handoff. An earlier
 partial run on predecessor `25eb55b` was stopped for the diagnostic-group
 correction, exited 255 and remains partial evidence; it is not a pass.
 
-All 25 command/shard/remote harness regressions pass after the portability
+All 26 command/shard/remote harness regressions pass after the portability
 correction. The original 22 passed at the benchmark checkpoint. Their small
 private snapshots contain explicitly inert executable markers for harness
 accounting and never substitute for the real Cargo/native benchmark above.
@@ -175,4 +176,10 @@ checkpoint `bee9` remains the measured source above. The final portability
 adapter changes one executable input, so those captures are not relabelled as
 identical final-source proofs. A fresh complete Linux npm validation is queued
 for the corrected frozen source after the current builder owner releases it;
-this does not repeat the controlled-input serial/four-worker measurement.
+this does not repeat the original serial/four-worker measurement.
+
+A further Codex finding exposed descendant leakage in `7dc045e`: cancellation
+signaled only Node’s coordinator. The actual predecessor fails the strengthened
+regression with a surviving test worker; the corrected adapter terminates both
+a SIGTERM-ignoring worker and its child. Windows tree-command construction is
+tested separately, without claiming execution on a Windows native server.

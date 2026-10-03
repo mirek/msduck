@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFile} from 'node:fs/promises'
-import {command, runCommand} from '../scripts/run-client-tests.mjs'
+import {command, runCommand, windowsTreeCommand} from '../scripts/run-client-tests.mjs'
 import {npmFiles, ciExtras, diagnosticFiles, suiteFiles, clientJobs, strictResult} from '../scripts/lib/client-suite.mjs'
 
 test('npm adapter retains a single serial invocation by default and passes opt-in workers as data', () => {
@@ -142,17 +142,22 @@ test('actual portable serial launch propagates assertion failure and removes sig
 test('actual portable serial launch forwards cancellation and terminates its test worker', {timeout:10000}, async t => {
   const dir = await snapshot(t)
   const marker = join(dir,'ready')
-  await writeFile(join(dir,npmFiles[0]), `import {test} from 'node:test';import {writeFileSync} from 'node:fs';test('wait',async()=>{writeFileSync(${JSON.stringify(marker)},String(process.pid));setInterval(()=>{},1000);await new Promise(()=>{})});`)
+  const descendantMarker = join(dir,'descendant-ready')
+  await writeFile(join(dir,npmFiles[0]), `import {test} from 'node:test';import {writeFileSync} from 'node:fs';import {spawn} from 'node:child_process';test('wait',async()=>{spawn(process.execPath,['-e',${JSON.stringify("require('node:fs').writeFileSync("+JSON.stringify(descendantMarker)+",String(process.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000)")}],{stdio:'ignore'});writeFileSync(${JSON.stringify(marker)},String(process.pid));process.on('SIGTERM',()=>{});setInterval(()=>{},1000);await new Promise(()=>{})});`)
   const selected = command({...process.env,MSDUCK_CLIENT_JOBS:'1',NODE_TEST_CONTEXT:'child-v8'}, [], 'win32')
   selected.args = selected.args.map(x=>npmFiles.includes(x)?join(dir,x):x)
   const signals = new EventEmitter()
   const terminal = runCommand(selected,{signals,stdio:'ignore'})
-  let pid
-  t.after(()=>{if(pid){try{process.kill(pid,'SIGKILL')}catch{}}})
+  let pid, descendant
+  t.after(()=>{for(const candidate of [pid,descendant]){if(candidate){try{process.kill(candidate,'SIGKILL')}catch{}}}})
   for(let i=0;i<250&&!pid;i++) {
     try {pid=Number(await readFile(marker,'utf8'))}catch{await new Promise(r=>setTimeout(r,20))}
   }
   assert(pid)
+  for(let i=0;i<250&&!descendant;i++) {
+    try {descendant=Number(await readFile(descendantMarker,'utf8'))}catch{await new Promise(r=>setTimeout(r,20))}
+  }
+  assert(descendant)
   signals.emit('SIGTERM')
   assert.notEqual(await terminal,0)
   for(let i=0;i<50;i++) {
@@ -160,5 +165,16 @@ test('actual portable serial launch forwards cancellation and terminates its tes
     await new Promise(r=>setTimeout(r,20))
   }
   assert.equal(pid,undefined,'cancelled serial test worker is terminal')
+  for(let i=0;i<50;i++) {
+    try{process.kill(descendant,0)}catch{descendant=undefined;break}
+    await new Promise(r=>setTimeout(r,20))
+  }
+  assert.equal(descendant,undefined,'cancelled worker descendant is terminal')
   assert.equal(signals.listenerCount('SIGTERM'),0)
+})
+
+
+test('Windows cancellation targets the full PID tree with bounded PID arguments', () => {
+  assert.deepEqual(windowsTreeCommand(1234, 'C:\\Windows'), {file:'C:\\Windows\\System32\\taskkill.exe',args:['/PID','1234','/T','/F']})
+  for (const pid of [undefined, 0, -1, '1234', 1.5]) assert.throws(()=>windowsTreeCommand(pid), /PID/)
 })

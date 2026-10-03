@@ -14,18 +14,53 @@ export function command(env = process.env, args = [], platform = process.platfor
   return {args: [fileURLToPath(new URL('./run-client-shards.mjs', import.meta.url)),
     '--suite', 'npm', '--jobs', String(jobs), ...(jobs === 1 ? ['--serial'] : [])], env: childEnvironment}
 }
-// The portable serial fallback forwards the same signals as the POSIX adapter.
-// Keep lifecycle handling in one place, and remove handlers after terminal exit.
+// POSIX groups include Node's test-file workers. Windows taskkill /T performs
+// the corresponding tree traversal; killing only the coordinator leaks workers.
+export function windowsTreeCommand(pid, systemRoot = process.env.SystemRoot) {
+  if (!Number.isInteger(pid) || pid <= 0) throw Error('Invalid child PID')
+  return {file: systemRoot ? `${systemRoot}\\System32\\taskkill.exe` : 'taskkill.exe', args: ['/PID', String(pid), '/T', '/F']}
+}
 export async function runCommand(selected, {signals = process, stdio = 'inherit'} = {}) {
-  const child = spawn(process.execPath, selected.args, {stdio, env: selected.env})
-  const handlers = new Map(['SIGINT', 'SIGTERM'].map(signal => [signal, () => child.kill(signal)]))
+  const windows = process.platform === 'win32'
+  const child = spawn(process.execPath, selected.args, {stdio, env: selected.env, detached: !windows})
+  let cancellation, escalation
+  const killGroup = signal => {
+    if (Number.isInteger(child.pid)) {
+      try { process.kill(-child.pid, signal) } catch (error) { if (error.code !== 'ESRCH') throw error }
+    }
+  }
+  const cancel = signal => {
+    if (cancellation) return
+    if (windows) {
+      const command = windowsTreeCommand(child.pid)
+      cancellation = new Promise(resolve => {
+        const killer = spawn(command.file, command.args, {stdio: 'ignore'})
+        killer.once('error', error => { console.error(error.message); resolve(1) })
+        killer.once('close', code => resolve(code ?? 1))
+      })
+    } else {
+      cancellation = Promise.resolve(0)
+      killGroup(signal)
+      // The POSIX shard coordinator needs two seconds to reap its own groups.
+      escalation = setTimeout(() => killGroup('SIGKILL'), 5000)
+    }
+  }
+  const handlers = new Map(['SIGINT', 'SIGTERM'].map(signal => [signal, () => cancel(signal)]))
   for (const [signal, handler] of handlers) signals.once(signal, handler)
   try {
-    return await new Promise(resolve => {
+    const code = await new Promise(resolve => {
       child.once('error', error => { console.error(error.message); resolve(1) })
       child.once('close', code => resolve(code ?? 1))
     })
+    if (cancellation) {
+      // A coordinator may exit while its descendants ignore the forwarded signal.
+      if (!windows) killGroup('SIGKILL')
+      await cancellation
+      return 1
+    }
+    return code
   } finally {
+    clearTimeout(escalation)
     for (const [signal, handler] of handlers) signals.off(signal, handler)
   }
 }
