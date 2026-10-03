@@ -142,6 +142,17 @@ pub enum Setting {
     UserAccess(UserAccess),
 }
 
+/// `sys.databases.snapshot_isolation_state`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SnapshotIsolation {
+    Off = 0,
+    On = 1,
+    /// ALLOW_SNAPSHOT_ISOLATION OFF waits for active transactions.
+    ToOff = 2,
+    /// ALLOW_SNAPSHOT_ISOLATION ON waits for active transactions.
+    ToOn = 3,
+}
+
 /// What ALTER DATABASE does when other sessions use the database.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Termination {
@@ -294,13 +305,17 @@ impl Catalog {
              CREATE SEQUENCE IF NOT EXISTS {ids} START {FIRST_USER_ID} MAXVALUE 32767 NO CYCLE;
              ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS user_access UTINYINT DEFAULT 0;
              ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS read_committed_snapshot BOOLEAN DEFAULT false;
-             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS snapshot_isolation BOOLEAN DEFAULT false;
+             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS snapshot_isolation_state UTINYINT DEFAULT 0;
              ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS family_guid VARCHAR;
              ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS database_guid VARCHAR;
              ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS data_name VARCHAR;
              ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS log_name VARCHAR;
              ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS data_path VARCHAR;
-             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS log_path VARCHAR",
+             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS log_path VARCHAR;
+             -- An ALLOW_SNAPSHOT_ISOLATION change that a stop interrupted did
+             -- not complete: return to the state it started from.
+             UPDATE {registry} SET snapshot_isolation_state = CASE snapshot_isolation_state WHEN 2 THEN 1 ELSE 0 END
+                 WHERE snapshot_isolation_state IN (2, 3)",
             registry = catalog.registry(),
             ids = catalog.ids(),
         ))?;
@@ -673,33 +688,33 @@ impl Catalog {
         })
     }
 
-    /// ALTER DATABASE ... SET ALLOW_SNAPSHOT_ISOLATION. SQL Server changes
-    /// this versioning state without exclusive access, so other sessions
-    /// stay connected. Returns false for `master`, where snapshot isolation
-    /// is always enabled and the option changes nothing
-    /// (reference/gaps-transactions.json). A missing database is error 5011;
-    /// the caller adds the final 5069.
-    pub fn set_snapshot_isolation(&self, db: &Connection, name: &str, on: bool) -> Result<bool> {
+    /// Store `sys.databases.snapshot_isolation_state` for a user database:
+    /// [`SnapshotIsolation`] as ALTER DATABASE ... SET
+    /// ALLOW_SNAPSHOT_ISOLATION moves through it.
+    pub fn set_snapshot_isolation(
+        &self,
+        db: &Connection,
+        alias: &str,
+        state: SnapshotIsolation,
+    ) -> Result<()> {
         let _change = self.lock();
-        let alias = self.alterable_name(db, name)?;
-        if alias == self.primary {
-            return Ok(false);
-        }
         db.execute(
             &format!(
-                "UPDATE {} SET snapshot_isolation=? WHERE name=?",
+                "UPDATE {} SET snapshot_isolation_state=? WHERE name=?",
                 self.registry()
             ),
-            duckdb::params![on, alias],
+            duckdb::params![state as u8, alias],
         )?;
-        Ok(true)
+        Ok(())
     }
 
-    /// The SQL Server name of an ALTER DATABASE target, or error 5011.
-    pub fn alter_target(&self, db: &Connection, name: &str) -> Result<String> {
+    /// The DuckDB catalog alias and SQL Server name of an ALTER DATABASE
+    /// target, or error 5011 (the caller adds the final 5069).
+    pub fn alter_target(&self, db: &Connection, name: &str) -> Result<(String, String)> {
         let _change = self.lock();
         let alias = self.alterable_name(db, name)?;
-        Ok(self.display(&alias))
+        let display = self.display(&alias);
+        Ok((alias, display))
     }
 
     fn alterable_name(&self, db: &Connection, name: &str) -> Result<String> {
@@ -716,26 +731,41 @@ impl Catalog {
         })
     }
 
-    /// Whether SNAPSHOT transactions may access the database with this
-    /// DuckDB catalog alias (`sys.databases.snapshot_isolation_state`).
-    /// Always true for `master`; false for an unknown alias.
-    pub fn snapshot_isolation(&self, db: &Connection, alias: &str) -> Result<bool> {
+    /// `sys.databases.snapshot_isolation_state` of the database with this
+    /// DuckDB catalog alias: always ON for `master`, OFF for an unknown
+    /// alias. Inside a transaction the registry is read through another
+    /// connection, so the state is current rather than the transaction's
+    /// snapshot.
+    pub fn snapshot_isolation(&self, db: &Connection, alias: &str) -> Result<SnapshotIsolation> {
         if alias == self.primary {
-            return Ok(true);
+            return Ok(SnapshotIsolation::On);
         }
-        Ok(db
+        let fresh;
+        let db = if db.is_autocommit() {
+            db
+        } else {
+            fresh = db.try_clone()?;
+            &fresh
+        };
+        let state: u8 = db
             .query_row(
                 &format!(
-                    "SELECT coalesce(snapshot_isolation,false) FROM {} WHERE name=?",
+                    "SELECT coalesce(snapshot_isolation_state,0) FROM {} WHERE name=?",
                     self.registry()
                 ),
                 [alias],
                 |row| row.get(0),
             )
             .or_else(|error| match error {
-                duckdb::Error::QueryReturnedNoRows => Ok(false),
+                duckdb::Error::QueryReturnedNoRows => Ok(0),
                 error => Err(error),
-            })?)
+            })?;
+        Ok(match state {
+            1 => SnapshotIsolation::On,
+            2 => SnapshotIsolation::ToOff,
+            3 => SnapshotIsolation::ToOn,
+            _ => SnapshotIsolation::Off,
+        })
     }
 
     /// The SQL Server name of an attached DuckDB catalog alias.
@@ -1140,8 +1170,10 @@ impl Catalog {
                     false AS is_read_only,
                     CAST(0 AS UTINYINT) AS state,
                     CAST('ONLINE' AS VARCHAR) AS state_desc,
-                    CAST(CASE WHEN snapshot_isolation THEN 1 ELSE 0 END AS UTINYINT) AS snapshot_isolation_state,
-                    CAST(CASE WHEN snapshot_isolation THEN 'ON' ELSE 'OFF' END AS VARCHAR) AS snapshot_isolation_state_desc,
+                    CAST(snapshot_isolation_state AS UTINYINT) AS snapshot_isolation_state,
+                    CAST(CASE snapshot_isolation_state WHEN 1 THEN 'ON'
+                         WHEN 2 THEN 'IN_TRANSITION_TO_OFF' WHEN 3 THEN 'IN_TRANSITION_TO_ON'
+                         ELSE 'OFF' END AS VARCHAR) AS snapshot_isolation_state_desc,
                     CAST(read_committed_snapshot AS BOOLEAN) AS is_read_committed_snapshot_on,
                     CAST(3 AS UTINYINT) AS recovery_model,
                     CAST('SIMPLE' AS VARCHAR) AS recovery_model_desc
@@ -1149,11 +1181,11 @@ impl Catalog {
                  SELECT '{MASTER}' AS name,{MASTER_ID} AS database_id,
                         CAST(TIMESTAMP '2003-04-08 09:13:36.39' AS TIMESTAMP) AS create_date,
                         0 AS user_access,false AS read_committed_snapshot,
-                        true AS snapshot_isolation
+                        1 AS snapshot_isolation_state
                  UNION ALL
                  SELECT r.name,r.database_id,r.create_date,
                         coalesce(r.user_access,0),coalesce(r.read_committed_snapshot,false),
-                        coalesce(r.snapshot_isolation,false)
+                        coalesce(r.snapshot_isolation_state,0)
                  FROM {registry} r JOIN duckdb_databases() d ON d.database_name=r.name
                  WHERE r.published
              );

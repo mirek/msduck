@@ -38,13 +38,16 @@ from issue #870 (task `v025-snapshot-isolation-v1`). The feature lives in the
 - The fixture's separate `snapshot` section was captured by
   `scripts/capture-gaps-transactions.mjs --snapshot` from the pinned
   `mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144…` image (two
-  fresh databases, identical results). Its 80 observations use three
-  connections (`a` and `b` in the fresh database, `m` in master): the
+  fresh databases, identical results). Its 107 observations use four
+  connections (`a`, `b` and `c` in the fresh database, `m` in master): the
   `ALLOW_SNAPSHOT_ISOLATION` forms and errors, `sys.databases` states, 3952
-  for data access while the option is OFF, and SNAPSHOT reads and 3960 write
-  conflicts against a concurrent writer. `tests/compat/snapshot_isolation.test.mjs`
-  replays it (rows, column descriptors, errors and messages) and lists the
-  remaining differences exactly.
+  for data access while the option is OFF, SNAPSHOT reads and 3960 write
+  conflicts against a concurrent writer, and changes that wait for open
+  transactions (an ALTER sent in the background, whether it was still
+  running 1.5 seconds later, and 3956/3954 meanwhile).
+  `tests/compat/snapshot_isolation.test.mjs` replays it (rows, column
+  descriptors, errors, messages and the waits) and lists the remaining
+  differences exactly.
 - `tests/gaps_transactions.rs` covers the same rules in process, plus
   savepoint restores, cancellation and termination, and the option's
   persistence across a restart.
@@ -96,9 +99,10 @@ have no effect.
 
 `ALTER DATABASE {name | CURRENT} SET ALLOW_SNAPSHOT_ISOLATION {ON | OFF}`
 stores the option per database; it persists across restarts and appears as
-`sys.databases.snapshot_isolation_state` (`tinyint`, 0 or 1) and
-`snapshot_isolation_state_desc` (`nvarchar(60)`, `OFF` or `ON`) in SQL
-Server's column order, before `is_read_committed_snapshot_on`. As captured:
+`sys.databases.snapshot_isolation_state` (`tinyint`: 0 OFF, 1 ON, 2
+IN_TRANSITION_TO_OFF, 3 IN_TRANSITION_TO_ON) and
+`snapshot_isolation_state_desc` (`nvarchar(60)`) in SQL Server's column
+order, before `is_read_committed_snapshot_on`. As captured:
 
 - New databases start OFF. `master` is always ON: setting the option there
   succeeds with informational message 3987 ("SNAPSHOT ISOLATION is always
@@ -106,6 +110,18 @@ Server's column order, before `is_read_committed_snapshot_on`. As captured:
 - Other sessions may stay connected; no termination clause is needed. The
   statement completes with no row count and leaves `@@ROWCOUNT` 0. It works
   inside `sp_executesql`.
+- A change waits for other sessions' open transactions: ON for those that
+  wrote to the database, OFF also for SNAPSHOT transactions that use it
+  (even before their first data access). Read-only transactions at other
+  levels do not delay it. Meanwhile the state is 3 or 2, and a SNAPSHOT
+  transaction that accesses the database fails with 3956 ("…because the
+  ALTER DATABASE command which enables snapshot isolation for this database
+  has not finished yet…") or 3954 ("…because the ALTER DATABASE command that
+  disallows snapshot isolation had started before this transaction
+  began…"), with the effects of 3952. A SNAPSHOT transaction that already
+  read the database continues during the change to OFF. An attention
+  cancels the wait and restores the previous state; a server stopped during
+  the wait also restores it.
 - Errors, in SQL Server's order: 226 inside a transaction; 12104 for
   `CURRENT` in master; 5011 for a missing database; 5082 ("Cannot change the
   versioning state on database "…" together with another database state.")
@@ -150,6 +166,9 @@ Remaining differences, retained exactly in the replay:
   DATABASE options; SQL Server continues with the next statement. A missing
   `ON`/`OFF` reports state 1 instead of 6, and a missing table reports
   DuckDB's 208 message.
+- Waiting changes find the transactions to wait for from the statements
+  each one ran: the database current at `BEGIN TRANSACTION`, the tables it
+  accessed, and the targets of its writes and DDL.
 - After a write conflict DuckDB aborts its transaction, so msduck restarts
   an empty one for the doomed transaction's remaining reads until it is
   rolled back.

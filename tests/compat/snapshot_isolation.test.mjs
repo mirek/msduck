@@ -28,11 +28,12 @@ const shape = result => ({
 })
 
 // Retained differences, compared exactly so that a change is noticed.
-// SQL Server sends a failing SELECT's column metadata before 3952; msduck
-// checks access before it describes the query, so no empty result set
-// precedes the error.
+// SQL Server sends a failing SELECT's column metadata before 3952, 3954 and
+// 3956; msduck checks access before it describes the query, so no empty
+// result set precedes the error.
 function known(name, reference) {
-  if (['off: autocommit read', 'off: read in transaction', 'off: three-part name from master', 'off again: read'].includes(name)) {
+  if (['off: autocommit read', 'off: read in transaction', 'off: three-part name from master', 'off again: read',
+    'to on: snapshot transaction', 'to off: new snapshot transaction', 'to off: idle snapshot transaction reads'].includes(name)) {
     return { ...reference, sets: reference.sets.slice(1) }
   }
   if (['off: caught read', 'off: caught read in transaction'].includes(name)) {
@@ -73,11 +74,28 @@ test('replays the captured ALLOW_SNAPSHOT_ISOLATION and SNAPSHOT reference', { t
   await query(admin, `CREATE DATABASE ${DATABASE}`)
   const connections = { a: await open(t, admin, DATABASE), m: await open(t, admin, 'master') }
   const differences = []
+  // An ALTER that waits runs in the background between its `start` and
+  // `finish` entries, as in the capture.
+  const pending = {}
+  const pause = 1500
   for (const expected of fixture.snapshot.run) {
     connections[expected.connection] ??= await open(t, admin, DATABASE)
-    const result = canonical(await capture(connections[expected.connection], bind(expected.sql)))
-    const actual = shape(result)
-    const reference = known(expected.name, bind(shape(expected.result)))
+    if (expected.start) {
+      const started = Date.now()
+      pending[expected.connection] = capture(connections[expected.connection], bind(expected.sql)).then(result => ({ result, elapsed: Date.now() - started }))
+      await new Promise(resolve => setTimeout(resolve, pause))
+      continue
+    }
+    let result, waited
+    if (expected.finish) {
+      ({ result } = await pending[expected.connection])
+      waited = (await pending[expected.connection]).elapsed >= pause
+      delete pending[expected.connection]
+    } else {
+      result = await capture(connections[expected.connection], bind(expected.sql))
+    }
+    const actual = { ...shape(canonical(result)), ...(expected.finish ? { waited } : {}) }
+    const reference = { ...known(expected.name, bind(shape(expected.result))), ...(expected.finish ? { waited: expected.waited } : {}) }
     if (JSON.stringify(actual) !== JSON.stringify(reference)) {
       differences.push({ name: expected.name, actual: JSON.stringify(actual).slice(0, 2000), reference: JSON.stringify(reference).slice(0, 2000) })
     }

@@ -113,6 +113,7 @@ impl Feature for Hooks {
                 if snapshot {
                     snapshot::check_access(session, statement)?;
                 }
+                snapshot::track_write(session, statement)?;
                 savepoints::before_statement(session, statement)?;
                 if snapshot {
                     return snapshot::write(session, statement, parameters);
@@ -146,10 +147,18 @@ impl Feature for Hooks {
 
     fn transaction_begin(&self, session: &mut Session, isolation: u8) {
         options::begin_request(session, isolation);
+        if session.transactions == 1 {
+            snapshot::begin(session);
+        }
     }
 
     fn transaction_end(&self, session: &mut Session, _committed: bool) {
         savepoints::release_all(session);
+        snapshot::end(session);
+    }
+
+    fn session_end(&self, session: &mut Session) {
+        snapshot::end(session);
     }
 
     fn session_start(&self, session: &mut Session) -> Result<()> {

@@ -6,11 +6,16 @@
 //!   option is OFF fails with 3952, which ends the batch and rolls back an
 //!   open transaction (inside TRY it dooms the transaction instead);
 //! - an update or delete of a row that another transaction changed after
-//!   the snapshot began fails with 3960, with the same effects.
+//!   the snapshot began fails with 3960, with the same effects;
+//! - changing the option waits for the transactions that were active (ON
+//!   for those that wrote, OFF also for SNAPSHOT transactions). Meanwhile
+//!   the state is in transition and new SNAPSHOT transactions fail with
+//!   3956 (to ON) or 3954 (to OFF), with the effects of 3952.
 //!
 //! DuckDB runs every transaction as snapshot isolation (see options.rs), so
 //! the rows a SNAPSHOT transaction reads need no further work here.
 use super::super::super::{Execution, Parameter, Session, StatementErrors};
+use crate::database_catalog::SnapshotIsolation;
 use anyhow::{Result, bail};
 use msduck_core::diagnostic::SqlError;
 use msduck_sql::dialect::alter_database::{Request, Termination};
@@ -18,7 +23,12 @@ use sqlparser::ast::{
     Delete, FromTable, ObjectName, Query, SetExpr, Statement, TableFactor, TableObject,
     TableWithJoins, UpdateTableFromKind, Visit, Visitor,
 };
-use std::{collections::HashMap, ops::ControlFlow};
+use std::{
+    collections::HashMap,
+    ops::ControlFlow,
+    sync::{LazyLock, Mutex},
+    time::Duration,
+};
 
 /// TDS numbering of SNAPSHOT.
 const SNAPSHOT: u8 = 5;
@@ -61,13 +71,12 @@ pub(super) fn alter(session: &mut Session, request: Request) -> Result<Execution
         bail!(conflicting_values_error());
     }
     let catalog = session.database.catalog().clone();
-    let with_failure = |error: anyhow::Error| match error.downcast::<SqlError>() {
-        Ok(error) => failed(error),
-        Err(error) => error,
-    };
-    let display = catalog
+    let (alias, display) = catalog
         .alter_target(&session.db, &name)
-        .map_err(with_failure)?;
+        .map_err(|error| match error.downcast::<SqlError>() {
+            Ok(error) => failed(error),
+            Err(error) => error,
+        })?;
     if !request.settings.is_empty() {
         return Err(failed(SqlError::new(
             5082,
@@ -85,10 +94,8 @@ pub(super) fn alter(session: &mut Session, request: Request) -> Result<Execution
         )));
     }
     let mut tokens = Vec::new();
-    if !catalog
-        .set_snapshot_isolation(&session.db, &name, *on)
-        .map_err(with_failure)?
-    {
+    session.rowcount = 0;
+    if alias == catalog.primary() {
         crate::tds::diagnostic_utf16(
             &mut tokens,
             crate::tds::DiagnosticKind::Information,
@@ -99,9 +106,156 @@ pub(super) fn alter(session: &mut Session, request: Request) -> Result<Execution
                 .encode_utf16()
                 .collect::<Vec<_>>(),
         );
+        return Ok(Execution::statement(tokens, None, 215));
     }
-    session.rowcount = 0;
+    let (target, transition) = if *on {
+        (SnapshotIsolation::On, SnapshotIsolation::ToOn)
+    } else {
+        (SnapshotIsolation::Off, SnapshotIsolation::ToOff)
+    };
+    let previous = catalog.snapshot_isolation(&session.db, &alias)?;
+    if previous != target {
+        catalog.set_snapshot_isolation(&session.db, &alias, transition)?;
+        if let Err(error) = wait_for_transactions(session, &alias, *on) {
+            catalog.set_snapshot_isolation(&session.db, &alias, previous)?;
+            return Err(error);
+        }
+        catalog.set_snapshot_isolation(&session.db, &alias, target)?;
+    }
     Ok(Execution::statement(tokens, None, 215))
+}
+
+/// A transaction open in a session, as ALLOW_SNAPSHOT_ISOLATION changes
+/// see it.
+struct Active {
+    /// The server's database catalog (its address), so that servers in one
+    /// process stay apart.
+    catalog: usize,
+    /// The session was at SNAPSHOT when the transaction began.
+    snapshot: bool,
+    /// The databases (DuckDB catalog aliases) the transaction used.
+    databases: HashMap<String, Usage>,
+}
+
+#[derive(Default)]
+struct Usage {
+    wrote: bool,
+    /// It accessed data as a SNAPSHOT transaction.
+    read: bool,
+}
+
+/// Open transactions by session token.
+static ACTIVE: LazyLock<Mutex<HashMap<u64, Active>>> = LazyLock::new(Default::default);
+
+fn active_transactions() -> std::sync::MutexGuard<'static, HashMap<u64, Active>> {
+    ACTIVE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn catalog_id(session: &Session) -> usize {
+    std::sync::Arc::as_ptr(session.database.catalog()) as usize
+}
+
+/// The outermost transaction of a session began.
+pub(super) fn begin(session: &Session) {
+    let mut databases = HashMap::new();
+    databases.insert(session.database.alias().to_owned(), Usage::default());
+    active_transactions().insert(
+        session.ext.token,
+        Active {
+            catalog: catalog_id(session),
+            snapshot: active(session),
+            databases,
+        },
+    );
+}
+
+/// The session's transaction ended, or the session ended.
+pub(super) fn end(session: &Session) {
+    active_transactions().remove(&session.ext.token);
+}
+
+fn usage(session: &Session, alias: &str, update: impl FnOnce(&mut Usage)) {
+    if let Some(active) = active_transactions().get_mut(&session.ext.token) {
+        update(active.databases.entry(alias.to_owned()).or_default());
+    }
+}
+
+/// Note a write of the session's open transaction.
+pub(super) fn track_write(session: &mut Session, statement: &Statement) -> Result<()> {
+    if session.transactions == 0 {
+        return Ok(());
+    }
+    let alias = match statement {
+        Statement::CreateTable(_)
+        | Statement::AlterTable(_)
+        | Statement::Drop { .. }
+        | Statement::Truncate(_)
+        | Statement::CreateIndex(_)
+        | Statement::CreateView(_) => Some(session.database.alias().to_owned()),
+        _ => match write_target(statement) {
+            Some(target) => {
+                let parts: Vec<&str> = target
+                    .0
+                    .iter()
+                    .filter_map(|part| part.as_ident().map(|ident| ident.value.as_str()))
+                    .collect();
+                match parts.as_slice() {
+                    [.., table] if table.starts_with('#') || table.starts_with('@') => None,
+                    [database, _, _] => {
+                        session.database.catalog().resolve(&session.db, database)?
+                    }
+                    _ => Some(session.database.alias().to_owned()),
+                }
+            }
+            None => None,
+        },
+    };
+    if let Some(alias) = alias {
+        usage(session, &alias, |usage| usage.wrote = true);
+    }
+    Ok(())
+}
+
+/// Wait until the other sessions' transactions that an
+/// ALLOW_SNAPSHOT_ISOLATION change waits for have ended: ON waits for
+/// transactions that wrote to the database, OFF also for SNAPSHOT
+/// transactions that used it.
+fn wait_for_transactions(session: &mut Session, alias: &str, on: bool) -> Result<()> {
+    let catalog = catalog_id(session);
+    let token = session.ext.token;
+    let blocked = || {
+        active_transactions().iter().any(|(other, active)| {
+            *other != token
+                && active.catalog == catalog
+                && active
+                    .databases
+                    .get(alias)
+                    .is_some_and(|usage| usage.wrote || (!on && active.snapshot))
+        })
+    };
+    while blocked() {
+        let attention = session.read_cancel.clone();
+        let poll = Duration::from_millis(10);
+        match session.process.wait(poll, poll, &|| {
+            attention
+                .as_ref()
+                .is_some_and(|flag| flag.load(std::sync::atomic::Ordering::SeqCst))
+        }) {
+            crate::sessions::Wake::Elapsed => {}
+            crate::sessions::Wake::Cancelled => {
+                return Err(crate::read_cancellation::CancelledRead {
+                    metadata: Vec::new(),
+                }
+                .into());
+            }
+            crate::sessions::Wake::Terminated => {
+                bail!("ALTER DATABASE ended because the session is being terminated")
+            }
+        }
+    }
+    Ok(())
 }
 
 fn conflicting_values_error() -> SqlError {
@@ -159,7 +313,7 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
         return Ok(());
     }
     let catalog = session.database.catalog().clone();
-    let mut allowed: HashMap<String, bool> = HashMap::new();
+    let mut states: HashMap<String, SnapshotIsolation> = HashMap::new();
     for name in relations(statement) {
         let parts: Vec<&str> = name
             .0
@@ -199,28 +353,55 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
         } else {
             session.database.alias().to_owned()
         };
-        let snapshot = match allowed.get(&alias) {
-            Some(snapshot) => *snapshot,
+        let state = match states.get(&alias) {
+            Some(state) => *state,
             None => {
-                let snapshot = catalog.snapshot_isolation(&session.db, &alias)?;
-                allowed.insert(alias.clone(), snapshot);
-                snapshot
+                let state = catalog.snapshot_isolation(&session.db, &alias)?;
+                states.insert(alias.clone(), state);
+                state
             }
         };
-        if snapshot || !exists(session, &alias, schema, object)? {
+        let read = || {
+            active_transactions()
+                .get(&session.ext.token)
+                .and_then(|active| active.databases.get(&alias))
+                .is_some_and(|usage| usage.read)
+        };
+        // A transaction that read under SNAPSHOT before OFF began continues.
+        if state == SnapshotIsolation::On || (state == SnapshotIsolation::ToOff && read()) {
+            usage(session, &alias, |usage| usage.read = true);
+            continue;
+        }
+        if !exists(session, &alias, schema, object)? {
             continue;
         }
         if session.transactions > 0 {
             session.transaction_doomed = true;
         }
-        bail!(SqlError::new(
-            3952,
-            1,
-            format!(
-                "Snapshot isolation transaction failed accessing database '{}' because snapshot isolation is not allowed in this database. Use ALTER DATABASE to allow snapshot isolation.",
-                catalog.display_name(&alias)
-            )
-        ));
+        let database = catalog.display_name(&alias);
+        bail!(match state {
+            SnapshotIsolation::ToOn => SqlError::new(
+                3956,
+                1,
+                format!(
+                    "Snapshot isolation transaction failed to start in database '{database}' because the ALTER DATABASE command which enables snapshot isolation for this database has not finished yet. The database is in transition to pending ON state. You must wait until the ALTER DATABASE Command completes successfully."
+                ),
+            ),
+            SnapshotIsolation::ToOff => SqlError::new(
+                3954,
+                1,
+                format!(
+                    "Snapshot isolation transaction failed to start in database '{database}' because the ALTER DATABASE command that disallows snapshot isolation had started before this transaction began. The database is in transition to OFF state. You will either need to change the isolation level of the transaction or re-enable the snapshot isolation in the database."
+                ),
+            ),
+            _ => SqlError::new(
+                3952,
+                1,
+                format!(
+                    "Snapshot isolation transaction failed accessing database '{database}' because snapshot isolation is not allowed in this database. Use ALTER DATABASE to allow snapshot isolation."
+                ),
+            ),
+        });
     }
     Ok(())
 }

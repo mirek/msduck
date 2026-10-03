@@ -178,6 +178,23 @@ function observeSnapshot(config) {
     const on = async (connection, name, sql) => {
       run.push({ name, connection, sql, result: canonical(await capture(connections[connection], sql)) })
     }
+    // An ALTER that waits for other transactions: `start` sends it without
+    // waiting, `finish` records its result and whether it was still running
+    // after `pause` (the observations in between run meanwhile).
+    const pending = {}
+    const pause = 1500
+    const start = (connection, name, sql) => {
+      const started = Date.now()
+      const entry = { name, connection, sql, start: true }
+      run.push(entry)
+      pending[connection] = capture(connections[connection], sql).then(result => ({ entry, result, elapsed: Date.now() - started }))
+      return new Promise(resolve => setTimeout(resolve, pause))
+    }
+    const finish = async (connection, name) => {
+      const { entry, result, elapsed } = await pending[connection]
+      delete pending[connection]
+      run.push({ name, connection, finish: entry.name, result: canonical(result), waited: elapsed >= pause })
+    }
     const state = "SELECT name, snapshot_isolation_state, snapshot_isolation_state_desc, is_read_committed_snapshot_on FROM sys.databases WHERE name IN (N'master', DB_NAME()) ORDER BY database_id"
     const alter = 'ALTER DATABASE CURRENT SET ALLOW_SNAPSHOT_ISOLATION'
     try {
@@ -271,8 +288,41 @@ function observeSnapshot(config) {
       await on('m', 'alter: off by name', `ALTER DATABASE [${fresh}] SET ALLOW_SNAPSHOT_ISOLATION OFF`)
       await on('a', 'off again: read', 'SET TRANSACTION ISOLATION LEVEL SNAPSHOT; SELECT v FROM t WHERE id = 1')
       await on('a', 'off again: state', `SET TRANSACTION ISOLATION LEVEL READ COMMITTED; ${state}`)
+
+      // Changing the option waits for transactions that were active: ON
+      // for those that wrote, OFF for every one. Meanwhile the state is in
+      // transition and new SNAPSHOT transactions fail (3956, 3954).
+      await open('c', fresh)
+      const named = `SELECT snapshot_isolation_state, snapshot_isolation_state_desc FROM sys.databases WHERE name = N'${fresh}'`
+      await on('b', 'to on: writer begins', 'BEGIN TRAN; UPDATE t SET v = v + 1 WHERE id = 1')
+      await start('a', 'to on: alter', `${alter} ON`)
+      await on('m', 'to on: state', named)
+      await on('c', 'to on: snapshot transaction', 'SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT v FROM t WHERE id = 1; SELECT 2 AS after_error')
+      await on('c', 'to on: after snapshot transaction', 'SELECT @@TRANCOUNT AS tc; SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
+      await on('b', 'to on: writer commits', 'COMMIT')
+      await finish('a', 'to on: alter completes')
+      await on('m', 'to on: final state', named)
+      await on('b', 'to on with reader: reader begins', 'BEGIN TRAN; SELECT v FROM t WHERE id = 1')
+      await on('a', 'to on with reader: alter', `${alter} OFF`)
+      await on('b', 'to on with reader: reader commits', 'COMMIT')
+      await on('b', 'to on with reader: reader begins again', 'BEGIN TRAN; SELECT v FROM t WHERE id = 1')
+      await start('a', 'to on with reader: alter on', `${alter} ON`)
+      await finish('a', 'to on with reader: alter on completes')
+      await on('b', 'to on with reader: reader commits again', 'COMMIT')
+      await on('b', 'to off: snapshot reader begins', 'SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT v FROM t WHERE id = 1')
+      await on('c', 'to off: idle snapshot transaction begins', 'SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT 1 AS no_data_access')
+      await start('a', 'to off: alter', `${alter} OFF`)
+      await on('m', 'to off: state', named)
+      await on('m', 'to off: new snapshot transaction', `SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT v FROM [${fresh}].dbo.t WHERE id = 1; SELECT 2 AS after_error`)
+      await on('m', 'to off: after new snapshot transaction', 'SELECT @@TRANCOUNT AS tc; SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
+      await on('b', 'to off: snapshot reader continues', 'SELECT v FROM t WHERE id = 1; SELECT @@TRANCOUNT AS tc')
+      await on('c', 'to off: idle snapshot transaction reads', 'SELECT v FROM t WHERE id = 1; SELECT 2 AS after_error')
+      await on('c', 'to off: after idle snapshot transaction', 'SELECT @@TRANCOUNT AS tc; SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
+      await on('b', 'to off: snapshot reader commits', 'COMMIT; SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
+      await finish('a', 'to off: alter completes')
+      await on('m', 'to off: final state', named)
     } finally {
-      for (const name of ['b', 'm']) {
+      for (const name of ['b', 'c', 'm']) {
         const connection = connections[name]
         if (connection && !connection.closed) await new Promise(resolve => { connection.once('end', resolve); connection.close() })
       }

@@ -4,6 +4,7 @@
 //! docs/gaps-transactions.md. Client-level coverage is in
 //! tests/compat/transactions.test.mjs.
 use msduck::{
+    database_catalog::SnapshotIsolation,
     engine::Session,
     read_cancellation::{Mode, Outcome},
     server::Server,
@@ -895,6 +896,15 @@ fn allow_snapshot_isolation_is_published_and_persists_across_restart() {
         .unwrap();
         assert_eq!(snapshot_state(&s, "probe_db"), Some((1, Some("ON".into()))));
     }
+    {
+        // A change that a stop interrupted returns to the state it started
+        // from.
+        let server = Server::open(path).unwrap();
+        let db = server.connection().unwrap();
+        db.databases()
+            .set_snapshot_isolation(&db, "probe_db", SnapshotIsolation::ToOff)
+            .unwrap();
+    }
     let server = Server::open(path).unwrap();
     let mut s = session(&server);
     assert_eq!(snapshot_state(&s, "probe_db"), Some((1, Some("ON".into()))));
@@ -1159,4 +1169,88 @@ fn snapshot_transactions_need_the_option_and_read_their_snapshot() {
         "(SELECT COUNT(*) FROM audit) = 0 AND (SELECT v FROM t WHERE id = 1) = 8",
     )
     .unwrap();
+}
+
+#[test]
+fn allow_snapshot_isolation_changes_wait_for_open_transactions() {
+    let server = Server::open(":memory:").unwrap();
+    let mut writer = session(&server);
+    run(&mut writer, "CREATE DATABASE probe_db").unwrap();
+    writer.use_database("probe_db").unwrap();
+    run(
+        &mut writer,
+        "CREATE TABLE t (id INT PRIMARY KEY, v INT); INSERT t VALUES (1, 1)",
+    )
+    .unwrap();
+    let mut reader = session(&server);
+    reader.use_database("probe_db").unwrap();
+    let mut observer = session(&server);
+    let alter = |sql: &'static str| {
+        let mut s = session(&server);
+        s.process().set_login(
+            msduck::sessions::Client::default(),
+            "sa",
+            Some(Arc::new(|| {})),
+        );
+        thread::spawn(move || {
+            let started = Instant::now();
+            let result = run(&mut s, sql).map(|_| ());
+            (result, started.elapsed())
+        })
+    };
+    // ON waits for a transaction that wrote, not for one that only read.
+    run(&mut reader, "BEGIN TRAN; SELECT v FROM t").unwrap();
+    run(&mut writer, "BEGIN TRAN; UPDATE t SET v = 2").unwrap();
+    let on = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON");
+    thread::sleep(Duration::from_millis(500));
+    assert_eq!(
+        snapshot_state(&observer, "probe_db"),
+        Some((3, Some("IN_TRANSITION_TO_ON".into())))
+    );
+    run(&mut observer, "SET TRANSACTION ISOLATION LEVEL SNAPSHOT").unwrap();
+    assert_eq!(
+        run(&mut observer, "BEGIN TRAN; SELECT v FROM probe_db.dbo.t"),
+        Err(3956)
+    );
+    check(&mut observer, "@@TRANCOUNT = 0").unwrap();
+    run(&mut writer, "COMMIT").unwrap();
+    let (result, elapsed) = on.join().unwrap();
+    assert_eq!(result, Ok(()));
+    assert!(elapsed >= Duration::from_millis(400), "{elapsed:?}");
+    assert_eq!(
+        snapshot_state(&observer, "probe_db"),
+        Some((1, Some("ON".into())))
+    );
+    run(&mut reader, "COMMIT").unwrap();
+    // OFF waits for SNAPSHOT transactions too. One that already read keeps
+    // reading; one that had not yet read fails with 3954.
+    run(
+        &mut reader,
+        "SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT v FROM t",
+    )
+    .unwrap();
+    let mut idle = session(&server);
+    idle.use_database("probe_db").unwrap();
+    run(
+        &mut idle,
+        "SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT 1",
+    )
+    .unwrap();
+    let off = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF");
+    thread::sleep(Duration::from_millis(500));
+    assert_eq!(
+        snapshot_state(&observer, "probe_db"),
+        Some((2, Some("IN_TRANSITION_TO_OFF".into())))
+    );
+    check(&mut reader, "(SELECT v FROM t) = 2").unwrap();
+    assert_eq!(run(&mut idle, "SELECT v FROM t"), Err(3954));
+    check(&mut idle, "@@TRANCOUNT = 0").unwrap();
+    run(&mut reader, "COMMIT").unwrap();
+    let (result, elapsed) = off.join().unwrap();
+    assert_eq!(result, Ok(()));
+    assert!(elapsed >= Duration::from_millis(400), "{elapsed:?}");
+    assert_eq!(
+        snapshot_state(&observer, "probe_db"),
+        Some((0, Some("OFF".into())))
+    );
 }
