@@ -10416,6 +10416,22 @@
       "dependencies": [],
       "issue": 850,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkY_d"
+    },
+    {
+      "id": "docker-client-script-trigger-v1",
+      "title": "Avoid rebuilding native Docker images for client command list edits",
+      "state": "ready",
+      "authorization": "Owner asks for faster PR cycles and no hour-long PR CI. Verified PR846 Docker run37104221494 actor/trigger8561 exactca96 ownerhead is rebuilding bothnativeplatforms solely because package.json changes npm test list. Dockerfile copies Rust/manifests/vendor/launcher, not package.json; Docker smoke dependencies remain pinned by unchanged package-lock.json. Main required check is Deterministic crates only. This bounded companion of helper845 removes an irrelevant trigger, preserving native-image/smoke/dependency/release/manual verification.",
+      "scope": [
+        ".github/workflows/docker.yml"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Remove package.json from Docker pull_request path filters, keeping package-lock.json (npm ci smoke dependency integrity), scripts/docker-smoke.mjs, Docker/Rust/container/security source paths, release-tag and manual triggers, both architectures and all smoke/publishing/trust gates unchanged. Explain that client script-list edits do not change image inputs; actual dependency changes must update the lockfile and trigger Docker. No image/release behavior change or relaxation of required deterministic CI.",
+        "Fresh exclusive own receipt in existingroot845 worktree, no new worker/cache/build. Verify scope/input diff and workflow syntax by source review; combine this related trigger correction with846 under both exactclaims and document changedhead. RequiredCI/finalindependent+Codexreview and845 fullnpm stillapply; record understood reason if cancelling obsolete owner-attributable optional Docker runs whose production/dependency inputs are unchanged. Never count cancelled jobs as passes or cancel required/unrelated jobs. Worker owns combined merge and prompt bothregistry/project completion."
+      ],
+      "issue": 856,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkaeE"
     }
   ]
 }
