@@ -22,18 +22,20 @@ and filters with `ISNULL(old_value, N'') <> ISNULL(new_value, N'')`.
   its STRUCT display text. Integer and other first types are unchanged.
   This covers carriers that reach ISNULL through derived tables, inline
   functions and APPLY, which the predicate catalog cannot type.
-- The predicate catalog (`src/engine/ext/keys/predicates/catalog.rs`)
-  declares OPENJSON row sources: the default schema's `key` as
-  NVARCHAR(4000) and `value` as NVARCHAR(MAX) carriers and `type` as an
-  integer, and explicit WITH columns by their declarations (NVARCHAR and
-  NCHAR columns are carriers, VARCHAR and CHAR are text). Comparisons,
-  IN, CASE operands and ORDER BY over these columns then use the Unicode
-  comparison, and ISNULL, COALESCE, IIF and CASE that mix them with text
-  convert them to their declared type first, like stored NVARCHAR columns.
+- The NVARCHAR and NCHAR widths that ISNULL applies for a known first
+  argument (`__msduck_isnull_nvarchar_width`, `__msduck_isnull_nchar_width`)
+  accept both VARCHAR text and carriers and keep the input's backend type.
+  Previously a carrier from an aggregate subquery, as in
+  `N'text' + ISNULL((SELECT MAX(v) FROM ...), N'')`, reached the VARCHAR-only
+  width function and failed to bind (found while verifying #901).
+
+The multirow trigger from the report, ISNULL over OPENJSON keys and values
+in projections and stored results, and ISNULL over aggregated subqueries now
+match SQL Server.
 
 ## Evidence
 
-- `scripts/capture-openjson-isnull.mjs` captures 17 cases from the pinned
+- `scripts/capture-openjson-isnull.mjs` captures 21 cases from the pinned
   SQL Server 2025 reference image (17.0.4065.4) into
   `reference/openjson-isnull.json`: the report's query over NVARCHAR(MAX),
   VARCHAR(MAX), bounded NVARCHAR and literal documents; ISNULL key, value,
@@ -41,8 +43,9 @@ and filters with `ISNULL(old_value, N'') <> ISNULL(new_value, N'')`.
   replacements; IIF and CASE results and comparisons; ISNULL in WHERE and
   ORDER BY; comparisons and IN; explicit WITH schemas over NVARCHAR and
   VARCHAR documents; two OPENJSON sources FULL JOINed through APPLY and
-  through an inline function; and the multirow trigger, with changed and
-  unchanged rows. Comparison cases avoid supplementary characters,
+  through an inline function; the multirow trigger, with changed and
+  unchanged rows; and ISNULL over STRING_AGG and MAX subqueries inside
+  concatenation and over stored NVARCHAR and NCHAR columns. Comparison cases avoid supplementary characters,
   punctuation and case differences, whose ordering depends on the
   collation.
 - `tests/compat/openjson_isnull.test.mjs` replays every case through
@@ -51,7 +54,7 @@ and filters with `ISNULL(old_value, N'') <> ISNULL(new_value, N'')`.
 - `tests/openjson_isnull.rs` checks the native ISNULL dispatch (carrier code
   units including an unpaired surrogate, carrier replacements of text,
   integer and date first arguments), stored ISNULL results over OPENJSON,
-  and the trigger.
+  the trigger, and both overloads of the ISNULL width functions.
 - `tests/compat/apply_full_join.test.mjs` now expects SQL Server's rows for
   its ISNULL trigger case.
 
@@ -59,5 +62,24 @@ and filters with `ISNULL(old_value, N'') <> ISNULL(new_value, N'')`.
 
 The tedious test lists them exactly:
 
+- COALESCE, IIF, CASE results and comparisons (`=`, `<>`, `>`, IN, simple
+  CASE) that mix a direct OPENJSON `key`/`value` column, or an explicit WITH
+  NVARCHAR column, with text still fail with 245, or with DuckDB's binder
+  error for COALESCE of a VARCHAR and an NVARCHAR WITH column. The same
+  holds for comparisons of `ISNULL(j.[value], N'')` with a literal. The
+  predicate catalog in `src/engine/ext/keys/predicates/catalog.rs` treats
+  OPENJSON aliases as derived tables of unknown type; declaring their
+  columns (key NVARCHAR(4000), value NVARCHAR(MAX), WITH columns by
+  declaration) lets the existing marking and pinning handle them. That file
+  belonged to the default-collation task while this one ran; a prototype
+  made 9 more of the 21 cases match.
+- Two carriers compare by their bytes, so `ISNULL(l.[value], N'') <>
+  ISNULL(r.[value], N'')` treats `'x'` and `'x  '` as different; SQL
+  Server ignores trailing spaces.
+- `COALESCE(l.[key], r.[key])` and `COALESCE` over OPENJSON WITH columns
+  report `nvarchar(max)`; SQL Server keeps the declared width.
+- ISNULL with a VARCHAR first argument and a carrier replacement holding
+  characters outside Windows-1252 fails on the wire instead of returning
+  `?`; the same happens for VARCHAR and NVARCHAR variables.
 - The OPENJSON `type` column is `int`; SQL Server reports `tinyint`, so
   `ISNULL(j.[type], 0)` is `int` too.
