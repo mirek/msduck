@@ -60,6 +60,7 @@ pub fn rewrite(query: &mut Query) {
 
 fn rewrite_select(select: &mut Select) {
     let mut taken = relation_names(select);
+    let base_names = !long_names(select);
     let mut filters = Vec::new();
     let mut sides = Vec::new();
     for item in &mut select.from {
@@ -155,7 +156,7 @@ fn rewrite_select(select: &mut Select) {
                 global: false,
                 join_operator: JoinOperator::LeftOuter(JoinConstraint::On(side(1))),
             },
-            right_join(right, &side, &condition),
+            right_join(right, &side, &condition, base_names),
         ];
         joins.extend(item.joins.drain(index + 1..));
         item.relation = relation;
@@ -203,7 +204,12 @@ fn rewrite_select(select: &mut Select) {
 /// and an unqualified name in the condition may do so, so an aliased B reads
 /// the condition in a lateral filter instead (`LEFT JOIN LATERAL (SELECT *
 /// FROM B WHERE ...) AS b ON TRUE`); the alias keeps `b.column` and `b.*`.
-fn right_join(right: TableFactor, side: &dyn Fn(i64) -> Expr, condition: &Expr) -> Join {
+fn right_join(
+    right: TableFactor,
+    side: &dyn Fn(i64) -> Expr,
+    condition: &Expr,
+    base_names: bool,
+) -> Join {
     let matched = Expr::BinaryOp {
         left: Box::new(Expr::Nested(Box::new(Expr::BinaryOp {
             left: Box::new(side(1)),
@@ -213,7 +219,17 @@ fn right_join(right: TableFactor, side: &dyn Fn(i64) -> Expr, condition: &Expr) 
         op: BinaryOperator::Or,
         right: Box::new(side(2)),
     };
-    let Some(name) = alias(&right).map(|alias| alias.name.clone()) else {
+    // An unaliased table keeps its base name as the derived alias, unless
+    // the SELECT uses three-part names, which a derived alias cannot match.
+    let name = alias(&right)
+        .map(|alias| alias.name.clone())
+        .or(match &right {
+            TableFactor::Table { name, .. } if base_names => {
+                name.0.last().and_then(|part| part.as_ident()).cloned()
+            }
+            _ => None,
+        });
+    let Some(name) = name else {
         return Join {
             relation: right,
             global: false,
@@ -259,6 +275,28 @@ fn alias(factor: &TableFactor) -> Option<&TableAlias> {
         | TableFactor::NestedJoin { alias, .. } => alias.as_ref(),
         _ => None,
     }
+}
+
+/// Whether the SELECT names a column or wildcard with three or more parts
+/// (`schema.table.column`).
+fn long_names(select: &Select) -> bool {
+    struct Long(bool);
+    impl Visitor for Long {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            if matches!(expr, Expr::CompoundIdentifier(parts) if parts.len() >= 3) {
+                self.0 = true;
+                return ControlFlow::Break(());
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut long = Long(false);
+    let _ = select.visit(&mut long);
+    long.0
+        || select.projection.iter().any(|item| {
+            matches!(item, SelectItem::QualifiedWildcard(SelectItemQualifiedWildcardKind::ObjectName(name), _) if name.0.len() >= 2)
+        })
 }
 
 /// Lowercase aliases and table names of every relation in the SELECT, and
@@ -508,8 +546,10 @@ fn factor_names(factor: &TableFactor, names: &mut HashSet<String>) {
     {
         names.insert(last.value.to_lowercase());
     }
+    // An aliased parenthesized join hides the names inside it.
     if let TableFactor::NestedJoin {
-        table_with_joins, ..
+        table_with_joins,
+        alias: None,
     } = factor
     {
         join_names(table_with_joins, names);
@@ -611,6 +651,24 @@ mod tests {
         // Names a subquery defines for itself are not outer references.
         let sql = "SELECT 1 FROM (SELECT p.k FROM t AS p) AS l FULL JOIN u AS r ON l.k = r.k AND EXISTS (SELECT 1 FROM v AS q WHERE q.k = r.k)";
         assert!(rewritten(sql).contains("FULL"), "{sql}");
+    }
+
+    #[test]
+    fn unaliased_tables_filter_laterally_and_nested_aliases_hide_names() {
+        let sql = rewritten("SELECT 1 FROM a FULL JOIN b ON a.k = b.k AND i.id = 1");
+        assert!(
+            sql.contains("LEFT OUTER JOIN LATERAL (SELECT * FROM b WHERE"),
+            "{sql}"
+        );
+        assert!(sql.contains(") AS b ON true"), "{sql}");
+        // Three-part names cannot bind to a derived alias.
+        let sql = rewritten("SELECT dbo.b.k FROM a FULL JOIN dbo.b ON a.k = dbo.b.k AND i.id = 1");
+        assert!(sql.contains("LEFT OUTER JOIN dbo.b ON"), "{sql}");
+        // `p` inside `(...) AS r` is hidden, so `p.id` is an outer reference.
+        let sql = rewritten(
+            "SELECT 1 FROM a FULL JOIN (b AS p JOIN c ON p.k = c.k) AS r ON a.k = r.k AND p.id = 1",
+        );
+        assert!(!sql.contains("FULL"), "{sql}");
     }
 
     #[test]
