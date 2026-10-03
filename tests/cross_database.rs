@@ -434,3 +434,23 @@ fn ctes_and_table_functions_hide_only_their_own_names() {
     );
     assert_eq!(catalog(&session), "memory.dbo");
 }
+
+#[test]
+fn procedure_bodies_report_writes_to_a_second_database() {
+    let (_server, mut session) = fixture();
+    ok(
+        &mut session,
+        "CREATE PROCEDURE dbo.two AS BEGIN INSERT foo.dbo.items (name) VALUES (N'p'); INSERT dbo.loc VALUES (9, N'nine') END",
+    );
+    let (number, state, class, message) = fails(&mut session, "BEGIN TRAN; EXEC dbo.two; SELECT 1");
+    assert_eq!((number, state, class), (40515, 1, 16));
+    assert_eq!(
+        message,
+        "unsupported cross-database transaction: database 'master' cannot be modified in a transaction that has already modified database 'foo'; a transaction may write only one database"
+    );
+    assert_eq!(session.transactions, 0);
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.items"), 1);
+    assert_eq!(count(&session, "SELECT count(*) FROM memory.dbo.loc"), 1);
+    assert_eq!(catalog(&session), "memory.dbo");
+    ok(&mut session, "SELECT label FROM dbo.loc");
+}

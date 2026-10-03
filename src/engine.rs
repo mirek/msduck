@@ -2944,7 +2944,10 @@ impl Session {
         if result.is_err() && own_transaction {
             let _ = self.db.execute_batch("ROLLBACK");
         }
-        result
+        // Statements of procedure and trigger bodies reach DuckDB here
+        // without the batch loop, so writes to a second database are
+        // reported and doom the transaction here too.
+        result.map_err(|error| self.single_database_writes(error))
     }
     fn execute_drop_index(
         &mut self,
