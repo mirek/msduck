@@ -1599,7 +1599,7 @@ fn incomplete_catalogs_and_conversion_contracts_remain_explicit_barriers() {
             Err(Error::UnknownCollation)
         );
     }
-    for kind in [Type::Text, Type::Ntext, Type::Image] {
+    for kind in [Type::Text, Type::Ntext] {
         let mut arguments = base.clone();
         arguments[1] = Argument {
             kind: Some(kind),
@@ -2261,4 +2261,152 @@ fn rejected_concat_sources_use_the_declared_conversion_family() {
         };
         assert!(actual.message.contains(" to nvarchar is not allowed."));
     }
+}
+
+#[test]
+fn legacy_context_preserves_conversion_family_and_rejection_order() {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../../../reference/concat-legacy-family.json")).unwrap();
+    let source = |declaration: &str, value: &str| {
+        let kind = match declaration {
+            "XML" => Type::Xml,
+            "SQL_VARIANT" => Type::Variant,
+            "IMAGE" => Type::Image,
+            "TEXT" => Type::Text,
+            "NTEXT" => Type::Ntext,
+            _ => panic!("unknown source declaration"),
+        };
+        let legacy_text = matches!(kind, Type::Text | Type::Ntext);
+        (
+            Argument {
+                kind: Some(kind),
+                converted_width: legacy_text.then_some(Length::Max),
+                collation: legacy_text.then(|| Label::CoercibleDefault(DEFAULT.into())),
+            },
+            if legacy_text && value != "NULL" {
+                text("a")
+            } else {
+                None
+            },
+        )
+    };
+    // The exact review counterexample must fail before any broader legacy rule.
+    let arguments = [
+        literal(Some(""), false).0,
+        source("XML", "value").0,
+        source("NTEXT", "value").0,
+    ];
+    let actual = rules::plan(Function::ConcatWs, &arguments, DEFAULT, &catalog()).unwrap_err();
+    assert_runtime_error(
+        &actual,
+        &observed(
+            &fixture["containers"][0]["runs"][0],
+            "xml value before ntext value ansi",
+        )["errors"][0],
+    );
+    let mut diagnostics = 0;
+    let mut successes = 0;
+    for container in fixture["containers"].as_array().unwrap() {
+        for run in container["runs"].as_array().unwrap() {
+            for record in run.as_array().unwrap() {
+                let input = &record["input"];
+                if input["kind"] != "isolated" && input["kind"] != "mixed" {
+                    continue;
+                }
+                let separator = input["separator"].as_str().unwrap();
+                let (argument, value) = literal(
+                    if separator == "NULL" { None } else { Some("") },
+                    separator == "N''",
+                );
+                let mut arguments = vec![argument];
+                let mut values = vec![value];
+                if input["kind"] == "isolated" {
+                    let (argument, value) = source(
+                        input["declaration"].as_str().unwrap(),
+                        input["value"].as_str().unwrap(),
+                    );
+                    arguments.extend([argument, Argument::null_literal()]);
+                    values.extend([value, None]);
+                } else {
+                    for member in input["members"].as_array().unwrap() {
+                        let (argument, value) = source(
+                            member["declaration"].as_str().unwrap(),
+                            member["value"].as_str().unwrap(),
+                        );
+                        arguments.push(argument);
+                        values.push(value);
+                    }
+                }
+                let captured = &record["result"];
+                let plan = rules::plan(Function::ConcatWs, &arguments, DEFAULT, &catalog());
+                if let Some(expected) = captured["errors"].as_array().unwrap().first() {
+                    assert_runtime_error(&plan.unwrap_err(), expected);
+                    assert!(captured["sets"].as_array().unwrap().is_empty());
+                    diagnostics += 1;
+                } else {
+                    let plan = plan.unwrap();
+                    assert_character_descriptor(
+                        &plan,
+                        &captured["sets"][0]["columns"][0],
+                        record["name"].as_str().unwrap(),
+                    );
+                    let actual = rules::evaluate(&plan, &values, &default_match).unwrap();
+                    assert_eq!(
+                        json!([[actual.map(|v| String::from_utf16(&v).unwrap())]]),
+                        captured["sets"][0]["rows"]
+                    );
+                    successes += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(diagnostics, 936);
+    assert_eq!(successes, 144);
+}
+
+#[test]
+fn legacy_text_contracts_require_explicit_width_collation_and_source_encoding() {
+    let base = [
+        literal(Some(""), false).0,
+        Argument {
+            kind: Some(Type::Ntext),
+            converted_width: Some(Length::Max),
+            collation: Some(Label::CoercibleDefault(DEFAULT.into())),
+        },
+        Argument::null_literal(),
+    ];
+    let plan = rules::plan(Function::ConcatWs, &base, DEFAULT, &catalog()).unwrap();
+    // Typed UTF-16 payload contract, not a new SQL Server capture. NTEXT must
+    // retain non-CP1252 units and isolated surrogates without normalization.
+    let units = vec![0x4241, 0xd83d];
+    assert_eq!(
+        rules::evaluate(
+            &plan,
+            &[text(""), Some(units.clone()), None],
+            &default_match
+        ),
+        Ok(Some(units))
+    );
+    for kind in [Type::Text, Type::Ntext] {
+        let mut arguments = base.clone();
+        arguments[1].kind = Some(kind);
+        arguments[1].converted_width = Some(Length::Bounded(40));
+        assert_eq!(
+            rules::plan(Function::ConcatWs, &arguments, DEFAULT, &catalog()),
+            Err(Error::InvalidDeclaration)
+        );
+        arguments[1].converted_width = Some(Length::Max);
+        arguments[1].collation = None;
+        assert_eq!(
+            rules::plan(Function::ConcatWs, &arguments, DEFAULT, &catalog()),
+            Err(Error::UnknownCollation)
+        );
+    }
+    let mut ansi = base;
+    ansi[1].kind = Some(Type::Text);
+    let plan = rules::plan(Function::ConcatWs, &ansi, DEFAULT, &catalog()).unwrap();
+    assert_eq!(
+        rules::evaluate(&plan, &[text(""), Some(vec![0x4241]), None], &default_match),
+        Err(Error::InvalidPayload)
+    );
 }

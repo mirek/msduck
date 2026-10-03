@@ -31,12 +31,12 @@ The position is nonzero and passed through `plan_with_context`. Comparison weigh
 and may return unknown. The tests provide only comparisons established for the
 captured cases; they do not claim to implement all linguistic weights. Numeric,
 legacy temporal and GUID formatting remains in separate caller conversion code;
-uncaptured per-type formatting widths remain unknown. Unsupported legacy types
-and ANSI UTF-8 evaluation do not acquire invented behavior. Character payloads
+uncaptured per-type formatting widths remain unknown. Legacy conversions without explicit contracts
+and ANSI UTF-8 evaluation remain barriers. Character payloads
 must respect their declared widths and fixed-width padding. Core CP1252 encoding
 validates ANSI payloads; Unicode payloads retain isolated surrogate units.
 
-Thirty-one private Rust tests pass using cached, compiler-compatible Linux
+Thirty-three private Rust tests pass using cached, compiler-compatible Linux
 dependencies and isolated temporary binaries, with strict Clippy and formatting.
 They compare 21 ordinary character cases across all four captures (84 comparisons),
 26 declaration/collation cases (104 comparisons), 10 supplementary/UTF-8/mismatch
@@ -195,3 +195,21 @@ observations across all four captures (96 exact diagnostics). Planning now
 selects the conversion family from all original character declarations before
 rejecting a source, without consulting values. A separate rendering test covers
 Unicode following the rejected source; it is not a new SQL Server capture.
+
+The follow-up NTEXT review finding is backed by reference #833
+(`concat-legacy-family.json`, SHA-256
+`636c51a2516b74ebb3dbb3a16e4478ac58a6d14bae33a832e18d69e31aef1711`).
+The actual c0aec03 predecessor fails its XML-before-NTEXT regression. The new
+replay checks 936 complete diagnostics and 144 successful legacy-text results
+and character descriptors across all four captures. NTEXT selects Unicode even
+when NULL; XML/sql_variant/image preserve the first incompatible argument's
+captured error and target family. IMAGE supplies 206/state2/severity16.
+
+CONCAT_WS accepts already converted TEXT/NTEXT only with an explicit MAX width
+and collation; original source types remain intact. NTEXT payloads retain UTF-16
+units, while TEXT uses its explicit source encoding. Missing contracts and
+unsupported TRANSLATE legacy conversions remain barriers. Separate typed-payload
+regressions cover invalid bounded legacy widths, missing collations, isolated
+surrogate preservation and rejecting non-CP1252 TEXT input; these are rendering
+contracts, not new SQL Server observations. The reference covers isolated and
+pairwise default-collation inputs, not every wider diagnostic/collation context.

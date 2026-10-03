@@ -145,9 +145,11 @@ pub fn plan_with_context(
     let mut combined: Option<Label> = None;
     // Conversion family is determined by all original declarations, including
     // a Unicode argument following a source rejected during conversion.
-    let is_unicode = arguments
-        .iter()
-        .any(|argument| matches!(argument.kind, Some(Type::Character(kind)) if unicode(kind)));
+    let is_unicode = arguments.iter().any(|argument| match argument.kind {
+        Some(Type::Ntext) => true,
+        Some(Type::Character(kind)) => unicode(kind),
+        _ => false,
+    });
     let mut source_encodings = Vec::new();
     for (index, argument) in arguments.iter().enumerate() {
         match argument.kind {
@@ -170,6 +172,21 @@ pub fn plan_with_context(
                     ),
                 ));
             }
+            Some(Type::Image) if function == Function::ConcatWs => {
+                let target = if is_unicode { "nvarchar" } else { "varchar" };
+                return Err(sql(
+                    206,
+                    2,
+                    format!("Operand type clash: image is incompatible with {target}"),
+                ));
+            }
+            Some(Type::Text | Type::Ntext) if function == Function::ConcatWs => {
+                match argument.converted_width {
+                    Some(Length::Max) => {}
+                    Some(_) => return Err(Error::InvalidDeclaration),
+                    None => return Err(Error::UnknownConversion),
+                }
+            }
             Some(Type::Text | Type::Ntext | Type::Image) => return Err(Error::UnknownConversion),
             Some(Type::Xml | Type::Variant) => return Err(Error::UnknownConversion),
             Some(Type::Int) if function == Function::Translate && index == 2 => {
@@ -188,7 +205,11 @@ pub fn plan_with_context(
         if argument.kind.is_none() && argument != &Argument::null_literal() {
             return Err(Error::InvalidDeclaration);
         }
-        if matches!(argument.kind, Some(Type::Character(_))) && argument.collation.is_none() {
+        if matches!(
+            argument.kind,
+            Some(Type::Character(_) | Type::Text | Type::Ntext)
+        ) && argument.collation.is_none()
+        {
             return Err(Error::UnknownCollation);
         }
         if let Some(label) = &argument.collation {
@@ -463,6 +484,7 @@ fn evaluate_with_translator(
             return Err(Error::InputLimit);
         }
         let source_unicode = matches!(argument.kind, Some(Type::Character(kind)) if unicode(kind))
+            || argument.kind == Some(Type::Ntext)
             || (unicode(plan.declaration) && matches!(argument.kind, Some(Type::Binary(_))));
         let size = if source_unicode {
             value.len()
