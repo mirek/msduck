@@ -10797,6 +10797,21 @@
       "dependencies": [],
       "issue": 868,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkgwF"
+    },
+    {
+      "id": "v025-bracket-types-v1-catalog-text",
+      "title": "Render delimited system type names in catalog definitions",
+      "state": "ready",
+      "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03): \"please find the following compatibility report and work on it; definition of done is when all this functionality lands in published container; feel free to schedule multiple agents working on multiple prs\". The owner pasted a first-party workload compatibility report for the v0.2.5 image (umbrella #864); only its generic reproductions are used. No external content. Companion of v025-bracket-types-v1 (issue #865): sys.computed_columns and sys.default_constraints definitions are NULL for CONVERT([nvarchar](200), ...) because catalog/definition.rs type_name rejects the delimited name.",
+      "scope": [
+        "crates/msduck-sql/src/dialect/ext/catalog/definition.rs"
+      ],
+      "acceptance": [
+        "type_name renders a delimited or sys-qualified system type name through dialect::ext::conversion::bracket_types::plain_type, so the definition of value AS (CONVERT([nvarchar](200),JSON_VALUE(body,N$.a))) is (CONVERT([nvarchar](200),json_value([body],N$.a))) and of DEFAULT CONVERT([nvarchar](450),SESSION_CONTEXT(Nfoo)) is (CONVERT([nvarchar](450),session_context(Nfoo))), as captured from SQL Server. Shipped in the same PR as v025-bracket-types-v1 with its tests."
+      ],
+      "dependencies": [],
+      "issue": 865,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pkgvg"
     }
   ]
 }
