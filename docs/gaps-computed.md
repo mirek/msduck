@@ -168,7 +168,7 @@ After RESETCONNECTION, the session context is empty, so the defaults are NULL.
   `int` otherwise), which is what SQL Server converts the sql_variant to. In
   other positions, and with a non-constant property name, the default is
   refused with 40515.
-- **sql_variant results.** ISNULL, COALESCE, NULLIF, IIF and CASE results built
+- **sql_variant results.** ISNULL, COALESCE, NULLIF, IIF, CHOOSE and CASE results built
   from `SESSION_CONTEXT` or its `SQL_VARIANT_PROPERTY` are `sql_variant`, so a
   default of another column type fails with 257 (state 3) when the table is
   created, as captured. `ISNULL(NULL, SESSION_CONTEXT(...))` has the

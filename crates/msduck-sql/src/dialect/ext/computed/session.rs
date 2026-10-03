@@ -15,7 +15,7 @@
 //!   applied to each supported base type in turn and the stored kind selects
 //!   one. A bare value converts implicitly to the column type, which SQL
 //!   Server refuses with 257 when the table is created; so do ISNULL,
-//!   COALESCE, NULLIF, IIF and CASE results built from it.
+//!   COALESCE, NULLIF, IIF, CHOOSE and CASE results built from it.
 //! - `SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'key'), 'property')` with a
 //!   constant property reads the stored kind (and, for nvarchar, the declared
 //!   and total byte lengths) in its base type, so DEFAULT conditions compare
@@ -376,7 +376,7 @@ fn variant_property(expr: &Expr) -> Option<(&Function, &Expr)> {
 
 /// Whether a DEFAULT expression's result is a sql_variant read from session
 /// state: SESSION_CONTEXT, SQL_VARIANT_PROPERTY of it, or ISNULL, COALESCE,
-/// NULLIF, IIF or CASE results built from those. SQL Server refuses those for
+/// NULLIF, IIF, CHOOSE or CASE results built from those. SQL Server refuses those for
 /// a column of another type with 257 when the table is created.
 fn variant_result(expr: &Expr) -> bool {
     match expr {
@@ -437,7 +437,8 @@ fn variant_result(expr: &Expr) -> bool {
                 }
                 "ISNULL" | "NULLIF" => arguments.get(..1).unwrap_or_default(),
                 "COALESCE" => &arguments,
-                "IIF" => arguments.get(1..).unwrap_or_default(),
+                // The value arms after the condition or index.
+                "IIF" | "CHOOSE" => arguments.get(1..).unwrap_or_default(),
                 _ => &[],
             };
             candidates.iter().any(|candidate| variant_result(candidate))
@@ -582,6 +583,7 @@ fn static_type_name(expr: &Expr) -> Option<String> {
         } => Some(type_name(data_type)),
         Expr::Value(value) => match &value.value {
             Value::NationalStringLiteral(_) => Some("nvarchar".into()),
+            Value::HexStringLiteral(_) => Some("varbinary".into()),
             Value::SingleQuotedString(_) => Some("varchar".into()),
             // Integer constants are int when they fit, otherwise numeric, as
             // are decimal constants (captured from SQL Server).
@@ -928,6 +930,7 @@ mod tests {
             "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(NULL, SESSION_CONTEXT(N'foo'))))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL((NULL), SESSION_CONTEXT(N'foo'))))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT CAST(SESSION_CONTEXT(N'foo') AS sql_variant))",
+            "CREATE TABLE t (v nvarchar(10) DEFAULT CHOOSE(1, SESSION_CONTEXT(N'foo'), N'x'))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(CAST(NULL AS sql_variant), SESSION_CONTEXT(N'foo'))))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT (CASE WHEN 1 = 1 THEN SESSION_CONTEXT(N'foo') END))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT IIF(1 = 1, N'x', SESSION_CONTEXT(N'foo')))",
@@ -953,6 +956,10 @@ mod tests {
             (
                 "CREATE TABLE t (v int DEFAULT (ISNULL(-1, SESSION_CONTEXT(N'k'))))",
                 "int",
+            ),
+            (
+                "CREATE TABLE t (v varbinary(1) DEFAULT (ISNULL(0x01, SESSION_CONTEXT(N'k'))))",
+                "varbinary",
             ),
             (
                 "CREATE TABLE t (v int DEFAULT (ISNULL(-((1)), SESSION_CONTEXT(N'k'))))",
