@@ -255,6 +255,15 @@ To resolve a stale task:
    confirmation. Isolate successor outputs and honor shared build locks; never
    kill unrelated jobs or overwrite an executable still in use.
 
+6. Preserve downstream work explicitly: published dependency IDs are immutable,
+   and completing the successor alone does not release tasks depending on the
+   old ID. After the successor merges, publish the old ID as `done` only if the
+   combined retained and successor evidence satisfies all of its original
+   acceptance criteria. If it does not, keep the old ID blocked and publish
+   affected dependent work under fresh IDs with truthful dependencies, recording
+   the supersession and blocking obsolete reservations to avoid scope conflicts.
+   Claim each replacement separately; never fabricate completion to release work.
+
 Preserve the old branch, receipt, permanent claim and verification evidence;
 never adopt or delete the old receipt or claim. A suspended process
 that wakes up later must verify again, and stop when its task is no longer
