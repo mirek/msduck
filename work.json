@@ -9883,6 +9883,27 @@
         "Fresh exclusive claim in the clean completed existing prepared-rpc worktree; no new worktrees/local native caches/agents. Never adopt322 receipt or stop unrelated jobs. Independent and verified exact-head Codexreview or availability fallback, green requiredCI, worker owns focusedPRmerge and prompt registry/project/issuecompletion. Link superseded323 and preserve its finding/evidence until verified successor addresses it."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkE4R"
+    },
+    {
+      "id": "concat-numeric-format-reference-v1",
+      "title": "Capture numeric implicit formatting boundaries for CONCAT_WS and TRANSLATE",
+      "issue": 823,
+      "state": "ready",
+      "authorization": "Continuing owner compatibility goal; establish complete retained first-party SQL Server evidence for uncovered numeric function formatting, using approved815 observer design and existing formatter candidates only as comparison subjects.",
+      "scope": [
+        "scripts/capture-concat-numeric-format.mjs",
+        "reference/concat-numeric-format.json",
+        "docs/concat-numeric-format.md"
+      ],
+      "dependencies": [
+        "concat-text-conversion-reference-v1"
+      ],
+      "acceptance": [
+        "Capture integer/bit limits/zero, decimal signs/zeros/precision-scale extremes, MONEY/SMALLMONEY positive/negative half-cent ties/neighbors/carries/extrema, REAL/FLOAT six-digit rounding and fixed/scientific transitions/signedzero/small-largefinite-subnormal/widthdifferences. Retain explicit declarations, original scalar or IEEE RPC input bit provenance, separate native/source-CAST and explicitstyle0 controls from implicit CONCAT_WS/TRANSLATE; includeNULL/ANSI-Unicode/sourcepositions/preparedrebindings/fullstablemetadata. No inference fromcurrentreturnedvalues or silently omitted rejectedinputs.",
+        "Pinned SQL Server image, independently owned containers/fresh databases, four complete observations and a full second reproduction. Reuse approved815 observer with raw rows/UTF16/BIGINTs/userType/full descriptors/server-procedureidentity/errors/orderedtokens/RETURNVALUE/DONE. Hostname/config explicit, no field normalization. Meaningful bounded self-tests detect coherent fixture corruption and overwrite/CLI guard regressions; watchdog/memory/input-output limits, ownership labels and cleanup onlyownterminalresources. Record observed formatter differences/unknowns and no servercompatibility claim.",
+        "Fresh exclusive claim in clean completed msduck-concat-ws-translate-core worktree from approved main5f6dd8b; retain old quoted-registration branch/receipt. No new worktrees/nativecaches/agents; never sync/build/change the live shared root job81480 workspace. Private reference staging/cached immutable Node deps only, resource-limited containers. Exact-head CI, independent and owner-enabledCodex review or fallback, worker owns PRmerge and prompt registry/project/issuecompletion. No engine.rs edit/reservation."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkFdl"
     }
   ]
 }
