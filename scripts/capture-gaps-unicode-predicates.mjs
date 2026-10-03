@@ -1,10 +1,10 @@
 // First-party evidence for docs/gaps-unicode-predicates.md: comparisons,
 // LIKE, ordering, concatenation and character conversions over NVARCHAR and
 // NCHAR columns. Each case runs its statements in order in a fresh database
-// created with COLLATE Latin1_General_100_BIN2, the binary semantics msduck
-// uses by default (case-sensitive, code-unit order, trailing spaces ignored
-// by comparisons). Rows, diagnostics and completions are kept raw except the
-// generated database name.
+// with the server's default collation, SQL_Latin1_General_CP1_CI_AS, which
+// msduck reports and follows (case-insensitive, accent-sensitive, trailing
+// spaces ignored by comparisons). Rows, diagnostics and completions are kept
+// raw except the generated database name.
 //
 // node scripts/capture-gaps-unicode-predicates.mjs [output-directory]
 // MSSQL_REFERENCE_IMAGE selects the image (default: the pinned reference).
@@ -18,7 +18,7 @@ import {isolatedReference, assertSameCapture, connect, command} from './lib/refe
 import {TYPES, Request} from 'tedious'
 import {capture, canonical} from './lib/compatibility.mjs'
 
-// Values chosen around the edges of binary comparison: trailing spaces,
+// Values chosen around the edges of comparison: trailing spaces,
 // case, NUL below the pad space, U+0100 (whose little-endian bytes sort
 // first), a surrogate pair against U+E000, an isolated surrogate, empty,
 // NULL, LIKE metacharacters and a value longer than 4000 characters.
@@ -210,11 +210,8 @@ async function captureReference() {
     return (await exec('docker', actual, {env: {...process.env, ...env}, maxBuffer: 4 * 1024 * 1024})).stdout.trim()
   }
   const redact = value => JSON.parse(JSON.stringify(value).replace(/msduck_audit_[0-9a-f]{32}/g, 'msduck_audit_<database>'))
-  // Binary collation: msduck's default comparison semantics.
-  const binary = {
-    connect,
-    command: (connection, sql) => command(connection, sql.startsWith('CREATE DATABASE') ? `${sql} COLLATE Latin1_General_100_BIN2` : sql),
-  }
+  // The server's default collation, as every msduck database reports.
+  const defaults = {connect, command}
 
   const output = resolve(process.argv[2] ?? 'artifacts/compatibility/gaps-unicode-predicates-reference')
   await mkdir(output, {recursive: true})
@@ -234,14 +231,14 @@ async function captureReference() {
             steps.push(redact({sql, result, completion: tokens}))
           }
           return {id, steps}
-        }, binary))
+        }, defaults))
       }
       runs.push(results)
     }
     await writeFile(resolve(output, 'runs.json'), JSON.stringify(runs, null, 2) + '\n')
     assertSameCapture(runs[0], runs[1], 'Fresh captures differ')
     const version = await isolatedReference(config, async connection => canonical(await capture(connection, 'SELECT @@VERSION AS version')).sets[0].rows[0][0])
-    const actual = {image: container.image, version, collation: 'Latin1_General_100_BIN2', identicalFreshCaptures: 2, cases: runs[0]}
+    const actual = {image: container.image, version, collation: 'SQL_Latin1_General_CP1_CI_AS', identicalFreshCaptures: 2, cases: runs[0]}
     await writeFile(resolve(output, 'gaps-unicode-predicates.json'), JSON.stringify(actual) + '\n')
     console.log(`Captured ${cases.length} cases twice identically in ${output}`)
   }, {docker: labeledDocker})

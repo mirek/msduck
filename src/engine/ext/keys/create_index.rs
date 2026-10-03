@@ -356,6 +356,21 @@ fn check_duplicates(
     columns: &[Column],
     filter: Option<&str>,
 ) -> Result<()> {
+    match first_duplicate(db, table, name, columns, filter)? {
+        Some(diagnostic) => Err(error(diagnostic)),
+        None => Ok(()),
+    }
+}
+
+/// SQL Server's 1505 for the first duplicate in key order of existing rows
+/// under a new unique key, if any.
+pub(super) fn first_duplicate(
+    db: &duckdb::Connection,
+    table: &tables::Table,
+    name: &str,
+    columns: &[Column],
+    filter: Option<&str>,
+) -> Result<Option<(i32, u8, u8, String)>> {
     // The first duplicate in key order, NULL keys first, as SQL Server
     // reports it. The typed values order; their text is read.
     let mut components = vec![];
@@ -370,10 +385,24 @@ fn check_duplicates(
         }
         components.extend(parts);
     }
+    // Character keys drop trailing spaces and may fold case; the duplicate
+    // is shown as stored, the least of the equal values.
+    let stored: Vec<Option<String>> = columns
+        .iter()
+        .map(|column| match column.kind() {
+            Ok(value::Storage::Unicode) => Some(format!(
+                "min(hex(struct_extract({}, '__msduck_utf16le')))",
+                column.quoted()
+            )),
+            Ok(value::Storage::Ansi) => Some(format!("min(hex({}))", column.quoted())),
+            _ => None,
+        })
+        .collect();
     let selected = components
         .iter()
         .cloned()
         .chain(components.iter().map(|c| format!("CAST({c} AS VARCHAR)")))
+        .chain(stored.iter().flatten().cloned())
         .collect::<Vec<_>>()
         .join(", ");
     let sql = format!(
@@ -384,16 +413,30 @@ fn check_duplicates(
     );
     let mut statement = db.prepare(&sql)?;
     let width = components.len();
+    let extra = stored.iter().flatten().count();
     let mut rows = statement.query_map([], |row| {
-        (width..2 * width)
+        let values = (width..2 * width)
             .map(|i| row.get::<_, String>(i))
-            .collect::<duckdb::Result<Vec<_>>>()
+            .collect::<duckdb::Result<Vec<_>>>()?;
+        let raw = (2 * width..2 * width + extra)
+            .map(|i| row.get::<_, Option<String>>(i))
+            .collect::<duckdb::Result<Vec<_>>>()?;
+        Ok((values, raw))
     })?;
-    let Some(values) = rows.next().transpose()? else {
-        return Ok(());
+    let Some((values, raw)) = rows.next().transpose()? else {
+        return Ok(None);
     };
-    let shown = value::managed_values(columns, &values).unwrap_or_default();
-    Err(error(creation(name, &table.qualified(), &shown)))
+    let mut shown = value::managed_values(columns, &values).unwrap_or_default();
+    let mut raw = raw.into_iter();
+    for ((column, stored), shown) in columns.iter().zip(&stored).zip(shown.iter_mut()) {
+        if stored.is_some()
+            && let Some(Some(text)) = raw.next()
+            && shown != "<NULL>"
+        {
+            *shown = column.display(&text, true);
+        }
+    }
+    Ok(Some(creation(name, &table.qualified(), &shown)))
 }
 
 /// Register the index in the table-owned catalog, as its `create` does.

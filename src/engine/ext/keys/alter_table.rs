@@ -224,6 +224,115 @@ pub(super) fn run(
     }
 }
 
+/// ALTER TABLE ADD PRIMARY KEY or UNIQUE over CHAR or VARCHAR columns under
+/// a case-insensitive collation (the database default), which the
+/// constraints feature parses and adds. DuckDB enforces such a constraint
+/// natively by exact value; a managed index then enforces case-insensitive
+/// uniqueness, after checking existing rows (1505 and 1750, as SQL Server
+/// reports them).
+pub(super) fn add_keys(
+    session: &mut Session,
+    statement: &Statement,
+    parameters: &mut HashMap<String, Parameter>,
+) -> Result<Option<Execution>> {
+    use msduck_sql::dialect::ext::constraints::{Action, AddItem, Kind, decode};
+    use msduck_sql::dialect::ext::keys::value::Storage;
+    let Some(Ok(alter)) = decode(statement) else {
+        return Ok(None);
+    };
+    let Action::Add(items) = &alter.action else {
+        return Ok(None);
+    };
+    let Some(table) = tables::resolve(&session.db, &alter.table)? else {
+        return Ok(None);
+    };
+    let folded = |table: &tables::Table, name: &str| {
+        table
+            .column(name)
+            .is_some_and(|c| matches!(c.kind(), Ok(Storage::Ansi)) && c.case_insensitive())
+    };
+    let adds = items.iter().any(|item| match item {
+        AddItem::Constraint(constraint) => match &constraint.kind {
+            Kind::PrimaryKey(columns) | Kind::Unique(columns) => {
+                columns.iter().any(|c| folded(&table, &c.value))
+            }
+            _ => false,
+        },
+        AddItem::Column(_) => false,
+    });
+    if !adds {
+        return Ok(None);
+    }
+    let before: std::collections::HashSet<i64> = catalog::table(&session.db, table.object_id)?
+        .into_iter()
+        .map(|key| key.tag)
+        .collect();
+    let statement = statement.clone();
+    let object_id = table.object_id;
+    atomically(session, |session| {
+        let execution = ext::reenter(session, "keys", |session| {
+            session.execute(statement.clone(), parameters)
+        })?;
+        let Some(created) = tables::by_id(&session.db, object_id)? else {
+            return Ok(execution);
+        };
+        for key in catalog::table(&session.db, object_id)? {
+            if before.contains(&key.tag) || !key.constraint() || key.backend_name.is_some() {
+                continue;
+            }
+            let Some(columns) = key
+                .columns
+                .iter()
+                .map(|name| created.column(name).cloned())
+                .collect::<Option<Vec<_>>>()
+            else {
+                continue;
+            };
+            if !columns.iter().any(|c| folded(&created, &c.name)) {
+                continue;
+            }
+            if let Some(duplicate) = super::create_index::first_duplicate(
+                &session.db,
+                &created,
+                &key.name,
+                &columns,
+                None,
+            )? {
+                return Err(StatementErrors(vec![
+                    SqlError::from_utf16(
+                        duplicate.0,
+                        duplicate.1,
+                        duplicate.2,
+                        duplicate.3.encode_utf16().collect(),
+                    ),
+                    SqlError::new(
+                        1750,
+                        1,
+                        "Could not create constraint or index. See previous errors.",
+                    ),
+                ])
+                .into());
+            }
+            let backend = format!("__msduck_key_{}", key.tag);
+            super::build_index(
+                &session.db,
+                &created,
+                &backend,
+                key.tag,
+                true,
+                &columns,
+                None,
+            )?;
+            session.db.execute(
+                "UPDATE main.__msduck_keys SET backend_name=? WHERE tag=?",
+                duckdb::params![backend, key.tag],
+            )?;
+        }
+        Ok(execution)
+    })
+    .map(Some)
+}
+
 /// DuckDB still sees an index dropped in the open transaction when it
 /// checks DROP COLUMN and ALTER COLUMN.
 fn depends_on_dropped_index(error: &anyhow::Error) -> bool {

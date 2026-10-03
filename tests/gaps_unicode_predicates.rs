@@ -65,38 +65,41 @@ INSERT dbo.t VALUES
   (11, N'ab%_[c]', N'ab%_', 'ab')";
 
 #[test]
-fn comparisons_follow_binary_code_unit_order_and_ignore_trailing_spaces() {
+fn comparisons_follow_the_default_collation_and_ignore_trailing_spaces() {
     let server = Server::open(":memory:").unwrap();
     let mut session = Session::new(server.connection().unwrap()).unwrap();
     ok(&mut session, SETUP);
     let s = &mut session;
-    assert_eq!(ids(s, "n = N'x'"), "1,2");
-    assert_eq!(ids(s, "n = 'x   '"), "1,2");
-    assert_eq!(ids(s, "n <> N'x'"), "3,4,5,6,7,8,9,11");
+    // SQL_Latin1_General_CP1_CI_AS: case-insensitive, and NUL and
+    // surrogates (so supplementary characters) are ignored.
+    assert_eq!(ids(s, "n = N'x'"), "1,2,3");
+    assert_eq!(ids(s, "n = 'x   '"), "1,2,3");
+    assert_eq!(ids(s, "n <> N'x'"), "4,5,6,7,8,9,11");
     assert_eq!(ids(s, "n = v"), "1,3,5");
-    assert_eq!(ids(s, "c = N'x'"), "1,2");
-    // Padding: N'a' + NCHAR(0) sorts before N'a'.
-    assert_eq!(ids(s, "n < N'a'"), "3,4");
-    // Code units: U+0100 after ASCII, the surrogate pair before U+E000.
-    assert_eq!(ids(s, "n > N'x'"), "6,7,8,9");
-    assert_eq!(ids(s, "n > N'\u{1F986}'"), "8");
-    assert_eq!(ids(s, "n BETWEEN NCHAR(256) AND N'\u{1F986}'"), "6,7,9");
+    assert_eq!(ids(s, "c = N'x'"), "1,2,3");
+    // The ignored surrogates leave empty strings, which sort first; N'a' +
+    // NCHAR(0) equals N'a'.
+    assert_eq!(ids(s, "n < N'a'"), "7,9");
+    // U+0100 sorts beside a; U+E000 after letters.
+    assert_eq!(ids(s, "n > N'x'"), "8");
+    assert_eq!(ids(s, "n > N'\u{1F986}'"), "1,2,3,4,5,6,8,11");
+    assert_eq!(ids(s, "n BETWEEN NCHAR(256) AND N'\u{1F986}'"), "");
     assert_eq!(
         ids(s, "n IN (N'X', 'a', CAST(0x3DD8 AS nvarchar(1)))"),
-        "3,5,9"
+        "1,2,3,4,5,7,9"
     );
     assert_eq!(ids(s, "n NOT IN (N'x', NULL)"), "");
-    assert_eq!(ids(s, "n IN (SELECT v FROM dbo.t)"), "1,2,3,5");
+    assert_eq!(ids(s, "n IN (SELECT v FROM dbo.t)"), "1,2,3,4,5");
     assert_eq!(ids(s, "v IN (SELECT n FROM dbo.t)"), "1,3,5");
     assert_eq!(ids(s, "n IS NULL"), "10");
     // CASE, joins and correlated subqueries.
-    assert_eq!(ids(s, "CASE n WHEN N'x' THEN 1 ELSE 0 END = 1"), "1,2");
+    assert_eq!(ids(s, "CASE n WHEN N'x' THEN 1 ELSE 0 END = 1"), "1,2,3");
     assert_eq!(
         ids(
             s,
             "EXISTS (SELECT 1 FROM dbo.t u WHERE u.n = t.n AND u.id <> t.id)"
         ),
-        "1,2"
+        "1,2,3,4,5,7,9"
     );
 }
 
@@ -106,18 +109,19 @@ fn like_follows_sql_server_unicode_patterns() {
     let mut session = Session::new(server.connection().unwrap()).unwrap();
     ok(&mut session, SETUP);
     let s = &mut session;
-    assert_eq!(ids(s, "n LIKE N'x%'"), "1,2");
+    assert_eq!(ids(s, "n LIKE N'x%'"), "1,2,3");
     // Trailing spaces are significant in Unicode LIKE.
-    assert_eq!(ids(s, "n LIKE N'x'"), "1");
+    assert_eq!(ids(s, "n LIKE N'x'"), "1,3");
     assert_eq!(ids(s, "c LIKE N'x'"), "");
-    assert_eq!(ids(s, "n LIKE N'[a-x]'"), "1,5");
-    assert_eq!(ids(s, "n LIKE N'[^a-x]%'"), "3,6,7,8,9");
-    // `_` is one UTF-16 code unit.
-    assert_eq!(ids(s, "n LIKE N'_'"), "1,3,5,6,8,9");
-    assert_eq!(ids(s, "n LIKE N'__'"), "4,7");
+    // Ranges follow the collation's order (U+0100 beside a); ignored units
+    // (NUL, surrogates) are not characters.
+    assert_eq!(ids(s, "n LIKE N'[a-x]'"), "1,3,4,5,6");
+    assert_eq!(ids(s, "n LIKE N'[^a-x]%'"), "8");
+    assert_eq!(ids(s, "n LIKE N'_'"), "1,3,4,5,6,8");
+    assert_eq!(ids(s, "n LIKE N'__'"), "");
     assert_eq!(ids(s, "n LIKE N'ab!%!_![c]' ESCAPE '!'"), "11");
     assert_eq!(ids(s, "n LIKE N'%[%]%'"), "11");
-    assert_eq!(ids(s, "n NOT LIKE N'%x%'"), "3,4,5,6,7,8,9,11");
+    assert_eq!(ids(s, "n NOT LIKE N'%x%'"), "4,5,6,7,8,9,11");
     let (response, _) = run(s, "SELECT id FROM dbo.t WHERE n LIKE N'x' ESCAPE 'ab'");
     let message = "The invalid escape character \"ab\" was specified in a LIKE predicate.";
     let units: Vec<u8> = message.encode_utf16().flat_map(u16::to_le_bytes).collect();
@@ -166,7 +170,7 @@ fn views_and_computed_columns_survive_restart_and_write_ahead_log_replay() {
     let path = directory.join("predicates.duckdb");
     let path = path.to_str().unwrap();
     let checks = |session: &mut Session| {
-        assert_eq!(ids(session, "id IN (SELECT id FROM dbo.v)"), "1,2,6,7,8,9");
+        assert_eq!(ids(session, "id IN (SELECT id FROM dbo.v)"), "1,2,3,8");
         assert_eq!(
             ids(session, "id IN (SELECT id FROM dbo.w WHERE flag = 1)"),
             "1,2"

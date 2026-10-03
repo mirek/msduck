@@ -1,0 +1,89 @@
+// The database's default collation (SQL_Latin1_General_CP1_CI_AS) and column
+// collations (issue #868) through tedious, against the SQL Server capture in
+// reference/default-collation.json. Remaining differences are listed by name,
+// so a regression and a fix both show up here (docs/unicode-collation.md
+// explains each one).
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { test } from 'node:test'
+import { capture, canonical } from '../../scripts/lib/compatibility.mjs'
+import { start, query } from '../support/client.mjs'
+
+const fixture = JSON.parse(readFileSync(new URL('../../reference/default-collation.json', import.meta.url)))
+
+// Cases whose rows or diagnostics differ from SQL Server, by reason.
+const known = new Map([
+  ['ignorable unicode units', 'NCHAR of a surrogate code unit is unsupported'],
+  ['surrogate pair', 'NCHAR of a surrogate code unit is unsupported'],
+  ['accented letter order', 'values derived from literals (VALUES) sort by code point'],
+  ['ordering weights', 'punctuation and digits follow code points, not SQL Server sort weights'],
+  ['group by', 'grouping by an expression of a column keeps DuckDB grouping (trailing spaces)'],
+  ['alter table add unique', 'ALTER TABLE ADD UNIQUE over nvarchar is unsupported (constraints)'],
+])
+
+// System-generated constraint names end in a random hexadecimal suffix.
+const message = text => text.replace(/__[0-9A-F]{16}'/g, "__<hash>'")
+
+function outcome(result) {
+  return {
+    rows: canonical(result.sets.map(set => set.rows)),
+    errors: result.errors.map(e => [e.number, e.state, e.class, message(e.message)]),
+  }
+}
+
+test('comparisons, grouping, keys and column collations match the SQL Server capture', async t => {
+  const connection = await start(t, { options: { requestTimeout: 60000 } })
+  const differences = []
+  for (const entry of fixture.cases) {
+    const local = outcome(await capture(connection, entry.sql))
+    const reference = {
+      rows: entry.sets.map(set => set.rows),
+      errors: entry.errors.map(e => [e.number, e.state, e.class, message(e.message)]),
+    }
+    if (JSON.stringify(local) !== JSON.stringify(reference)) differences.push(entry.name)
+    for (const [, table] of entry.sql.matchAll(/CREATE TABLE dbo\.(\w+)/g)) {
+      await capture(connection, `DROP TABLE IF EXISTS dbo.${table}`)
+    }
+  }
+  assert.deepEqual(differences.filter(name => !known.has(name)), [])
+  assert.deepEqual([...known.keys()].filter(name => !differences.includes(name)), [])
+})
+
+test('the reported reproductions behave as in SQL Server', async t => {
+  const connection = await start(t)
+  assert.deepEqual((await query(connection, "SELECT CASE WHEN N'A'=N'a' THEN 1 ELSE 0 END")).rows, [[1]])
+  await query(connection, 'CREATE TABLE items(value nvarchar(100) UNIQUE)')
+  await query(connection, "INSERT items VALUES (N'Foo')")
+  await assert.rejects(query(connection, "INSERT items VALUES (N'foo')"), error =>
+    error.number === 2627 && error.state === 1 && error.class === 14 &&
+    /Violation of UNIQUE KEY constraint 'UQ__items__[0-9A-F]{16}'\. Cannot insert duplicate key in object 'dbo\.items'\. The duplicate key value is \(foo\)\./.test(error.message))
+  assert.deepEqual((await query(connection, 'SELECT value FROM items')).rows, [['Foo']])
+})
+
+test('case-insensitive keys report the duplicate as written', async t => {
+  const connection = await start(t)
+  await query(connection, "CREATE TABLE dbo.tags (name varchar(20) NOT NULL PRIMARY KEY, label nvarchar(20) NULL UNIQUE)")
+  await query(connection, "INSERT dbo.tags VALUES ('Red', N'Ruby')")
+  await assert.rejects(query(connection, "INSERT dbo.tags VALUES ('RED', N'other')"), error => error.number === 2627 && /\(RED\)/.test(error.message))
+  await assert.rejects(query(connection, "INSERT dbo.tags VALUES ('blue', N'RUBY  ')"), error => error.number === 2627 && /\(RUBY  \)/.test(error.message))
+  assert.deepEqual((await query(connection, "SELECT name FROM dbo.tags WHERE label = N'ruby' AND name LIKE 'r%'")).rows, [['Red']])
+  // Keys added by ALTER TABLE compare the same way, and go with the constraint.
+  await query(connection, "CREATE TABLE dbo.codes (code varchar(10) NOT NULL); INSERT dbo.codes VALUES ('abc')")
+  await query(connection, 'ALTER TABLE dbo.codes ADD CONSTRAINT uq_codes UNIQUE (code)')
+  await assert.rejects(query(connection, "INSERT dbo.codes VALUES ('ABC')"), error => error.number === 2627 && /'uq_codes'.*\(ABC\)/.test(error.message))
+  await query(connection, 'ALTER TABLE dbo.codes DROP CONSTRAINT uq_codes')
+  await query(connection, "INSERT dbo.codes VALUES ('ABC')")
+  assert.deepEqual((await query(connection, "SELECT count(*) FROM dbo.codes WHERE code = 'Abc'")).rows, [[2]])
+})
+
+test('LIKE, DISTINCT counts and extrema follow the column collations', async t => {
+  const connection = await start(t)
+  // ASCII LIKE ignores the value's trailing blanks, not the pattern's.
+  assert.deepEqual((await query(connection, "SELECT CASE WHEN 'a' LIKE 'a ' THEN 1 ELSE 0 END, CASE WHEN 'a ' LIKE 'A' THEN 1 ELSE 0 END, CASE WHEN N'a ' LIKE N'A' THEN 1 ELSE 0 END")).rows, [[0, 1, 0]])
+  await query(connection, "CREATE TABLE dbo.agg (n nvarchar(10), v varchar(10), cs nvarchar(10) COLLATE Latin1_General_CS_AS, ai varchar(10) COLLATE Latin1_General_CI_AI); INSERT dbo.agg VALUES (N'Foo', 'Foo', N'a', 'Fóo'), (N'foo', 'foo', N'A', 'foo'), (N'FOO  ', 'FOO  ', N'a  ', 'FOO'), (N'bar', 'bar', NULL, NULL)")
+  assert.deepEqual((await query(connection, 'SELECT count(DISTINCT n), count(DISTINCT v), count(DISTINCT cs), count(DISTINCT ai) FROM dbo.agg')).rows, [[2, 2, 2, 1]])
+  assert.deepEqual((await query(connection, 'SELECT MIN(n), UPPER(MAX(n)), MIN(v), UPPER(RTRIM(MAX(v))) FROM dbo.agg')).rows, [['bar', 'FOO', 'bar', 'FOO']])
+  assert.deepEqual((await query(connection, 'SELECT n, count(*) FROM dbo.agg GROUP BY n HAVING count(*) > 1')).rows.map(([, c]) => c), [3])
+  assert.deepEqual((await query(connection, 'SELECT count(*) FROM (SELECT DISTINCT n FROM dbo.agg) d')).rows, [[2]])
+})
+
