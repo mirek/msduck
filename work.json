@@ -10902,7 +10902,7 @@
     {
       "id": "compatibility-cli-output-v1",
       "title": "Flush compatibility CLI output before exiting under backpressure",
-      "state": "ready",
+      "state": "done",
       "issue": 887,
       "authorization": "Owner continuing goal and task decomposition; first-party failure/probe evidence in owner issue887. Two-path bounded follow-up, no unrelated compatibility changes.",
       "scope": [
@@ -10920,7 +10920,7 @@
     {
       "id": "compatibility-docker-output-v1",
       "title": "Flush Docker comparison planning output under backpressure",
-      "state": "ready",
+      "state": "done",
       "issue": 887,
       "authorization": "Owner continuing goal; companion to claimed CLI flush task887 in same focused PR after separate fresh receipt. First-party source evidence only.",
       "scope": [
@@ -10936,7 +10936,7 @@
     {
       "id": "compatibility-cli-suite-registration-v1",
       "title": "Keep expanded CLI regression suite registered in standard clients",
-      "state": "ready",
+      "state": "done",
       "issue": 887,
       "authorization": "Owner goal; bounded companion for own PR888 after independent confirmed integration finding. Same worker claims and ships in focused CLI fix.",
       "scope": [
