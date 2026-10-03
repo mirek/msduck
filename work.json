@@ -11658,6 +11658,31 @@
         "Native tests replay all applicable original variable-storage projection controls across all four retained source runs; expected native/UTF16 payloads and original descriptors come from references, never candidate results or client display. Fixed capacity/storage padding remains outside complete projection. Cover materialization, Arrow/vector zero/multichunk/NULL/tag failures, statement atomicity/transaction reuse, limits and malformed UTF8 explicit failure; meaningful predecessor missing-adapter evidence. Full exact-head fmt/workspace Rust/strict Clippy/build, complete clients, raw audit and manifest/binary provenance; independent and verified Codex reviews, required CI, worker-owned merge/registry/issue/project completion. Reuse existing resources under shared locks; no new agents/worktrees/native caches.\n"
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pl8pr"
+    },
+    {
+      "id": "ansi-stored-utf8-projection-v1",
+      "title": "Decode stored UTF8 bytes into SQL Server UTF16 units",
+      "state": "ready",
+      "authorization": "Owner continuing implementation goal. Use actual SQL Server at-rest reinterpretation plus unchanged BulkLoad fixtures to implement stored byte projection independently of admission and strict scalar API.",
+      "scope": [
+        "crates/msduck-core/src/ansi_conversion.rs",
+        "crates/msduck-core/src/ansi_conversion/stored_utf8.rs",
+        "crates/msduck-core/tests/ansi_stored_utf8_projection.rs",
+        "scripts/capture-stored-utf8-projection.mjs",
+        "reference/stored-utf8-projection.json",
+        "docs/ansi-stored-utf8-projection.md"
+      ],
+      "dependencies": [
+        "utf8-valid-projection-v1",
+        "bulk-character-utf8-multibyte-reference-v1"
+      ],
+      "acceptance": [
+        "Capture direct SQL UTF8 VARCHAR(MAX) byte reinterpretation/native identity and binary Unicode projection for NULL,empty,256 individual octets,400 multibyte anchors (without suffix), explicit incomplete valid and range-forbidden prefixes plus all unique admitted UTF8 source bytes from7 original variable-storage fixtures. Freeze inputs before Docker; four freshDB/two pinnedSQLcontainers, full raw packets/descriptors/errors retained with inherited unchanged bounds and helpers; independently verify four-run results and final source replay. Do not infer BulkLoad admission from this at-rest conversion.",
+        "Implement public deterministic stored_utf8 module through existing ansi_conversion declaration only. Explicit source identity/NULL/resource plans; mismatch/unsupported-source/input limits before decode, exact UTF16 output preflight before fallible final allocation, no lossy client decoder/intermediate expanded allocation/hidden effects. Preserve strict project valid-only API and existing Cpp1/Cpp2 maps/error precedence. Implement actual malformed consumption, complete scalar pairs and EOF behavior grounded in directSQL; flag observed disagreements rather than normalizing.",
+        "Meaningful raw SQL-reference replay, original admitted-row comparisons, finite transition/EOF/supplementary/NULL/empty/immutable/limit and malformed strict-API distinction tests. Full exacthead fmt/workspace/strictclippy/client/audit and raw differences, independent and verifiedCodex reviews, exact CI and merge/Done. Reuse own tree and shared builder lock, no newagents/trees/nativecaches; no root engine/Value/wire/reader/writer/admission/capacity edits or operational gate claims."
+      ],
+      "issue": 933,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pl98k"
     }
   ]
 }
