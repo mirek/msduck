@@ -49,6 +49,21 @@ a second invocation against that workspace fails rather than changing files
 beneath an active run. Source deletions are mirrored only inside its `source`
 subdirectory. `.git`, `.env` files, `.msduck/` credentials, database files, local `target`, `node_modules`
 and artifacts are excluded. Remote target and dependency caches survive syncs.
+Root exclusions match directories, files and symlinks, so sender cache links and
+private `.git` worktree pointer files never replace receiver entries. Symlink
+destinations are not followed or copied.
+
+Under the existing runner lock, after checking workspace ownership and before
+rsync, the runner migrates stale receiver links at `source/target`,
+`source/node_modules` and `source/artifacts`. It unlinks only the link itself,
+including dangling links, and preserves external destinations and ordinary cache
+directories. A symlinked `source` directory is rejected before any migration.
+These paths are bounded to caches created by the runner; `.git` and `.msduck`
+receiver entries are not deleted. A migrated `node_modules` link also invalidates
+the workspace npm lock stamp. The next `test`, `audit` or `verify` installs into a
+new receiver directory, even if the package lock is unchanged. Failed installs
+do not record a successful stamp. `fast`, `build` and `rust` defer npm installation
+because they do not use Node dependencies.
 `npm ci` runs when the package lock changes or dependencies are absent.
 
 Source sync compares file content (`rsync --checksum`) and does not preserve
@@ -65,7 +80,20 @@ The marker and reset are protected by the same workspace lock as synchronization
 `node --test tests/remote-build.test.mjs` exercises a same-size source change
 with an old mtime in a small offline Cargo crate. It checks that the changed
 binary rebuilds, an unchanged rerun leaves the binary untouched, and private
-`.env` and `.msduck` files stay excluded. On `linux.local`, the test passed and
+`.env` and `.msduck` files stay excluded. Additional offline cases cover sender
+links for all five excluded root paths, repeated sync/source deletion, stale and
+dangling receiver cache links, ordinary cache preservation, ownership/source-link
+refusals, external destinations and npm stamp invalidation/reinstallation. Tiny
+Cargo fixtures declare their own workspace and are removed after each test.
+Run with `TMPDIR="$PWD/.tmp"` so temporary state stays within your worktree.
+
+The exclusions recover the owner checkpoint from PR #323 at
+`052a2208faabb2c7e723934e5797e8c0122dd90d`. Its unresolved receiver-link finding is
+addressed by task #822; the old branch, claim and evidence are retained. The
+predecessor's exclusions alone leave receiver links protected from `--delete`,
+which the migration regression explicitly demonstrates.
+
+On `linux.local`, the original test passed and
 the runner's first migrated workspace build completed in 1m 31s of Cargo time;
 an unchanged second invocation finished in 0.05s of Cargo time (0.77s wall
 clock). These are build-cache checks, not full workspace or compatibility test
