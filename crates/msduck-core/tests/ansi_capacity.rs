@@ -320,7 +320,6 @@ fn validation_rejects_unproven_profiles_and_invalid_declarations() {
         );
     }
     for target in [
-        EncodingIdentity::Cp1251,
         EncodingIdentity::Opaque(1252),
         EncodingIdentity::Opaque(65001),
     ] {

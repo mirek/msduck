@@ -2,13 +2,13 @@
 
 `msduck_core::ansi_conversion::capacity::Plan` separates SQL capacity from the
 complete projections in its parent module. A plan validates CP1251/CP1252 source
-identity and bounded/MAX source form, native CP1252/UTF8 or SQL UTF16 target, variable/fixed family and
+identity and bounded/MAX source form, native CP1251/CP1252/UTF8 or SQL UTF16 target, variable/fixed family and
 bounded/MAX capacity before a nullable row is supplied. Source form comes from the admitted declaration,
 not the row length or value. Native capacities count
 bytes; Unicode capacities count two-byte units. Bounded declarations accept
 1..=8000 native bytes or 1..=4000 Unicode units; fixed MAX is invalid.
-Opaque tags and UTF8 source plans are unsupported. Native CP1251 capacity is
-not admitted by this version; the parent's complete projection is separate.
+Opaque tags and UTF8 source plans are unsupported. The parent's complete
+projection remains separate from capacity admission.
 
 The root must first admit the actual source declaration, wire shape and target
 catalog profile. The measured profiles are Cyrillic_General_100_BIN2,
@@ -21,7 +21,7 @@ padding or source CHAR-to-MAX rule is invented here.
 ## Admission and conversion are separate
 
 For bounded single-byte source declarations, overflow checks all bytes after
-the target capacity. Same-CP1252 MAX conversion does the same. Both reject any
+the target capacity. Same-codepage CP1251 and CP1252 MAX conversion do the same. Both reject any
 byte other than ASCII space in that remainder. Cross-encoding MAX source paths
 have a different validation window: they inspect
 `input[width..min(input.len(), 2*width)]`, rather than the whole remainder.
@@ -93,5 +93,44 @@ CP1251-to-CP1252 VARCHAR(2) leading-spaces case has @@ERROR2628 in run0 and0
 in runs1–3. Two failed UTF8 CHAR(3) cutoff cases consistently have @@ERROR0.
 Their error tokens and empty readbacks remain failures. This API does not turn
 those counters into a universal diagnostic claim. General UTF8/Unicode sources,
-native CP1251 capacity, arbitrary collations and complete storage/BulkLoad/output
+arbitrary collations and complete storage/BulkLoad/output
 adoption remain separate work under the adapter plan.
+
+## Native CP1251 target extension
+
+Three additional private matrices retain four fresh databases in two pinned
+SQL Server17.0.4065.4 containers each. They cover native CP1251 and CP1252
+sources into CP1251 variable/fixed targets, with bounded VARCHAR64/8000,
+bounded CHAR64 and MAX source declarations. The original collector, all
+requests/frames/descriptors, errors/info, callbacks, native/SQL projections,
+original-session counters and complete unnormalized comparison sidecars remain
+in the worker's `.tmp/ansi921-*-four.json` artifacts. The frozen wrapper SHA256 is
+`36ceba520c75c7935d62adb56ba6296ea85e060eea06cff3a14ec068c0b2a429`;
+the reviewed ancestor capacity collector SHA above is unchanged.
+
+| Private CP1251 target matrix | Bytes | SHA256 |
+| --- | ---: | --- |
+| Space/NUL/NBSP/embedded cutoffs, widths1/2 | 5935415 | `74e32f6446dfd5d1a45a7587ceaf8057ed815ff53891adae539343b013d37142` |
+| Bounded VARCHAR/CHAR64 and MAX windows, widths3/4 | 6057662 | `ff3887d4296916174b3fbef42ad7df831a6cf496c76206372592d0cd359e02b5` |
+| Width8/64/4000/8000 windows and complete MAX | 23431792 | `3ff838436fb1f4d9ab15d35445f7ba863ccd8bfd2842942dc5550a5165ebcd27` |
+
+The CP1251-target observations establish the same-codepage/full-remainder
+distinction directly: CP1251 MAX `A space B` to CP1251 VARCHAR(1) fails2628,
+whereas CP1252 MAX stores `A`. Bounded CP1252 rejects that overflow. Within
+the cross-encoding MAX window, NUL/NBSP/non-space rejects; a later non-space
+beyond the window is discarded. Width8 through8000 retain these distinctions.
+CP1251 identity preserves every original byte, including undefined0x98;
+CP1252 conversion uses the unchanged observed parent CP1252-to-CP1251 table.
+Complete MAX, NULL, empty and fixed padding are independently retained outputs.
+
+The public CP1251 tests preserve each of286 cases' four native/error oracles:
+1144 observations,2336 input-row applications and920 failed loads. Byte arrays
+are losslessly run-length packed as `[byte,count]`; no display-derived expected
+bytes or generated conversion table replace the oracle. All successful non-NULL
+rows verify exact input/output budgets and one-under boundaries, with immutable
+source bytes. Failed-load tests require a rejected row, without claiming that
+the row API implements SQL Server's whole-load rollback or counters.
+Each matrix's original counters agree within its four runs, while the complete
+sidecars retain respectively1942,2187 and3161 raw differences elsewhere.
+These finite collations and BulkLoad declarations do not establish arbitrary
+collation, CAST/assignment, source-wire admission or runtime adoption.
