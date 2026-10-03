@@ -194,6 +194,17 @@ test('existing files, hard links, dangling links and symlink parents are refused
   } finally { await rm(directory, {recursive: true, force: true}) }
 })
 
+test('capture cannot report success by writing unreviewed bytes as the retained fixture', async () => {
+  const original = await readFile(fixture)
+  const result = spawnSync(process.execPath, ['scripts/capture-bulk-staging-reference.mjs', '--write-fixture'], {
+    cwd: new URL('../', import.meta.url), encoding: 'utf8', timeout: 5000, env: {...process.env, PATH: ''}
+  })
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /known flags only/)
+  assert.doesNotMatch(result.stderr, /docker|ENOENT/)
+  assert.deepEqual(await readFile(fixture), original)
+})
+
 test('a rejected changed observation retains both raw capture and full comparison sidecar', async () => {
   const originalBytes = await readFile(fixture)
   const actual = JSON.parse(originalBytes)

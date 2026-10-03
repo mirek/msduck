@@ -321,7 +321,7 @@ export function validateRetained(bytes) {
   return retained
 }
 
-export async function persistCapture(actual, output, write = false) {
+export async function persistCapture(actual, output) {
   // Preserve the whole comparison even when fixed gold validation rejects a
   // newly observed variation. Neither artifact is a claim of validation success.
   await guardOutput(output)
@@ -337,17 +337,15 @@ export async function persistCapture(actual, output, write = false) {
   await writeFile(`${output}.comparison.json`, JSON.stringify({retained: Boolean(retained), differences: comparison}) + '\n', {flag: 'wx'})
   validate(actual)
   if (retained) validateRetained(retainedBytes)
-  if (write) await writeFile(fixture, JSON.stringify(actual) + '\n', {flag: 'wx'})
   return {retained: Boolean(retained), comparison}
 }
 
 export async function main(args = process.argv.slice(2)) {
-  const allowed = new Set(['--write-fixture', '--replay-fixture'])
+  const allowed = new Set(['--replay-fixture'])
   assert.ok(args.filter(arg => arg.startsWith('--')).every(arg => allowed.has(arg)), 'known flags only')
   const positional = args.filter(arg => !arg.startsWith('--'))
   assert.ok(positional.length <= 1, 'one output path')
-  const write = args.includes('--write-fixture'), replay = args.includes('--replay-fixture')
-  assert.ok(!(write && replay), 'choose writing or replay')
+  const replay = args.includes('--replay-fixture')
   if (replay) {
     validateRetained(await readFile(fixture))
     console.log('Validated four retained BulkLoad staging reference runs and exact raw differences')
@@ -356,7 +354,6 @@ export async function main(args = process.argv.slice(2)) {
   const output = resolve(positional[0] ?? 'artifacts/compatibility/bulk-staging-reference/capture.json')
   await guardOutput(output)
   await guardOutput(`${output}.comparison.json`)
-  if (write) await guardOutput(fixture)
   assert.notEqual(output, fixture, 'diagnostic output differs from fixture')
   const containers = [], runs = []
   for (let index = 0; index < 2; index++) {
@@ -366,7 +363,7 @@ export async function main(args = process.argv.slice(2)) {
     runs.push(...result.runs)
   }
   const actual = {format: 1, containers, runs, comparisons: runs.slice(1).map(run => compare(run, runs[0]))}
-  const {retained, comparison} = await persistCapture(actual, output, write)
+  const {retained, comparison} = await persistCapture(actual, output)
   console.log(`Captured ${cases.length} cases in four fresh databases; ${retained ? `${comparison.length} retained-fixture differences` : 'no prior retained baseline'}`)
   if (retained && comparison.length) throw Error('raw reference drift preserved; inspect output and comparison sidecar')
 }

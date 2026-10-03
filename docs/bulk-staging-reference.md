@@ -31,7 +31,10 @@ Capture to a new diagnostic path with:
 node scripts/capture-bulk-staging-reference.mjs artifacts/bulk-staging.json
 ```
 
-The first retained fixture requires `--write-fixture`. Every output must be new;
+The capture command writes diagnostic evidence only. It cannot create or
+overwrite the retained fixture: fresh database UUIDs and packet headers cannot
+match the reviewed artifact's fixed digest. Updating retained ground truth and
+its digest is a separate reviewed source change. Every output must be new;
 existing files, hard links, dangling links and symlink parents are rejected
 before Docker starts. Raw capture is written exclusively before validation or
 comparison. Exact differences between runs are retained in the artifact.
