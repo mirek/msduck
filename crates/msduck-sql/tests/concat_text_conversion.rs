@@ -331,6 +331,29 @@ fn prepared_metadata_remains_declaration_only_across_all_bindings() {
                         assert_eq!(col["length"].as_u64().unwrap(), n);
                     }
                 }
+                if name == "prepared binary max conversion" {
+                    for execution in p["executions"].as_array().unwrap() {
+                        let bytes = binary_bytes(&execution["values"]["p"]);
+                        for (i, function) in [Function::Translate, Function::ConcatWs]
+                            .into_iter()
+                            .enumerate()
+                        {
+                            let plan = contract(function, src, Domain::Cp1252, None).unwrap();
+                            let mut text = binary_text(plan, bytes.as_deref()).unwrap();
+                            if function == Function::Translate
+                                && let Some(conversion::Text::Ansi(s)) = &mut text
+                            {
+                                *s = s.replace('A', "Z");
+                            }
+                            let expected = if function == Function::ConcatWs && text.is_none() {
+                                Value::String(String::new())
+                            } else {
+                                json_text(text)
+                            };
+                            assert_eq!(expected, execution["result"]["sets"][0]["rows"][0][i]);
+                        }
+                    }
+                }
             }
         }
     }

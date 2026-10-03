@@ -164,11 +164,11 @@ pub fn binary_text(plan: Contract, value: Option<&[u8]>) -> Result<Option<Text>,
     if bytes.len() > INPUT_LIMIT {
         return Err(Unsupported::InputLimit);
     }
-    if let Length::Bounded(width) = source.length() {
-        if bytes.len() > usize::from(width) || (source.fixed() && bytes.len() != usize::from(width))
-        {
-            return Err(Unsupported::InvalidBinaryValue);
-        }
+    if let Length::Bounded(width) = source.length()
+        && (bytes.len() > usize::from(width)
+            || (source.fixed() && bytes.len() != usize::from(width)))
+    {
+        return Err(Unsupported::InvalidBinaryValue);
     }
     Ok(Some(match plan.domain {
         Domain::Cp1252 => Text::Ansi(decode_cp1252(bytes)),
