@@ -126,7 +126,7 @@ async function running(pid, {platform = process.platform, probe = process.kill,
       const stat = await readStat(pid)
       const state = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[0]
       return state !== 'Z' && state !== 'X'
-    } catch (error) { if (error.code === 'ENOENT') return false; throw error }
+    } catch (error) { if (error.code === 'ENOENT' || error.code === 'ESRCH') return false; throw error }
   }
   return true
 }
@@ -204,8 +204,10 @@ test('terminal worker checks distinguish Linux zombies from executing processes'
     assert.equal(await running(123, {platform:'linux', probe,
       readStat:async()=>`123 (worker) ${state} 1 2 3`}), true)
   }
-  assert.equal(await running(123, {platform:'linux',probe,
-    readStat:async()=>{throw Object.assign(Error('gone'),{code:'ENOENT'})}}), false)
+  for (const code of ['ENOENT','ESRCH']) {
+    assert.equal(await running(123, {platform:'linux',probe,
+      readStat:async()=>{throw Object.assign(Error('gone'),{code})}}), false)
+  }
   assert.equal(await running(123, {probe:()=>{throw Object.assign(Error('gone'),{code:'ESRCH'})}}), false)
   await assert.rejects(running(123, {probe:()=>{throw Object.assign(Error('denied'),{code:'EPERM'})}}), /denied/)
   assert.equal(await running(123, {platform:'win32',probe,readStat:()=>{throw Error('not Linux')}}), true)
