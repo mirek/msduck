@@ -36,6 +36,7 @@ pub mod sql_type;
 pub mod temporal_guid_text;
 pub mod temporal_scale;
 pub mod top;
+pub mod translate_matching;
 pub mod window_frame;
 pub mod window_placement;
 
