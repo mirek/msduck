@@ -8,10 +8,13 @@
 //! markers here; [`super::lower`] turns them into `typeof` dispatches, so a
 //! same-named column of another type keeps its own order. DISTINCT and set
 //! operations, whose ORDER BY must name output columns, are left unchanged.
+//! A carrier column declared with a collation of its own (case-sensitive,
+//! binary or accent-insensitive) orders by that collation through an
+//! explicit COLLATE instead.
 use super::catalog::Catalog;
 use super::lower::{SORT, TIE};
 use sqlparser::ast::*;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ops::ControlFlow;
 
 /// The column an ORDER BY item names, if it names one.
@@ -103,14 +106,18 @@ pub(super) fn sites(statement: &Statement) -> bool {
 }
 
 pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
-    let carriers: HashSet<String> = candidates(statement)
+    let carriers: HashMap<String, Option<String>> = candidates(statement)
         .into_iter()
         .filter(|name| catalog.carrier_named(name))
+        .map(|name| {
+            let collation = catalog.carrier_collation(&name).map(str::to_owned);
+            (name, collation)
+        })
         .collect();
     if carriers.is_empty() {
         return;
     }
-    struct Rewrite(HashSet<String>);
+    struct Rewrite(HashMap<String, Option<String>>);
     impl VisitorMut for Rewrite {
         type Break = ();
         fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
@@ -127,10 +134,24 @@ pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
             let mut rewritten = Vec::with_capacity(items.len());
             for item in items.drain(..) {
                 let target = column(&item.expr, select)
-                    .filter(|c| last_name(c).is_some_and(|n| self.0.contains(&n)))
+                    .filter(|c| last_name(c).is_some_and(|n| self.0.contains_key(&n)))
                     .cloned();
-                match target {
-                    Some(target) => {
+                let collation = target
+                    .as_ref()
+                    .and_then(last_name)
+                    .and_then(|n| self.0.get(&n).cloned().flatten());
+                match (target, collation) {
+                    // A column collation of its own orders through the
+                    // explicit COLLATE lowering.
+                    (Some(target), Some(collation)) => rewritten.push(OrderByExpr {
+                        expr: Expr::Collate {
+                            expr: Box::new(target),
+                            collation: ObjectName::from(vec![Ident::new(collation)]),
+                        },
+                        options: item.options,
+                        with_fill: item.with_fill,
+                    }),
+                    (Some(target), None) => {
                         rewritten.push(OrderByExpr {
                             expr: marker(SORT, target.clone()),
                             options: item.options.clone(),
@@ -142,7 +163,7 @@ pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
                             with_fill: item.with_fill,
                         });
                     }
-                    None => rewritten.push(item),
+                    (None, _) => rewritten.push(item),
                 }
             }
             *items = rewritten;

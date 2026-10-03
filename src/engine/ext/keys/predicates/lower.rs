@@ -19,6 +19,8 @@ pub(super) const MARK: &str = "__msduck_unicode_value";
 /// these, and expressions that can produce carriers, get a `typeof`
 /// dispatch.
 pub(super) const MAYBE: &str = "__msduck_unicode_maybe";
+/// Grouping key marker placed by [`super::group`].
+pub(super) const GROUP: &str = "__msduck_unicode_group";
 /// IN (subquery) marker placed by [`super::mark`].
 pub(super) const MEMBER: &str = "__msduck_unicode_in";
 pub(super) const INPUT: &str = "__msduck_unicode_input";
@@ -318,6 +320,9 @@ fn may_be_carrier(expr: &Expr, columns: bool) -> bool {
                     return arguments(expr)
                         .is_some_and(|args| args.iter().any(|a| at(a, columns, reach - 1)));
                 }
+                if let Some(element) = observed(expr) {
+                    return at(element, columns, reach - 1);
+                }
                 name.starts_with("__msduck_")
                     && ["unicode", "carrier", "json"]
                         .iter()
@@ -344,7 +349,26 @@ fn collated(expr: &Expr) -> bool {
     match expr {
         Expr::Nested(e) => collated(e),
         Expr::Collate { .. } => true,
-        _ => false,
+        _ => observed(expr).is_some_and(collated),
+    }
+}
+
+/// The value inside the NULL-observing wrapper aggregate arguments get:
+/// `list_extract(list_transform([value], …), 1)`.
+fn observed(expr: &Expr) -> Option<&Expr> {
+    if function_name(expr).as_deref() != Some("list_extract") {
+        return None;
+    }
+    let args = arguments(expr)?;
+    if function_name(args.first()?).as_deref() != Some("list_transform") {
+        return None;
+    }
+    match arguments(args[0])?.first().copied()? {
+        Expr::Array(array) => match array.elem.as_slice() {
+            [element] => Some(element),
+            _ => None,
+        },
+        _ => None,
     }
 }
 
@@ -481,7 +505,7 @@ fn rewrite(expr: &mut Expr) {
             Some(case(
                 textual(&operands.iter().collect::<Vec<_>>()),
                 not(call(LIKE, args), *negated),
-                Expr::Like {
+                Expr::ILike {
                     negated: *negated,
                     any: false,
                     expr: Box::new(varchar(&value)),
@@ -490,6 +514,21 @@ fn rewrite(expr: &mut Expr) {
                 },
             ))
         }
+        // Other LIKE matches case-insensitively, as under the database's
+        // default collation; an explicit COLLATE keeps DuckDB's LIKE.
+        Expr::Like {
+            negated,
+            any: false,
+            expr: value,
+            pattern,
+            escape_char,
+        } if !collated(value) && !collated(pattern) => Some(Expr::ILike {
+            negated: *negated,
+            any: false,
+            expr: value.clone(),
+            pattern: pattern.clone(),
+            escape_char: escape_char.clone(),
+        }),
         Expr::InList {
             expr: value,
             list,
@@ -617,7 +656,92 @@ fn rewrite(expr: &mut Expr) {
     }
 }
 
+/// `count(DISTINCT x)` and `min`/`max` over character data, under the
+/// case-insensitive default: DISTINCT counts compare the sort keys of text
+/// (DuckDB's DISTINCT ignores collations), and extrema of carriers take the
+/// value with the least or greatest key (DuckDB orders the STRUCT by its
+/// bytes). VARCHAR extrema follow the column's DuckDB collation.
+fn aggregate(name: &str, expr: &Expr) -> Option<Expr> {
+    let Expr::Function(f) = expr else {
+        return None;
+    };
+    let FunctionArguments::List(list) = &f.args else {
+        return None;
+    };
+    if f.over.is_some()
+        || f.filter.is_some()
+        || !f.within_group.is_empty()
+        || !list.clauses.is_empty()
+    {
+        return None;
+    }
+    let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] = list.args.as_slice() else {
+        return None;
+    };
+    if collated(value) {
+        return None;
+    }
+    let distinct = matches!(list.duplicate_treatment, Some(DuplicateTreatment::Distinct));
+    let with = |name: &str, args: Vec<Expr>| {
+        let mut lowered = expr.clone();
+        if let Expr::Function(f) = &mut lowered {
+            f.name = ObjectName::from(vec![Ident::new(name)]);
+            if let FunctionArguments::List(list) = &mut f.args {
+                list.args = args
+                    .into_iter()
+                    .map(|arg| FunctionArg::Unnamed(FunctionArgExpr::Expr(arg)))
+                    .collect();
+            }
+        }
+        lowered
+    };
+    // The type test reads the value through an aggregate, so that it binds
+    // where the value itself may not appear (grouped queries).
+    let sample = call("any_value", vec![value.clone()]);
+    match name.to_ascii_lowercase().as_str() {
+        "count" if distinct => Some(case(
+            type_in(&sample, &[CARRIER, "VARCHAR"]),
+            with("count", vec![key(value.clone())]),
+            expr.clone(),
+        )),
+        // The extremum of (key, value) pairs; NULL values stay NULL so the
+        // aggregate (and the NULL-elimination warning) still sees them.
+        "min" | "max" if !distinct && converted(value) => {
+            let pair = case(
+                Expr::IsNull(Box::new(value.clone())),
+                null(),
+                Expr::Dictionary(vec![
+                    DictionaryField {
+                        key: Ident::with_quote('\'', "__msduck_k"),
+                        value: Box::new(key(value.clone())),
+                    },
+                    DictionaryField {
+                        key: Ident::with_quote('\'', "__msduck_v"),
+                        value: Box::new(value.clone()),
+                    },
+                ]),
+            );
+            Some(case(
+                Expr::BinaryOp {
+                    left: Box::new(call("typeof", vec![sample])),
+                    op: BinaryOperator::Eq,
+                    right: Box::new(text(CARRIER)),
+                },
+                call(
+                    "struct_extract",
+                    vec![with(&f.name.to_string(), vec![pair]), text("__msduck_v")],
+                ),
+                expr.clone(),
+            ))
+        }
+        _ => None,
+    }
+}
+
 fn function(name: &str, expr: &Expr) -> Option<Expr> {
+    if let Some(lowered) = aggregate(name, expr) {
+        return Some(lowered);
+    }
     let args = arguments(expr)?;
     if let Some((cast, unicode)) = carrier_cast(name)
         && let [value, width] = args.as_slice()
@@ -670,6 +794,12 @@ fn function(name: &str, expr: &Expr) -> Option<Expr> {
                 key((*value).clone()),
                 null(),
             ))
+        }
+        GROUP => {
+            let [value] = args.as_slice() else {
+                return None;
+            };
+            Some(key((*value).clone()))
         }
         TIE => {
             let [value] = args.as_slice() else {
@@ -931,7 +1061,6 @@ mod tests {
             "$1 < 'x'",
             "CAST(x AS INTEGER) = 1",
             "x = (SELECT y FROM t)",
-            "(SELECT y FROM t) LIKE 'a%'",
             "x COLLATE \"C\" = 'a'",
             "typeof(x) = 'VARCHAR'",
         ] {
@@ -940,15 +1069,50 @@ mod tests {
     }
 
     #[test]
+    fn other_like_matches_case_insensitively() {
+        assert_eq!(lowered("n LIKE 'a%'"), "n ILIKE 'a%'");
+        assert_eq!(
+            lowered("(SELECT y FROM t) NOT LIKE 'a%'"),
+            "(SELECT y FROM t) NOT ILIKE 'a%'"
+        );
+        assert_eq!(
+            lowered("n COLLATE \"C\" LIKE 'a%'"),
+            "n COLLATE \"C\" LIKE 'a%'"
+        );
+    }
+
+    #[test]
+    fn text_aggregates_compare_keys() {
+        let count = lowered("count(DISTINCT n)");
+        assert_eq!(
+            count,
+            "CASE WHEN typeof(any_value(n)) IN ('STRUCT(__msduck_utf16le BLOB)', 'VARCHAR') \
+             THEN count(DISTINCT __msduck_unicode_order_key(__msduck_unicode_input(n))) \
+             ELSE count(DISTINCT n) END"
+        );
+        let least = lowered("min(n)");
+        assert_eq!(
+            least,
+            "CASE WHEN typeof(any_value(n)) = 'STRUCT(__msduck_utf16le BLOB)' \
+             THEN struct_extract(min(CASE WHEN n IS NULL THEN NULL ELSE {'__msduck_k': __msduck_unicode_order_key(__msduck_unicode_input(n)), '__msduck_v': n} END), '__msduck_v') \
+             ELSE min(n) END"
+        );
+        // Window extrema and explicitly collated values keep DuckDB's.
+        assert_eq!(lowered("max(n) OVER ()"), "max(n) OVER ()");
+        assert_eq!(
+            lowered("count(DISTINCT n COLLATE \"C\")"),
+            "count(DISTINCT n COLLATE \"C\")"
+        );
+        assert_eq!(
+            lowered("__msduck_unicode_group(n)"),
+            "__msduck_unicode_order_key(__msduck_unicode_input(n))"
+        );
+    }
+
+    #[test]
     fn plain_columns_are_left_alone() {
         // Outer join conditions must stay comparisons for hash joins.
-        for sql in [
-            "a.id = b.id",
-            "n = 'x'",
-            "n LIKE 'a%'",
-            "n IN (1, 2)",
-            "n BETWEEN 1 AND 2",
-        ] {
+        for sql in ["a.id = b.id", "n = 'x'", "n IN (1, 2)", "n BETWEEN 1 AND 2"] {
             assert_eq!(lowered(sql), expr(sql).to_string(), "{sql}");
         }
     }
@@ -969,7 +1133,7 @@ mod tests {
             "{like}"
         );
         assert!(
-            like.ends_with("ELSE CAST(n AS VARCHAR) NOT LIKE 'a!%' ESCAPE '!' END"),
+            like.ends_with("ELSE CAST(n AS VARCHAR) NOT ILIKE 'a!%' ESCAPE '!' END"),
             "{like}"
         );
         let simple = lowered("CASE __msduck_unicode_maybe(n) WHEN 'a' THEN 1 END");

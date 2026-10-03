@@ -55,19 +55,24 @@ After translation an explicit collation becomes a DuckDB collation chain:
 | `*_CS_AS` | ICU locale |
 | `*_CI_AI` | `nocase.noaccent` + ICU locale |
 | `*_CS_AI` | `noaccent` + ICU locale |
-| `*_BIN`, `*_BIN2` | code point order |
+| `*_BIN`, `*_BIN2` | `C` (code point order) |
 
 Latin1_General, SQL_Latin1_General and the other Latin collations use the ICU
 `en_us` locale, which orders lowercase before uppercase and accented letters
 after their base letter, like the captured Windows collations; about 30 other
 designators map to their ICU language. Comparisons (`=`, `<>`, `<`, `<=`,
 `>`, `>=`), IN and BETWEEN with an explicit collation ignore trailing spaces,
-as SQL Server does. COUNT(DISTINCT) applies the collation's equality, and
-LIKE, ORDER BY, GROUP BY and DISTINCT use the DuckDB collation. Unicode RPC
-parameters and expression results are read through the UTF-16 carrier.
+as SQL Server does, and every operand of such a comparison takes the
+explicit collation, which overrides the `nocase` collation CHAR and VARCHAR
+columns carry. COUNT(DISTINCT) applies the collation's equality, and LIKE,
+ORDER BY, GROUP BY and DISTINCT use the DuckDB collation. Unicode RPC
+parameters and expression results are read through the UTF-16 carrier. The
+collation name grammar lives in `msduck_sql::dialect::ext::keys::collation`,
+shared with column declarations.
 
-The default collation is unchanged: comparisons without COLLATE are still
-binary (N'A' = N'a' is false).
+Comparisons without COLLATE follow the database's case-insensitive default
+(N'A' = N'a' is true) and columns their declared collation; see
+docs/unicode-collation.md.
 
 ## Styled CONVERT
 

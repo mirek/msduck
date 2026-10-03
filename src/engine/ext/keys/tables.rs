@@ -81,7 +81,7 @@ pub(in crate::engine::ext) fn by_id(db: &Connection, object_id: i32) -> Result<O
     let columns = db
         .prepare(
             "SELECT c.name,CAST(c.system_type_id AS INTEGER),CAST(c.max_length AS INTEGER),
-               CAST(coalesce(c.scale,0) AS INTEGER),c.is_nullable,d.data_type
+               CAST(coalesce(c.scale,0) AS INTEGER),c.is_nullable,d.data_type,c.collation_name
              FROM sys.columns c JOIN duckdb_columns() d
                ON d.database_name=current_database() AND lower(d.schema_name)=lower(?)
                AND lower(d.table_name)=lower(?) AND lower(d.column_name)=lower(c.name)
@@ -95,6 +95,7 @@ pub(in crate::engine::ext) fn by_id(db: &Connection, object_id: i32) -> Result<O
                 scale: r.get::<_, i32>(3)? as u8,
                 nullable: r.get(4)?,
                 storage: r.get(5)?,
+                collation: r.get(6)?,
             })
         })?
         .collect::<duckdb::Result<Vec<_>>>()?;

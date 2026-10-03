@@ -1,6 +1,15 @@
-//! Byte keys that order Unicode carriers like msduck's default binary
-//! comparison: UTF-16 code units, with the shorter operand padded with
+//! Byte keys that order Unicode carriers like msduck's default comparison
+//! (the database's case-insensitive, accent-sensitive collation): UTF-16
+//! code units folded to lower case, with the shorter operand padded with
 //! spaces (so trailing spaces never distinguish values).
+//!
+//! Case folding maps each unit through its simple lowercase mapping
+//! ([`fold`]); units without a one-unit mapping stay as they are. Units the
+//! collation ignores (NUL, surrogates and a few format characters; see
+//! [`ignorable`]) are dropped. A first key level orders Latin letters with
+//! diacritics next to their base letter ([`base`]); otherwise ordering
+//! follows folded code units rather than SQL Server's sort weights (see
+//! docs/unicode-collation.md).
 //!
 //! Trimming trailing spaces and comparing the rest is not enough: padding
 //! means `N'a'` sorts after `N'a' + NCHAR(0)`, because the pad space is
@@ -20,6 +29,25 @@
 //! Equal keys mean equal values, so the key also serves equality, IN lists,
 //! joins and sorting.
 
+/// The case-folded form of one UTF-16 unit: its simple lowercase mapping
+/// when that is a single BMP unit. U+0130 maps to `i`, as DuckDB's `lower`
+/// (and so the session's `nocase` collation) maps it.
+pub(crate) fn fold(unit: u16) -> u16 {
+    if unit == 0x130 {
+        return 0x69;
+    }
+    let Some(character) = char::from_u32(u32::from(unit)) else {
+        return unit;
+    };
+    let mut lower = character.to_lowercase();
+    match (lower.next(), lower.next()) {
+        (Some(single), None) if (single as u32) < 0x10000 => single as u16,
+        _ => unit,
+    }
+}
+
+pub(crate) use msduck_sql::dialect::ext::keys::value::ignorable;
+
 /// The order-preserving, prefix-free encoding of a run length.
 fn run(out: &mut Vec<u8>, count: u32, reversed: bool) {
     let start = out.len();
@@ -38,22 +66,53 @@ fn run(out: &mut Vec<u8>, count: u32, reversed: bool) {
     }
 }
 
-/// The sort key of a value's UTF-16 code units.
-pub(crate) fn order_key(units: &[u16]) -> Vec<u8> {
-    let mut key = Vec::with_capacity(units.len() * 4 + 1);
+/// The base letter of a Latin-1 or Latin Extended-A letter with a
+/// diacritic (`é` -> `e`), which orders it next to that letter; other units
+/// are their own base.
+pub(crate) fn base(unit: u16) -> u16 {
+    const LATIN1: &[u8; 64] =
+        b"AAAAAA\0CEEEEIIII\0NOOOOO\0\0UUUUY\0\0aaaaaa\0ceeeeiiii\0nooooo\0\0uuuuy\0y";
+    const EXTENDED: &[u8; 128] = b"AaAaAaCcCcCcCcDd\0\0EeEeEeEeEeGgGgGgGgHh\0\0IiIiIiIiI\0\0\0Jj\
+Kk\0LlLlLl\0\0\0\0NnNnNn\0\0\0OoOoOo\0\0RrRrRrSsSsSsSsTtTt\0\0UuUuUuUuUuUuWwYyYZzZzZz\0";
+    let base = match unit {
+        0xC0..=0xFF => LATIN1[usize::from(unit - 0xC0)],
+        0x100..=0x17F => EXTENDED[usize::from(unit - 0x100)],
+        _ => 0,
+    };
+    if base == 0 { unit } else { u16::from(base) }
+}
+
+/// One level of a sort key: each non-space unit with the run of spaces
+/// before it, then the end of the value (see the module documentation).
+fn level(key: &mut Vec<u8>, units: impl Iterator<Item = u16>) {
     let mut spaces = 0u32;
-    for &unit in units {
+    for unit in units {
         if unit == 0x20 {
             spaces += 1;
             continue;
         }
         let high = unit > 0x20;
         key.push(if high { 0x03 } else { 0x01 });
-        run(&mut key, spaces, high);
+        run(key, spaces, high);
         key.extend_from_slice(&unit.to_be_bytes());
         spaces = 0;
     }
     key.push(0x02);
+}
+
+/// The case-insensitive sort key of a value's UTF-16 code units. Units the
+/// default collation ignores are dropped. The first level orders letters
+/// with diacritics next to their base letter; the second, the case-folded
+/// units, decides equality and orders the rest.
+pub(crate) fn order_key(units: &[u16]) -> Vec<u8> {
+    let folded: Vec<u16> = units
+        .iter()
+        .filter(|unit| !ignorable(**unit))
+        .map(|&unit| fold(unit))
+        .collect();
+    let mut key = Vec::with_capacity(folded.len() * 8 + 2);
+    level(&mut key, folded.iter().map(|&unit| fold(base(unit))));
+    level(&mut key, folded.iter().copied());
     key
 }
 
@@ -67,7 +126,7 @@ mod tests {
     }
 
     #[test]
-    fn keys_order_like_space_padded_code_units() {
+    fn keys_order_like_space_padded_folded_units() {
         let alphabet = [
             0x00u16, 0x09, 0x1F, 0x20, 0x21, 0x41, 0x61, 0xD83E, 0xDD86, 0xE000,
         ];
@@ -99,14 +158,59 @@ mod tests {
             values.push(value);
         }
         let keys: Vec<_> = values.iter().map(|v| order_key(v)).collect();
-        for (left, left_key) in values.iter().zip(&keys) {
-            for (right, right_key) in values.iter().zip(&keys) {
+        // Without letters that have diacritics both key levels agree, so the
+        // key orders like the padded comparison of the folded units that
+        // remain once ignorable units are dropped.
+        let folded: Vec<Vec<u16>> = values
+            .iter()
+            .map(|v| {
+                v.iter()
+                    .filter(|u| !ignorable(**u))
+                    .map(|&u| fold(u))
+                    .collect()
+            })
+            .collect();
+        for ((left, left_key), left_folded) in values.iter().zip(&keys).zip(&folded) {
+            for ((right, right_key), right_folded) in values.iter().zip(&keys).zip(&folded) {
                 assert_eq!(
                     left_key.cmp(right_key),
-                    msduck_core::bin2::compare(left, right),
+                    msduck_core::bin2::compare(left_folded, right_folded),
                     "{left:04X?} vs {right:04X?}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn case_does_not_distinguish_values_but_accents_do() {
+        assert_eq!(order_key(&units("Foo")), order_key(&units("fOO  ")));
+        assert_eq!(order_key(&units("ÄÖÜ")), order_key(&units("äöü")));
+        assert_eq!(order_key(&units("ΣΑ")), order_key(&units("σα")));
+        assert_ne!(order_key(&units("a")), order_key(&units("á")));
+        assert!(order_key(&units("a")) < order_key(&units("B")));
+        assert_eq!(fold(0x130), 0x69);
+        assert_eq!(fold(0xD83E), 0xD83E);
+        assert_eq!(base(0xE9), u16::from(b'e'));
+        assert_eq!(base(0x100), u16::from(b'A'));
+        assert_eq!(base(0xFF), u16::from(b'y'));
+        assert_eq!(base(0x17D), u16::from(b'Z'));
+        assert_eq!(base(0x142), 0x142);
+        assert_eq!(base(0xC6), 0xC6);
+    }
+
+    #[test]
+    fn ignorable_units_vanish_and_diacritics_sort_by_base_letter() {
+        assert_eq!(order_key(&units("a\u{0}b")), order_key(&units("ab")));
+        assert_eq!(order_key(&units("\u{1F986}")), order_key(&units("")));
+        assert_eq!(order_key(&units("a \u{0}")), order_key(&units("a")));
+        assert_ne!(order_key(&units("a\u{1}")), order_key(&units("a")));
+        // a < á < ā < ab < b < z, as reference/default-collation.json orders.
+        let ordered = ["a", "á", "\u{101}", "ab", "b", "c", "ç", "d", "z"];
+        for pair in ordered.windows(2) {
+            assert!(
+                order_key(&units(pair[0])) < order_key(&units(pair[1])),
+                "{pair:?}"
+            );
         }
     }
 
@@ -115,8 +219,9 @@ mod tests {
         assert_eq!(order_key(&units("abc")), order_key(&units("abc   ")));
         assert_eq!(order_key(&units("")), order_key(&units("  ")));
         assert_ne!(order_key(&units("a b")), order_key(&units("ab")));
+        // Padding: a unit below the space sorts before the shorter value.
         assert_eq!(
-            order_key(&units("a")).cmp(&order_key(&units("a\0"))),
+            order_key(&units("a")).cmp(&order_key(&units("a\u{1}"))),
             Ordering::Greater
         );
     }

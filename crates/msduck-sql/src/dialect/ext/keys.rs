@@ -12,6 +12,7 @@ use sqlparser::{
     parser::{Parser, ParserError},
 };
 
+pub mod collation;
 pub mod filter;
 pub mod index;
 pub mod message;

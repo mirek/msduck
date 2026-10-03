@@ -53,10 +53,90 @@ pub(super) fn run(
         Statement::Update(_) => Some(0xc5),
         _ => None,
     };
+    let texts = texts(statement, parameters);
     let result = ext::reenter(session, "keys", |session| {
         session.execute(statement.clone(), parameters)
     });
-    result.map_err(|error| translate(session, target.as_ref(), command, error))
+    result.map_err(|error| translate(session, target.as_ref(), command, &texts, error))
+}
+
+/// The character values a statement writes: its string literals and text
+/// parameters, in order. Character keys drop trailing spaces and, under a
+/// case-insensitive collation, fold case in the value DuckDB reports; SQL
+/// Server shows the value as written, which is recovered from these
+/// ([`written`]).
+fn texts(statement: &Statement, parameters: &HashMap<String, Parameter>) -> Vec<String> {
+    use sqlparser::ast::{Expr, Value, Visit, Visitor};
+    struct Find(Vec<String>);
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
+            if let Expr::Value(value) = expr
+                && let Value::SingleQuotedString(text) | Value::NationalStringLiteral(text) =
+                    &value.value
+            {
+                self.0.push(text.clone());
+            }
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    let mut find = Find(vec![]);
+    // An UPDATE writes its SET values; its other literals select rows.
+    match statement {
+        Statement::Update(update) => {
+            for assignment in &update.assignments {
+                let _ = assignment.value.visit(&mut find);
+            }
+        }
+        _ => {
+            let _ = statement.visit(&mut find);
+        }
+    }
+    let mut names: Vec<&String> = parameters.keys().collect();
+    names.sort();
+    for name in names {
+        match &parameters[name].value {
+            msduck_core::value::Value::Text(text) => find.0.push(text.clone()),
+            msduck_core::value::Value::Unicode(units) => {
+                find.0.push(String::from_utf16_lossy(units))
+            }
+            _ => {}
+        }
+    }
+    find.0
+}
+
+/// The display of a key value as written: the last written value with that
+/// key (keys drop trailing spaces and fold case), or `None` when none has it.
+fn written(column: &value::Column, raw: &str, texts: &[String]) -> Option<String> {
+    use value::Storage;
+    let hex = |bytes: &[u8]| -> String { bytes.iter().map(|b| format!("{b:02X}")).collect() };
+    let text = match column.kind().ok()? {
+        Storage::Unicode => texts
+            .iter()
+            .rev()
+            .find(|text| column.unicode_key_of(text) == raw)
+            .map(|text| {
+                hex(&text
+                    .encode_utf16()
+                    .flat_map(u16::to_le_bytes)
+                    .collect::<Vec<_>>())
+            }),
+        Storage::Ansi => texts
+            .iter()
+            .rev()
+            .find(|text| {
+                let key = if column.case_insensitive() {
+                    text.to_lowercase()
+                } else {
+                    (*text).clone()
+                };
+                hex(key.trim_end_matches(' ').as_bytes()) == raw
+            })
+            .map(|text| hex(text.as_bytes())),
+        _ => None,
+    }?;
+    Some(column.display(&text, true))
 }
 
 /// Replace a DuckDB duplicate-key error with SQL Server's, keeping the
@@ -65,13 +145,14 @@ fn translate(
     session: &Session,
     target: Option<&ObjectName>,
     command: Option<u16>,
+    texts: &[String],
     error: anyhow::Error,
 ) -> anyhow::Error {
     let error = match error.downcast::<ext::Partial>() {
         Ok(partial) => {
             return ext::Partial {
                 tokens: partial.tokens,
-                error: translate(session, target, command, partial.error),
+                error: translate(session, target, command, texts, partial.error),
             }
             .into();
         }
@@ -89,7 +170,7 @@ fn translate(
     let failed_context = error
         .downcast_ref::<crate::query_error::FailedQuery>()
         .map(|failed| (failed.metadata.clone(), failed.command));
-    let describe = |db: &Connection| describe(db, target, &text, &duplicate);
+    let describe = |db: &Connection| describe(db, target, &text, &duplicate, texts);
     // A failed statement can abort the DuckDB transaction; read the
     // committed catalog through a separate connection then.
     let described = describe(&session.db).or_else(|_| {
@@ -127,12 +208,13 @@ fn describe(
     target: Option<&ObjectName>,
     text: &str,
     duplicate: &Duplicate,
+    texts: &[String],
 ) -> Result<Option<Diagnostic>> {
     let table = match target {
         Some(name) => tables::resolve(db, name)?,
         None => None,
     };
-    if let Some(found) = managed(db, table.as_ref(), duplicate)? {
+    if let Some(found) = managed(db, table.as_ref(), duplicate, texts)? {
         return Ok(Some(found));
     }
     let Some(table) = table else {
@@ -146,6 +228,7 @@ fn managed(
     db: &Connection,
     table: Option<&tables::Table>,
     duplicate: &Duplicate,
+    texts: &[String],
 ) -> Result<Option<Diagnostic>> {
     let Some(tag) = duplicate.tag() else {
         return Ok(None);
@@ -167,12 +250,25 @@ fn managed(
     else {
         return Ok(None);
     };
-    let Some(values) = duplicate
-        .managed_values(value::component_count(&columns))
-        .and_then(|values| value::managed_values(&columns, &values))
-    else {
+    let Some(raw) = duplicate.managed_values(value::component_count(&columns)) else {
         return Ok(None);
     };
+    let Some(mut values) = value::managed_values(&columns, &raw) else {
+        return Ok(None);
+    };
+    // The key value of each column follows its NULL discriminator, if any.
+    let mut position = 0;
+    for (column, shown) in columns.iter().zip(values.iter_mut()) {
+        if column.nullable {
+            position += 1;
+        }
+        if shown != "<NULL>"
+            && let Some(written) = raw.get(position).and_then(|r| written(column, r, texts))
+        {
+            *shown = written;
+        }
+        position += 1;
+    }
     Ok(Some(message::violation(
         key.message_kind(),
         &key.name,

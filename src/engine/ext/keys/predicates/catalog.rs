@@ -19,6 +19,8 @@ pub(super) struct Column {
     pub text: bool,
     /// The SQL Server declaration of a carrier column, after [`Catalog::declare`].
     pub declared: Option<DataType>,
+    /// A declared collation whose rule differs from the database default.
+    pub collation: Option<String>,
 }
 
 /// What a column reference resolves to.
@@ -164,6 +166,27 @@ impl Visitor for Relations {
     }
 }
 
+/// Declared collations of a relation's character columns that differ from
+/// the database default, by lowercase column name.
+fn collations(db: &duckdb::Connection, spelling: &str) -> HashMap<String, String> {
+    use msduck_sql::dialect::ext::keys::collation::{Sensitivity, sensitivity};
+    let Ok(mut query) = db.prepare(
+        "SELECT lower(c.name), d.collation_name FROM main.__msduck_column_info c
+         JOIN main.__msduck_declared_columns d USING(object_id, column_id)
+         WHERE c.object_id = __msduck_object_id(?, NULL) AND d.collation_name IS NOT NULL",
+    ) else {
+        return HashMap::new();
+    };
+    let Ok(rows) = query.query_map([spelling], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    }) else {
+        return HashMap::new();
+    };
+    rows.filter_map(Result::ok)
+        .filter(|(_, collation)| sensitivity(collation) == Some(Sensitivity::Other))
+        .collect()
+}
+
 impl Catalog {
     /// The columns of the relations `node` reads, from DuckDB's catalog.
     pub fn load<T: Visit>(db: &duckdb::Connection, node: &T) -> Result<Self> {
@@ -191,6 +214,7 @@ impl Catalog {
             }) else {
                 continue;
             };
+            let collations = collations(db, spelling);
             let columns = catalog.tables.entry(table.clone()).or_default();
             for row in rows {
                 let Ok((name, kind)) = row else { continue };
@@ -199,20 +223,33 @@ impl Catalog {
                     carrier,
                     text: carrier || kind == "VARCHAR",
                     declared: None,
+                    collation: collations.get(&name).cloned(),
                 };
                 match columns.get(&name) {
                     // Same-named tables in several schemas or databases
                     // count as carriers only when they agree.
                     Some(existing) if !existing.carrier || !column.carrier => {
                         let text = existing.text || column.text;
+                        let collation = (existing.collation == column.collation)
+                            .then(|| column.collation.clone())
+                            .flatten();
                         columns.insert(
                             name,
                             Column {
                                 carrier: false,
                                 text,
                                 declared: None,
+                                collation,
                             },
                         );
+                    }
+                    // Carriers of same-named tables keep a collation only
+                    // when they agree.
+                    Some(existing) if existing.collation != column.collation => {
+                        let mut merged = column;
+                        merged.collation = None;
+                        merged.text = true;
+                        columns.insert(name, merged);
                     }
                     Some(_) => {}
                     None => {
@@ -274,6 +311,105 @@ impl Catalog {
         self.tables
             .values()
             .any(|columns| columns.get(name).is_some_and(|c| c.carrier))
+    }
+
+    /// Whether some relation has a column with a collation of its own.
+    pub fn has_collations(&self) -> bool {
+        self.tables
+            .values()
+            .any(|columns| columns.values().any(|c| c.collation.is_some()))
+    }
+
+    /// The collation of the carrier columns of this (lowercase) name, when
+    /// every relation with such a carrier column declares the same one.
+    pub fn carrier_collation(&self, name: &str) -> Option<&str> {
+        let mut found: Option<Option<&str>> = None;
+        for column in self.tables.values().filter_map(|columns| columns.get(name)) {
+            if !column.carrier {
+                continue;
+            }
+            match found {
+                Some(existing) if existing != column.collation.as_deref() => return None,
+                _ => found = Some(column.collation.as_deref()),
+            }
+        }
+        found.flatten()
+    }
+
+    /// The collation of the column `expr` refers to, when it unambiguously
+    /// refers to a column with a collation of its own.
+    pub fn collation(&self, expr: &Expr) -> Option<&str> {
+        let (tables, name): (Vec<&String>, String) = match expr {
+            Expr::Nested(inner) => return self.collation(inner),
+            Expr::Identifier(ident) if !self.defined.contains(&lower(ident)) => {
+                (self.tables.keys().collect(), lower(ident))
+            }
+            Expr::CompoundIdentifier(parts) if parts.len() >= 2 => {
+                let tables = self.qualifiers.get(&lower(&parts[parts.len() - 2]))?;
+                if tables.iter().any(|t| !self.tables.contains_key(t)) {
+                    return None;
+                }
+                (tables.iter().collect(), lower(parts.last()?))
+            }
+            _ => return None,
+        };
+        let mut found: Option<Option<&str>> = None;
+        for table in tables {
+            let Some(column) = self.tables.get(table).and_then(|c| c.get(&name)) else {
+                continue;
+            };
+            match found {
+                Some(existing) if existing != column.collation.as_deref() => return None,
+                _ => found = Some(column.collation.as_deref()),
+            }
+        }
+        found.flatten()
+    }
+
+    /// Every column of the statement's relations that `expr` may name; `None`
+    /// for references this catalog cannot resolve (derived tables, CTEs,
+    /// aliases, outer or missing columns).
+    fn candidates(&self, expr: &Expr) -> Option<Vec<&Column>> {
+        let (tables, name): (Vec<&String>, String) = match expr {
+            Expr::Nested(inner) => return self.candidates(inner),
+            Expr::Identifier(ident)
+                if !ident.value.starts_with('@') && !self.defined.contains(&lower(ident)) =>
+            {
+                (self.tables.keys().collect(), lower(ident))
+            }
+            Expr::CompoundIdentifier(parts) if parts.len() >= 2 => {
+                let tables = self.qualifiers.get(&lower(&parts[parts.len() - 2]))?;
+                if tables.iter().any(|t| !self.tables.contains_key(t)) {
+                    return None;
+                }
+                (tables.iter().collect(), lower(parts.last()?))
+            }
+            _ => return None,
+        };
+        let found: Vec<&Column> = tables
+            .into_iter()
+            .filter_map(|table| self.tables.get(table).and_then(|c| c.get(&name)))
+            .collect();
+        (!found.is_empty()).then_some(found)
+    }
+
+    /// Whether every column `expr` may name is character data.
+    pub fn textual(&self, expr: &Expr) -> bool {
+        self.candidates(expr)
+            .is_some_and(|columns| columns.iter().all(|c| c.text))
+    }
+
+    /// Whether every column `expr` may name is CHAR or VARCHAR data.
+    pub fn ansi(&self, expr: &Expr) -> bool {
+        self.candidates(expr)
+            .is_some_and(|columns| columns.iter().all(|c| c.text && !c.carrier))
+    }
+
+    /// Whether every column `expr` may name is character data under the
+    /// database default collation.
+    pub fn default_text(&self, expr: &Expr) -> bool {
+        self.candidates(expr)
+            .is_some_and(|columns| columns.iter().all(|c| c.text && c.collation.is_none()))
     }
 
     /// The carrier column `expr` refers to, if it unambiguously refers to one.

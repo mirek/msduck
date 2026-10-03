@@ -30,22 +30,31 @@ subquery. This holds in SELECT, UPDATE, DELETE and MERGE statements,
 
 ## Semantics
 
-Comparisons use msduck's default binary comparison, which corresponds to SQL
-Server's `Latin1_General_100_BIN2`:
+Comparisons follow the database's default collation,
+SQL_Latin1_General_CP1_CI_AS (see [unicode-collation.md](unicode-collation.md)):
 
-- case-sensitive;
-- ordered by UTF-16 code units, so a surrogate pair sorts by its high
-  surrogate (before U+E000) and U+0100 sorts after every ASCII character;
+- case-insensitive and accent-sensitive;
+- NUL, surrogates (so supplementary characters such as emoji), U+200D,
+  U+200E, U+FEFF, U+FFFE and U+FFFF are ignored, so `N'a' + NCHAR(0)`
+  equals `N'a'` and a supplementary character equals `N''`;
+- Latin letters with diacritics sort beside their base letter (U+0100
+  between `a` and `b`); otherwise values sort by case-folded UTF-16 code
+  units, not SQL Server's sort weights;
 - the shorter operand is padded with spaces, so trailing spaces never
-  distinguish values and `N'a' + NCHAR(0)` sorts before `N'a'`.
+  distinguish values.
 
 NULL follows SQL's three-valued logic, including `NOT IN` with a NULL in
-the list or subquery. Isolated surrogates, NUL characters and NVARCHAR(MAX)
-values compare like any other unit.
+the list or subquery. NVARCHAR(MAX) values compare like any other.
+`reference/gaps-unicode-predicates.json` was captured under this default
+collation (it was first captured in a Latin1_General_100_BIN2 database,
+msduck's former binary default).
 
 LIKE follows SQL Server's Unicode pattern matching:
 
-- `_` matches one UTF-16 code unit, so a surrogate pair needs `__`;
+- units the collation ignores are dropped from the value and the pattern;
+  `_` matches one remaining UTF-16 code unit;
+- letters match case-insensitively, and a range such as `[a-c]` holds the
+  units that sort between its ends (so `B` and `á`);
 - trailing spaces are significant in both the value and the pattern, so
   an NCHAR(6) value `x` does not match `N'x'`;
 - `[a-c]`, `[^a-c]`, `[%]`, `[_]` and `[[]` match as in SQL Server. `[]`
@@ -105,12 +114,16 @@ The second stage runs last on the backend AST, in `lower_expr` (`lower.rs`):
   carrier consumer (concatenation, storage) stays a carrier, so isolated
   surrogates survive.
 
-The sort key (`key.rs`) encodes each non-space unit with the run of spaces
-before it, so that comparing keys byte-wise equals comparing space-padded
-code units. Equal keys mean equal values, so the same key also serves
-equality, IN, BETWEEN, joins and ORDER BY. A unit test checks the order
-against `msduck_core::bin2::compare` for every pair of short strings over
-NUL, controls, space, ASCII, surrogates and U+E000, and for long space runs.
+The sort key (`key.rs`) drops ignorable units, folds case and encodes each
+non-space unit with the run of spaces before it, so that comparing keys
+byte-wise equals comparing space-padded units. It has two levels: base
+letters first (so letters with diacritics sort beside their base letter),
+then the case-folded units, which decide equality. Equal keys mean equal
+values, so the same key also serves equality, IN, BETWEEN, joins, ORDER BY
+and GROUP BY. A unit test checks the order against
+`msduck_core::bin2::compare` of the folded units for every pair of short
+strings over NUL, controls, space, ASCII, surrogates and U+E000, and for
+long space runs.
 
 LIKE (`like.rs`) is a native matcher over UTF-16 units (`__msduck_unicode_like`).
 Constant patterns are parsed once per vector.
@@ -119,8 +132,8 @@ Constant patterns are parsed once per vector.
 
 `reference/gaps-unicode-predicates.json` holds 9 programs (114 steps)
 captured twice, identically, by `scripts/capture-gaps-unicode-predicates.mjs`.
-Each program runs in a fresh database created with
-`COLLATE Latin1_General_100_BIN2`. Each step keeps its rows, column types,
+Each program runs in a fresh database with the server's default collation,
+SQL_Latin1_General_CP1_CI_AS. Each step keeps its rows, column types,
 diagnostics and DONE tokens; RPC steps (sp_executesql with NVARCHAR and
 VARCHAR parameters) keep their rows and diagnostics. The values cover
 trailing spaces, case, NUL, U+0100, a surrogate pair, U+E000, an isolated
@@ -158,11 +171,11 @@ LIKE case and the backend rewrites.
   NVARCHAR and VARCHAR, set operations that mix them, REPLACE, SUBSTRING
   and REVERSE. SQL Server reports, for example, nvarchar(25) for
   CONCAT and nvarchar(4000) for REPLACE.
-- **GROUP BY, DISTINCT and set-operation duplicates** compare carriers by
-  their exact units. Values that differ only in trailing spaces (`N'x'` and
-  `N'x  '`) form separate groups, where SQL Server forms one. ORDER BY on a
-  `SELECT DISTINCT`, on a set operation, and inside window functions
-  (`OVER (ORDER BY …)`, `PARTITION BY`) still uses DuckDB's payload order.
+- **GROUP BY, DISTINCT and set-operation duplicates.** GROUP BY and SELECT
+  DISTINCT over columns group by the sort keys (docs/unicode-collation.md).
+  GROUP BY of other expressions, set-operation duplicates (UNION) and
+  window functions (`OVER (ORDER BY …)`, `PARTITION BY`) compare carriers by
+  their exact units and order them by DuckDB's payload order.
 - **Text functions count code points.** SUBSTRING, REVERSE and similar
   functions that reach DuckDB's VARCHAR functions work on code points, not
   UTF-16 units. They differ from SQL Server only for supplementary
@@ -189,8 +202,9 @@ LIKE case and the backend rewrites.
   function result or a Unicode RPC parameter with a number fails ("Comparing nvarchar with a value of DuckDB type … is not
   supported"). SQL Server converts the NVARCHAR value to the number's type.
 - **Literals and variables.** N'' literals, NVARCHAR variables and
-  parameters are VARCHAR in the backend. Comparisons between them, without
-  a carrier column, keep the existing behavior: `N'a' = N'a  '` is false.
+  parameters are VARCHAR in the backend. Comparisons between them compare
+  through the same sort keys (`N'a' = N'A  '` is true); comparisons of other
+  expressions that the first stage cannot type keep DuckDB's comparison.
 - **DATALENGTH over concatenation** (`DATALENGTH(n + N'!')`) still fails
   with 40515, as it does for VARCHAR columns.
 - **NCHAR(n) for surrogate code units** is not supported (an existing limit).
