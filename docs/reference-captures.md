@@ -76,7 +76,11 @@ Rows are bounded per result set and messages/done tokens per phase
 `tests/reference-prepared.test.mjs` covers these rules with a fake connection
 driving real tedious Request objects.
 
-Do not hand-roll another prepared helper in a capture script.
+Use the shared helper when its retained result shape fits the capture. It keeps
+the legacy descriptor/message fields used by HASHBYTES and CHARINDEX; it does
+not establish complete raw token fidelity. Captures requiring full descriptor
+fields, ordered tokens or original ROW/RETURNVALUE bytes need an independently
+verified bounded observer, as in the temporal/GUID and TRANSLATE references.
 
 ### Verification of existing fixtures
 
@@ -148,10 +152,27 @@ must be fixed rather than given more memory.
 ## Temporary files
 
 Keep captures, logs and helper scripts in the worktree's ignored
-`artifacts/<task-id>/` directory or a per-task scratch directory such as
-`<scratchpad>/<task-id>/`. Do not write to shared paths like `/tmp/capture.json`
+`.tmp/<task-id>/` directory or its own isolated remote staging directory.
+Do not write to shared paths like `/tmp/capture.json`
 or another worker's `artifacts/` directory, and pass an explicit output path
 when the script's default could collide with another worker.
+
+### Recovery verification
+
+At code revision `7dd41a1`, the fresh exclusive #845 worker passed all 18
+helper/comparison regressions and reran both normal four-observation captures
+with the pinned SQL Server image. Both retained fixtures remain byte-identical:
+HASHBYTES/CHECKSUM has 162 programs per run and SHA256
+`f85b878678ecbd08a52f151d4716b645c34a4751ca27e649ea63f6a3c2c29dda`;
+CHARINDEX/PATINDEX has 211 programs per run and
+`8cb74acbb1facf521620149dd0701d427f7d3bfaf402af0d4cd34f1601c98a85`.
+Raw captures/logs remain in the private remote
+`prepared-helper-e430bd1/checkpoint-v2/.tmp` staging directory. Each container
+was limited to 4 GiB, two CPUs and 512 PIDs; the capture wrapper enforced a
+30-minute wall limit, 1 GiB Node heap and 2 GiB RSS limit, and cleaned only
+containers carrying its exact worker label. No shared builder was synchronized.
+Full client verification and final-head CI/review remain PR gates; these finite
+reference checks do not prove complete SQL Server compatibility.
 
 ## Output paths never alias the fixture
 
@@ -175,4 +196,3 @@ The shared `capture` helper in `scripts/lib/compatibility.mjs` records one
 top-level `returnStatus` per batch, not one per DONEPROC. Until it records one
 status per procedure completion, put each procedure call whose status matters
 in its own observation (Codex review on PR #320).
-
