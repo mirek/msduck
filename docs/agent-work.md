@@ -219,6 +219,12 @@ at least one of these holds:
   the worker is unresponsive after attempting contact through an available
   owner-approved coordination channel. Record what was checked and the contact
   attempt; do not wait indefinitely once the evidence establishes unresponsiveness.
+- a ready reservation is unclaimed, no attributable worker/job is pursuing it,
+  and the current owner-approved snapshot, checkpoint or dependency state shows
+  it is obsolete or cannot proceed as scoped. Recheck the protected registry and
+  permanent claim ref before publishing recovery. No worker contact is required
+  when there is no worker; record the evidence and why a bounded successor is
+  needed. An unclaimed task's age alone does not make it obsolete.
 
 Age, a missing branch or PR, and a pending review/check alone are insufficient.
 A responsive worker or an actively progressing build is not stale. Verify
