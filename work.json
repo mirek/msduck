@@ -11524,6 +11524,32 @@
         "Fresh exclusive receipt after genuine Done predecessors. Reuse existing447 isolated tree/private capture resources and canonical Linux native cache under runner.lock; no newagents/worktrees/nativecaches. Root919 private capture is disjoint; canonical builder currently released. Worker owns full exact-head fmt/workspaceRust/strictalltargetClippy/allclients/rawaudit with actual source/binary provenance, independent/Codex review or genuine fallback, requiredCI/merge and registry/issue/projectcompletion. No engine/Value/catalog/TDS/lib export/root consumer changes."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PluRq"
+    },
+    {
+      "id": "bulk-character-utf8-context-reference-v1",
+      "title": "Capture malformed UTF8 lexical contexts across bounded and MAX profiles",
+      "issue": 924,
+      "state": "ready",
+      "authorization": "Continuing owner full-server goal, decomposed from approved890 and immutable895/913/918/919. Isolated malformed controls do not establish transitions with adjacent ordinary bytes; capture actual context behavior without strict/lossy platform assumptions.",
+      "scope": [
+        "scripts/capture-bulk-character-utf8-context.mjs",
+        "reference/bulk-character-utf8-context.json",
+        "tests/bulk_character_utf8_context_capture.test.mjs",
+        "docs/bulk-character-utf8-context-reference.md"
+      ],
+      "dependencies": [
+        "bulk-character-conversion-reference-v1",
+        "bulk-character-utf8-boundary-reference-v1",
+        "bulk-character-utf8-source-form-reference-v1",
+        "bulk-character-utf8-bounded-target-reference-v1",
+        "bulk-character-adapter-plan-v1"
+      ],
+      "acceptance": [
+        "Freeze16 anchors80,bf,c0af,c1bf,f5808080,c228,e228a1,e08080,eda080,f02880a1,f0808080,f4908080,c2,e0a0,f09080,f48fbf times contexts41+anchor,anchor+42,41+anchor+42 times6profiles: bounded64source to UTF8VARCHAR64/UnicodeNVARCHAR64, MAX/PLPsource to those bounded targets or UTF8VARCHARMAX/UnicodeNVARCHARMAX. Exactly288 isolated NULL/challenge probes; all payloads fit source/target width. Exclude boundedsource→MAX already known4816 admission path. Names describe anchors, not guessed transformed categories. Original native bytes/SQL units/display/errors/info/DONE/callback/counters remain exact; no universal decoder/codepage/assignment/capacity claim.",
+        "Four fresh databases/two pinnedSQL17.0.4065.4 containers and complete final-source-pinned four-run reproduction. Original declarations/TYPEINFO/ROW/PLP/requestSQL/typeddescriptors/framing retained. Reviewed bounded helpers and all ancestor hashes pinned before Docker; raw and complete unnormalized comparison sidecars before golden validation. Independently pin full semantics/request/response/framing, replay every original outcome, reject uniform corruption and payload-preserving repartition with recomputed comparisons, verify alias/async/budget/partial evidence guards; keep any counter variation explicit.",
+        "Fresh own claim after genuineDone dependencies. Reuse existingroot isolated tree/privateSQLworkspace, no newagents/worktrees/nativecaches/canonical source/cache writes. Worker923 owns frozen canonicalLinuxbuild until explicit release. Claimingworker owns checkpoints/draftPR/focusedtests bothhosts/independent andCodexreview or genuinefallback/exactrequiredCI/merge and promptregistry/issue/projectcompletion. No Rust/engine/Value/catalog/TDS/lib/runtime/operationalgate edits."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PlyYh"
     }
   ]
 }
