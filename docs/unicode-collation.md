@@ -280,7 +280,7 @@ and applying precedence before either folding or lowering comparisons.
 
 Every msduck database reports SQL_Latin1_General_CP1_CI_AS, and comparisons
 now follow it: case-insensitive, accent-sensitive, trailing spaces ignored in
-equality. `reference/default-collation.json` (38 live programs captured by
+equality. `reference/default-collation.json` (40 live programs captured by
 `scripts/capture-default-collation.mjs`) is the evidence;
 `tests/compat/default_collation.test.mjs` replays it and names each remaining
 difference. The rule is applied where the value is stored or compared, not
@@ -324,12 +324,15 @@ Latin1_General_100_CI_AS_SC(_UTF8). They are recorded in `sys.columns` and
 result descriptors. A name outside SQL Server's grammar fails with 448
 (state 2) and a non-character column with 447, as in SQL Server; a valid
 name without a descriptor reports "unsupported column collation". A
-case-insensitive, accent-sensitive column behaves like the default. Other
+case-insensitive, accent-sensitive column compares like the default. Other
 column collations apply through an explicit COLLATE of the column in
 comparisons, LIKE, IN, BETWEEN, simple CASE, ORDER BY of carriers and
 COUNT(DISTINCT), and through the DuckDB collation of CHAR and VARCHAR
-columns elsewhere; a comparison between columns of different collations
-raises 468 as in SQL Server. Their keys use BIN2 equality.
+columns elsewhere. Their keys use BIN2 equality. A comparison (`=`, `<>`,
+`<`, `>`, `<=`, `>=`, IN, BETWEEN, simple CASE) between columns of different
+collations raises 468 as in SQL Server, in queries and DML predicates alike,
+even when both collations are case-insensitive (Latin1_General_CI_AS against
+the database default).
 
 Remaining limits:
 

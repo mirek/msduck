@@ -11,6 +11,8 @@
 use super::catalog::{Catalog, Resolution};
 use super::lower::{MARK, MAYBE, MEMBER};
 use crate::engine::Parameter;
+use msduck_core::collation::{Conflict, Label, Operation};
+use msduck_core::diagnostic::SqlError;
 use sqlparser::ast::*;
 use std::collections::HashMap;
 use std::ops::ControlFlow;
@@ -136,45 +138,39 @@ fn collated(expr: &Expr) -> bool {
 
 /// What [`collate`] did with an operation.
 enum Collated {
-    /// No operand is a column with a collation of its own.
+    /// No operand is a column with a rule of its own.
     No,
     /// Its column operands now carry their collation explicitly.
     Wrapped,
-    /// Columns of different collations meet; binding reports the conflict.
-    Conflict,
+    /// Columns of different collations meet: their names, in operand order.
+    Conflict(String, String),
 }
 
 /// Give the column operands of an operation their declared collation as an
-/// explicit COLLATE, when it differs from the database default: SQL
+/// explicit COLLATE, when its rule differs from the database default: SQL
 /// Server's implicit column collation then wins over literals and
-/// variables, and the explicit COLLATE lowering applies it.
+/// variables, and the explicit COLLATE lowering applies it. Columns of
+/// different collations (by name, even when they compare alike) conflict.
 fn collate(catalog: &Catalog, operands: &mut [&mut Expr]) -> Collated {
+    use msduck_sql::dialect::ext::keys::collation::DEFAULT;
     let mut name: Option<String> = None;
-    let mut default_column = false;
     for operand in operands.iter() {
-        match catalog.collation(operand) {
-            Some(found) => match &name {
-                Some(existing) if !existing.eq_ignore_ascii_case(found) => {
-                    return Collated::Conflict;
-                }
-                _ => name = Some(found.to_owned()),
-            },
-            None => {
-                default_column |= matches!(
-                    catalog.resolve(operand),
-                    Resolution::Carrier(_) | Resolution::Plain { text: true }
-                );
+        if !catalog.textual(operand) {
+            continue;
+        }
+        let found = catalog.collation(operand).unwrap_or(DEFAULT);
+        match &name {
+            Some(existing) if !existing.eq_ignore_ascii_case(found) => {
+                return Collated::Conflict(existing.clone(), found.to_owned());
             }
+            _ => name = Some(found.to_owned()),
         }
     }
-    let Some(name) = name else {
+    let Some(name) = name.filter(|name| own(name)) else {
         return Collated::No;
     };
-    if default_column {
-        return Collated::Conflict;
-    }
     for operand in operands.iter_mut() {
-        if catalog.collation(operand).is_some() {
+        if catalog.textual(operand) && catalog.collation(operand).is_some() {
             let inner = std::mem::replace(&mut **operand, Expr::Value(Value::Null.into()));
             **operand = Expr::Collate {
                 expr: Box::new(inner),
@@ -183,6 +179,30 @@ fn collate(catalog: &Catalog, operands: &mut [&mut Expr]) -> Collated {
         }
     }
     Collated::Wrapped
+}
+
+/// The collation operation of a comparison operator.
+fn operation(op: &BinaryOperator) -> Option<Operation> {
+    Some(match op {
+        BinaryOperator::Eq => Operation::Equal,
+        BinaryOperator::NotEq => Operation::NotEqual,
+        BinaryOperator::Lt => Operation::Less,
+        BinaryOperator::Gt => Operation::Greater,
+        BinaryOperator::LtEq => Operation::LessEqual,
+        BinaryOperator::GtEq => Operation::GreaterEqual,
+        _ => return None,
+    })
+}
+
+/// Whether a collation compares differently from the database default.
+fn own(name: &str) -> bool {
+    use msduck_sql::dialect::ext::keys::collation::{Sensitivity, sensitivity};
+    sensitivity(name) == Some(Sensitivity::Other)
+}
+
+/// The column's collation when it compares differently from the default.
+fn own_collation<'a>(catalog: &'a Catalog, expr: &Expr) -> Option<&'a str> {
+    catalog.collation(expr).filter(|name| own(name))
 }
 
 /// Whether `expr` is known to be character data: a text column, a string
@@ -262,12 +282,28 @@ fn ansi(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
 /// otherwise mark operands of unknown type for the backend `typeof`
 /// dispatch. Explicitly collated operations are left to the COLLATE
 /// handling.
-fn mark(catalog: &Catalog, mut operands: Vec<&mut Expr>) {
+fn mark(
+    catalog: &Catalog,
+    operation: Option<Operation>,
+    mut operands: Vec<&mut Expr>,
+) -> Result<(), SqlError> {
     if operands.iter().any(|o| collated(o) || marked(o)) {
-        return;
+        return Ok(());
     }
-    if !matches!(collate(catalog, &mut operands), Collated::No) {
-        return;
+    match collate(catalog, &mut operands) {
+        Collated::No => {}
+        Collated::Wrapped => return Ok(()),
+        // SQL Server's 468; binding reports it for queries, but DML
+        // predicates would otherwise compare the raw values.
+        Collated::Conflict(left, right) => {
+            if let Some(operation) = operation
+                && let Err(Conflict::Operation(error)) =
+                    operation.resolve(&[Label::Implicit(left), Label::Implicit(right)])
+            {
+                return Err(error);
+            }
+            return Ok(());
+        }
     }
     // A subquery pass can type a column the statement pass could not.
     let unwrap = |e: &Expr| -> Expr {
@@ -295,6 +331,7 @@ fn mark(catalog: &Catalog, mut operands: Vec<&mut Expr>) {
         let inner = unwrap(operand);
         *operand = msduck_sql::expr::unary_function(name, inner);
     }
+    Ok(())
 }
 
 /// Mark one comparison, IN, BETWEEN, simple CASE or LIKE whose operands are
@@ -378,26 +415,23 @@ pub(super) fn literals(parameters: &Parameters, expr: &mut Expr) {
     }
 }
 
-pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, parameters: &Parameters, node: &mut T) {
+pub(super) fn rewrite<T: VisitMut>(
+    catalog: &Catalog,
+    parameters: &Parameters,
+    node: &mut T,
+) -> Result<(), SqlError> {
     struct Mark<'a>(&'a Catalog, &'a Parameters);
     impl VisitorMut for Mark<'_> {
-        type Break = ();
-        fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
-            match expr {
-                Expr::BinaryOp {
-                    left,
-                    op:
-                        BinaryOperator::Eq
-                        | BinaryOperator::NotEq
-                        | BinaryOperator::Lt
-                        | BinaryOperator::Gt
-                        | BinaryOperator::LtEq
-                        | BinaryOperator::GtEq,
-                    right,
-                } => mark(self.0, vec![left, right]),
+        type Break = SqlError;
+        fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<SqlError> {
+            let result = match expr {
+                Expr::BinaryOp { left, op, right } => match operation(op) {
+                    Some(operation) => mark(self.0, Some(operation), vec![left, right]),
+                    None => Ok(()),
+                },
                 Expr::Between {
                     expr, low, high, ..
-                } => mark(self.0, vec![expr, low, high]),
+                } => mark(self.0, Some(Operation::GreaterEqual), vec![expr, low, high]),
                 // The escape stays as written: its checks look for a literal.
                 // LIKE over known character data matches with SQL Server's
                 // Unicode LIKE under the case-insensitive default.
@@ -410,8 +444,8 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, parameters: &Parameters, n
                     if [&**expr, &**pattern]
                         .iter()
                         .all(|o| !collated(o) && !marked(o) && text(self.0, self.1, o))
-                        && self.0.collation(expr).is_none()
-                        && self.0.collation(pattern).is_none()
+                        && own_collation(self.0, expr).is_none()
+                        && own_collation(self.0, pattern).is_none()
                     {
                         // ASCII pattern matching ignores the value's
                         // trailing blanks (the pattern's count); Unicode
@@ -429,14 +463,15 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, parameters: &Parameters, n
                             }
                             **operand = msduck_sql::expr::unary_function(MARK, inner);
                         }
+                        Ok(())
                     } else {
-                        mark(self.0, vec![expr, pattern])
+                        mark(self.0, None, vec![expr, pattern])
                     }
                 }
                 Expr::InList { expr, list, .. } => {
                     let mut operands = vec![expr.as_mut()];
                     operands.extend(list.iter_mut());
-                    mark(self.0, operands)
+                    mark(self.0, Some(Operation::Equal), operands)
                 }
                 Expr::Case {
                     operand: Some(operand),
@@ -445,7 +480,7 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, parameters: &Parameters, n
                 } => {
                     let mut operands = vec![operand.as_mut()];
                     operands.extend(conditions.iter_mut().map(|c| &mut c.condition));
-                    mark(self.0, operands)
+                    mark(self.0, Some(Operation::Equal), operands)
                 }
                 // DISTINCT counts and extrema of a column with a collation
                 // of its own keep it (explicitly), instead of the default's
@@ -465,7 +500,7 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, parameters: &Parameters, n
                             ))
                         && let [FunctionArg::Unnamed(FunctionArgExpr::Expr(value))] =
                             list.args.as_mut_slice()
-                        && let Some(name) = self.0.collation(value).map(str::to_owned)
+                        && let Some(name) = own_collation(self.0, value).map(str::to_owned)
                         // Binding gives Latin1_General_100_BIN2 extrema their
                         // own lossless UTF-16 path.
                         && (count || !name.eq_ignore_ascii_case("Latin1_General_100_BIN2"))
@@ -476,6 +511,7 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, parameters: &Parameters, n
                             collation: ObjectName::from(vec![Ident::new(name)]),
                         };
                     }
+                    Ok(())
                 }
                 // NULLIF(a, b) becomes CASE WHEN a = b …; marking `b` alone
                 // keeps `a`, which gives the result its type, as written.
@@ -493,6 +529,7 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, parameters: &Parameters, n
                         let inner = std::mem::replace(second, Expr::Value(Value::Null.into()));
                         *second = msduck_sql::expr::unary_function(MARK, inner);
                     }
+                    Ok(())
                 }
                 Expr::InSubquery {
                     expr: value,
@@ -519,11 +556,18 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, parameters: &Parameters, n
                             std::mem::replace(value.as_mut(), Expr::Value(Value::Null.into()));
                         **value = msduck_sql::expr::unary_function(MEMBER, inner);
                     }
+                    Ok(())
                 }
-                _ => {}
+                _ => Ok(()),
+            };
+            match result {
+                Ok(()) => ControlFlow::Continue(()),
+                Err(error) => ControlFlow::Break(error),
             }
-            ControlFlow::Continue(())
         }
     }
-    let _ = VisitMut::visit(node, &mut Mark(catalog, parameters));
+    match VisitMut::visit(node, &mut Mark(catalog, parameters)) {
+        ControlFlow::Break(error) => Err(error),
+        ControlFlow::Continue(()) => Ok(()),
+    }
 }
