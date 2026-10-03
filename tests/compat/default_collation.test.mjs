@@ -134,6 +134,10 @@ test('duplicates show each key column as written, and ORDER BY resolves qualifie
   await query(connection, "CREATE TABLE dbo.cs_added (v varchar(10) COLLATE Latin1_General_CS_AS NOT NULL); INSERT dbo.cs_added VALUES ('b'); ALTER TABLE dbo.cs_added ADD CONSTRAINT uq_cs_added UNIQUE (v)")
   await assert.rejects(query(connection, "INSERT dbo.cs_added VALUES ('b ')"), error => error.number === 2627 && /'uq_cs_added'.*\(b \)/.test(error.message))
   await query(connection, "INSERT dbo.cs_added VALUES ('B')")
+  // ANSI ranges space-pad their operands.
+  assert.deepEqual((await query(connection, "SELECT count(*) FROM dbo.cs_keys WHERE v BETWEEN 'a  ' AND 'a ' COLLATE Latin1_General_CS_AS")).rows, [[1]])
+  await query(connection, "CREATE TABLE dbo.plain_text (v varchar(10)); INSERT dbo.plain_text VALUES ('a')")
+  assert.deepEqual((await query(connection, "SELECT count(*) FROM dbo.plain_text WHERE v BETWEEN 'A ' AND 'a  ' AND v >= 'A  ' AND v <= 'a'")).rows, [[1]])
   // IN (subquery) keeps a column's own collation, on either side.
   assert.deepEqual((await query(connection, "SELECT count(*) FROM dbo.cs_keys WHERE v IN (SELECT 'a')")).rows, [[1]])
   assert.deepEqual((await query(connection, "SELECT CASE WHEN 'A' IN (SELECT k.v FROM dbo.cs_keys k WHERE k.v = 'a') THEN 1 ELSE 0 END")).rows, [[0]])

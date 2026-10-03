@@ -303,12 +303,6 @@ impl Catalog {
         Ok(())
     }
 
-    pub fn has_carriers(&self) -> bool {
-        self.tables
-            .values()
-            .any(|columns| columns.values().any(|c| c.carrier))
-    }
-
     /// Whether some relation has a carrier column of this (lowercase) name.
     pub fn carrier_named(&self, name: &str) -> bool {
         self.tables
@@ -316,11 +310,24 @@ impl Catalog {
             .any(|columns| columns.get(name).is_some_and(|c| c.carrier))
     }
 
-    /// Whether some relation has a column with a collation of its own.
+    pub fn has_carriers(&self) -> bool {
+        self.tables
+            .values()
+            .any(|columns| columns.values().any(|c| c.carrier))
+    }
+
+    /// Whether some relation has a column with a declared collation.
     pub fn has_collations(&self) -> bool {
         self.tables
             .values()
             .any(|columns| columns.values().any(|c| c.collation.is_some()))
+    }
+
+    /// Whether some relation has a character column.
+    pub fn has_text(&self) -> bool {
+        self.tables
+            .values()
+            .any(|columns| columns.values().any(|c| c.text))
     }
 
     /// The collation of the column `expr` refers to, when it unambiguously

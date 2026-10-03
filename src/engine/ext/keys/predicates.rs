@@ -101,6 +101,9 @@ fn rewrite<T: Visit + VisitMut + 'static>(
         return Ok(());
     }
     let mut catalog = catalog::Catalog::load(db, node)?;
+    if catalog.has_text() {
+        mark::pad_ranges(&catalog, parameters, node);
+    }
     let grouped = ordered
         && (node as &dyn std::any::Any)
             .downcast_ref::<Statement>()

@@ -324,6 +324,11 @@ fn ansi(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
     }
 }
 
+/// An operand already wrapped in RTRIM by the ANSI ordering rule.
+fn trimmed(expr: &Expr) -> bool {
+    matches!(expr, Expr::Function(f) if f.name.to_string() == "RTRIM")
+}
+
 /// An operand [`literals`] already turned into `LOWER(RTRIM(…))`.
 fn ansi_keyed(expr: &Expr) -> bool {
     let name =
@@ -337,7 +342,12 @@ fn ansi_keyed(expr: &Expr) -> bool {
 /// otherwise mark operands of unknown type for the backend `typeof`
 /// dispatch. Explicitly collated operations are left to the COLLATE
 /// handling.
-fn mark(catalog: &Catalog, operation: &str, mut operands: Vec<&mut Expr>) -> Result<(), SqlError> {
+fn mark(
+    catalog: &Catalog,
+    _parameters: &Parameters,
+    operation: &str,
+    mut operands: Vec<&mut Expr>,
+) -> Result<(), SqlError> {
     if operands.iter().any(|o| collated(o) || marked(o)) {
         return Ok(());
     }
@@ -348,6 +358,7 @@ fn mark(catalog: &Catalog, operation: &str, mut operands: Vec<&mut Expr>) -> Res
         // predicates would otherwise compare the raw values.
         Collated::Conflict(left, right) => return Err(conflict(operation, &left, &right)),
     }
+
     // A subquery pass can type a column the statement pass could not.
     let unwrap = |e: &Expr| -> Expr {
         match e {
@@ -474,6 +485,54 @@ pub(super) fn literals(parameters: &Parameters, expr: &mut Expr) {
     }
 }
 
+/// Space-pad ANSI ordering comparisons (`<`, `>`, `<=`, `>=`, BETWEEN)
+/// whose operands are all CHAR or VARCHAR columns, literals or variables:
+/// trailing spaces never decide them, as SQL Server pads the shorter
+/// operand (equality and IN get this from ANSI padding). This pass runs on
+/// its own, without the Unicode marking.
+pub(super) fn pad_ranges<T: VisitMut>(catalog: &Catalog, parameters: &Parameters, node: &mut T) {
+    struct Pad<'a>(&'a Catalog, &'a Parameters);
+    impl VisitorMut for Pad<'_> {
+        type Break = ();
+        fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
+            let operands: Vec<&mut Expr> = match expr {
+                Expr::BinaryOp {
+                    left,
+                    op:
+                        BinaryOperator::Lt
+                        | BinaryOperator::Gt
+                        | BinaryOperator::LtEq
+                        | BinaryOperator::GtEq,
+                    right,
+                } => vec![left, right],
+                Expr::Between {
+                    expr, low, high, ..
+                } => vec![expr, low, high],
+                _ => return ControlFlow::Continue(()),
+            };
+            if operands
+                .iter()
+                .any(|o| collated(o) || marked(o) || trimmed(o))
+                || !operands.iter().all(|o| ansi(self.0, self.1, o))
+                || own_collation_any(self.0, &operands)
+            {
+                return ControlFlow::Continue(());
+            }
+            for operand in operands {
+                let inner = std::mem::replace(operand, Expr::Value(Value::Null.into()));
+                *operand = msduck_sql::expr::unary_function("RTRIM", inner);
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let _ = VisitMut::visit(node, &mut Pad(catalog, parameters));
+}
+
+/// Whether an operand is a column with a collation of its own.
+fn own_collation_any(catalog: &Catalog, operands: &[&mut Expr]) -> bool {
+    operands.iter().any(|o| own_collation(catalog, o).is_some())
+}
+
 pub(super) fn rewrite<T: VisitMut>(
     catalog: &Catalog,
     parameters: &Parameters,
@@ -485,12 +544,17 @@ pub(super) fn rewrite<T: VisitMut>(
         fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<SqlError> {
             let result = match expr {
                 Expr::BinaryOp { left, op, right } => match operation(op) {
-                    Some(operation) => mark(self.0, operation, vec![left, right]),
+                    Some(operation) => mark(self.0, self.1, operation, vec![left, right]),
                     None => Ok(()),
                 },
                 Expr::Between {
                     expr, low, high, ..
-                } => mark(self.0, "greater than or equal to", vec![expr, low, high]),
+                } => mark(
+                    self.0,
+                    self.1,
+                    "greater than or equal to",
+                    vec![expr, low, high],
+                ),
                 // The escape stays as written: its checks look for a literal.
                 // LIKE over known character data matches with SQL Server's
                 // Unicode LIKE under the case-insensitive default.
@@ -530,13 +594,13 @@ pub(super) fn rewrite<T: VisitMut>(
                         }
                         Ok(())
                     } else {
-                        mark(self.0, "like", vec![expr, pattern])
+                        mark(self.0, self.1, "like", vec![expr, pattern])
                     }
                 }
                 Expr::InList { expr, list, .. } => {
                     let mut operands = vec![expr.as_mut()];
                     operands.extend(list.iter_mut());
-                    mark(self.0, "equal to", operands)
+                    mark(self.0, self.1, "equal to", operands)
                 }
                 Expr::Case {
                     operand: Some(operand),
@@ -545,7 +609,7 @@ pub(super) fn rewrite<T: VisitMut>(
                 } if !volatile(operand) => {
                     let mut operands = vec![operand.as_mut()];
                     operands.extend(conditions.iter_mut().map(|c| &mut c.condition));
-                    mark(self.0, "equal to", operands)
+                    mark(self.0, self.1, "equal to", operands)
                 }
                 // DISTINCT counts and extrema of a column with a collation
                 // of its own keep it (explicitly), instead of the default's
