@@ -10381,6 +10381,25 @@
       "dependencies": [],
       "issue": 849,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkY_S"
+    },
+    {
+      "id": "limits-procedure-error-context-v1-wire",
+      "title": "Error token procedure name and line plumbing for module errors",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Companion of limits-procedure-error-context-v1 (issue #853), decomposed by its claiming worker because ERROR/INFO token encoding and engine error emission live outside the procedures/functions modules. No external submission is input.",
+      "scope": [
+        "src/engine.rs",
+        "src/engine/ext.rs",
+        "crates/msduck-tds/src/lib.rs"
+      ],
+      "acceptance": [
+        "The TDS codec can encode or rewrite ERROR/INFO tokens with a ProcName and LineNumber; existing encoders keep an empty ProcName and line 1.",
+        "Engine error emission honors a module location attached to an error by a feature hook (an additive type in src/engine/ext.rs), without changing error identity, classification, TRY/CATCH or messages for errors that carry no location.",
+        "Ships in the same PR as limits-procedure-error-context-v1, verified by its tests, with fmt, workspace tests, clippy (1.95) and npm test."
+      ],
+      "dependencies": [],
+      "issue": 853,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkZAG"
     }
   ]
 }
