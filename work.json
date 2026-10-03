@@ -10151,7 +10151,7 @@
     {
       "id": "client-verification-factory-v1",
       "title": "Use optional client concurrency without weakening full-suite evidence",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner asks for faster PR pickup/merge cycle, proper use of powerful linux.local and optional gitignored .env configuration. Current full gates spend about15minutes on507 serial client tests; task845 adds13 helper tests. Existing owner-reviewed sharding runner has historical four-worker404-test proof and a read-only d035 plan for507tests/17processes, not a current-suite performance pass. Implement optional verified concurrency after845; preserve all mandatory checks and claim boundaries.",
       "scope": [
         "package.json",
