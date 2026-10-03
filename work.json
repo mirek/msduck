@@ -10400,6 +10400,22 @@
       "dependencies": [],
       "issue": 853,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkZAG"
+    },
+    {
+      "id": "limits-identifiers-reserved-v1-batch",
+      "title": "Call the reserved-identifier check from batch parsing",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Companion of limits-identifiers-reserved-v1 (issue #850), published by its claiming worker because the per-statement post-parse check must run inside msduck_sql::batch::parse so a reserved keyword fails the whole batch at compile time. No external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/batch.rs"
+      ],
+      "acceptance": [
+        "After each statement is parsed, call crate::dialect::ext::identifiers::check so an unquoted T-SQL reserved keyword used as a name fails the batch with 156 before any statement runs; no other behavior change in batch.rs.",
+        "Delivered in the same PR as limits-identifiers-reserved-v1 with its verification; merged with the exact head and published done together."
+      ],
+      "dependencies": [],
+      "issue": 850,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkY_d"
     }
   ]
 }
