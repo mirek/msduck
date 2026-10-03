@@ -527,3 +527,42 @@ fn compile_diagnostics_retain_all_captured_identity_fields() {
         }
     }
 }
+
+#[test]
+fn converted_numeric_payloads_cannot_escape_width_or_encoding_contracts() {
+    let integer = Argument {
+        kind: Some(Type::Int),
+        converted_width: None,
+        collation: None,
+    };
+    let arguments = vec![
+        arg(Family::Varchar, Length::Bounded(1)),
+        integer,
+        arg(Family::Varchar, Length::Bounded(1)),
+    ];
+    let p = rules::plan(Function::ConcatWs, &arguments, DEFAULT, &catalog()).unwrap();
+    for invalid in [vec![u16::from(b'1'); 13], vec![0xd83d, 0xde00]] {
+        assert_eq!(
+            rules::evaluate(&p, &[text(","), Some(invalid), text("a")], &default_match),
+            Err(Error::InvalidPayload)
+        );
+    }
+    assert_eq!(
+        rules::evaluate(&p, &[text(","), text("42"), text("a")], &default_match).unwrap(),
+        text("42,a")
+    );
+    let max_arguments = vec![
+        arg(Family::Varchar, Length::Bounded(1)),
+        arg(Family::Varchar, Length::Max),
+        arg(Family::Varchar, Length::Bounded(1)),
+    ];
+    let max_plan = rules::plan(Function::ConcatWs, &max_arguments, DEFAULT, &catalog()).unwrap();
+    assert_eq!(
+        rules::evaluate(
+            &max_plan,
+            &[text(","), text("😀"), text("a")],
+            &default_match
+        ),
+        Err(Error::InvalidPayload)
+    );
+}

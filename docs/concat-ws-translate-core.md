@@ -32,7 +32,7 @@ and ANSI UTF-8 evaluation do not acquire invented behavior. Character payloads
 must respect their declared widths and fixed-width padding. Core CP1252 encoding
 validates ANSI payloads; Unicode payloads retain isolated surrogate units.
 
-Six private Rust tests currently pass using cached, compiler-compatible Linux
+Seven private Rust tests currently pass using cached, compiler-compatible Linux
 dependencies and isolated temporary binaries. They cover21 ordinary character
 cases across all four captures (84 comparisons), prepared CONCAT_WS rebindings,
 isolated surrogate fidelity, captured bounded truncation/MAX behavior and ten
@@ -41,6 +41,9 @@ four raw `"\ud83d-a"` strings into an exact UTF-16 unit carrier because serde_js
 cannot represent an isolated surrogate in a Rust String. It retains the original
 fixture unchanged and checks those exact units rather than replacing them.
 MAX DATALENGTH expectations retain the captured BIGINT string representation.
+Independent review found that converted numeric payloads could escape width and
+ANSI encoding validation; the new regression fails on the original checkpoint
+and passes after every supplied payload receives those checks.
 
 This is unfinished work. Remaining applicable fixture cases, byte-domain edge
 checks, independent review, full exact-head gates and CI must be completed before

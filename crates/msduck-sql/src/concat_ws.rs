@@ -311,25 +311,37 @@ pub fn evaluate(
         .zip(values)
         .zip(&plan.source_encodings)
     {
-        if let (Some(Type::Character(kind)), Some(value)) = (argument.kind, value) {
-            let size = if unicode(kind) {
-                value.len()
-            } else {
-                let text = String::from_utf16(value).map_err(|_| Error::InvalidPayload)?;
-                match encoding {
-                    Encoding::Utf8 => text.len(),
-                    Encoding::Cp1252 => msduck_core::encoding::encode_cp1252(&text)
-                        .map_err(|_| Error::InvalidPayload)?
-                        .len(),
-                }
-            };
-            if let Length::Bounded(width) = kind.length()
-                && (size > usize::from(width)
-                    || (matches!(kind.family(), Family::Char | Family::Nchar)
-                        && size != usize::from(width)))
-            {
-                return Err(Error::InvalidPayload);
+        let Some(value) = value else {
+            continue;
+        };
+        let source_unicode = matches!(argument.kind, Some(Type::Character(kind)) if unicode(kind));
+        let size = if source_unicode {
+            value.len()
+        } else {
+            let text = String::from_utf16(value).map_err(|_| Error::InvalidPayload)?;
+            match encoding {
+                Encoding::Utf8 => text.len(),
+                Encoding::Cp1252 => msduck_core::encoding::encode_cp1252(&text)
+                    .map_err(|_| Error::InvalidPayload)?
+                    .len(),
             }
+        };
+        let width = match argument.kind {
+            Some(Type::Character(kind)) => kind.length(),
+            Some(Type::Int) => Length::Bounded(12),
+            _ => argument
+                .converted_width
+                .ok_or(Error::UnknownConversionWidth)?,
+        };
+        let fixed = matches!(argument.kind, Some(Type::Character(kind)) if matches!(kind.family(), Family::Char | Family::Nchar));
+        if let Length::Bounded(width) = width
+            && (size > usize::from(width) || (fixed && size != usize::from(width)))
+        {
+            return Err(Error::InvalidPayload);
+        }
+        if !unicode(plan.declaration) {
+            let text = String::from_utf16(value).map_err(|_| Error::InvalidPayload)?;
+            msduck_core::encoding::encode_cp1252(&text).map_err(|_| Error::InvalidPayload)?;
         }
     }
 
