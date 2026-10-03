@@ -514,16 +514,17 @@ function relationReport(run) {
     const records=run.filter(r=>r.input?.kind==='ASCII grid'&&r.input.collation===collation&&r.input.declaration===declaration)
     assert.equal(records.length,128,'complete mapping inventory')
     const matrix=records.map(gridRelation)
-    const failures={reflexive:[],symmetric:[],transitive:[]}
+    const failures=Object.fromEntries(['reflexive','symmetric','transitive'].map(kind=>[kind,{count:0,witnesses:[]}]))
+    const fail=(kind,witness)=>{const failure=failures[kind];failure.count++;if(failure.witnesses.length<16)failure.witnesses.push(witness)}
     for(let a=0;a<128;a++) {
-      if(!matrix[a][a])failures.reflexive.push(a)
+      if(!matrix[a][a])fail('reflexive',a)
       for(let b=0;b<128;b++) {
-        if(matrix[a][b]!==matrix[b][a])failures.symmetric.push([a,b])
-        if(matrix[a][b])for(let c=0;c<128;c++)if(matrix[b][c]&&!matrix[a][c])failures.transitive.push([a,b,c])
+        if(matrix[a][b]!==matrix[b][a])fail('symmetric',[a,b])
+        if(matrix[a][b])for(let c=0;c<128;c++)if(matrix[b][c]&&!matrix[a][c])fail('transitive',[a,b,c])
       }
     }
     const rowsHex=matrix.map(row=>{const bytes=Buffer.alloc(16);row.forEach((matched,index)=>{if(matched)bytes[index>>3]|=1<<(index&7)});return bytes.toString('hex')})
-    return {collation,declaration,alphabetSize:128,rowAxis:'mapping ASCII code',bitAxis:'source ASCII code; least significant bit first within each byte',rowsHex,failures,classification:Object.values(failures).every(x=>x.length===0)?'observed equivalence within ASCII only':'inconsistent observed relation; unknown'}
+    return {collation,declaration,alphabetSize:128,rowAxis:'mapping ASCII code',bitAxis:'source ASCII code; least significant bit first within each byte',rowsHex,failures,classification:Object.values(failures).every(x=>x.count===0)?'observed equivalence within ASCII only':'inconsistent observed relation; unknown'}
   }))
 }
 function validate(run) {
