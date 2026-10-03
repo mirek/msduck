@@ -31,6 +31,13 @@ impl Plan {
     ) -> anyhow::Result<Self> {
         // Validate the semantic projection before any nullable payload is read.
         project(source, None, target, limits)?;
+        if target == ProjectionTarget::SqlUtf16 {
+            anyhow::ensure!(
+                limits.output_bytes <= crate::unicode_carrier::CELL_LIMIT
+                    && output_chunk_limit <= crate::unicode_carrier::CHUNK_LIMIT,
+                "ANSI projection exceeds the existing UTF16 carrier limits"
+            );
+        }
         anyhow::ensure!(
             limits.output_bytes <= output_chunk_limit,
             "ANSI projection output cell limit exceeds chunk limit"

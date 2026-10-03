@@ -680,3 +680,68 @@ fn earlier_variable_encoding_controls_keep_actual_primary_native_or_unicode_byte
         "original884 observations={observations} rows={rows} malformed={malformed} failed={failed}"
     );
 }
+
+#[test]
+fn unicode_constructor_obeys_existing_carrier_limits_before_any_payload() {
+    let cell = 16 * 1024 * 1024;
+    let chunk = 64 * 1024 * 1024;
+    let limits = |output| ProjectionLimits {
+        input_bytes: 1,
+        output_bytes: output,
+    };
+    assert!(Plan::new(Encoding::Cp1252, Target::SqlUtf16, limits(cell), 1, chunk).is_ok());
+    assert!(
+        Plan::new(
+            Encoding::Cp1252,
+            Target::SqlUtf16,
+            limits(cell + 1),
+            1,
+            chunk
+        )
+        .is_err()
+    );
+    assert!(
+        Plan::new(
+            Encoding::Cp1252,
+            Target::SqlUtf16,
+            limits(cell),
+            1,
+            chunk + 1
+        )
+        .is_err()
+    );
+    assert!(
+        Plan::new(
+            Encoding::Utf8,
+            Target::SqlUtf16,
+            limits(usize::MAX),
+            1,
+            usize::MAX
+        )
+        .is_err()
+    );
+    // Native carriers retain the caller's independent explicit bounds.
+    assert!(
+        Plan::new(
+            Encoding::Cp1252,
+            Target::Native(Encoding::Cp1252),
+            limits(cell + 1),
+            1,
+            chunk + 1
+        )
+        .is_ok()
+    );
+    assert!(
+        Plan::new(
+            Encoding::Cp1252,
+            Target::SqlUtf16,
+            ProjectionLimits {
+                input_bytes: 0,
+                output_bytes: 0
+            },
+            0,
+            0
+        )
+        .is_ok()
+    );
+}
