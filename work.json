@@ -10898,6 +10898,24 @@
         "Ship in PR885 with task858 focused rejection regression and exact-head formatter, strict Clippy, Rust/client/audit, required CI and verified independent/Codex review or genuine availability fallback. Same worker owns review follow-up, merge and registry/project completion of both claims; no new cache/worktree/agent or engine.rs scope."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkdtQ"
+    },
+    {
+      "id": "compatibility-cli-output-v1",
+      "title": "Flush compatibility CLI output before exiting under backpressure",
+      "state": "ready",
+      "issue": 887,
+      "authorization": "Owner continuing goal and task decomposition; first-party failure/probe evidence in owner issue887. Two-path bounded follow-up, no unrelated compatibility changes.",
+      "scope": [
+        "scripts/compatibility.mjs",
+        "tests/compatibility-selection.test.mjs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Ensure --list-cases and --plan emit their entire output before successful termination under stdout pipe backpressure. Preserve exact case names/order, selection validation, plan JSON/mode/paths and no-server/no-Docker behavior. Cover Docker wrapper forwarding through the existing interface without expanding its file scope.",
+        "Use real delayed-consumption pipe regression with a known constrained Linux pipe or sufficient deterministic backpressure; demonstrate predecessor loses the final cases or JSON and corrected code preserves exact complete output. Keep existing selection assertions intact; avoid timing-only busy-load claims or fabricated expected results. Verify error behavior and no accidental connection on planning commands.",
+        "Exclusive claim in an existing isolated worktree/cache; no additional agents or native build. Focused Node tests on both hosts and syntax/diff checks, exact-head requiredCI and independent/Codex review or genuine availability fallback. Worker owns PR review follow-up, exact-head merge and registry/project completion. No Rust/runtime/corpus/expected-reference edits."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkyP3"
     }
   ]
 }
