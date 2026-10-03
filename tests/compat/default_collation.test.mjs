@@ -105,6 +105,9 @@ test('LIKE, DISTINCT counts and extrema follow the column collations', async t =
   assert.deepEqual((await query(connection, 'SELECT MIN(n), UPPER(MAX(n)), MIN(v), UPPER(RTRIM(MAX(v))) FROM dbo.agg')).rows, [['bar', 'FOO', 'bar', 'FOO']])
   assert.deepEqual((await query(connection, 'SELECT n, count(*) FROM dbo.agg GROUP BY n HAVING count(*) > 1')).rows.map(([, c]) => c), [3])
   assert.deepEqual((await query(connection, 'SELECT count(*) FROM (SELECT DISTINCT n FROM dbo.agg) d')).rows, [[2]])
+  // ANSI values ignore no unit: CHAR(0) still distinguishes them.
+  await query(connection, "CREATE TABLE dbo.nul (v varchar(10), n nvarchar(10)); INSERT dbo.nul VALUES ('ab', N'ab'), ('a' + CHAR(0) + 'b', N'a' + NCHAR(0) + N'b')")
+  assert.deepEqual((await query(connection, 'SELECT count(DISTINCT v) FROM dbo.nul')).rows, [[2]])
 })
 
 test('duplicates show each key column as written, and ORDER BY resolves qualified columns', async t => {

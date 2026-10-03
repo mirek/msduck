@@ -350,7 +350,9 @@ Remaining limits:
   not applied. Unique keys fold only Basic Latin, Latin-1, Latin Extended-A,
   basic Greek and basic Cyrillic. Ignorable units are dropped only from
   Unicode values; VARCHAR values (where SQL Server ignores none of the
-  captured units) compare them.
+  captured units) compare them. COUNT(DISTINCT) over NVARCHAR columns reads
+  them as text and so still counts values that differ only in ignorable
+  units separately.
 - A column collation applies to direct column references. Expressions over
   a case-sensitive column (`UPPER(cs) = 'X'`), GROUP BY of expressions, and
   GROUP BY or DISTINCT of carriers under a non-default collation keep

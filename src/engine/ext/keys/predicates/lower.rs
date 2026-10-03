@@ -699,11 +699,30 @@ fn aggregate(name: &str, expr: &Expr) -> Option<Expr> {
     // where the value itself may not appear (grouped queries).
     let sample = call("any_value", vec![value.clone()]);
     match name.to_ascii_lowercase().as_str() {
-        "count" if distinct => Some(case(
-            type_in(&sample, &[CARRIER, "VARCHAR"]),
-            with("count", vec![key(value.clone())]),
-            expr.clone(),
-        )),
+        // Carriers count Unicode keys; VARCHAR (where no unit is ignored)
+        // counts its lowercased text without trailing spaces.
+        "count" if distinct => Some(Expr::Case {
+            case_token: AttachedToken::empty(),
+            end_token: AttachedToken::empty(),
+            operand: None,
+            conditions: vec![
+                CaseWhen {
+                    condition: type_in(&sample, &[CARRIER]),
+                    result: with("count", vec![key(value.clone())]),
+                },
+                CaseWhen {
+                    condition: type_in(&sample, &["VARCHAR"]),
+                    result: with(
+                        "count",
+                        vec![call(
+                            "lower",
+                            vec![call("rtrim", vec![value.clone(), text(" ")])],
+                        )],
+                    ),
+                },
+            ],
+            else_result: Some(Box::new(expr.clone())),
+        }),
         // The extremum of (key, value) pairs; NULL values stay NULL so the
         // aggregate (and the NULL-elimination warning) still sees them.
         "min" | "max" if !distinct && converted(value) => {
@@ -1106,8 +1125,9 @@ mod tests {
         let count = lowered("count(DISTINCT n)");
         assert_eq!(
             count,
-            "CASE WHEN typeof(any_value(n)) IN ('STRUCT(__msduck_utf16le BLOB)', 'VARCHAR') \
+            "CASE WHEN typeof(any_value(n)) IN ('STRUCT(__msduck_utf16le BLOB)') \
              THEN count(DISTINCT __msduck_unicode_order_key(__msduck_unicode_input(n))) \
+             WHEN typeof(any_value(n)) IN ('VARCHAR') THEN count(DISTINCT lower(rtrim(n, ' '))) \
              ELSE count(DISTINCT n) END"
         );
         let least = lowered("min(n)");
