@@ -104,7 +104,7 @@ jobs:
           node scripts/run-client-shards.mjs --jobs 2 --revision "$(git rev-parse HEAD)" \
             --output artifacts/ci/client-shards -- \
             tests/tedious.test.mjs tests/compatibility.test.mjs tests/tls.test.mjs \
-            tests/datepart_numeric.test.mjs tests/reference-compare.test.mjs \
+            tests/datepart_numeric.test.mjs tests/reference-compare.test.mjs tests/reference-prepared.test.mjs \
             tests/session_reset.test.mjs tests/databases.test.mjs \
             tests/login_database_error.test.mjs tests/alter_database_sessions.test.mjs \
             tests/tedious_compat_gaps.test.mjs tests/compat/*.test.mjs \
