@@ -392,6 +392,25 @@ fn set_null_actions_follow_on_update_cascades() {
         ),
         [[Some(2)]]
     );
+    // Without a row identity the default cannot be evaluated once.
+    ok(
+        &mut session,
+        "CREATE TABLE hp(id int PRIMARY KEY); \
+         CREATE TABLE hc(rowid int, pid int DEFAULT 1 CONSTRAINT uq_hc UNIQUE CONSTRAINT fhc REFERENCES hp(id) ON DELETE SET DEFAULT); \
+         CREATE TABLE hg(id int, pid int CONSTRAINT fhg REFERENCES hc(pid) ON UPDATE CASCADE); \
+         INSERT hp VALUES (1),(2); INSERT hc VALUES (7, 2); INSERT hg VALUES (1, 2)",
+    );
+    assert!(!run(&mut session, "DELETE hp WHERE id = 2"));
+    assert_eq!(ints(&session, "SELECT * FROM hg"), [[Some(1), Some(2)]]);
+    // SET NULL needs no row identity.
+    ok(
+        &mut session,
+        "CREATE TABLE np(id int PRIMARY KEY); \
+         CREATE TABLE nc(rowid int, pid int CONSTRAINT uq_nc UNIQUE CONSTRAINT fnc REFERENCES np(id) ON DELETE SET NULL); \
+         CREATE TABLE ng(id int, pid int CONSTRAINT fng REFERENCES nc(pid) ON UPDATE CASCADE); \
+         INSERT np VALUES (2); INSERT nc VALUES (7, 2); INSERT ng VALUES (1, 2); DELETE np WHERE id = 2",
+    );
+    assert_eq!(ints(&session, "SELECT * FROM ng"), [[Some(1), None]]);
 }
 
 #[test]

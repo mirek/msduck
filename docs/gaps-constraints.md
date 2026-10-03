@@ -239,12 +239,11 @@ The feature uses the extension hooks (docs/extension-hooks.md):
   time functions, NEXT VALUE FOR), MERGE that changes a key referenced with
   cascading or differing actions, or a cascade through columns that are not
   a copy of the updated key or reset by SET NULL or SET DEFAULT; these fail
-  with an explicit error instead of guessing old and new keys. A SET NULL
-  or SET DEFAULT reset of a key that ON UPDATE actions reference evaluates
-  each value once, except in a table whose user column named `rowid` hides
-  the native row id, where a nondeterministic default is evaluated again for
-  the stored row and a downstream ON UPDATE CASCADE may copy a different
-  value.
+  with an explicit error instead of guessing old and new keys. A SET DEFAULT
+  reset of a key that ON UPDATE actions reference fails with an explicit
+  error in a table whose user column named `rowid` hides the native row id,
+  since the default could not be evaluated once for both the row and the
+  cascade.
 - Rows changed by referential actions do not fire triggers.
 - Bulk loads (INSERT BULK) do not check CHECK and FOREIGN KEY constraints,
   like SQL Server's default without CHECK_CONSTRAINTS, but they do not mark

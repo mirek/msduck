@@ -1125,8 +1125,15 @@ fn reset(
             columns.push(column.clone());
         }
     }
-    // Without the native row id, the update evaluates the values again.
+    // Without the native row id, the update evaluates the values again,
+    // which is only safe for NULL: a default may be nondeterministic.
     let row = !hides_rowid(session, child)?;
+    if !row && values.iter().any(|(_, value)| value != "NULL") {
+        bail!(
+            "unsupported SET DEFAULT of keys referenced with ON UPDATE actions on {}: a column named rowid hides the row identity",
+            child.display()
+        );
+    }
     let mut projection = Vec::new();
     if row {
         projection.push(format!("{}.rowid AS __msduck_row", child.sql()));
