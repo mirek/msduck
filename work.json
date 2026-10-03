@@ -11272,6 +11272,34 @@
       "dependencies": [],
       "issue": 871,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pkgw1"
+    },
+    {
+      "id": "ansi-native-storage-prototype-v1",
+      "title": "Preserve native ANSI bytes in an explicitly planned DuckDB carrier",
+      "state": "backlog",
+      "authorization": "Owner continuing implementation goal; approved first-party adapter plan890, public carrier894, writer898, reviewed kernel897 and finite reference895/899. Prototype only; later storage/BulkLoad/output adoption requires separate claims.",
+      "scope": [
+        "src/ansi_carrier.rs",
+        "src/lib.rs",
+        "tests/ansi_carrier.rs",
+        "docs/ansi-carrier.md"
+      ],
+      "dependencies": [
+        "ansi-byte-carrier-v1",
+        "ansi-byte-export-v1",
+        "ansi-cp1251-projection-v1",
+        "bulk-character-capacity-reference-v1",
+        "bulk-character-adapter-plan-v1"
+      ],
+      "acceptance": [
+        "Add a real public root adapter and integration-test that API through src/lib.rs, with explicitly validated immutable encoding/representation plans. Implement a distinct tagged native ANSI DuckDB representation and pack/read adapters preserving original bytes and declared encoding. Do not modify the common Value or Parameter enum, backend_value, engine.rs, engine/ext.rs, catalog/output/BulkLoad adapters or collation-admission gates; later adoption is separate work. Native SQL structs, ordinary BLOB, UTF16 carriers and arbitrary structs must stay distinct; structural resemblance alone is not logical VARCHAR evidence.",
+        "Prove real DuckDB persistence, reopen, transactions, Arrow and vector roundtrips for all256 CP1251/CP1252 bytes and original accepted invalid/mixed UTF8 native cells from884/895/899, plus fragmentedMAX and NULL/empty controls. Read native byte/encoding fields using an explicit matching plan, never lossy client display or guessed scalar conversion. Tests retain raw fixture hashes and distinguish native bytes from SQL UTF16 units. Encoding mismatches, unknown opaque aliases and malformed tags/shapes must fail explicitly including unsupported plans beforeNULL.",
+        "Inspect native/Arrow memory safety: validate parent and child types, row indices, array/chunk lengths and NULL validity before access/copy; refuse non-NULL carriers with missing/NULL payloads or invalid tags. Handle zero rows/empty/NULL typed shapes. Checked per-cell and aggregate byte budgets precede allocation/native insertion and fallible allocation errors propagate; no hidden decode/padding/truncation/capacity policy. Prove single evaluation of explicitly packed volatile operands over multiple chunks, binary logical separation and statement/transaction behavior under errors.",
+        "Complete tests exercise actual DuckDB/Arrow adapters and real public API; no path-import bypass, backend feature skipping or fabricated descriptors. Prototype export is not runtime adoption: unsupported output/result shapes remain explicit. Document admitted named encoding/representation contracts, limits and remaining registration/lowering/Value/catalog/BulkLoad/output work. No enabling CP1251/UTF8 external collation support before complete consumers.",
+        "Fresh exclusive claim only after genuine dependenciesDone; existing worker worktree and canonicalLinux cache/runner lock, no extra agents/worktrees/nativecaches. Full fmt/workspaceRust/strictalltargetClippy, full stricttediousclients and raw325audit at exacthead/source/binary, appropriate direct native tests, exactrequiredCI, independent/Codex review or genuine fallback, exacthead merge and promptregistry/project completion. Preserve raw differences; audit does not prove full SQL Server compatibility."
+      ],
+      "issue": 904,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PlXvL"
     }
   ]
 }
