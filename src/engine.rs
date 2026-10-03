@@ -1151,25 +1151,46 @@ impl Session {
         else {
             return error;
         };
-        // DuckDB inserts catalog names unescaped, so split at the fixed text
-        // around them rather than at quotes, which names may contain.
-        let names = rest
-            .split_once("\" in a transaction that has already modified database \"")
-            .and_then(|(written, rest)| {
-                rest.rsplit_once(
-                    "\" - a single transaction can only write to a single attached database",
-                )
-                .map(|(modified, _)| (written, modified))
-            });
-        let Some((written, modified)) = names else {
-            return error;
-        };
         if self.transactions > 0 {
             self.transaction_doomed = true;
             if self.db.execute_batch("ROLLBACK; BEGIN TRANSACTION").is_ok() {
                 self.restore_catalog();
             }
         }
+        // DuckDB inserts catalog names unescaped, and a name may contain any
+        // text, so the names are the attached catalogs that reproduce the
+        // diagnostic exactly; failing that, the text between its fixed
+        // phrases.
+        const MODIFIED: &str = "\" in a transaction that has already modified database \"";
+        const END: &str = "\" - a single transaction can only write to a single attached database";
+        let attached = self
+            .db
+            .prepare("SELECT database_name FROM duckdb_databases() WHERE NOT internal")
+            .and_then(|mut query| {
+                query
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .collect::<duckdb::Result<Vec<_>>>()
+            })
+            .unwrap_or_default();
+        let names = attached
+            .iter()
+            .flat_map(|written| attached.iter().map(move |modified| (written, modified)))
+            .find(|(written, modified)| {
+                rest.strip_prefix(written.as_str())
+                    .and_then(|rest| rest.strip_prefix(MODIFIED))
+                    .and_then(|rest| rest.strip_prefix(modified.as_str()))
+                    .is_some_and(|rest| rest.starts_with(END))
+            })
+            .map(|(written, modified)| (written.clone(), modified.clone()))
+            .or_else(|| {
+                rest.split_once(MODIFIED).and_then(|(written, rest)| {
+                    rest.rsplit_once(END)
+                        .map(|(modified, _)| (written.to_string(), modified.to_string()))
+                })
+            });
+        let Some((written, modified)) = names else {
+            return error;
+        };
         let catalog = self.database.catalog();
         // A runtime error, which TRY catches, unlike unsupported syntax.
         SqlError::new(
@@ -1177,8 +1198,8 @@ impl Session {
             1,
             format!(
                 "unsupported cross-database transaction: database '{}' cannot be modified in a transaction that has already modified database '{}'; a transaction may write only one database",
-                catalog.display_name(written),
-                catalog.display_name(modified)
+                catalog.display_name(&written),
+                catalog.display_name(&modified)
             ),
         )
         .into()
@@ -2871,8 +2892,12 @@ impl Session {
         if !self.routed.replace(false) && names_other_databases(&statement) {
             return self.execute_routed(&mut statement, parameters);
         }
-        if let Some(execution) = ext::statement(self, &mut statement, parameters)? {
-            return Ok(execution);
+        // Feature hooks (MERGE, triggers, constraints) write through DuckDB
+        // too; see `single_database_writes`.
+        match ext::statement(self, &mut statement, parameters) {
+            Ok(Some(execution)) => return Ok(execution),
+            Ok(None) => {}
+            Err(error) => return Err(self.single_database_writes(error)),
         }
         // Resolve database names before any DDL dispatch or catalog
         // bookkeeping, which see only two-part names.

@@ -552,3 +552,37 @@ fn write_errors_name_databases_with_quotes() {
         1
     );
 }
+
+#[test]
+fn feature_statements_report_writes_to_a_second_database() {
+    let (_server, mut session) = fixture();
+    let (number, _, _, message) = fails(
+        &mut session,
+        "BEGIN TRAN; INSERT foo.dbo.items (name) VALUES (N'm'); MERGE dbo.loc AS t USING (SELECT 1 AS id) AS s ON t.id = s.id WHEN MATCHED THEN UPDATE SET label = N'm';",
+    );
+    assert_eq!(number, 40515);
+    assert_eq!(
+        message,
+        "unsupported cross-database transaction: database 'master' cannot be modified in a transaction that has already modified database 'foo'; a transaction may write only one database"
+    );
+    assert_eq!(session.transactions, 0);
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.items"), 1);
+    // A name may even contain the diagnostic's own phrases.
+    let odd = "a\" in a transaction that has already modified database \"b";
+    ok(&mut session, &format!("CREATE DATABASE [{odd}]"));
+    ok(
+        &mut session,
+        &format!("USE [{odd}]; CREATE TABLE dbo.t (id INT); USE master"),
+    );
+    let (number, _, _, message) = fails(
+        &mut session,
+        &format!("BEGIN TRAN; INSERT dbo.loc VALUES (5, N'five'); INSERT [{odd}].dbo.t VALUES (1)"),
+    );
+    assert_eq!(number, 40515);
+    assert_eq!(
+        message,
+        format!(
+            "unsupported cross-database transaction: database '{odd}' cannot be modified in a transaction that has already modified database 'master'; a transaction may write only one database"
+        )
+    );
+}
