@@ -97,6 +97,12 @@ test('duplicates show each key column as written, and ORDER BY resolves qualifie
   await query(connection, "CREATE TABLE dbo.left_side (id int, v nvarchar(10) COLLATE Latin1_General_CS_AS); CREATE TABLE dbo.right_side (id int, v int); INSERT dbo.left_side VALUES (1, N'b'), (2, N'B'); INSERT dbo.right_side VALUES (1, 20), (2, 10)")
   assert.deepEqual((await query(connection, 'SELECT r.id FROM dbo.left_side l JOIN dbo.right_side r ON l.id = r.id ORDER BY r.v')).rows, [[2], [1]])
   assert.deepEqual((await query(connection, 'SELECT l.id FROM dbo.left_side l JOIN dbo.right_side r ON l.id = r.id ORDER BY l.v')).rows, [[1], [2]])
+  // Case-sensitive CHAR/VARCHAR keys still ignore trailing spaces.
+  await query(connection, "CREATE TABLE dbo.cs_keys (v varchar(10) COLLATE Latin1_General_CS_AS NOT NULL UNIQUE); INSERT dbo.cs_keys VALUES ('a'), ('A')")
+  await assert.rejects(query(connection, "INSERT dbo.cs_keys VALUES ('a  ')"), error => error.number === 2627 && /\(a  \)/.test(error.message))
+  await query(connection, "CREATE TABLE dbo.cs_added (v varchar(10) COLLATE Latin1_General_CS_AS NOT NULL); INSERT dbo.cs_added VALUES ('b'); ALTER TABLE dbo.cs_added ADD CONSTRAINT uq_cs_added UNIQUE (v)")
+  await assert.rejects(query(connection, "INSERT dbo.cs_added VALUES ('b ')"), error => error.number === 2627 && /'uq_cs_added'.*\(b \)/.test(error.message))
+  await query(connection, "INSERT dbo.cs_added VALUES ('B')")
   // Conflicting column collations in DML predicates, LIKE included.
   await query(connection, "CREATE TABLE dbo.two (ci nvarchar(10) COLLATE Latin1_General_CI_AS, d nvarchar(10)); INSERT dbo.two VALUES (N'a', N'A')")
   for (const sql of ["UPDATE dbo.two SET ci = N'b' WHERE ci = d", "DELETE FROM dbo.two WHERE d LIKE ci"]) {
