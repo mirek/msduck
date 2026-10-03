@@ -3072,7 +3072,7 @@
     {
       "id": "remote-sync-symlinks-v1",
       "title": "Exclude local cache symlinks from remote source sync",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner request to use linux.local effectively for parallel verification. First-party remote runner failure at owner-authored PR310 head 83d9c2e: rsync directory-only exclusion copied local target/node_modules symlinks over isolated Linux cache paths. No external submission approved.",
       "scope": [
         "scripts/remote-build.mjs",
@@ -9864,6 +9864,25 @@
         "Activate only after dependencies complete and ready scopes are disjoint; fresh own receipt in an existing isolated worktree. No new local native caches/agents, honor shared Linux buildlock. Required formatter/strictClippy/workspace/client/audit gates on exactrevision, independent/Codexreview or ownerfallback, claimingworker owns PRmerge and registry/project/issuecompletion. engine.rs remains unreserved."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkEIC"
+    },
+    {
+      "id": "remote-cache-symlinks-recovery-v1",
+      "title": "Recover remote cache symlink exclusion and receiver migration",
+      "issue": 822,
+      "state": "ready",
+      "authorization": "Owner standing unresponsive-worker takeover and continuing compatibility/build-efficiency goal; recover approved322/ownerPR323 exact052a220 checkpoint plus verified owner-enabled Codex P2 on stale receiver symlinks. No external content.",
+      "scope": [
+        "scripts/remote-build.mjs",
+        "tests/remote-build.test.mjs",
+        "docs/remote-build.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Retain old322 branch/receipt/evidence and use own fresh successor receipt. Carry directory-or-symlink root exclusions from trusted052a220, and fix verified receiver-symlink persistence under the existing runnerlock before synchronization. Unlink only owned recorded cache links, never follow/delete destinations or ordinary caches; migrated node_modules must invalidate stale npm-install evidence. Preserve ownership guard, checksum/no-times sync, bounded deletion and private-path exclusion. No engine or unrelated edits.",
+        "Meaningful offline regressions cover sender cache links, stale receiver links and external destinations, ordinary cache preservation, repeated synchronization/source-change invalidation, privacy and npm reinstall. Show predecessor fails. Run Node syntax/diff/relevant tests; actual exact-head remote fast only after root812 job81480 terminal and explicit builder handoff. No cold native rebuild for tooling-only change.",
+        "Fresh exclusive claim in the clean completed existing prepared-rpc worktree; no new worktrees/local native caches/agents. Never adopt322 receipt or stop unrelated jobs. Independent and verified exact-head Codexreview or availability fallback, green requiredCI, worker owns focusedPRmerge and prompt registry/project/issuecompletion. Link superseded323 and preserve its finding/evidence until verified successor addresses it."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkE4R"
     }
   ]
 }
