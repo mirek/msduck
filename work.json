@@ -11378,7 +11378,7 @@
       "id": "bulk-character-utf8-boundary-reference-v1",
       "title": "Capture native UTF8 boundary and malformed conversion outcomes",
       "issue": 913,
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full-server goal. Native UTF8 source projection remains unimplemented, and actual malformed SQL conversion differs from client/platform strict/lossy decoding. Capture missing source/target boundary evidence before implementing converters.",
       "scope": [
         "scripts/capture-bulk-character-utf8-boundary.mjs",
