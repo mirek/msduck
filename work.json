@@ -11353,7 +11353,7 @@
       "id": "bulk-character-trailing-space-reference-v1",
       "title": "Capture BulkLoad trailing spaces and fixed CHAR capacity precedence",
       "issue": 909,
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full-server goal and parallel-worker instruction; approved first-party plan890 and reviewed captures895/899/906. Fill actual space/padding capacity evidence before deterministic/runtime capacity rules.",
       "scope": [
         "scripts/capture-bulk-character-trailing-space.mjs",
