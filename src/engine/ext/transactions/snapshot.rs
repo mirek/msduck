@@ -211,8 +211,7 @@ struct Usage {
 }
 
 /// Open transactions by session token. A session outside a transaction
-/// has an entry from its first write until its batch ends, for its
-/// autocommit transactions.
+/// has an entry for its running autocommit statement.
 static ACTIVE: LazyLock<Mutex<HashMap<u64, Active>>> = LazyLock::new(Default::default);
 
 /// Orders transactions and the ALLOW_SNAPSHOT_ISOLATION changes.
@@ -249,17 +248,16 @@ pub(super) fn end(session: &Session) {
     active_transactions().remove(&session.ext.token);
 }
 
-/// A statement starts. Outside a transaction each top-level statement is
-/// its own autocommit transaction, so earlier SNAPSHOT reads no longer
-/// count (writes stay registered until the batch ends).
+/// A statement starts. Outside a transaction each statement of the
+/// top-level batch is its own autocommit transaction, so what earlier ones
+/// read or wrote no longer counts. Statements nested in a running one
+/// (trigger and procedure bodies) keep its registration.
 pub(super) fn statement_begins(session: &Session) {
     if session.transactions == 0
         && session.ext.transactions.writing == 0
-        && let Some(active) = active_transactions().get_mut(&session.ext.token)
+        && session.ext.transactions.batch_isolation.len() <= 1
     {
-        for usage in active.databases.values_mut() {
-            usage.read = false;
-        }
+        end(session);
     }
 }
 

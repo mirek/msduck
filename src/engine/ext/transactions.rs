@@ -90,6 +90,7 @@ impl Feature for Hooks {
         statement: &mut Statement,
         parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Option<Execution>> {
+        snapshot::statement_begins(session);
         if let Some(request) = syntax::request(statement) {
             return execute(session, request, parameters).map(Some);
         }
@@ -114,7 +115,6 @@ impl Feature for Hooks {
                 {
                     return Ok(None);
                 }
-                snapshot::statement_begins(session);
                 let snapshot = snapshot::active(session);
                 if snapshot {
                     snapshot::check_access(session, statement)?;

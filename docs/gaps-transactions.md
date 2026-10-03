@@ -172,10 +172,11 @@ Remaining differences, retained exactly in the replay:
   each one ran: the database current at `BEGIN TRANSACTION`, the tables it
   accessed, and the targets of its writes and DDL (temporary objects
   excluded). Any statement msduck does not classify as read-only counts
-  as a write to the current database. Only transactions that began before the change are waited
-  for, and changes of one database run one at a time. An autocommit write
-  counts until its batch ends, so a change may wait longer than SQL Server,
-  which waits only for the statement.
+  as a write to the current database. Only transactions that began before
+  the change are waited for, and changes of one database run one at a
+  time. An autocommit statement counts until the next statement of its
+  batch starts; inside a procedure body, until the procedure returns. A
+  change may therefore wait slightly longer than SQL Server.
 - After a write conflict DuckDB aborts its transaction, so msduck restarts
   an empty one for the doomed transaction's remaining reads until it is
   rolled back.
