@@ -101,8 +101,8 @@ struct Lower<'a> {
     context: &'a SessionContext,
     parameters: &'a mut HashMap<String, Parameter>,
     next: usize,
-    /// The next query is an INSERT source, whose select items are written
-    /// rather than returned.
+    /// Inside an INSERT with a query source: select items there, including
+    /// those of nested queries and CTEs, are written rather than returned.
     insert_source: bool,
 }
 impl Lower<'_> {
@@ -388,7 +388,11 @@ impl VisitorMut for Lower<'_> {
     /// An INSERT source's select items are writes, refused like other
     /// implicit sql_variant writes.
     fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<anyhow::Error> {
-        if std::mem::take(&mut self.insert_source) {
+        // `WITH ... INSERT`: the CTEs are visited before the INSERT itself.
+        if matches!(query.body.as_ref(), SetExpr::Insert(_)) {
+            self.insert_source = true;
+        }
+        if self.insert_source {
             return ControlFlow::Continue(());
         }
         match select_items(&mut query.body, &mut |expr| self.select_property(expr)) {
@@ -399,8 +403,9 @@ impl VisitorMut for Lower<'_> {
     /// Session values are read when a statement runs; a persisted definition
     /// (view, default, routine, trigger) would freeze today's value instead.
     fn pre_visit_statement(&mut self, statement: &mut Statement) -> ControlFlow<anyhow::Error> {
-        self.insert_source =
-            matches!(statement, Statement::Insert(insert) if insert.source.is_some());
+        if matches!(statement, Statement::Insert(insert) if insert.source.is_some()) {
+            self.insert_source = true;
+        }
         let persisted = matches!(
             statement,
             Statement::CreateView { .. }
@@ -415,6 +420,12 @@ impl VisitorMut for Lower<'_> {
             return ControlFlow::Break(anyhow::anyhow!(
                 "unsupported SESSIONPROPERTY or SESSION_CONTEXT in a persisted definition"
             ));
+        }
+        ControlFlow::Continue(())
+    }
+    fn post_visit_statement(&mut self, statement: &mut Statement) -> ControlFlow<anyhow::Error> {
+        if matches!(statement, Statement::Insert(_)) {
+            self.insert_source = false;
         }
         ControlFlow::Continue(())
     }
