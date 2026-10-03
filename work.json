@@ -9968,7 +9968,7 @@
     {
       "id": "concat-legacy-family-reference-v1",
       "title": "Capture CONCAT_WS XML/variant and legacy Unicode conversion precedence",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing goal; verified owner-enabled review4171687249 needs exact SQL Server mixed-source ground truth before fixing813.",
       "scope": [
         "scripts/capture-concat-legacy-family.mjs",
