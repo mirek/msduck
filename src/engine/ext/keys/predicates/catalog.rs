@@ -19,7 +19,7 @@ pub(super) struct Column {
     pub text: bool,
     /// The SQL Server declaration of a carrier column, after [`Catalog::declare`].
     pub declared: Option<DataType>,
-    /// A declared collation whose rule differs from the database default.
+    /// A declared collation other than the database default.
     pub collation: Option<String>,
 }
 
@@ -166,10 +166,11 @@ impl Visitor for Relations {
     }
 }
 
-/// Declared collations of a relation's character columns that differ from
-/// the database default, by lowercase column name.
+/// Declared collation names of a relation's character columns other than
+/// the database default, by lowercase column name. A name that compares
+/// like the default is kept: columns of different collations conflict.
 fn collations(db: &duckdb::Connection, spelling: &str) -> HashMap<String, String> {
-    use msduck_sql::dialect::ext::keys::collation::{Sensitivity, sensitivity};
+    use msduck_sql::dialect::ext::keys::collation::{DEFAULT, sensitivity};
     let Ok(mut query) = db.prepare(
         "SELECT lower(c.name), d.collation_name FROM main.__msduck_column_info c
          JOIN main.__msduck_declared_columns d USING(object_id, column_id)
@@ -183,7 +184,9 @@ fn collations(db: &duckdb::Connection, spelling: &str) -> HashMap<String, String
         return HashMap::new();
     };
     rows.filter_map(Result::ok)
-        .filter(|(_, collation)| sensitivity(collation) == Some(Sensitivity::Other))
+        .filter(|(_, collation)| {
+            !collation.eq_ignore_ascii_case(DEFAULT) && sensitivity(collation).is_some()
+        })
         .collect()
 }
 
@@ -321,7 +324,8 @@ impl Catalog {
     }
 
     /// The collation of the carrier columns of this (lowercase) name, when
-    /// every relation with such a carrier column declares the same one.
+    /// every relation with such a carrier column declares the same one and
+    /// it compares differently from the default.
     pub fn carrier_collation(&self, name: &str) -> Option<&str> {
         let mut found: Option<Option<&str>> = None;
         for column in self.tables.values().filter_map(|columns| columns.get(name)) {
@@ -333,7 +337,10 @@ impl Catalog {
                 _ => found = Some(column.collation.as_deref()),
             }
         }
-        found.flatten()
+        found.flatten().filter(|name| {
+            use msduck_sql::dialect::ext::keys::collation::{Sensitivity, sensitivity};
+            sensitivity(name) == Some(Sensitivity::Other)
+        })
     }
 
     /// The collation of the column `expr` refers to, when it unambiguously
@@ -408,8 +415,15 @@ impl Catalog {
     /// Whether every column `expr` may name is character data under the
     /// database default collation.
     pub fn default_text(&self, expr: &Expr) -> bool {
-        self.candidates(expr)
-            .is_some_and(|columns| columns.iter().all(|c| c.text && c.collation.is_none()))
+        use msduck_sql::dialect::ext::keys::collation::{Sensitivity, sensitivity};
+        self.candidates(expr).is_some_and(|columns| {
+            columns.iter().all(|c| {
+                c.text
+                    && c.collation
+                        .as_deref()
+                        .is_none_or(|name| sensitivity(name) == Some(Sensitivity::Default))
+            })
+        })
     }
 
     /// The carrier column `expr` refers to, if it unambiguously refers to one.
