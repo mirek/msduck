@@ -10952,7 +10952,7 @@
     {
       "id": "bulk-character-adapter-plan-v1",
       "title": "Specify lossless BulkLoad character carrier and conversion boundaries",
-      "state": "ready",
+      "state": "done",
       "issue": 890,
       "authorization": "Owner continuing goal and decomposition from merged raw884 reference. Source-reviewed prerequisite for complete implementation, not a narrower compatibility completion claim.",
       "scope": [
@@ -10970,7 +10970,7 @@
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pk0fb"
     },
     {
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Continuing owner full SQL Server compatible Rust/DuckDB objective; first-party merged884 byte evidence and claimed890 architecture plan. Bounded deterministic implementation, not runtime compatibility completion. No third-party input or reserved export/engine scope.",
       "dependencies": [
         "bulk-character-adapter-plan-v1",
@@ -10993,7 +10993,7 @@
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pk1rA"
     },
     {
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Continuing owner full SQL Server compatible Rust/DuckDB objective; first-party merged884 byte evidence and claimed890 architecture plan. Bounded deterministic implementation, not runtime compatibility completion. No third-party input or reserved export/engine scope.",
       "dependencies": [
         "bulk-character-adapter-plan-v1",
