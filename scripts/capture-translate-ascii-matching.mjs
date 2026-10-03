@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Retain SQL Server CONCAT_WS and TRANSLATE rows, descriptors, diagnostics and completions.
+// Retain complete ASCII SQL Server TRANSLATE relationships and original wire evidence.
 // Usage: capture-translate-ascii-matching.mjs [output] [--write-fixture | --one-database | --check-fixture]
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
@@ -322,7 +322,7 @@ for(const collation of collations)for(const declaration of domains) {
   const name=`prepared ${declaration} ${collation}`
   const names=['s','m','t','u'].map(x=>`@${x} COLLATE ${collation}`)
   const sql=`SELECT ${projection(names)}`
-  const bindingSets=[{s:String.fromCharCode(...alphabet),m:'A',t:'é',u:'€'},{s:'aAaA',m:'a',t:'é',u:'€'},{s:' -\0',m:' ',t:'é',u:'€'},{s:null,m:'A',t:'é',u:'€'},{s:'ab',m:'ab',t:'é',u:'€'},{s:String.fromCharCode(...alphabet),m:'A',t:'é',u:'€'}]
+  const bindingSets=[{s:String.fromCharCode(...alphabet),m:'A',t:'é',u:'€'},{s:'aAaA',m:'a',t:'é',u:'€'},{s:' -\0 ',m:' ',t:'é',u:'€'},{s:null,m:'A',t:'é',u:'€'},{s:'ab',m:'ab',t:'é',u:'€'},{s:String.fromCharCode(...alphabet),m:'A',t:'é',u:'€'}]
   preparedPrograms.push([name,sql,['s','m','t','u'].map(x=>[x,wireType,{length:512}]),bindingSets]);provenance.set(name,{kind:'prepared ASCII matching',declaration,collation,bindings:bindingSets,roles:['native emitted operands','first and second TRANSLATE']})
 }
 assert.equal(cases.length,2048)
@@ -560,13 +560,18 @@ function validate(run) {
         assertSameCapture(execution.result.sets.map(x=>x.columns),record.prepared.prepare.sets.map(x=>x.columns),record.name+': unchanged prepared descriptors')
         assertSameCapture(execution.wire,record.bindingWire[index].map(({name,...wire})=>({type:record.declarations.find(d=>d.name===name).type,...wire})),record.name+': actual emitted bytes')
         if(index===4){assert(execution.result.errors.length>0,'genuine mismatch diagnostic retained');assert(execution.result.errors.every(e=>e.number===9828&&e.state===(record.input.declaration.startsWith('NVARCHAR')?3:1)&&e.class===16),'exact mismatch diagnostics')}
-        else {assert.equal(execution.result.errors.length,0);const measured=measuredRow(execution.result);if(index===3){assert.equal(measured.row[4],null);assert.equal(measured.row[6],null)}}
+        else {
+          assert.equal(execution.result.errors.length,0);const measured=measuredRow(execution.result)
+          if(index===3){assert.equal(measured.cells[0],null);for(const position of [4,5,6,7])assert.equal(measured.row[position],null)}
+          else assertSameCapture(nativeUnits(measured.cells[0],measured.set.columns[4]),units(execution.values.s),'native prepared source preserves original ASCII including trailing space/NUL')
+          for(const [position,name]of [[1,'m'],[2,'t'],[3,'u']])assertSameCapture(nativeUnits(measured.cells[position],measured.set.columns[4]),units(execution.values[name]),'original prepared mapping/sentinels after declared-domain conversion')
+        }
       }
       assertSameCapture(record.prepared.executions[0].result,record.prepared.executions.at(-1).result,'unchanged prepared replay')
     }
   }
 }
-const retainedDigests=[{"id":"container0/database0","sha256":"ba4ac4f768748f101cdd2060b45abe9ff92844ca9bb10213bf00157900face27"},{"id":"container0/database1","sha256":"ba4ac4f768748f101cdd2060b45abe9ff92844ca9bb10213bf00157900face27"},{"id":"container1/database0","sha256":"ba4ac4f768748f101cdd2060b45abe9ff92844ca9bb10213bf00157900face27"},{"id":"container1/database1","sha256":"ba4ac4f768748f101cdd2060b45abe9ff92844ca9bb10213bf00157900face27"}]
+const retainedDigests=[]
 function digestRun(run){return createHash('sha256').update(JSON.stringify(run)).digest('hex')}
 function runDigests(actual){return actual.containers.flatMap((c,ci)=>c.runs.map((run,ri)=>({id:`container${ci}/database${ri}`,sha256:digestRun(run)})))}
 function variablePath(record,segments) {
