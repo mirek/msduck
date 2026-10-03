@@ -417,6 +417,10 @@ pub fn bind<'a>(
     context: &Context<'_>,
     column: NonZeroUsize,
 ) -> Result<Option<Plan<'a>>, Error> {
+    if call(expression)?.is_none() {
+        return Ok(None);
+    }
+    validate_projected(catalog, expression, &[], scope, context, column, 0)?;
     bind_local(catalog, expression, &[], scope, context, column, 0)
 }
 /// Bind projected function calls against the same explicit source/CTE machinery

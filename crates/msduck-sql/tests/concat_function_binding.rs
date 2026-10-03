@@ -761,6 +761,40 @@ fn invalid_deep_ast_and_modifiers_are_rejected_without_annotations() {
         ),
         Err(Error::UnsupportedSyntax)
     ));
+    // Ordinary nested operands must not bypass standalone bind's same bounds.
+    let leaf = expression(&query("SELECT LOWER('a')")).clone();
+    let mut operand = leaf.clone();
+    for _ in 0..65 {
+        let mut wrapper = leaf.clone();
+        let Expr::Function(function) = &mut wrapper else {
+            panic!()
+        };
+        let sqlparser::ast::FunctionArguments::List(args) = &mut function.args else {
+            panic!()
+        };
+        args.args[0] =
+            sqlparser::ast::FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(operand));
+        operand = wrapper;
+    }
+    let mut function = expression(&q).clone();
+    let Expr::Function(function_ast) = &mut function else {
+        panic!()
+    };
+    let sqlparser::ast::FunctionArguments::List(args) = &mut function_ast.args else {
+        panic!()
+    };
+    args.args[1] =
+        sqlparser::ast::FunctionArg::Unnamed(sqlparser::ast::FunctionArgExpr::Expr(operand));
+    assert!(matches!(
+        binding::bind(
+            &c,
+            &function,
+            &Scope::default(),
+            &context,
+            NonZeroUsize::new(1).unwrap()
+        ),
+        Err(Error::UnsupportedSyntax)
+    ));
     for sql in [
         "SELECT CONCAT_WS(NULL,'a','b') OVER ()",
         "SELECT TRANSLATE(DISTINCT 'a','a','b')",
