@@ -1004,7 +1004,7 @@ impl Session {
                 )
             }
         };
-        if relations.foreign.len() == 1 && relations.local == 0 {
+        if relations.foreign.len() == 1 && relations.local.is_empty() && !relations.into {
             return Ok(CrossDatabase::Home(database.clone(), vec![]));
         }
         // A statement that writes another database runs there, reading the
@@ -7928,20 +7928,26 @@ fn dml_target(statement: &Statement) -> Option<ObjectName> {
 }
 
 /// The relations of a statement, by database (`Session::cross_database`).
+/// Nodes are identified by address, so names that only share a spelling
+/// with a CTE in another scope, a table function or an alias target stay
+/// tables.
 #[derive(Default)]
 struct Relations {
     current: String,
     foreign: std::collections::BTreeMap<String, String>,
-    local: usize,
-    ctes: std::collections::HashSet<String>,
-    functions: std::collections::HashSet<String>,
+    /// Relation nodes of the current database.
+    local: Vec<*const ObjectName>,
+    /// Whether a SELECT INTO creates a table in the current database.
+    into: bool,
+    /// Whether a temporary table or table variable is among the relations.
+    temporary: bool,
+    /// The CTE names in scope, innermost query last.
+    ctes: Vec<Vec<String>>,
+    /// Table function call nodes, such as `GENERATE_SERIES(1, 2)`.
+    functions: Vec<*const ObjectName>,
     /// UPDATE and DELETE target nodes that name a FROM alias
     /// (`alias_targets`).
     targets: Vec<*const ObjectName>,
-    /// The second pass, once the names above are known.
-    counting: bool,
-    /// Whether a temporary table or table variable is among the relations.
-    temporary: bool,
 }
 impl Relations {
     fn collect<T: Visit>(node: &T, current: String, targets: &[*const ObjectName]) -> Self {
@@ -7951,27 +7957,17 @@ impl Relations {
             ..Default::default()
         };
         let _ = node.visit(&mut relations);
-        relations.counting = true;
-        let _ = node.visit(&mut relations);
         relations
     }
 
-    /// Whether `name` is an UPDATE or DELETE target naming a FROM alias.
-    fn target(&self, name: &ObjectName) -> bool {
-        self.targets
-            .iter()
-            .any(|target| std::ptr::eq(*target, name))
-    }
-
-    /// A one-part name that is no table: a CTE or table function.
-    fn named(&self, single: &Ident) -> bool {
-        [&self.ctes, &self.functions]
-            .iter()
-            .any(|names| names.contains(&single.value.to_lowercase()))
+    /// Whether `name` is a relation node of the current database.
+    fn local(&self, name: &ObjectName) -> bool {
+        self.local.iter().any(|local| std::ptr::eq(*local, name))
     }
 
     fn add(&mut self, name: &ObjectName) {
-        if self.target(name) {
+        let node = name as *const ObjectName;
+        if self.targets.contains(&node) || self.functions.contains(&node) {
             return;
         }
         match name.0.as_slice() {
@@ -7982,35 +7978,46 @@ impl Relations {
                     .entry(database.value.clone())
                     .or_insert_with(|| name.to_string());
             }
-            [ObjectNamePart::Identifier(single)] if self.named(single) => {}
+            [ObjectNamePart::Identifier(single)]
+                if self
+                    .ctes
+                    .iter()
+                    .flatten()
+                    .any(|cte| cte.eq_ignore_ascii_case(&single.value)) => {}
             [ObjectNamePart::Identifier(single)] if single.value.starts_with(['#', '@']) => {
-                self.local += 1;
                 self.temporary = true;
+                self.local.push(node);
             }
-            _ => self.local += 1,
+            _ => self.local.push(node),
         }
     }
 }
 impl Visitor for Relations {
     type Break = ();
     fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
-        if let Some(with) = &query.with {
-            for cte in &with.cte_tables {
-                self.ctes.insert(cte.alias.name.value.to_lowercase());
-            }
-        }
+        self.ctes.push(
+            query
+                .with
+                .iter()
+                .flat_map(|with| &with.cte_tables)
+                .map(|cte| cte.alias.name.value.clone())
+                .collect(),
+        );
         let mut body = query.body.as_ref();
         while let SetExpr::SetOperation { left, .. } = body {
             body = left;
         }
         // SELECT INTO creates its one- or two-part target in the
         // current database.
-        if self.counting
-            && let SetExpr::Select(select) = body
+        if let SetExpr::Select(select) = body
             && select.into.is_some()
         {
-            self.local += 1;
+            self.into = true;
         }
+        ControlFlow::Continue(())
+    }
+    fn post_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
+        self.ctes.pop();
         ControlFlow::Continue(())
     }
     fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
@@ -8019,16 +8026,13 @@ impl Visitor for Relations {
             args: Some(_),
             ..
         } = factor
-            && let [ObjectNamePart::Identifier(function)] = name.0.as_slice()
         {
-            self.functions.insert(function.value.to_lowercase());
+            self.functions.push(name);
         }
         ControlFlow::Continue(())
     }
     fn pre_visit_relation(&mut self, relation: &ObjectName) -> ControlFlow<()> {
-        if self.counting {
-            self.add(relation);
-        }
+        self.add(relation);
         ControlFlow::Continue(())
     }
 }
@@ -8144,27 +8148,20 @@ fn rehome<T: Visit + VisitMut>(
 ) {
     let relations = Relations::collect(&*node, current.to_string(), targets);
     let _ = visit_relations_mut(node, |relation| {
-        match relation.0.as_slice() {
-            [ObjectNamePart::Identifier(database), _, _] if database.value == home => {
-                relation.0.remove(0);
-            }
-            [_, _, ..] if relation.0.len() > 2 => {}
-            [_, _] => relation.0.insert(
-                0,
-                ObjectNamePart::Identifier(Ident::with_quote('"', current)),
-            ),
-            [ObjectNamePart::Identifier(single)]
-                if !relations.named(single) && !relations.target(relation) =>
-            {
+        if let [ObjectNamePart::Identifier(database), _, _] = relation.0.as_slice()
+            && database.value == home
+        {
+            relation.0.remove(0);
+        } else if relations.local(relation) {
+            if relation.0.len() == 1 {
                 relation
                     .0
                     .insert(0, ObjectNamePart::Identifier(Ident::new("dbo")));
-                relation.0.insert(
-                    0,
-                    ObjectNamePart::Identifier(Ident::with_quote('"', current)),
-                );
             }
-            _ => {}
+            relation.0.insert(
+                0,
+                ObjectNamePart::Identifier(Ident::with_quote('"', current)),
+            );
         }
         ControlFlow::<()>::Continue(())
     });

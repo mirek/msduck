@@ -410,3 +410,27 @@ fn nested_statements_reuse_the_session_s_own_uses_of_other_databases() {
     assert_eq!(fails(&mut other, "SELECT id FROM solo.dbo.t").0, 924);
     assert_eq!(catalog(&owner), "memory.dbo");
 }
+
+#[test]
+fn ctes_and_table_functions_hide_only_their_own_names() {
+    let (_server, mut session) = fixture();
+    // A CTE hides only its own name; `loc` is master's table.
+    ok(
+        &mut session,
+        "WITH c AS (SELECT id FROM foo.dbo.items) UPDATE foo.dbo.items SET v = 'c' WHERE id IN (SELECT id FROM c) AND EXISTS (SELECT 1 FROM loc)",
+    );
+    assert_eq!(
+        native(&session, "SELECT v FROM foo.dbo.items WHERE id = 1"),
+        "c"
+    );
+    // A table spelled like a table function stays a table.
+    ok(
+        &mut session,
+        "CREATE TABLE dbo.string_split (value NVARCHAR(10)); INSERT dbo.string_split VALUES (N'kept')",
+    );
+    ok(
+        &mut session,
+        "IF (SELECT COUNT(*) FROM foo.dbo.items i CROSS JOIN [string_split] t CROSS APPLY STRING_SPLIT(N'a,b', N',') f WHERE t.value = N'kept') <> 2 THROW 50001, 'wrong string_split', 1",
+    );
+    assert_eq!(catalog(&session), "memory.dbo");
+}
