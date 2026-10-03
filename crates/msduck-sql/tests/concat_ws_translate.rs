@@ -1631,7 +1631,7 @@ fn incomplete_catalogs_and_conversion_contracts_remain_explicit_barriers() {
 }
 
 #[test]
-fn translate_noncharacter_max_conversion_never_fabricates_bounded_metadata() {
+fn translate_established_binary_max_retains_max_and_other_sources_remain_unknown() {
     let arguments = vec![
         Argument {
             kind: Some(Type::Binary(
@@ -1643,8 +1643,21 @@ fn translate_noncharacter_max_conversion_never_fabricates_bounded_metadata() {
         literal(Some("a"), false).0,
         literal(Some("b"), false).0,
     ];
+    let binary = rules::plan(Function::Translate, &arguments, DEFAULT, &catalog()).unwrap();
+    assert_eq!(binary.declaration.length(), Length::Max);
     assert_eq!(
-        rules::plan(Function::Translate, &arguments, DEFAULT, &catalog()),
+        rules::evaluate(
+            &binary,
+            &[text(&"a".repeat(9001)), text("a"), text("b")],
+            &default_match
+        )
+        .unwrap(),
+        text(&"b".repeat(9001))
+    );
+    let mut unestablished = arguments.clone();
+    unestablished[0].kind = Some(Type::DateTime);
+    assert_eq!(
+        rules::plan(Function::Translate, &unestablished, DEFAULT, &catalog()),
         Err(Error::UnknownConversion)
     );
     // Character MAX remains established by the retained four captures.
