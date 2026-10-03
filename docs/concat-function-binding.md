@@ -52,6 +52,16 @@ profile with an inferred argument length lacks emitted input TYPEINFO. Its four
 observations remain explicitly UnknownOperand; the test never derives a width
 from the bound string. Explicit driver declaration lengths above bounded caps
 are represented as their SQL MAX declarations, independently of values.
+The selected logical collation labels also match each captured finite
+LCID/flags/version/sort-ID/code-page descriptor, including prepared rebindings.
+Original observations that did not retain userType remain missing; retained
+computed result userType values are checked without inventing old fields.
+
+Non-ASCII bare ANSI literals require the captured CP1252 default source domain.
+A UTF8 or missing/ambiguous default encoding remains UnknownContext even when a
+Unicode companion or explicit COLLATE would otherwise promote the result. The
+default-UTF8 native literal allocation requires new reference evidence; the
+binder never substitutes UTF16 counts for its uncaptured native byte width.
 
 The four isolated UTF-16 results in #807 use a lossless typed unit carrier only
 because Rust JSON strings cannot contain isolated surrogates. Their exact units

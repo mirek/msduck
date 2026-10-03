@@ -144,8 +144,10 @@ fn literal_and_typed_null_allocations_are_declaration_only() {
 #[test]
 fn quoted_parameter_columns_ctes_derived_and_apply_share_scope_binding() {
     let mut c = catalog();
-    c.tables
-        .insert("t".into(), vec![field(&c, "@p"), field(&c, "s")]);
+    c.tables.insert(
+        "t".into(),
+        vec![field(&c, "@p"), field(&c, "@@rowcount"), field(&c, "s")],
+    );
     let mut scope = Scope::default();
     let mut parameter = c.types["nvarchar"].clone();
     parameter.max_length = Some(-1);
@@ -157,6 +159,7 @@ fn quoted_parameter_columns_ctes_derived_and_apply_share_scope_binding() {
     };
     for sql in [
         "SELECT CONCAT_WS(NULL,[@p],'x') FROM t",
+        "SELECT CONCAT_WS(NULL,[@@rowcount],'x') FROM t",
         "WITH c AS (SELECT [@p] AS x FROM t) SELECT CONCAT_WS(NULL,c.x,'x') FROM c",
         "SELECT CONCAT_WS(NULL,d.x,'x') FROM (SELECT [@p] AS x FROM t) d",
         "SELECT CONCAT_WS(NULL,d.x,'x') FROM t CROSS APPLY (SELECT t.[@p] AS x) d",
@@ -249,6 +252,27 @@ fn unknown_shadow_and_collation_context_do_not_guess() {
             &c,
             expression(&q),
             &scope,
+            &context,
+            NonZeroUsize::new(1).unwrap()
+        ),
+        Err(Error::UnknownOperand)
+    ));
+    let mut ambiguous = Scope::default();
+    ambiguous.rows.push(Some(vec![
+        Source {
+            qualifiers: vec!["a".into()],
+            fields: vec![field(&c, "s")],
+        },
+        Source {
+            qualifiers: vec!["b".into()],
+            fields: vec![field(&c, "s")],
+        },
+    ]));
+    assert!(matches!(
+        binding::bind(
+            &c,
+            expression(&q),
+            &ambiguous,
             &context,
             NonZeroUsize::new(1).unwrap()
         ),
@@ -605,6 +629,41 @@ fn retained_four_run_compile_descriptors_and_diagnostics_replay_without_values()
                                 fixture, record["name"]
                             );
                             assert_eq!(plan.properties().nullable, Some(result.flags & 1 != 0));
+                            // Finite descriptors retained by 807/815, also independently
+                            // grounded by the TDS collation codec vectors. This verifies
+                            // the selected logical label without importing transport types
+                            // or inferring weights/encodings from arbitrary name suffixes.
+                            let (flags, version, sort_id, codepage) =
+                                match result.collation.name().unwrap() {
+                                    "SQL_Latin1_General_CP1_CI_AS" => (13, 0, 52, "CP1252"),
+                                    "Latin1_General_100_CI_AS" => (13, 2, 0, "CP1252"),
+                                    "Latin1_General_100_CS_AS" => (12, 2, 0, "CP1252"),
+                                    "Latin1_General_100_BIN2" => (32, 2, 0, "CP1252"),
+                                    "Latin1_General_100_CI_AS_SC" => (13, 2, 0, "CP1252"),
+                                    "Latin1_General_100_CI_AS_SC_UTF8" => (77, 2, 0, "utf-8"),
+                                    other => panic!("uncaptured result label {other}"),
+                                };
+                            let collation = &column["collation"];
+                            assert_eq!(collation["lcid"], 1033, "{} {}", fixture, record["name"]);
+                            assert_eq!(collation["flags"], flags, "{} {}", fixture, record["name"]);
+                            assert_eq!(
+                                collation["version"], version,
+                                "{} {}",
+                                fixture, record["name"]
+                            );
+                            assert_eq!(
+                                collation["sortId"], sort_id,
+                                "{} {}",
+                                fixture, record["name"]
+                            );
+                            assert_eq!(
+                                collation["codepage"], codepage,
+                                "{} {}",
+                                fixture, record["name"]
+                            );
+                            if let Some(user_type) = column.get("userType") {
+                                assert_eq!(user_type, 0, "{} {}", fixture, record["name"]);
+                            }
                         };
                         if let Some(column) =
                             record["result"]["sets"][0]["columns"].get(position.get() - 1)
@@ -730,4 +789,45 @@ fn function_result_wildcards_retain_grouping_set_null_extension() {
         assert_eq!(fields[0].properties.nullable, Some(true));
         assert_eq!(fields[0].info.as_ref().unwrap().max_length, Some(2));
     }
+}
+
+#[test]
+fn unicode_promotion_does_not_guess_native_utf8_ansi_literal_allocation() {
+    let mut c = catalog();
+    let utf8 = "Latin1_General_100_CI_AS_SC_UTF8";
+    c.default_collation = Some(utf8.into());
+    let cols = [Collation {
+        name: utf8.into(),
+        supplementary: true,
+        case_sensitive: false,
+        encoding: Encoding::Utf8,
+    }];
+    let context = Context {
+        collations: &cols,
+        language: Language::UsEnglish,
+    };
+    for sql in [
+        "SELECT CONCAT_WS(NULL,'é',N'x')",
+        "SELECT TRANSLATE('é',N'é',N'x')",
+        "SELECT CONCAT_WS(NULL,'é' COLLATE Latin1_General_100_CI_AS_SC_UTF8,N'x')",
+    ] {
+        let q = query(sql);
+        assert!(
+            matches!(
+                binding::query(&c, &q, &Scope::default(), &context),
+                Err(Error::UnknownContext)
+            ),
+            "{sql}"
+        );
+    }
+    let q = query("SELECT CONCAT_WS(NULL,'a',N'x')");
+    assert_eq!(
+        binding::query(&c, &q, &Scope::default(), &context).unwrap()[0]
+            .1
+            .conversion()
+            .result()
+            .declaration
+            .length(),
+        Length::Bounded(2)
+    );
 }

@@ -127,19 +127,20 @@ fn declaration(
         expr: inner,
         collation,
     } = expr
-        && let Some(plan) = bind_local(catalog, inner, sources, scope, context, column, depth + 1)?
     {
-        return Ok(conversion::Declaration {
-            source: Some(Type::Character(plan.conversion.result().declaration)),
-            collation: Some(
-                plan.conversion
-                    .result()
-                    .collation
-                    .clone()
-                    .collate(collation.to_string()),
-            ),
-            style: None,
-        });
+        let mut declaration =
+            declaration(catalog, inner, sources, scope, context, column, depth + 1)?;
+        if !matches!(
+            declaration.source,
+            Some(Type::Character(_) | Type::Text | Type::Ntext)
+        ) {
+            return Err(Error::UnknownContext);
+        }
+        declaration.collation = Some(declaration.collation.map_or_else(
+            || msduck_core::collation::Label::Explicit(collation.to_string()),
+            |label| label.collate(collation.to_string()),
+        ));
+        return Ok(declaration);
     }
     if let Some(plan) = bind_local(catalog, expr, sources, scope, context, column, depth + 1)? {
         return Ok(conversion::Declaration {
@@ -180,6 +181,22 @@ fn declaration(
                 } else {
                     Family::Varchar
                 };
+                // Literal allocation is grounded under the retained CP1252
+                // default. A Unicode companion must not hide unknown native
+                // byte widths of ANSI literals in another source code page.
+                if family == Family::Varchar && !s.is_ascii() {
+                    let encoding = catalog.default_collation.as_deref().and_then(|name| {
+                        let mut matches = context
+                            .collations
+                            .iter()
+                            .filter(|c| c.name.eq_ignore_ascii_case(name));
+                        let first = matches.next()?;
+                        matches.next().is_none().then_some(first.encoding)
+                    });
+                    if encoding != Some(function::Encoding::Cp1252) {
+                        return Err(Error::UnknownContext);
+                    }
+                }
                 let n = u16::try_from(s.encode_utf16().count().max(1))
                     .map_err(|_| Error::UnknownOperand)?;
                 Type::Character(
