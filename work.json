@@ -11200,6 +11200,30 @@
       "dependencies": [],
       "issue": 853,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkZAG"
+    },
+    {
+      "id": "v025-openjson-isnull-v1",
+      "title": "ISNULL/COALESCE/IIF/CASE over OPENJSON key/value columns",
+      "state": "ready",
+      "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03) to fix the v0.2.5 workload report (umbrella #864) until it lands in a published container; first-party gap found while verifying #875 (report: multirow UPDATE trigger passing inserted/deleted JSON snapshots through an OPENJSON FULL JOIN function). No external content.",
+      "scope": [
+        "src/openjson.rs",
+        "src/isnull.rs",
+        "src/scalar.rs",
+        "crates/msduck-sql/src/result_types.rs",
+        "tests/compat/openjson_isnull.test.mjs",
+        "tests/openjson_isnull.rs",
+        "scripts/capture-openjson-isnull.mjs",
+        "reference/openjson-isnull.json",
+        "docs/openjson-isnull.md"
+      ],
+      "acceptance": [
+        "DECLARE @d nvarchar(max)=N'{\"a\":1,\"b\":null}'; SELECT j.[key], ISNULL(j.[value], N''), COALESCE(j.[value], N'x'), IIF(j.[value] IS NULL, N'n', j.[value]), CASE WHEN j.[value] = N'1' THEN 1 END FROM OPENJSON(@d) j returns SQL Server rows and descriptor types instead of 245; same for varchar documents, OPENJSON with explicit WITH schema, comparisons ISNULL(l.[value],N'') <> ISNULL(r.[value],N'') across two OPENJSON sources (FULL JOIN through APPLY as in #875), and inside a multirow AFTER UPDATE trigger diffing FOR JSON snapshots of inserted/deleted.",
+        "Fix at the OPENJSON lowering or ISNULL/COALESCE lowering (e.g. carriers declared nvarchar(4000)/nvarchar(max) for key/value, or carrier-aware replacement encoding), without breaking existing OPENJSON, ISNULL and carrier tests; result metadata (nvarchar(4000) key, nvarchar(max) value, ISNULL result type) matches SQL Server or remaining differences are documented. Capture uncertain behavior from the pinned SQL Server reference container. Add tedious and Rust regressions asserting rows, types and error numbers; run the AGENTS.md checks (fmt, cargo test --workspace, clippy with RUSTUP_TOOLCHAIN=1.95.0, npm test). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge with the exact head, publish done. src/engine/ext/keys/ is held by v025-default-collation-v1 and src/openjson/schema.rs by openjson-schema-varchar-bound-v1; do not edit them; companions only for free files."
+      ],
+      "dependencies": [],
+      "issue": 900,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PlRB0"
     }
   ]
 }
