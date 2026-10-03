@@ -1125,10 +1125,16 @@ impl Session {
     /// outside TRY the batch ends and rolls it back, inside TRY the handler
     /// runs and must roll it back. Nothing it wrote commits.
     fn single_database_writes(&mut self, error: anyhow::Error) -> anyhow::Error {
-        let message = format!("{error:#}");
-        let Some(rest) = message
-            .split_once("Attempting to write to database \"")
-            .map(|(_, rest)| rest)
+        // Only DuckDB's own diagnostic; a THROW or RAISERROR may quote it.
+        let Some(message) = error
+            .chain()
+            .find_map(|cause| cause.downcast_ref::<duckdb::Error>())
+            .map(|native| native.to_string())
+        else {
+            return error;
+        };
+        let Some(rest) =
+            message.strip_prefix("TransactionContext Error: Attempting to write to database \"")
         else {
             return error;
         };

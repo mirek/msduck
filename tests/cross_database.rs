@@ -459,3 +459,22 @@ fn procedure_bodies_report_writes_to_a_second_database() {
     assert_eq!(catalog(&session), "memory.dbo");
     ok(&mut session, "SELECT label FROM dbo.loc");
 }
+
+#[test]
+fn only_duckdb_reports_writes_to_a_second_database() {
+    let (_server, mut session) = fixture();
+    let (number, _, _, message) = fails(
+        &mut session,
+        "BEGIN TRAN; INSERT dbo.loc VALUES (7, N'seven'); THROW 50000, 'TransactionContext Error: Attempting to write to database \"foo\" in a transaction that has already modified database \"memory\"', 1",
+    );
+    assert_eq!(number, 50000);
+    assert!(
+        message.starts_with("TransactionContext Error: Attempting"),
+        "{message}"
+    );
+    // THROW ends the batch but keeps the transaction and its work.
+    assert_eq!(session.transactions, 1);
+    assert_eq!(count(&session, "SELECT count(*) FROM memory.dbo.loc"), 2);
+    ok(&mut session, "ROLLBACK");
+    assert_eq!(count(&session, "SELECT count(*) FROM memory.dbo.loc"), 1);
+}
