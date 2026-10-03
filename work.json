@@ -10848,7 +10848,7 @@
     {
       "id": "bulk-character-encoding-reference-v1",
       "title": "Capture BulkLoad character collation and byte encoding semantics",
-      "state": "ready",
+      "state": "done",
       "issue": 884,
       "authorization": "Owner continuing full SQL Server compatibility goal; first-party BulkLoad hardcoded CP1252 source gap and docs/gaps-bulk.md. No third-party content; no runtime edit or extra factory agent/cache.",
       "scope": [
