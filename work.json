@@ -10104,7 +10104,7 @@
     {
       "id": "concat-function-binding-v1",
       "title": "Bind CONCAT_WS and TRANSLATE from explicit logical query scopes",
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner full SQL Server compatibility goal. Read-only current-source investigation verifies existing pure projection member_expression/expression_collation/source machinery and root bind_unicode_operations hooks. Follow typed conversion composition842 without reserving owner engine.rs. No external content or fabricated current server support.",
       "scope": [
         "crates/msduck-sql/src/projection.rs",
