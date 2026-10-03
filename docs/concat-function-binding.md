@@ -69,7 +69,10 @@ LCID/flags/version/sort-ID/code-page descriptor, including prepared rebindings.
 Original observations that did not retain userType remain missing; retained
 computed result userType values are checked without inventing old fields.
 
-Non-ASCII bare ANSI literals require the captured CP1252 default source domain.
+Non-ASCII bare ANSI literals require the captured CP1252 default source domain
+and must be representable in it. Unrepresentable literals remain UnknownContext
+until native best-fit conversion is grounded; Unicode literals retain their own
+declarations.
 A UTF8 or missing/ambiguous default encoding remains UnknownContext even when a
 Unicode companion or explicit COLLATE would otherwise promote the result. The
 default-UTF8 native literal allocation requires new reference evidence; the

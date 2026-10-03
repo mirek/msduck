@@ -193,7 +193,9 @@ fn declaration(
                         let first = matches.next()?;
                         matches.next().is_none().then_some(first.encoding)
                     });
-                    if encoding != Some(function::Encoding::Cp1252) {
+                    if encoding != Some(function::Encoding::Cp1252)
+                        || msduck_core::encoding::encode_cp1252(s).is_err()
+                    {
                         return Err(Error::UnknownContext);
                     }
                 }

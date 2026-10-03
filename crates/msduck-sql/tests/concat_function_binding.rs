@@ -1119,3 +1119,71 @@ fn parenthesized_queries_preserve_scopes_fields_and_json_shape() {
         Err(Error::Function(_))
     ));
 }
+
+#[test]
+fn unrepresentable_ansi_literals_remain_unknown_before_unicode_promotion() {
+    let c = catalog();
+    let cols = collations();
+    let context = Context {
+        collations: &cols,
+        language: Language::UsEnglish,
+    };
+    for sql in [
+        "SELECT CONCAT_WS(',', '🦆', 'x')",
+        "SELECT CONCAT_WS(NULL, '🦆', N'x')",
+        "SELECT CONCAT_WS(NULL, '🦆' COLLATE Latin1_General_100_CI_AS, N'x')",
+        "SELECT TRANSLATE('🦆', N'🦆', N'x')",
+    ] {
+        let q = query(sql);
+        let original = q.clone();
+        assert!(
+            matches!(
+                binding::bind(
+                    &c,
+                    expression(&q),
+                    &Scope::default(),
+                    &context,
+                    NonZeroUsize::new(1).unwrap()
+                ),
+                Err(Error::UnknownContext)
+            ),
+            "{sql}"
+        );
+        assert!(
+            matches!(
+                binding::query(&c, &q, &Scope::default(), &context),
+                Err(Error::UnknownContext)
+            ),
+            "{sql}"
+        );
+        assert!(
+            matches!(
+                binding::fields(&c, &q, &Scope::default(), &context),
+                Err(Error::UnknownContext)
+            ),
+            "{sql}"
+        );
+        assert_eq!(q, original);
+    }
+    for sql in [
+        "SELECT CONCAT_WS(NULL,'é€',N'x')",
+        "SELECT TRANSLATE('é€',N'é',N'x')",
+        "SELECT CONCAT_WS(NULL,N'🦆',N'x')",
+        "SELECT TRANSLATE(N'🦆',N'🦆',N'x')",
+    ] {
+        let q = query(sql);
+        assert_eq!(
+            binding::query(&c, &q, &Scope::default(), &context)
+                .unwrap()
+                .len(),
+            1,
+            "{sql}"
+        );
+        assert!(
+            binding::fields(&c, &q, &Scope::default(), &context).unwrap()[0]
+                .info
+                .is_some(),
+            "{sql}"
+        );
+    }
+}
