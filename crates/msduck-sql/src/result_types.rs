@@ -20,6 +20,14 @@ impl ResultType {
     }
 }
 
+/// Adapt a validated function declaration without inspecting operand values.
+pub fn character_declaration(kind: msduck_core::character::CharacterType) -> ResultType {
+    ResultType::Character {
+        family: kind.family(),
+        length: kind.length(),
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Descriptor {
     Unknown,
