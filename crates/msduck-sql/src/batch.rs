@@ -8,8 +8,11 @@ use sqlparser::{ast::*, parser::Parser};
 pub fn parse(sql: &str) -> Result<Vec<Statement>> {
     use sqlparser::tokenizer::Token;
     let dialect = crate::dialect::ServerDialect;
-    let (tokens, fetch_expressions) =
+    let (tokens, mut fetch_expressions) =
         crate::top::fetch_tokens(crate::group_all::tokens(crate::dialect::tokenize(sql)?))?;
+    for expr in &mut fetch_expressions {
+        crate::dialect::ext::conversion::bracket_types::normalize_expr(expr);
+    }
     let mut parser = Parser::new(&dialect).with_tokens_with_locations(tokens);
     let mut statements = Vec::new();
     loop {

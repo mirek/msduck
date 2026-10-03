@@ -80,6 +80,12 @@ pub fn normalize(statement: &mut Statement) {
     let _ = VisitMut::visit(statement, &mut Normalize);
 }
 
+/// [`normalize`] for an expression kept outside a statement, such as a FETCH
+/// count that batch parsing restores after its statement passes.
+pub fn normalize_expr(expr: &mut Expr) {
+    let _ = VisitMut::visit(expr, &mut Normalize);
+}
+
 struct Normalize;
 
 impl VisitorMut for Normalize {

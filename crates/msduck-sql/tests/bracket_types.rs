@@ -67,6 +67,10 @@ fn delimited_names_parse_like_plain_spellings() {
             "SELECT * FROM OPENJSON(@j) WITH ([id] int '$.id', [name] nvarchar(20), [who] nvarchar(128))",
         ),
         (
+            "SELECT * FROM t ORDER BY id OFFSET 0 ROWS FETCH NEXT CAST(CAST('12' AS [varchar]) AS [int]) ROWS ONLY",
+            "SELECT * FROM t ORDER BY id OFFSET 0 ROWS FETCH NEXT CAST(CAST('12' AS varchar) AS int) ROWS ONLY",
+        ),
+        (
             "CREATE VIEW dbo.v AS SELECT CAST(1 AS [bigint]) AS c",
             "CREATE VIEW dbo.v AS SELECT CAST(1 AS bigint) AS c",
         ),
