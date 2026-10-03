@@ -44,7 +44,8 @@ WHERE (s.side = 1 OR NOT EXISTS (SELECT 1 FROM A WHERE c)) AND (w)
 - An unqualified `*` excludes the internal side column by its qualified
   name. The side alias avoids every relation name and qualifier in the
   SELECT, so it never shadows an outer alias.
-- An unaliased table B uses its base name as the derived alias. When the
+- An unaliased table B uses its base name as the derived alias, and an
+  unaliased function such as OPENJSON gets a fresh one. When the
   SELECT uses three-part names, or B is an unaliased parenthesized join, B
   joins with `ON (s.side = 1 AND (c)) OR s.side = 2` instead. That form
   fails in DuckDB when `c` references the outer query.
@@ -54,7 +55,8 @@ The following FULL JOINs are left unchanged:
 - Joins with no outer reference, which DuckDB runs natively.
 - Joins outside APPLY bodies.
 - Joins with volatile functions (NEWID, RAND, NEWSEQUENTIALID,
-  CRYPT_GEN_RANDOM), because A, B and `c` are evaluated more than once.
+  CRYPT_GEN_RANDOM) or TABLESAMPLE operands, because A, B and `c` are
+  evaluated more than once.
 - Joins in a FROM item that later has a RIGHT or FULL join.
 - A second FULL JOIN in the same FROM item.
 - FULL JOINs inside parentheses.

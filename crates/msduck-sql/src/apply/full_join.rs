@@ -42,6 +42,7 @@ use std::ops::ControlFlow;
 
 const SIDES: &str = "__msduck_full_join";
 const SIDE: &str = "__msduck_full_join_side";
+const RIGHT: &str = "__msduck_full_join_right";
 const VOLATILE: [&str; 4] = ["newid", "newsequentialid", "rand", "crypt_gen_random"];
 
 /// Rewrites every eligible SELECT inside an APPLY body. Idempotent: rewritten
@@ -96,18 +97,20 @@ fn rewrite_select(select: &mut Select) {
         }
         let condition = condition.clone();
         let right = right.clone();
-        // A fresh alias no relation of this SELECT (or its subqueries) uses.
-        let alias = (0..)
-            .map(|n| {
-                if n == 0 {
-                    SIDES.to_string()
-                } else {
-                    format!("{SIDES}_{n}")
-                }
-            })
-            .find(|name| !taken.contains(&name.to_lowercase()))
-            .expect("an unused alias");
-        taken.insert(alias.to_lowercase());
+        let alias = fresh(&mut taken, SIDES);
+        // The derived alias a lateral filter of B needs when B has none: an
+        // unaliased table keeps its base name (unless the SELECT uses
+        // three-part names, which a derived alias cannot match); other
+        // unaliased factors are only referenced unqualified, so any fresh
+        // name works. An unaliased parenthesized join has no usable alias.
+        let fallback = match &right {
+            TableFactor::Table {
+                alias: None, name, ..
+            } if base_names => name.0.last().and_then(|part| part.as_ident()).cloned(),
+            TableFactor::Table { .. } | TableFactor::NestedJoin { .. } => None,
+            factor if self::alias(factor).is_none() => Some(Ident::new(fresh(&mut taken, RIGHT))),
+            _ => None,
+        };
         let side = |n: i64| Expr::BinaryOp {
             left: Box::new(Expr::CompoundIdentifier(vec![
                 Ident::new(&alias),
@@ -156,7 +159,7 @@ fn rewrite_select(select: &mut Select) {
                 global: false,
                 join_operator: JoinOperator::LeftOuter(JoinConstraint::On(side(1))),
             },
-            right_join(right, &side, &condition, base_names),
+            right_join(right, &side, &condition, fallback),
         ];
         joins.extend(item.joins.drain(index + 1..));
         item.relation = relation;
@@ -208,7 +211,7 @@ fn right_join(
     right: TableFactor,
     side: &dyn Fn(i64) -> Expr,
     condition: &Expr,
-    base_names: bool,
+    fallback: Option<Ident>,
 ) -> Join {
     let matched = Expr::BinaryOp {
         left: Box::new(Expr::Nested(Box::new(Expr::BinaryOp {
@@ -219,16 +222,7 @@ fn right_join(
         op: BinaryOperator::Or,
         right: Box::new(side(2)),
     };
-    // An unaliased table keeps its base name as the derived alias, unless
-    // the SELECT uses three-part names, which a derived alias cannot match.
-    let name = alias(&right)
-        .map(|alias| alias.name.clone())
-        .or(match &right {
-            TableFactor::Table { name, .. } if base_names => {
-                name.0.last().and_then(|part| part.as_ident()).cloned()
-            }
-            _ => None,
-        });
+    let name = alias(&right).map(|alias| alias.name.clone()).or(fallback);
     let Some(name) = name else {
         return Join {
             relation: right,
@@ -343,6 +337,22 @@ fn relation_names(select: &Select) -> HashSet<String> {
     names.0
 }
 
+/// A name no relation or qualifier of the SELECT uses, reserved for this one.
+fn fresh(taken: &mut HashSet<String>, base: &str) -> String {
+    let name = (0..)
+        .map(|n| {
+            if n == 0 {
+                base.to_string()
+            } else {
+                format!("{base}_{n}")
+            }
+        })
+        .find(|name| !taken.contains(&name.to_lowercase()))
+        .expect("an unused alias");
+    taken.insert(name.to_lowercase());
+    name
+}
+
 fn number(n: i64) -> Expr {
     Expr::Value(Value::Number(n.to_string(), false).into())
 }
@@ -406,6 +416,23 @@ fn volatile(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> boo
     struct Find(bool);
     impl Visitor for Find {
         type Break = ();
+        // A sample drawn more than once can disagree with itself.
+        fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
+            if matches!(
+                factor,
+                TableFactor::Table {
+                    sample: Some(_),
+                    ..
+                } | TableFactor::Derived {
+                    sample: Some(_),
+                    ..
+                }
+            ) {
+                self.0 = true;
+                return ControlFlow::Break(());
+            }
+            ControlFlow::Continue(())
+        }
         fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
             if let Expr::Function(function) = expr
                 && let Some(name) = function.name.0.last().and_then(|part| part.as_ident())
@@ -669,6 +696,16 @@ mod tests {
             "SELECT 1 FROM a FULL JOIN (b AS p JOIN c ON p.k = c.k) AS r ON a.k = r.k AND p.id = 1",
         );
         assert!(!sql.contains("FULL"), "{sql}");
+    }
+
+    #[test]
+    fn unaliased_functions_get_a_fresh_alias_and_samples_are_volatile() {
+        let sql = rewritten(
+            "SELECT 1 FROM OPENJSON(i.lhs) WITH (a INT) l FULL JOIN OPENJSON(i.rhs) WITH (b INT) ON l.a = b AND i.id = 1",
+        );
+        assert!(sql.contains(&format!(") AS {RIGHT} ON true")), "{sql}");
+        let sql = "SELECT 1 FROM OPENJSON(i.lhs) l FULL JOIN t AS r TABLESAMPLE (10 PERCENT) ON l.[key] = r.k";
+        assert!(rewritten(sql).contains("FULL JOIN"), "{sql}");
     }
 
     #[test]
