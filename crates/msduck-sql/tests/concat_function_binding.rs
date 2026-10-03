@@ -1063,3 +1063,59 @@ fn initial_discovery_bounds_deep_wide_and_late_function_asts() {
         }
     }
 }
+
+#[test]
+fn parenthesized_queries_preserve_scopes_fields_and_json_shape() {
+    let c = catalog();
+    let cols = collations();
+    let context = Context {
+        collations: &cols,
+        language: Language::UsEnglish,
+    };
+    for sql in [
+        "((SELECT CONCAT_WS(NULL,CAST(NULL AS VARCHAR(4)),'xy') AS v))",
+        "WITH c AS (SELECT CAST(NULL AS VARCHAR(4)) AS v) (SELECT CONCAT_WS(NULL,c.v,'xy') AS v FROM c)",
+        "WITH c AS ((SELECT CONCAT_WS(NULL,CAST(NULL AS VARCHAR(4)),'x') AS v)) SELECT CONCAT_WS(NULL,c.v,'y') AS v FROM c",
+        "SELECT CONCAT_WS(NULL,d.v,'y') AS v FROM ((SELECT CONCAT_WS(NULL,CAST(NULL AS VARCHAR(4)),'x') AS v)) d",
+        "SELECT CONCAT_WS(NULL,d.v,'y') AS v FROM (SELECT CAST(NULL AS VARCHAR(4)) AS s) t CROSS APPLY ((SELECT CONCAT_WS(NULL,t.s,'x') AS v)) d",
+    ] {
+        let q = query(sql);
+        let original = q.clone();
+        let plans = binding::query(&c, &q, &Scope::default(), &context).unwrap();
+        assert_eq!(plans.len(), 1, "{sql}");
+        assert_eq!(
+            plans[0].1.conversion().result().declaration.length(),
+            Length::Bounded(6),
+            "{sql}"
+        );
+        let fields = binding::fields(&c, &q, &Scope::default(), &context).unwrap();
+        assert_eq!(fields.len(), 1, "{sql}");
+        assert_eq!(
+            fields[0].info.as_ref().unwrap().max_length,
+            Some(6),
+            "{sql}"
+        );
+        assert_eq!(q, original);
+    }
+    for sql in [
+        "(SELECT CONCAT_WS(',', 'a', 'b') AS x FOR JSON PATH)",
+        "(SELECT CONCAT_WS(',', 'a', 'b') AS x) FOR JSON PATH",
+    ] {
+        let q = query(sql);
+        let ordinary = msduck_sql::projection::query_fields(&c, &q, &Scope::default()).unwrap();
+        let bound = binding::fields(&c, &q, &Scope::default(), &context).unwrap();
+        assert_eq!(bound.len(), ordinary.len());
+        assert_eq!(bound[0].info, ordinary[0].info, "{sql}");
+        assert_eq!(bound[0].name, ordinary[0].name, "{sql}");
+        assert_eq!(bound[0].collation, ordinary[0].collation, "{sql}");
+        assert_eq!(bound[0].properties, ordinary[0].properties, "{sql}");
+        assert_eq!(bound[0].json_fragment, ordinary[0].json_fragment, "{sql}");
+        assert_eq!(bound.len(), 1);
+        assert!(bound[0].json_fragment);
+    }
+    let q = query("(SELECT CONCAT_WS('a') AS x) FOR JSON PATH");
+    assert!(matches!(
+        binding::fields(&c, &q, &Scope::default(), &context),
+        Err(Error::Function(_))
+    ));
+}

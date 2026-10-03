@@ -15,7 +15,9 @@ references. Without these functions it delegates to ordinary inference. Real
 nonzero SELECT positions include wildcard expansion, so the captured 451
 message identifies the original output position. Ordinary grouped row-reference
 properties remain governed by the existing grouping rules.
-FOR JSON keeps its ordinary single NVARCHAR(MAX) descriptor, canonical field
+Parenthesized query bodies retain the enclosing CTE declarations and original
+inner operands, including CTE, derived and APPLY bodies. FOR JSON on either
+side of a query wrapper keeps its ordinary single NVARCHAR(MAX) descriptor, canonical field
 name, fragment flag and properties after underlying function validation; it is
 not replaced by SELECT-list function fields.
 

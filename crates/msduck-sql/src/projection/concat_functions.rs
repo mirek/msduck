@@ -446,10 +446,15 @@ fn query_in<'a>(
     if !contains_functions(query)? {
         return Ok(Vec::new());
     }
+    let scope = scope_with_functions(catalog, query, outer, context, depth)?;
+    if let SetExpr::Query(inner) = query.body.as_ref() {
+        // Parentheses introduce another Query, not another relational scope.
+        // Carry this query's CTE declarations into its original inner body.
+        return query_in(catalog, inner, &scope, context, depth + 1);
+    }
     let SetExpr::Select(select) = query.body.as_ref() else {
         return Err(Error::UnsupportedSyntax);
     };
-    let scope = scope_with_functions(catalog, query, outer, context, depth)?;
     let sources = sources_with_functions(catalog, select, &scope, context, depth)?;
     let mut result = Vec::new();
     let mut position = 1;
@@ -712,10 +717,18 @@ fn fields_in(
     if !contains_functions(query)? {
         return query_fields(catalog, query, outer).ok_or(Error::UnknownOperand);
     }
+    let scope = scope_with_functions(catalog, query, outer, context, depth)?;
+    if let SetExpr::Query(inner) = query.body.as_ref() {
+        if matches!(query.for_clause, Some(ForClause::Json { .. })) {
+            // The outer JSON clause replaces the complete inner projection.
+            query_in(catalog, inner, &scope, context, depth + 1)?;
+            return query_fields(catalog, query, &scope).ok_or(Error::UnknownOperand);
+        }
+        return fields_in(catalog, inner, &scope, context, depth + 1);
+    }
     let SetExpr::Select(select) = query.body.as_ref() else {
         return Err(Error::UnsupportedSyntax);
     };
-    let scope = scope_with_functions(catalog, query, outer, context, depth)?;
     let sources = sources_with_functions(catalog, select, &scope, context, depth)?;
     let ordinary = query_fields(catalog, query, &scope).ok_or(Error::UnknownOperand)?;
     if matches!(query.for_clause, Some(ForClause::Json { .. })) {
