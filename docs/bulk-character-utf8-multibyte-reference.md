@@ -36,7 +36,7 @@ Initial collector SHA256 `3464f446728e88543e6619fa0166920c21b696787a34a3aa24895d
 
 Focused tests passed on macOS (16 tests, 43736.132833 ms) and Linux (16 tests, 36111.125383 ms). They cover exact matrix/outcomes, type/native/unit/counter corruption, omitted cases, provenance, packet repartition/SPIDs/types, alias rejection, JSON limits, asynchronous trace and aggregate exhaustion, aborted startup and bounded comparison failure retention. No Rust behavior changed, so this task does not require a cold native rebuild.
 
-Final-source reproduction is running; merge remains gated on its complete result, independent review, verified Codex review or authorized availability fallback, and exact-head required CI.
+The frozen-source reproduction completed another 1600 loads, awaited cleanup and exited 0. Its full raw artifact contains 16593484 bytes, SHA256 `aa8db47fb69c9805da2e8336c69561389f9fcefe01b9dc3b9b8f2416f188e3ed`; the complete sidecar has 24189 differences and was independently recomputed without modifying original evidence. Across both acquisitions, all 3200 original requests and 51200 semantic/request/response/framing pins agree. Merge remains gated on independent review, verified Codex review or authorized availability fallback, and exact-head required CI.
 
 ## Limits and next work
 
