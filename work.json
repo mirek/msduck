@@ -10701,6 +10701,22 @@
       "dependencies": [],
       "issue": 871,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pkgw1"
+    },
+    {
+      "id": "v025-snapshot-isolation-v1-catalog",
+      "title": "Declare sys.databases snapshot_isolation_state descriptors (companion of v025-snapshot-isolation-v1)",
+      "state": "ready",
+      "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03): \"please find the following compatibility report and work on it; definition of done is when all this functionality lands in published container; feel free to schedule multiple agents working on multiple prs\". The owner pasted a first-party workload compatibility report for the v0.2.5 image (umbrella #864); only its generic reproductions are used. No external content. Companion of v025-snapshot-isolation-v1 (#870), shipped in the same PR: the parent's acceptance requires sys.databases.snapshot_isolation_state/_desc, whose SQL Server descriptors are declared in src/query_catalog.rs and asserted for SELECT * in tests/sys_databases_descriptors.rs.",
+      "scope": [
+        "src/query_catalog.rs",
+        "tests/sys_databases_descriptors.rs"
+      ],
+      "acceptance": [
+        "sys.databases publishes snapshot_isolation_state (tinyint) and snapshot_isolation_state_desc (nvarchar(60)) with SQL Server's captured descriptors, in SQL Server column order for SELECT *; existing descriptor regressions updated and passing; shipped in the v025-snapshot-isolation-v1 PR."
+      ],
+      "dependencies": [],
+      "issue": 870,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pkgwi"
     }
   ]
 }
