@@ -94,7 +94,12 @@ pub fn declaration(kind: &DataType) -> Result<Type> {
             "image" if args.is_empty() => Type::Image,
             "xml" if args.is_empty() => Type::Xml,
             "sql_variant" if args.is_empty() => Type::Variant,
-            _ => bail!("unsupported scalar declaration {kind}"),
+            // `[int]`, `[nvarchar](10)`, `sys.int` and `sysname` name system
+            // types (docs/bracket-types.md).
+            _ => match crate::dialect::ext::conversion::bracket_types::value_type(kind) {
+                Some(resolved) => return declaration(&resolved),
+                None => bail!("unsupported scalar declaration {kind}"),
+            },
         },
         _ => bail!("unsupported scalar declaration {kind}"),
     })
