@@ -10104,7 +10104,7 @@
     {
       "id": "concat-function-binding-v1",
       "title": "Bind CONCAT_WS and TRANSLATE from explicit logical query scopes",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Continuing owner full SQL Server compatibility goal. Read-only current-source investigation verifies existing pure projection member_expression/expression_collation/source machinery and root bind_unicode_operations hooks. Follow typed conversion composition842 without reserving owner engine.rs. No external content or fabricated current server support.",
       "scope": [
         "crates/msduck-sql/src/projection.rs",
@@ -10452,7 +10452,7 @@
     {
       "id": "translate-matching-keys-v1",
       "title": "Provide proven finite TRANSLATE matching keys",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Owner continuing full SQL Server compatibility goal; reviewed complete owner-run ASCII reference854/PR855 mergedd7eb82b with source/raw proofs and841 finite observations. Deterministic keyed evaluator and existing841/854 raw evidence establish the next matching-provider work, not generic linguistic weights. No third-party inputs or engine scope.",
       "scope": [
         "crates/msduck-sql/src/lib.rs",
