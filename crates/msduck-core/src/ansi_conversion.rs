@@ -1,7 +1,10 @@
 //! Native CP1251/CP1252 projections established by retained SQL Server byte probes.
-//! Width, padding, SQL diagnostics and wire collation admission belong to adapters.
+//! Complete projections are separate from the BulkLoad capacity submodule.
+//! SQL diagnostics and wire collation admission belong to root adapters.
 use crate::ansi_bytes::{AnsiBytes, AnsiView, ByteError, EncodingIdentity};
 use std::fmt;
+
+pub mod capacity;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProjectionTarget {
