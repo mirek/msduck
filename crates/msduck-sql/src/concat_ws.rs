@@ -69,6 +69,7 @@ pub enum Error {
     UnknownConversion,
     UnknownComparison,
     ComparisonLimit,
+    LookupLimit,
     OutputLimit,
     InputLimit,
     UnknownEncoding,
@@ -315,6 +316,9 @@ pub fn plan_with_context(
 /// Maximum pairwise comparisons in the compatibility matcher path. Callers
 /// with established collation keys can use the indexed evaluator instead.
 pub const MAX_MATCH_COMPARISONS: usize = 1_000_000;
+/// Maximum distinct keys/units retained by either translation lookup.
+/// Callers remain responsible for the allocation size of their supplied keys.
+pub const MAX_LOOKUP_ENTRIES: usize = 65_536;
 
 /// Allocation policy, not SQL Server MAX capacity or a SQL diagnostic.
 /// The default evaluator produces at most 16 MiB of UTF-16 payload.
@@ -344,6 +348,9 @@ pub fn evaluate(
                 let replacement = if let Some(replacement) = resolved.get(unit) {
                     *replacement
                 } else {
+                    if resolved.len() == MAX_LOOKUP_ENTRIES {
+                        return Err(Error::LookupLimit);
+                    }
                     let mut replacement = unit;
                     for (candidate, mapped) in characters(source, plan.supplementary)
                         .zip(characters(replacements, plan.supplementary))
@@ -383,12 +390,20 @@ pub fn evaluate_with_keys<K: Ord>(
         values,
         &|plan, input, source, replacements, output| {
             let mut lookup = std::collections::BTreeMap::new();
+            let mut entries = 0;
             for (candidate, mapped) in characters(source, plan.supplementary)
                 .zip(characters(replacements, plan.supplementary))
             {
-                lookup
-                    .entry(key(candidate).ok_or(Error::UnknownComparison)?)
-                    .or_insert(mapped);
+                match lookup.entry(key(candidate).ok_or(Error::UnknownComparison)?) {
+                    std::collections::btree_map::Entry::Occupied(_) => {}
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        if entries == MAX_LOOKUP_ENTRIES {
+                            return Err(Error::LookupLimit);
+                        }
+                        entry.insert(mapped);
+                        entries += 1;
+                    }
+                }
             }
             for unit in characters(input, plan.supplementary) {
                 let resolved = lookup
@@ -509,7 +524,7 @@ fn evaluate_with_translator(
             {
                 return Err(sql(9828, if unicode(plan.declaration) { 3 } else { 1 }, "The second and third arguments of the TRANSLATE built-in function must contain an equal number of characters.".into()));
             }
-            if from.is_empty() {
+            if from.is_empty() || input.is_empty() {
                 append(&mut output, input, plan, Boundary::Value)?;
             } else {
                 translate(plan, input, from, to, &mut output)?;

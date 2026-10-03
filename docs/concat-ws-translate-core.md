@@ -36,7 +36,7 @@ and ANSI UTF-8 evaluation do not acquire invented behavior. Character payloads
 must respect their declared widths and fixed-width padding. Core CP1252 encoding
 validates ANSI payloads; Unicode payloads retain isolated surrogate units.
 
-Twenty-seven private Rust tests pass using cached, compiler-compatible Linux
+Twenty-eight private Rust tests pass using cached, compiler-compatible Linux
 dependencies and isolated temporary binaries, with strict Clippy and formatting.
 They compare 21 ordinary character cases across all four captures (84 comparisons),
 26 declaration/collation cases (104 comparisons), 10 supplementary/UTF-8/mismatch
@@ -142,3 +142,13 @@ append operation therefore receives an explicit value/separator role. The prior
 per-value-only snapshot fails the added separator regression (26 pass / 1 fail).
 Raw UTF-16 carriers preserve these differences instead of replacing isolated
 surrogates or borrowing CAST behavior.
+
+Both TRANSLATE lookup paths retain at most 65,536 distinct entries. The indexed
+path checks each vacant key before insertion; the callback path checks each new
+input-unit cache entry before matching. `LookupLimit` is an explicit resource
+barrier. Duplicate mapping keys still keep the first replacement and consume one
+entry. Callers remain responsible for bounded allocation in their supplied key
+representation. A supplementary mapping with 65,537 distinct pairs is rejected
+before growing the index beyond the limit; a short input can instead use the
+bounded callback path. Exactly 65,536 keys plus additional duplicates remain
+supported. Empty input avoids lookup construction after length-mismatch validation.

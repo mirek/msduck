@@ -1995,3 +1995,87 @@ fn captured_concat_separator_truncation_retains_split_high_surrogate() {
         }
     }
 }
+
+#[test]
+fn distinct_supplementary_lookup_entries_are_bounded_in_both_paths() {
+    let mut arguments = vec![arg(Family::Nvarchar, Length::Max); 3];
+    arguments[0].collation = Some(Label::Explicit(SC.into()));
+    let p = rules::plan(Function::Translate, &arguments, DEFAULT, &catalog()).unwrap();
+    let pairs = |count: usize| {
+        (0x10000..0x10000 + count as u32)
+            .flat_map(|value| {
+                let value = value - 0x10000;
+                [
+                    0xd800 + (value >> 10) as u16,
+                    0xdc00 + (value & 1023) as u16,
+                ]
+            })
+            .collect::<Vec<_>>()
+    };
+    let mapping = pairs(rules::MAX_LOOKUP_ENTRIES + 1);
+    let values = [
+        text("z"),
+        Some(mapping.clone()),
+        Some(vec![98; rules::MAX_LOOKUP_ENTRIES + 1]),
+    ];
+    let keys = std::cell::Cell::new(0usize);
+    assert_eq!(
+        rules::evaluate_with_keys(&p, &values, &|unit| {
+            keys.set(keys.get() + 1);
+            Some(unit.to_vec())
+        }),
+        Err(Error::LookupLimit)
+    );
+    assert_eq!(keys.get(), rules::MAX_LOOKUP_ENTRIES + 1);
+    // A short input can use the bounded opaque path without building the large
+    // mapping index; resource barriers are not SQL diagnostics.
+    assert_eq!(
+        rules::evaluate(&p, &values, &|a, b| Some(a == b)).unwrap(),
+        text("z")
+    );
+
+    let input = mapping.clone();
+    let values = [Some(input), text("b"), text("c")];
+    let comparisons = std::cell::Cell::new(0usize);
+    assert_eq!(
+        rules::evaluate(&p, &values, &|_, _| {
+            comparisons.set(comparisons.get() + 1);
+            Some(true)
+        }),
+        Err(Error::LookupLimit)
+    );
+    assert_eq!(comparisons.get(), rules::MAX_LOOKUP_ENTRIES);
+
+    // Exactly the allowed number of keys plus additional duplicate entries is
+    // valid; the limit applies to retained distinct keys, not mapping length.
+    let mut from = pairs(rules::MAX_LOOKUP_ENTRIES);
+    let final_pair = from[from.len() - 2..].to_vec();
+    for _ in 0..64 {
+        from.extend_from_slice(&final_pair);
+    }
+    let values = [
+        Some(final_pair),
+        Some(from),
+        Some(vec![98; rules::MAX_LOOKUP_ENTRIES + 64]),
+    ];
+    assert_eq!(
+        rules::evaluate_with_keys(&p, &values, &|unit| Some(unit.to_vec())).unwrap(),
+        text("b")
+    );
+
+    // Empty input needs no equality index, but mismatch must still be diagnosed.
+    let values = [
+        text(""),
+        Some(mapping),
+        Some(vec![98; rules::MAX_LOOKUP_ENTRIES + 1]),
+    ];
+    assert_eq!(
+        rules::evaluate_with_keys(&p, &values, &|_| None::<u8>).unwrap(),
+        text("")
+    );
+    let values = [text(""), text("ab"), text("x")];
+    let Err(Error::Sql(error)) = rules::evaluate_with_keys(&p, &values, &|_| None::<u8>) else {
+        panic!("empty input cannot suppress mismatched mapping diagnostics")
+    };
+    assert_eq!(error.number, 9828);
+}
