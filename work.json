@@ -9819,6 +9819,27 @@
       ],
       "issue": 817,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pj-vk"
+    },
+    {
+      "id": "concat-text-conversion-rules-v1",
+      "title": "Deterministic function-specific text conversion contracts",
+      "state": "ready",
+      "authorization": "Direct continuing owner compatibility goal and root delegation after completed reference task814/PR815; no external intake.",
+      "scope": [
+        "crates/msduck-sql/src/concat_text_conversion.rs",
+        "crates/msduck-sql/tests/concat_text_conversion.rs",
+        "docs/concat-text-conversion-rules.md"
+      ],
+      "dependencies": [
+        "concat-text-conversion-reference-v1"
+      ],
+      "issue": 819,
+      "acceptance": [
+        "Declaration-only CONCAT_WS source allocation and TRANSLATE output contracts grounded in merged four-run SQL2025 fixture; preserve original source kinds and explicit unsupported declarations/styles/formats. NULL or current parameter values never select compile metadata.",
+        "Pure binary CP1252 versus UTF16LE byte reinterpretation and odd-byte padding. Cover captured bounded/MAX/Unicode/prepared evidence across all four complete runs; width observations do not prove arbitrary numeric/temporal/GUID formatting.",
+        "Keep module unregistered; no lib.rs, root, engine, source adapter edits. Reuse existing isolated worktree and fresh claim/receipt; no new native caches/worktrees/agents. Private pure Linux proof uses read-only cached dependencies and removes own compiled outputs. Worker owns PR review, exact CI/appropriate full gates, merge and issue/project/registry completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkBHv"
     }
   ]
 }
