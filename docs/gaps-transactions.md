@@ -176,7 +176,9 @@ Remaining differences, retained exactly in the replay:
   the change are waited for, and changes of one database run one at a
   time. An autocommit statement counts until the next statement of its
   batch or body starts, so a change may wait slightly longer than SQL
-  Server.
+  Server. Likewise, a SNAPSHOT statement that fails because a temporary
+  table it names is missing still counts as a read of the other tables it
+  names, until its transaction ends.
 - After a write conflict DuckDB aborts its transaction, so msduck restarts
   an empty one for the doomed transaction's remaining reads until it is
   rolled back.
