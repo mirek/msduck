@@ -315,6 +315,66 @@ fn referential_actions_follow_update_from_and_report_numbers() {
 }
 
 #[test]
+fn set_null_actions_follow_on_update_cascades() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    // Accepted in one batch, as SQL Server does: the SET NULL updates child,
+    // so child's ON DELETE CASCADE to leaf is not a second path from parent.
+    ok(
+        &mut session,
+        "CREATE TABLE parent(id int PRIMARY KEY); CREATE TABLE middle(id int PRIMARY KEY, parent_id int); \
+         CREATE TABLE child(id int PRIMARY KEY, middle_id int); CREATE TABLE leaf(id int PRIMARY KEY, child_id int, parent_id int); \
+         ALTER TABLE middle ADD CONSTRAINT fk_mp FOREIGN KEY (parent_id) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE; \
+         ALTER TABLE leaf ADD CONSTRAINT fk_lp FOREIGN KEY (parent_id) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE; \
+         ALTER TABLE leaf ADD CONSTRAINT fk_lc FOREIGN KEY (child_id) REFERENCES child(id) ON UPDATE NO ACTION ON DELETE CASCADE; \
+         ALTER TABLE child ADD CONSTRAINT fk_cm FOREIGN KEY (middle_id) REFERENCES middle(id) ON UPDATE CASCADE ON DELETE SET NULL",
+    );
+    ok(
+        &mut session,
+        "INSERT parent VALUES (1),(2); INSERT middle VALUES (1,1); INSERT child VALUES (1,1); INSERT leaf VALUES (1,1,2),(2,1,1); DELETE parent WHERE id = 1",
+    );
+    assert_eq!(ints(&session, "SELECT * FROM child"), [[Some(1), None]]);
+    assert_eq!(
+        ints(&session, "SELECT * FROM leaf ORDER BY id"),
+        [[Some(1), Some(1), Some(2)]]
+    );
+    // ON UPDATE SET NULL, then ON UPDATE CASCADE of the nulled key.
+    ok(
+        &mut session,
+        "CREATE TABLE u(id int PRIMARY KEY); CREATE TABLE uc(id int PRIMARY KEY, uid int CONSTRAINT uq_uc UNIQUE CONSTRAINT fuc REFERENCES u(id) ON UPDATE SET NULL)",
+    );
+    assert_eq!(
+        caught(
+            &mut session,
+            "CREATE TABLE ug(id int PRIMARY KEY, cuid int CONSTRAINT fugc REFERENCES uc(uid) ON UPDATE CASCADE, uid int CONSTRAINT fugu REFERENCES u(id) ON UPDATE CASCADE)"
+        )
+        .0,
+        1750
+    );
+    ok(
+        &mut session,
+        "CREATE TABLE ug2(id int PRIMARY KEY, cuid int CONSTRAINT fug2c REFERENCES uc(uid) ON UPDATE CASCADE); \
+         INSERT u VALUES (1),(2); INSERT uc VALUES (10,1),(20,2); INSERT ug2 VALUES (100,1),(200,2); UPDATE u SET id = id + 5 WHERE id = 1",
+    );
+    assert_eq!(
+        ints(&session, "SELECT * FROM ug2 ORDER BY id"),
+        [[Some(100), None], [Some(200), Some(2)]]
+    );
+    // A composite key keeps its other columns.
+    ok(
+        &mut session,
+        "CREATE TABLE p(id int PRIMARY KEY); \
+         CREATE TABLE c(id int PRIMARY KEY, a int, pid int, CONSTRAINT uq_c UNIQUE (a, pid), CONSTRAINT fcp FOREIGN KEY (pid) REFERENCES p(id) ON DELETE SET NULL); \
+         CREATE TABLE g(id int PRIMARY KEY, a int, cpid int, CONSTRAINT fgc FOREIGN KEY (a, cpid) REFERENCES c(a, pid) ON UPDATE CASCADE); \
+         INSERT p VALUES (1),(2); INSERT c VALUES (10,7,1),(20,7,2); INSERT g VALUES (100,7,1),(200,7,2); DELETE p WHERE id = 1",
+    );
+    assert_eq!(
+        ints(&session, "SELECT * FROM g ORDER BY id"),
+        [[Some(100), Some(7), None], [Some(200), Some(7), Some(2)]]
+    );
+}
+
+#[test]
 fn failures_inside_transactions_never_commit_partial_effects() {
     let server = Server::open(":memory:").unwrap();
     let mut session = Session::new(server.connection().unwrap()).unwrap();
@@ -341,18 +401,15 @@ fn failures_inside_transactions_never_commit_partial_effects() {
     ok(&mut session, "CREATE TABLE p(id INT PRIMARY KEY)");
     ok(
         &mut session,
-        "CREATE TABLE c(id INT PRIMARY KEY, pid INT CONSTRAINT uq_c UNIQUE CONSTRAINT fk_c REFERENCES p(id) ON UPDATE SET NULL)",
+        "CREATE TABLE c(id INT PRIMARY KEY, pid INT CONSTRAINT fk_c REFERENCES p(id) ON DELETE CASCADE ON UPDATE SET NULL)",
     );
-    ok(
-        &mut session,
-        "CREATE TABLE g(id INT PRIMARY KEY, cpid INT CONSTRAINT fk_g REFERENCES c(pid) ON UPDATE CASCADE)",
-    );
-    ok(
-        &mut session,
-        "INSERT p VALUES (1); INSERT c VALUES (10, 1); INSERT g VALUES (100, 1)",
-    );
+    ok(&mut session, "INSERT p VALUES (1); INSERT c VALUES (10, 1)");
     ok(&mut session, "BEGIN TRANSACTION");
-    assert!(!run(&mut session, "UPDATE p SET id = 2"));
+    // MERGE with differing actions is unsupported once its keys changed.
+    assert!(!run(
+        &mut session,
+        "MERGE p USING (SELECT 1 AS id) s ON p.id = s.id WHEN MATCHED THEN DELETE;"
+    ));
     assert!(!run(&mut session, "SELECT 1"));
     // Like after a native constraint error, COMMIT ends the transaction
     // without its changes.
@@ -361,10 +418,6 @@ fn failures_inside_transactions_never_commit_partial_effects() {
     assert_eq!(
         ints(&session, "SELECT id, pid FROM c"),
         [[Some(10), Some(1)]]
-    );
-    assert_eq!(
-        ints(&session, "SELECT id, cpid FROM g"),
-        [[Some(100), Some(1)]]
     );
 
     // New key values must be the ones the UPDATE writes.

@@ -531,38 +531,58 @@ fn resolve_foreign(
 }
 
 /// SQL Server rejects a cascading foreign key that would let one delete or
-/// update reach a table along two paths, or reach its own table (1785).
+/// update reach a table along two paths, or reach a table already on its
+/// path (1785).
+///
+/// A walk starts with a DELETE or an UPDATE of any table. A deleted row's ON
+/// DELETE CASCADE deletes the referencing rows, so the walk continues with
+/// their table's ON DELETE actions. ON DELETE SET NULL or SET DEFAULT updates
+/// the referencing rows instead, so the walk continues with their table's ON
+/// UPDATE actions only. Every ON UPDATE action updates the referencing rows,
+/// whichever of their columns the next key covers. Each arrival counts,
+/// whether it deletes or updates.
 fn cascade_paths(
     existing: &[Constraint],
     new: &[(i32, i32, Referential, Referential)],
     added: (&str, &str),
 ) -> Result<()> {
-    for update in [false, true] {
-        let mut edges: Vec<(i32, i32)> = existing
-            .iter()
-            .filter(|c| c.kind == Type::Foreign && c.action(update) != Referential::NoAction)
-            .filter_map(|c| c.referenced.as_ref().map(|r| (r.id, c.table.id)))
-            .collect();
-        let before = edges.len();
-        for (parent, child, on_delete, on_update) in new {
-            let action = if update { on_update } else { on_delete };
-            if *action != Referential::NoAction {
-                edges.push((*parent, *child));
-            }
-        }
-        if edges.len() == before {
-            continue;
-        }
-        let nodes: HashSet<i32> = edges.iter().flat_map(|(a, b)| [*a, *b]).collect();
-        for start in &nodes {
+    if new.iter().all(|(_, _, delete, update)| {
+        *delete == Referential::NoAction && *update == Referential::NoAction
+    }) {
+        return Ok(());
+    }
+    // (referenced, referencing, ON DELETE, ON UPDATE)
+    let edges: Vec<(i32, i32, Referential, Referential)> = existing
+        .iter()
+        .filter(|c| c.kind == Type::Foreign)
+        .filter_map(|c| {
+            c.referenced
+                .as_ref()
+                .map(|r| (r.id, c.table.id, c.on_delete, c.on_update))
+        })
+        .chain(new.iter().copied())
+        .filter(|(_, _, delete, update)| {
+            *delete != Referential::NoAction || *update != Referential::NoAction
+        })
+        .collect();
+    let nodes: HashSet<i32> = edges.iter().flat_map(|(a, b, _, _)| [*a, *b]).collect();
+    for start in &nodes {
+        for deleting in [true, false] {
             // Count arrivals along every path; a cycle or a second arrival fails.
-            let mut stack = vec![(*start, vec![*start])];
+            let mut stack = vec![(*start, deleting, vec![*start])];
             let mut reached: HashMap<i32, usize> = HashMap::new();
-            while let Some((node, path)) = stack.pop() {
-                for (parent, child) in &edges {
+            while let Some((node, deleting, path)) = stack.pop() {
+                for (parent, child, on_delete, on_update) in &edges {
                     if parent != &node {
                         continue;
                     }
+                    let next = match (deleting, on_delete, on_update) {
+                        (true, Referential::NoAction, _) | (false, _, Referential::NoAction) => {
+                            continue;
+                        }
+                        (true, Referential::Cascade, _) => true,
+                        _ => false,
+                    };
                     if path.contains(child) {
                         return Err(cycles(added));
                     }
@@ -571,9 +591,9 @@ fn cascade_paths(
                     if *count > 1 {
                         return Err(cycles(added));
                     }
-                    let mut next = path.clone();
-                    next.push(*child);
-                    stack.push((*child, next));
+                    let mut onward = path.clone();
+                    onward.push(*child);
+                    stack.push((*child, next, onward));
                 }
             }
         }

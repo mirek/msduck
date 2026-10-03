@@ -217,6 +217,65 @@ export const groups = [
     ]
   },
   {
+    // ON DELETE SET NULL / SET DEFAULT update the referencing rows: the
+    // delete walk continues with their ON UPDATE actions only.
+    name: 'cascade paths',
+    steps: [
+      'CREATE TABLE parent(id int PRIMARY KEY)',
+      'CREATE TABLE middle(id int PRIMARY KEY, parent_id int)',
+      'CREATE TABLE child(id int PRIMARY KEY, middle_id int)',
+      'CREATE TABLE leaf(id int PRIMARY KEY, child_id int, parent_id int)',
+      'ALTER TABLE middle ADD CONSTRAINT fk_mp FOREIGN KEY (parent_id) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE',
+      'ALTER TABLE leaf ADD CONSTRAINT fk_lp FOREIGN KEY (parent_id) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE',
+      'ALTER TABLE leaf ADD CONSTRAINT fk_lc FOREIGN KEY (child_id) REFERENCES child(id) ON UPDATE NO ACTION ON DELETE CASCADE',
+      'ALTER TABLE child ADD CONSTRAINT fk_cm FOREIGN KEY (middle_id) REFERENCES middle(id) ON UPDATE CASCADE ON DELETE SET NULL',
+      'INSERT parent VALUES (1),(2); INSERT middle VALUES (1,1); INSERT child VALUES (1,1); INSERT leaf VALUES (1,1,2),(2,1,1)',
+      'DELETE parent WHERE id = 1',
+      'SELECT * FROM middle; SELECT * FROM child; SELECT * FROM leaf ORDER BY id',
+      'UPDATE parent SET id = 20 WHERE id = 2; SELECT * FROM leaf',
+      'CREATE TABLE p(id int PRIMARY KEY)',
+      'CREATE TABLE c(id int, x int CONSTRAINT fx REFERENCES p(id) ON DELETE SET NULL, y int CONSTRAINT fy REFERENCES p(id) ON DELETE SET NULL)',
+      'CREATE TABLE c2(id int, x int CONSTRAINT fx2 REFERENCES p(id) ON DELETE SET NULL, y int CONSTRAINT fy2 REFERENCES p(id) ON DELETE SET DEFAULT)',
+      'CREATE TABLE c3(id int, x int CONSTRAINT fx3 REFERENCES p(id) ON DELETE SET NULL, y int CONSTRAINT fy3 REFERENCES p(id) ON DELETE NO ACTION ON UPDATE CASCADE)',
+      'CREATE TABLE cc(id int PRIMARY KEY, pid int CONSTRAINT fcc REFERENCES p(id) ON DELETE CASCADE)',
+      'CREATE TABLE d(id int, cid int CONSTRAINT fdc REFERENCES cc(id) ON DELETE SET NULL, pid int CONSTRAINT fdp REFERENCES p(id) ON DELETE SET NULL)',
+      'CREATE TABLE d2(id int, cid int CONSTRAINT fdc2 REFERENCES cc(id) ON DELETE SET NULL, pid int CONSTRAINT fdp2 REFERENCES p(id) ON DELETE CASCADE)',
+      'CREATE TABLE d3(id int, cid int CONSTRAINT fdc3 REFERENCES cc(id) ON DELETE CASCADE, pid int CONSTRAINT fdp3 REFERENCES p(id) ON DELETE SET NULL)',
+      'CREATE TABLE sn(id int PRIMARY KEY, pid int CONSTRAINT uq_sn UNIQUE CONSTRAINT fsn REFERENCES p(id) ON DELETE SET NULL)',
+      'CREATE TABLE e(id int, sid int CONSTRAINT fes REFERENCES sn(id) ON DELETE CASCADE, pid int CONSTRAINT fep REFERENCES p(id) ON DELETE CASCADE)',
+      'CREATE TABLE g(id int PRIMARY KEY, spid int CONSTRAINT fgs REFERENCES sn(pid) ON UPDATE CASCADE)',
+      'CREATE TABLE gd(id int PRIMARY KEY, spid int DEFAULT 2 CONSTRAINT fgds REFERENCES sn(pid) ON UPDATE SET DEFAULT)',
+      'CREATE TABLE g2(id int PRIMARY KEY, spid int CONSTRAINT fg2s REFERENCES sn(pid) ON UPDATE CASCADE, pid int CONSTRAINT fg2p REFERENCES p(id) ON DELETE CASCADE)',
+      'CREATE TABLE g3(id int PRIMARY KEY, spid int CONSTRAINT fg3s REFERENCES sn(pid) ON DELETE CASCADE, pid int CONSTRAINT fg3p REFERENCES p(id) ON DELETE CASCADE)',
+      'CREATE TABLE g4(id int PRIMARY KEY, spid int CONSTRAINT fg4s REFERENCES sn(pid) ON UPDATE CASCADE, pid int CONSTRAINT fg4p REFERENCES p(id) ON UPDATE CASCADE)',
+      'INSERT p VALUES (1),(2); INSERT sn VALUES (10,1),(20,2); INSERT e VALUES (1,10,2); INSERT g VALUES (100,1),(200,2); INSERT gd VALUES (100,1),(200,2)',
+      'DELETE p WHERE id = 1',
+      'SELECT * FROM sn ORDER BY id; SELECT * FROM e; SELECT * FROM g ORDER BY id; SELECT * FROM gd ORDER BY id',
+      'CREATE TABLE u(id int PRIMARY KEY); CREATE TABLE uc(id int PRIMARY KEY, uid int CONSTRAINT uq_uc UNIQUE CONSTRAINT fuc REFERENCES u(id) ON UPDATE SET NULL)',
+      'CREATE TABLE ug(id int PRIMARY KEY, cuid int CONSTRAINT fugc REFERENCES uc(uid) ON UPDATE CASCADE, uid int CONSTRAINT fugu REFERENCES u(id) ON UPDATE CASCADE)',
+      'CREATE TABLE ud(id int, cid int CONSTRAINT fudc REFERENCES uc(id) ON UPDATE CASCADE, uid int CONSTRAINT fudu REFERENCES u(id) ON UPDATE CASCADE)',
+      'CREATE TABLE ug2(id int PRIMARY KEY, cuid int CONSTRAINT fug2c REFERENCES uc(uid) ON UPDATE CASCADE)',
+      'INSERT u VALUES (1),(2); INSERT uc VALUES (10,1),(20,2); INSERT ug2 VALUES (100,1),(200,2)',
+      'UPDATE u SET id = id + 5 WHERE id = 1',
+      'SELECT * FROM uc ORDER BY id; SELECT * FROM ug2 ORDER BY id',
+      'CREATE TABLE ka(id int PRIMARY KEY, kb_id int); CREATE TABLE kb(id int PRIMARY KEY, ka_id int CONSTRAINT fkb REFERENCES ka(id) ON DELETE CASCADE)',
+      'ALTER TABLE ka ADD CONSTRAINT fka FOREIGN KEY (kb_id) REFERENCES kb(id) ON DELETE SET NULL',
+      'CREATE TABLE self(id int PRIMARY KEY, parent int CONSTRAINT fself REFERENCES self(id) ON DELETE SET NULL)',
+      'CREATE TABLE x(id int PRIMARY KEY, y_id int); CREATE TABLE y(id int PRIMARY KEY, x_id int CONSTRAINT fyx REFERENCES x(id) ON DELETE SET NULL)',
+      'ALTER TABLE x ADD CONSTRAINT fxy FOREIGN KEY (y_id) REFERENCES y(id) ON DELETE SET NULL',
+      'INSERT x VALUES (1,NULL); INSERT y VALUES (1,1); UPDATE x SET y_id = 1; DELETE x; SELECT * FROM y',
+      'SELECT name FROM sys.foreign_keys ORDER BY name'
+    ]
+  },
+  {
+    name: 'cascade paths in one batch',
+    steps: [
+      'CREATE TABLE parent(id int PRIMARY KEY); CREATE TABLE middle(id int PRIMARY KEY, parent_id int); CREATE TABLE child(id int PRIMARY KEY, middle_id int); CREATE TABLE leaf(id int PRIMARY KEY, child_id int, parent_id int); ALTER TABLE middle ADD CONSTRAINT fk_mp FOREIGN KEY (parent_id) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE; ALTER TABLE leaf ADD CONSTRAINT fk_lp FOREIGN KEY (parent_id) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE; ALTER TABLE leaf ADD CONSTRAINT fk_lc FOREIGN KEY (child_id) REFERENCES child(id) ON UPDATE NO ACTION ON DELETE CASCADE; ALTER TABLE child ADD CONSTRAINT fk_cm FOREIGN KEY (middle_id) REFERENCES middle(id) ON UPDATE CASCADE ON DELETE SET NULL',
+      'INSERT parent VALUES (1),(2); INSERT middle VALUES (1,1); INSERT child VALUES (1,1); INSERT leaf VALUES (1,1,2),(2,1,1); DELETE parent WHERE id = 1; SELECT * FROM child; SELECT * FROM leaf ORDER BY id',
+      'SELECT name, delete_referential_action_desc, update_referential_action_desc FROM sys.foreign_keys ORDER BY name'
+    ]
+  },
+  {
     name: 'transactions',
     steps: [
       'CREATE TABLE p(id int PRIMARY KEY); INSERT p VALUES (1)',

@@ -94,13 +94,6 @@ impl Constraint {
     pub fn enabled(&self) -> bool {
         !self.disabled
     }
-    pub fn action(&self, update: bool) -> Referential {
-        if update {
-            self.on_update
-        } else {
-            self.on_delete
-        }
-    }
     pub fn self_referencing(&self) -> bool {
         self.referenced
             .as_ref()

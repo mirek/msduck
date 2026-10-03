@@ -1080,6 +1080,69 @@ fn mapped_pairs(constraint: &Constraint, mapping: &Mapping) -> Vec<(String, (Str
         .collect()
 }
 
+/// Before a SET NULL or SET DEFAULT action resets `values` (lower-cased
+/// column → native expression) in the rows of `child` matching
+/// `condition`, record the old and new values of every key that foreign keys
+/// with ON UPDATE actions reference, so those actions can follow the reset
+/// keys, as an ON UPDATE CASCADE copies NULL or the default.
+fn map_reset(
+    session: &Session,
+    run: &mut Run<'_>,
+    child: &Table,
+    values: &HashMap<String, String>,
+    condition: &str,
+) -> Result<()> {
+    let mut columns: Vec<String> = Vec::new();
+    for constraint in run.constraints {
+        if constraint.kind == Type::Foreign
+            && constraint.enabled()
+            && constraint.on_update != Referential::NoAction
+            && constraint.referenced.as_ref().map(|r| r.id) == Some(child.id)
+        {
+            for column in &constraint.referenced_columns {
+                if !columns.iter().any(|c| c.eq_ignore_ascii_case(column)) {
+                    columns.push(column.clone());
+                }
+            }
+        }
+    }
+    if !columns
+        .iter()
+        .any(|c| values.contains_key(&c.to_lowercase()))
+    {
+        return Ok(());
+    }
+    let mut projection = Vec::new();
+    let mut pairs = HashMap::new();
+    for (index, column) in columns.iter().enumerate() {
+        let old = format!("{}.{}", child.sql(), quote(column));
+        // The CASE keeps the column's type for a NULL.
+        let new = match values.get(&column.to_lowercase()) {
+            Some(value) => format!("CASE WHEN true THEN {value} ELSE {old} END"),
+            None => old.clone(),
+        };
+        projection.push(format!("{old} AS o{index}, {new} AS n{index}"));
+        pairs.insert(
+            column.to_lowercase(),
+            (format!("o{index}"), format!("n{index}")),
+        );
+    }
+    let name = run.scratch.create(
+        session,
+        &format!(
+            "SELECT {} FROM {} WHERE {condition}",
+            projection.join(", "),
+            child.sql()
+        ),
+    )?;
+    run.mappings.push(Mapping {
+        table: child.id,
+        relation: format!("temp.main.{}", quote(&name)),
+        columns: pairs,
+    });
+    Ok(())
+}
+
 /// Referential actions, breadth first from the tables the statement wrote.
 fn actions(
     session: &mut Session,
@@ -1154,6 +1217,31 @@ fn actions(
                     .collect::<Vec<_>>()
                     .join(", ");
                 run.snapshot_keys(session, &child, true)?;
+                if action != Referential::Cascade {
+                    let nulled: HashMap<String, String> = pairs
+                        .iter()
+                        .map(|(column, _)| {
+                            let value = match action {
+                                Referential::SetDefault => defaults
+                                    .get(&column.to_lowercase())
+                                    .cloned()
+                                    .unwrap_or_else(|| "NULL".into()),
+                                _ => "NULL".into(),
+                            };
+                            (column.to_lowercase(), value)
+                        })
+                        .collect();
+                    map_reset(
+                        session,
+                        run,
+                        &child,
+                        &nulled,
+                        &format!(
+                            "EXISTS (SELECT 1 FROM {} m WHERE {matched} AND ({changed}))",
+                            mapping.relation
+                        ),
+                    )?;
+                }
                 session.db.execute_batch(&format!(
                     "UPDATE {} SET {assignments} FROM {} m WHERE {matched} AND ({changed})",
                     child.sql(),
@@ -1202,17 +1290,26 @@ fn actions(
                 }
                 Referential::SetNull | Referential::SetDefault => {
                     let defaults = catalog::native_defaults(&session.db, &child)?;
-                    session.db.execute_batch(&format!(
-                        "UPDATE {} SET {} WHERE {condition}",
-                        child.sql(),
-                        set_list(constraint, |c| if action == Referential::SetDefault {
+                    let value = |c: &str| {
+                        if action == Referential::SetDefault {
                             defaults
                                 .get(&c.to_lowercase())
                                 .cloned()
                                 .unwrap_or_else(|| "NULL".into())
                         } else {
                             "NULL".into()
-                        })
+                        }
+                    };
+                    let nulled: HashMap<String, String> = constraint
+                        .columns
+                        .iter()
+                        .map(|c| (c.to_lowercase(), value(c)))
+                        .collect();
+                    map_reset(session, run, &child, &nulled, &condition)?;
+                    session.db.execute_batch(&format!(
+                        "UPDATE {} SET {} WHERE {condition}",
+                        child.sql(),
+                        set_list(constraint, value)
                     ))?;
                     run.acted.insert(constraint.id);
                     run.action_tables.insert(child.id);

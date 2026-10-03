@@ -1,6 +1,6 @@
 {
- "image": "mcr.microsoft.com/mssql/server:2022-latest",
- "version": "16.0.4236.2",
+ "image": "mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a",
+ "version": "17.0.4065.4",
  "groups": [
   {
    "name": "alter lifecycle",
@@ -1323,7 +1323,7 @@
         "number": 2627,
         "state": 1,
         "class": 14,
-        "message": "Violation of PRIMARY KEY constraint 'PK__k__2792E7E8DF9F3E08'. Cannot insert duplicate key in object 'dbo.k'. The duplicate key value is (1, 1)."
+        "message": "Violation of PRIMARY KEY constraint 'PK__k__2792E7E8A5EA992D'. Cannot insert duplicate key in object 'dbo.k'. The duplicate key value is (1, 1)."
        }
       ],
       "info": [
@@ -2743,6 +2743,714 @@
        [
         [
          1
+        ]
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "cascade paths",
+   "steps": [
+    {
+     "sql": "CREATE TABLE parent(id int PRIMARY KEY)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE middle(id int PRIMARY KEY, parent_id int)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE child(id int PRIMARY KEY, middle_id int)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE leaf(id int PRIMARY KEY, child_id int, parent_id int)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE middle ADD CONSTRAINT fk_mp FOREIGN KEY (parent_id) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE leaf ADD CONSTRAINT fk_lp FOREIGN KEY (parent_id) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE leaf ADD CONSTRAINT fk_lc FOREIGN KEY (child_id) REFERENCES child(id) ON UPDATE NO ACTION ON DELETE CASCADE",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE child ADD CONSTRAINT fk_cm FOREIGN KEY (middle_id) REFERENCES middle(id) ON UPDATE CASCADE ON DELETE SET NULL",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT parent VALUES (1),(2); INSERT middle VALUES (1,1); INSERT child VALUES (1,1); INSERT leaf VALUES (1,1,2),(2,1,1)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DELETE parent WHERE id = 1",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM middle; SELECT * FROM child; SELECT * FROM leaf ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [],
+       [
+        [
+         1,
+         null
+        ]
+       ],
+       [
+        [
+         1,
+         1,
+         2
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "UPDATE parent SET id = 20 WHERE id = 2; SELECT * FROM leaf",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1,
+         1,
+         20
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE p(id int PRIMARY KEY)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c(id int, x int CONSTRAINT fx REFERENCES p(id) ON DELETE SET NULL, y int CONSTRAINT fy REFERENCES p(id) ON DELETE SET NULL)",
+     "result": {
+      "errors": [
+       {
+        "number": 1785,
+        "state": 0,
+        "class": 16,
+        "message": "Introducing FOREIGN KEY constraint 'fy' on table 'c' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c2(id int, x int CONSTRAINT fx2 REFERENCES p(id) ON DELETE SET NULL, y int CONSTRAINT fy2 REFERENCES p(id) ON DELETE SET DEFAULT)",
+     "result": {
+      "errors": [
+       {
+        "number": 1785,
+        "state": 0,
+        "class": 16,
+        "message": "Introducing FOREIGN KEY constraint 'fy2' on table 'c2' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE c3(id int, x int CONSTRAINT fx3 REFERENCES p(id) ON DELETE SET NULL, y int CONSTRAINT fy3 REFERENCES p(id) ON DELETE NO ACTION ON UPDATE CASCADE)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE cc(id int PRIMARY KEY, pid int CONSTRAINT fcc REFERENCES p(id) ON DELETE CASCADE)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE d(id int, cid int CONSTRAINT fdc REFERENCES cc(id) ON DELETE SET NULL, pid int CONSTRAINT fdp REFERENCES p(id) ON DELETE SET NULL)",
+     "result": {
+      "errors": [
+       {
+        "number": 1785,
+        "state": 0,
+        "class": 16,
+        "message": "Introducing FOREIGN KEY constraint 'fdp' on table 'd' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE d2(id int, cid int CONSTRAINT fdc2 REFERENCES cc(id) ON DELETE SET NULL, pid int CONSTRAINT fdp2 REFERENCES p(id) ON DELETE CASCADE)",
+     "result": {
+      "errors": [
+       {
+        "number": 1785,
+        "state": 0,
+        "class": 16,
+        "message": "Introducing FOREIGN KEY constraint 'fdp2' on table 'd2' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE d3(id int, cid int CONSTRAINT fdc3 REFERENCES cc(id) ON DELETE CASCADE, pid int CONSTRAINT fdp3 REFERENCES p(id) ON DELETE SET NULL)",
+     "result": {
+      "errors": [
+       {
+        "number": 1785,
+        "state": 0,
+        "class": 16,
+        "message": "Introducing FOREIGN KEY constraint 'fdp3' on table 'd3' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE sn(id int PRIMARY KEY, pid int CONSTRAINT uq_sn UNIQUE CONSTRAINT fsn REFERENCES p(id) ON DELETE SET NULL)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE e(id int, sid int CONSTRAINT fes REFERENCES sn(id) ON DELETE CASCADE, pid int CONSTRAINT fep REFERENCES p(id) ON DELETE CASCADE)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE g(id int PRIMARY KEY, spid int CONSTRAINT fgs REFERENCES sn(pid) ON UPDATE CASCADE)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE gd(id int PRIMARY KEY, spid int DEFAULT 2 CONSTRAINT fgds REFERENCES sn(pid) ON UPDATE SET DEFAULT)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE g2(id int PRIMARY KEY, spid int CONSTRAINT fg2s REFERENCES sn(pid) ON UPDATE CASCADE, pid int CONSTRAINT fg2p REFERENCES p(id) ON DELETE CASCADE)",
+     "result": {
+      "errors": [
+       {
+        "number": 1785,
+        "state": 0,
+        "class": 16,
+        "message": "Introducing FOREIGN KEY constraint 'fg2p' on table 'g2' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE g3(id int PRIMARY KEY, spid int CONSTRAINT fg3s REFERENCES sn(pid) ON DELETE CASCADE, pid int CONSTRAINT fg3p REFERENCES p(id) ON DELETE CASCADE)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE g4(id int PRIMARY KEY, spid int CONSTRAINT fg4s REFERENCES sn(pid) ON UPDATE CASCADE, pid int CONSTRAINT fg4p REFERENCES p(id) ON UPDATE CASCADE)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT p VALUES (1),(2); INSERT sn VALUES (10,1),(20,2); INSERT e VALUES (1,10,2); INSERT g VALUES (100,1),(200,2); INSERT gd VALUES (100,1),(200,2)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "DELETE p WHERE id = 1",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM sn ORDER BY id; SELECT * FROM e; SELECT * FROM g ORDER BY id; SELECT * FROM gd ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         10,
+         null
+        ],
+        [
+         20,
+         2
+        ]
+       ],
+       [
+        [
+         1,
+         10,
+         2
+        ]
+       ],
+       [
+        [
+         100,
+         null
+        ],
+        [
+         200,
+         2
+        ]
+       ],
+       [
+        [
+         100,
+         2
+        ],
+        [
+         200,
+         2
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE u(id int PRIMARY KEY); CREATE TABLE uc(id int PRIMARY KEY, uid int CONSTRAINT uq_uc UNIQUE CONSTRAINT fuc REFERENCES u(id) ON UPDATE SET NULL)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE ug(id int PRIMARY KEY, cuid int CONSTRAINT fugc REFERENCES uc(uid) ON UPDATE CASCADE, uid int CONSTRAINT fugu REFERENCES u(id) ON UPDATE CASCADE)",
+     "result": {
+      "errors": [
+       {
+        "number": 1785,
+        "state": 0,
+        "class": 16,
+        "message": "Introducing FOREIGN KEY constraint 'fugu' on table 'ug' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE ud(id int, cid int CONSTRAINT fudc REFERENCES uc(id) ON UPDATE CASCADE, uid int CONSTRAINT fudu REFERENCES u(id) ON UPDATE CASCADE)",
+     "result": {
+      "errors": [
+       {
+        "number": 1785,
+        "state": 0,
+        "class": 16,
+        "message": "Introducing FOREIGN KEY constraint 'fudu' on table 'ud' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE ug2(id int PRIMARY KEY, cuid int CONSTRAINT fug2c REFERENCES uc(uid) ON UPDATE CASCADE)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT u VALUES (1),(2); INSERT uc VALUES (10,1),(20,2); INSERT ug2 VALUES (100,1),(200,2)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "UPDATE u SET id = id + 5 WHERE id = 1",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "SELECT * FROM uc ORDER BY id; SELECT * FROM ug2 ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         10,
+         null
+        ],
+        [
+         20,
+         2
+        ]
+       ],
+       [
+        [
+         100,
+         null
+        ],
+        [
+         200,
+         2
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "CREATE TABLE ka(id int PRIMARY KEY, kb_id int); CREATE TABLE kb(id int PRIMARY KEY, ka_id int CONSTRAINT fkb REFERENCES ka(id) ON DELETE CASCADE)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE ka ADD CONSTRAINT fka FOREIGN KEY (kb_id) REFERENCES kb(id) ON DELETE SET NULL",
+     "result": {
+      "errors": [
+       {
+        "number": 1785,
+        "state": 0,
+        "class": 16,
+        "message": "Introducing FOREIGN KEY constraint 'fka' on table 'ka' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE self(id int PRIMARY KEY, parent int CONSTRAINT fself REFERENCES self(id) ON DELETE SET NULL)",
+     "result": {
+      "errors": [
+       {
+        "number": 1785,
+        "state": 0,
+        "class": 16,
+        "message": "Introducing FOREIGN KEY constraint 'fself' on table 'self' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints."
+       },
+       {
+        "number": 1750,
+        "state": 1,
+        "class": 16,
+        "message": "Could not create constraint or index. See previous errors."
+       }
+      ],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "CREATE TABLE x(id int PRIMARY KEY, y_id int); CREATE TABLE y(id int PRIMARY KEY, x_id int CONSTRAINT fyx REFERENCES x(id) ON DELETE SET NULL)",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "ALTER TABLE x ADD CONSTRAINT fxy FOREIGN KEY (y_id) REFERENCES y(id) ON DELETE SET NULL",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT x VALUES (1,NULL); INSERT y VALUES (1,1); UPDATE x SET y_id = 1; DELETE x; SELECT * FROM y",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1,
+         null
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "SELECT name FROM sys.foreign_keys ORDER BY name",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         "fcc"
+        ],
+        [
+         "fep"
+        ],
+        [
+         "fes"
+        ],
+        [
+         "fg3p"
+        ],
+        [
+         "fg3s"
+        ],
+        [
+         "fg4p"
+        ],
+        [
+         "fg4s"
+        ],
+        [
+         "fgds"
+        ],
+        [
+         "fgs"
+        ],
+        [
+         "fk_cm"
+        ],
+        [
+         "fk_lc"
+        ],
+        [
+         "fk_lp"
+        ],
+        [
+         "fk_mp"
+        ],
+        [
+         "fkb"
+        ],
+        [
+         "fsn"
+        ],
+        [
+         "fuc"
+        ],
+        [
+         "fug2c"
+        ],
+        [
+         "fx3"
+        ],
+        [
+         "fxy"
+        ],
+        [
+         "fy3"
+        ],
+        [
+         "fyx"
+        ]
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "name": "cascade paths in one batch",
+   "steps": [
+    {
+     "sql": "CREATE TABLE parent(id int PRIMARY KEY); CREATE TABLE middle(id int PRIMARY KEY, parent_id int); CREATE TABLE child(id int PRIMARY KEY, middle_id int); CREATE TABLE leaf(id int PRIMARY KEY, child_id int, parent_id int); ALTER TABLE middle ADD CONSTRAINT fk_mp FOREIGN KEY (parent_id) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE; ALTER TABLE leaf ADD CONSTRAINT fk_lp FOREIGN KEY (parent_id) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE; ALTER TABLE leaf ADD CONSTRAINT fk_lc FOREIGN KEY (child_id) REFERENCES child(id) ON UPDATE NO ACTION ON DELETE CASCADE; ALTER TABLE child ADD CONSTRAINT fk_cm FOREIGN KEY (middle_id) REFERENCES middle(id) ON UPDATE CASCADE ON DELETE SET NULL",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": []
+     }
+    },
+    {
+     "sql": "INSERT parent VALUES (1),(2); INSERT middle VALUES (1,1); INSERT child VALUES (1,1); INSERT leaf VALUES (1,1,2),(2,1,1); DELETE parent WHERE id = 1; SELECT * FROM child; SELECT * FROM leaf ORDER BY id",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         1,
+         null
+        ]
+       ],
+       [
+        [
+         1,
+         1,
+         2
+        ]
+       ]
+      ]
+     }
+    },
+    {
+     "sql": "SELECT name, delete_referential_action_desc, update_referential_action_desc FROM sys.foreign_keys ORDER BY name",
+     "result": {
+      "errors": [],
+      "info": [],
+      "sets": [
+       [
+        [
+         "fk_cm",
+         "SET_NULL",
+         "CASCADE"
+        ],
+        [
+         "fk_lc",
+         "CASCADE",
+         "NO_ACTION"
+        ],
+        [
+         "fk_lp",
+         "CASCADE",
+         "CASCADE"
+        ],
+        [
+         "fk_mp",
+         "CASCADE",
+         "CASCADE"
         ]
        ]
       ]
