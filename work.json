@@ -2955,7 +2955,7 @@
     {
       "id": "prepared-capture-helper-v1",
       "title": "Add a shared prepared-statement capture helper and verify affected fixtures",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner goal of 2026-09-26: continue development with parallel agents and shared coordination. First-party evidence: owner-run worker finding in PR #308 and inspection of merged fixtures; no external submission is input.",
       "scope": [
         "scripts/lib/reference.mjs",
@@ -10124,6 +10124,29 @@
       ],
       "issue": 843,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkTp5"
+    },
+    {
+      "id": "prepared-capture-helper-recovery-v1",
+      "title": "Recover bounded prepared capture helper and protect retained reference outputs",
+      "state": "ready",
+      "authorization": "Owner continuing SQL Server compatibility goal and standing unresponsive-worker takeover authorization. Old309 claim a33ac306b84dfd602c5d10a3aa54ea5f65121b62 remains permanent. PR312 owner8561/same repository frozen b2bfc5511af995d119d3a995144e2a03cbaece5a last updated2026-09-27; no attached local worktree or attributable local/Linux capture job found2026-10-03, active Claude cwd mirek/vigil; recovery contact5966332325. Preserve checkpoint/receipts; revoke old309 before fresh acquisition. Verified Codex finding4115900930 requires output alias guard callers; no external content.",
+      "scope": [
+        "scripts/lib/reference.mjs",
+        "scripts/capture-hashbytes-checksum.mjs",
+        "scripts/capture-charindex-patindex.mjs",
+        "tests/reference-prepared.test.mjs",
+        "package.json",
+        "docs/reference-captures.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Preserve all309 obligations: shared bounded sp_prepare/sp_execute/sp_unprepare observer using prepared/error events, phase-specific diagnostics and failing/successful/failing execution reuse, row/message bounds and deterministic fake-connection regressions wired into npm test. Reconcile preserved owner checkpoint with current merged helper APIs without reverting newer work; original SQL/parameter input and fixture schemas stay unchanged.",
+        "Fix verified unresolved output alias finding: both capture callers must refuse retained fixture, symlink, hardlink and parent-directory aliases before containers; never overwrite retained fixtures or existing outputs. Meaningful caller-level CLI tests must prove refusal happens before Docker and preserves bytes. Preserve errors, diagnostics, metadata, DONE and original source identities, including truncated/error handling; no passing comparison created by overwriting evidence.",
+        "Run both unchanged HASHBYTES and CHARINDEX/PATINDEX full check modes against retained fixtures with bounded isolated owner-labelled SQL containers, retain raw captures/hashes and independently inspect differences. No fixture edits; report genuine differences and isolate follow-up work. Document capture conventions, unique statements for plan-dependent sequences, lifecycle ownership/resources and explicit limitations.",
+        "Fresh own claim in completed existing root worktree, no new agents/worktrees/native caches. Old branch/receipt retained, old worker verifies and stops on revocation; stop only provably attributable jobs if found. Shared Linux builder remains held by838 then840; private JS/reference proofs use existing compatible dependencies. Meaningful focused checks and exact-head npm test, required CI and independent/Codex review or authorized unavailable fallback; claiming worker owns merge and registry/project completion. No Rust/engine.rs edits."
+      ],
+      "issue": 845,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkWsX"
     }
   ]
 }
