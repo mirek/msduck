@@ -69,6 +69,7 @@ pub enum Error {
     UnknownConversion,
     UnknownComparison,
     UnknownEncoding,
+    UnknownDiagnosticContext,
     InvalidDeclaration,
     InvalidPayload,
 }
@@ -90,11 +91,27 @@ fn sql(number: i32, state: u8, message: String) -> Error {
     Error::Sql(SqlError::new(number, state, message))
 }
 
+/// Statement context is supplied by the binder, never inferred from arguments.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DiagnosticContext {
+    SelectColumn(std::num::NonZeroUsize),
+}
+
 pub fn plan(
     function: Function,
     arguments: &[Argument],
     default_collation: &str,
     catalog: &[Collation],
+) -> Result<Plan, Error> {
+    plan_with_context(function, arguments, default_collation, catalog, None)
+}
+
+pub fn plan_with_context(
+    function: Function,
+    arguments: &[Argument],
+    default_collation: &str,
+    catalog: &[Collation],
+    context: Option<DiagnosticContext>,
 ) -> Result<Plan, Error> {
     let count = arguments.len();
     if function == Function::ConcatWs && !(3..=254).contains(&count) {
@@ -203,11 +220,14 @@ pub fn plan(
     let label = combined.unwrap_or_else(|| Label::CoercibleDefault(default_collation.into()));
     if let Label::NoCollation { left, right } = &label {
         if function == Function::ConcatWs {
+            let Some(DiagnosticContext::SelectColumn(column)) = context else {
+                return Err(Error::UnknownDiagnosticContext);
+            };
             return Err(sql(
                 451,
                 1,
                 format!(
-                    "Cannot resolve collation conflict between \"{right}\" and \"{left}\" in concat_ws operator occurring in SELECT statement column 1."
+                    "Cannot resolve collation conflict between \"{right}\" and \"{left}\" in concat_ws operator occurring in SELECT statement column {column}."
                 ),
             ));
         }

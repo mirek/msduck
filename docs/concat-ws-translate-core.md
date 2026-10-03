@@ -24,7 +24,10 @@ state, severity and text; root adapters still own source locations, wire order
 and statement/transaction effects.
 
 Collation labels combine through existing core rules. Unknown, absent or duplicate
-catalog entries are barriers. Comparison weights are an explicit matcher input
+catalog entries are barriers. An implicit CONCAT_WS collation conflict also needs
+an explicit SELECT projection position to render diagnostic451; absent statement
+context returns `UnknownDiagnosticContext`, rather than inventing column1.
+The position is nonzero and passed through `plan_with_context`. Comparison weights are an explicit matcher input
 and may return unknown. The tests provide only comparisons established for the
 captured cases; they do not claim to implement all linguistic weights. Numeric,
 legacy temporal and GUID formatting remains in separate caller conversion code;
@@ -33,10 +36,11 @@ and ANSI UTF-8 evaluation do not acquire invented behavior. Character payloads
 must respect their declared widths and fixed-width padding. Core CP1252 encoding
 validates ANSI payloads; Unicode payloads retain isolated surrogate units.
 
-Ten private Rust tests currently pass using cached, compiler-compatible Linux
+Twelve private Rust tests currently pass using cached, compiler-compatible Linux
 dependencies and isolated temporary binaries. They cover21 ordinary character
 cases across all four captures (84 comparisons), another26 declaration and
-collation cases (104 comparisons), prepared CONCAT_WS rebindings and32 prepared
+collation cases (104 comparisons), another10 supplementary/UTF-8/mismatch cases
+(40 comparisons), prepared CONCAT_WS rebindings and32 prepared
 TRANSLATE executions, the254-argument CONCAT_WS boundary, isolated surrogate
 fidelity, captured bounded truncation/MAX behavior and ten compile diagnostic
 cases in every capture. The new declaration cases retain typed NULL widths,
@@ -49,7 +53,10 @@ fixture unchanged and checks those exact units rather than replacing them.
 MAX DATALENGTH expectations retain the captured BIGINT string representation.
 Independent review found that converted numeric payloads could escape width and
 ANSI encoding validation; the new regression fails on the original checkpoint
-and passes after every supplied payload receives those checks.
+and passes after every supplied payload receives those checks. A second review
+found the implicit-collation diagnostic assumed SELECT column1 without context;
+the regression rejects a mutation restoring that default. Context positions2/17
+are rendering tests, not additional SQL Server reference captures.
 
 This is unfinished work. Remaining applicable fixture cases, byte-domain edge
 checks, independent review, full exact-head gates and CI must be completed before

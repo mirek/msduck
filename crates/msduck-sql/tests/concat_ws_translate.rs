@@ -510,7 +510,18 @@ fn compile_diagnostics_retain_all_captured_identity_fields() {
         };
         arguments[1].collation = Some(label("Latin1_General_100_BIN2"));
         arguments[2].collation = Some(label("Latin1_General_100_CS_AS"));
-        cases.push((name, rules::plan(function, &arguments, DEFAULT, &catalog())));
+        cases.push((
+            name,
+            rules::plan_with_context(
+                function,
+                &arguments,
+                DEFAULT,
+                &catalog(),
+                Some(rules::DiagnosticContext::SelectColumn(
+                    std::num::NonZeroUsize::new(1).unwrap(),
+                )),
+            ),
+        ));
     }
     for (name, result) in cases {
         let Err(Error::Sql(actual)) = result else {
@@ -924,4 +935,200 @@ fn largest_valid_concat_arity_matches_captured_empty_separator_width() {
             );
         }
     }
+}
+
+#[test]
+fn implicit_collation_diagnostics_require_explicit_statement_context() {
+    let mut arguments = vec![arg(Family::Varchar, Length::Bounded(1)); 3];
+    arguments[1].collation = Some(Label::Implicit("Latin1_General_100_BIN2".into()));
+    arguments[2].collation = Some(Label::Implicit("Latin1_General_100_CS_AS".into()));
+    assert_eq!(
+        rules::plan(Function::ConcatWs, &arguments, DEFAULT, &catalog()),
+        Err(Error::UnknownDiagnosticContext)
+    );
+    // Context rendering is deterministic. SQL Server evidence for column 1 is
+    // checked in the full captured-diagnostic test; these positions additionally
+    // verify that the caller's explicit position survives without defaulting.
+    for column in [1, 2, 17] {
+        let result = rules::plan_with_context(
+            Function::ConcatWs,
+            &arguments,
+            DEFAULT,
+            &catalog(),
+            Some(rules::DiagnosticContext::SelectColumn(
+                std::num::NonZeroUsize::new(column).unwrap(),
+            )),
+        );
+        let Err(Error::Sql(error)) = result else {
+            panic!("missing contextual error")
+        };
+        assert_eq!(error.number, 451);
+        assert_eq!(error.state, 1);
+        assert_eq!(error.severity, 16);
+        assert_eq!(
+            error.message,
+            format!(
+                "Cannot resolve collation conflict between \"Latin1_General_100_CS_AS\" and \"Latin1_General_100_BIN2\" in concat_ws operator occurring in SELECT statement column {column}."
+            )
+        );
+    }
+    assert!(std::num::NonZeroUsize::new(0).is_none());
+}
+
+#[test]
+fn translate_supplementary_utf8_and_mismatch_cases_retain_captured_contracts() {
+    let cases = [
+        (
+            "tr length mismatch longer",
+            false,
+            false,
+            ["abc", "ab", "x"],
+        ),
+        (
+            "tr length mismatch shorter",
+            false,
+            false,
+            ["abc", "a", "xy"],
+        ),
+        (
+            "tr trailing space mismatch",
+            false,
+            false,
+            ["a b", "a ", "x"],
+        ),
+        (
+            "tr supplementary default collation",
+            true,
+            false,
+            ["a😀b", "😀", "xy"],
+        ),
+        (
+            "tr supplementary default collation mismatch",
+            true,
+            false,
+            ["a😀b", "😀", "x"],
+        ),
+        (
+            "tr supplementary sc collation",
+            true,
+            true,
+            ["a😀b", "😀", "x"],
+        ),
+        (
+            "tr supplementary sc collation pair",
+            true,
+            true,
+            ["a😀b", "😀", "xy"],
+        ),
+        (
+            "tr supplementary replacement",
+            true,
+            true,
+            ["abc", "b", "😀"],
+        ),
+    ];
+    let mut declared_cases: Vec<_> = cases
+        .into_iter()
+        .map(|(name, unicode, sc, strings)| {
+            let (mut arguments, values): (Vec<_>, Vec<_>) = strings
+                .into_iter()
+                .map(|s| literal(Some(s), unicode))
+                .unzip();
+            if sc {
+                arguments[0].collation = Some(Label::Explicit(SC.into()));
+            }
+            (name, arguments, values)
+        })
+        .collect();
+    declared_cases.push((
+        "tr lone surrogate",
+        vec![
+            arg(Family::Nvarchar, Length::Bounded(3)),
+            arg(Family::Nchar, Length::Bounded(1)),
+            literal(Some("x"), true).0,
+        ],
+        vec![Some(vec![97, 0xd83d, 98]), Some(vec![0xd83d]), text("x")],
+    ));
+    let utf8 = "Latin1_General_100_CI_AS_SC_UTF8";
+    let mut input = arg(Family::Varchar, Length::Bounded(10));
+    input.collation = Some(Label::Explicit(utf8.into()));
+    declared_cases.push((
+        "tr utf8 collation",
+        vec![
+            input,
+            literal(Some("é"), true).0,
+            literal(Some("e"), true).0,
+        ],
+        vec![text("aéb"), text("é"), text("e")],
+    ));
+    let mut catalog = catalog();
+    catalog.push(Collation {
+        name: utf8.into(),
+        supplementary: true,
+        case_sensitive: false,
+        encoding: Encoding::Utf8,
+    });
+    let f = fixture();
+    let mut comparisons = 0;
+    for c in f["containers"].as_array().unwrap() {
+        for run in c["runs"].as_array().unwrap() {
+            for (name, arguments, values) in &declared_cases {
+                let p = rules::plan(Function::Translate, arguments, DEFAULT, &catalog).unwrap();
+                let result = rules::evaluate(&p, values, &default_match);
+                let captured = observed(run, name);
+                let column = &captured["sets"][0]["columns"][0];
+                assert_eq!(column["flags"], p.flags, "{name}");
+                assert_eq!(column["length"], 8000, "{name}");
+                assert_eq!(
+                    column["type"],
+                    if p.declaration.family() == Family::Nvarchar {
+                        "NVarChar"
+                    } else {
+                        "VarChar"
+                    },
+                    "{name}"
+                );
+                assert_eq!(
+                    column["collation"]["version"],
+                    if p.supplementary { 2 } else { 0 },
+                    "{name}"
+                );
+                assert_eq!(
+                    column["collation"]["flags"],
+                    if p.encoding == Encoding::Utf8 { 77 } else { 13 },
+                    "{name}"
+                );
+                assert_eq!(
+                    column["collation"]["sortId"],
+                    if p.supplementary { 0 } else { 52 },
+                    "{name}"
+                );
+                assert_eq!(
+                    column["collation"]["codepage"],
+                    if p.encoding == Encoding::Utf8 {
+                        "utf-8"
+                    } else {
+                        "CP1252"
+                    },
+                    "{name}"
+                );
+                if captured["errors"].as_array().unwrap().is_empty() {
+                    let actual = result.unwrap().map(|v| String::from_utf16(&v).unwrap());
+                    assert_eq!(json!([[actual]]), captured["sets"][0]["rows"], "{name}");
+                } else {
+                    let Err(Error::Sql(actual)) = result else {
+                        panic!("missing error: {name}")
+                    };
+                    let expected = &captured["errors"][0];
+                    assert_eq!(json!(actual.number), expected["number"], "{name}");
+                    assert_eq!(json!(actual.state), expected["state"], "{name}");
+                    assert_eq!(json!(actual.severity), expected["class"], "{name}");
+                    assert_eq!(json!(actual.message), expected["message"], "{name}");
+                    assert!(captured["sets"][0]["rows"].as_array().unwrap().is_empty());
+                }
+                comparisons += 1;
+            }
+        }
+    }
+    assert_eq!(comparisons, 40);
 }
