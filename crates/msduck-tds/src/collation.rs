@@ -34,6 +34,8 @@ impl Collation {
             "sql_latin1_general_cp1_ci_as" => (13, 0, 52),
             "latin1_general_ci_as_ks_ws" => (1, 0, 0),
             "latin1_general_100_ci_as" => (13, 2, 0),
+            "latin1_general_100_ci_as_sc" => (13, 2, 0),
+            "latin1_general_100_ci_as_sc_utf8" => (77, 2, 0),
             "latin1_general_100_cs_as" => (12, 2, 0),
             "latin1_general_100_ci_ai" => (15, 2, 0),
             "latin1_general_100_cs_ai" => (14, 2, 0),
@@ -67,7 +69,7 @@ mod tests {
         for name in [
             "unknown",
             "Japanese_CI_AS",
-            "Latin1_General_100_CI_AS_SC_UTF8",
+            "Latin1_General_100_CI_AS_SC_UTF8_unknown",
         ] {
             assert!(Collation::for_name(name).is_none());
         }
