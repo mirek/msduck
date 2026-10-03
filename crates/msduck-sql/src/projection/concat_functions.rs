@@ -197,12 +197,20 @@ fn declaration(
                         return Err(Error::UnknownContext);
                     }
                 }
-                let n = u16::try_from(s.encode_utf16().count().max(1))
-                    .map_err(|_| Error::UnknownOperand)?;
-                Type::Character(
-                    CharacterType::new(family, Length::Bounded(n))
-                        .map_err(|_| Error::UnknownOperand)?,
-                )
+                if s.is_empty() {
+                    Type::Character(
+                        CharacterType::new(family, Length::Bounded(1))
+                            .map_err(|_| Error::UnknownOperand)?,
+                    )
+                } else {
+                    let kind = crate::expression_metadata::storage::kind(
+                        expr,
+                        &Default::default(),
+                        &|_| None,
+                    )
+                    .ok_or(Error::UnknownOperand)?;
+                    crate::sql_type::declaration(&kind).map_err(|_| Error::UnknownOperand)?
+                }
             }
             _ => member_expression(catalog, expr, sources, scope)
                 .and_then(|i| i.logical_type())
@@ -636,6 +644,13 @@ fn fields_in(
     let scope = scope_with_functions(catalog, query, outer, context, depth)?;
     let sources = sources_with_functions(catalog, select, &scope, context, depth)?;
     let ordinary = query_fields(catalog, query, &scope).ok_or(Error::UnknownOperand)?;
+    if matches!(query.for_clause, Some(ForClause::Json { .. })) {
+        // FOR JSON is one complete output field, not the SELECT-list fields.
+        // Validate the underlying original operands without overwriting its
+        // established descriptor, name, fragment flag or logical properties.
+        query_in(catalog, query, outer, context, depth + 1)?;
+        return Ok(ordinary);
+    }
     let grouping = crate::grouping_properties::Plan::new(select, &sources, &scope.rows)
         .ok_or(Error::UnknownOperand)?;
     let mut ordinary = ordinary.into_iter();

@@ -15,6 +15,9 @@ references. Without these functions it delegates to ordinary inference. Real
 nonzero SELECT positions include wildcard expansion, so the captured 451
 message identifies the original output position. Ordinary grouped row-reference
 properties remain governed by the existing grouping rules.
+FOR JSON keeps its ordinary single NVARCHAR(MAX) descriptor, canonical field
+name, fragment flag and properties after underlying function validation; it is
+not replaced by SELECT-list function fields.
 
 Plans borrow the single original expression and operand nodes; metadata and
 conversion rules are frozen separately. A later lowering acquires each original
@@ -28,7 +31,10 @@ columns, nearest unknown/ambiguous shadows and explicit correlation boundaries.
 
 Original numeric, binary, legacy and character source kinds remain distinct.
 Literal NULL allocates zero; empty string literals allocate one. Typed NULL
-retains its declared family/width, including MAX. CWS results are nonnullable
+retains its declared family/width, including MAX. Nonempty literals reuse the established storage
+declaration rules, including ANSI >8000 and national >4000 promotion to MAX.
+No function output is inferred from the current literal text instead of those
+source declaration rules. CWS results are nonnullable
 computed expressions; TRANSLATE results are nullable computed expressions as
 captured. Derived row columns retain their separate derived origin. Computed
 function results use the canonical result type identity, never an operand alias

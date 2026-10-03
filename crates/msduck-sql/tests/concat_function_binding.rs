@@ -831,3 +831,80 @@ fn unicode_promotion_does_not_guess_native_utf8_ansi_literal_allocation() {
         Length::Bounded(2)
     );
 }
+
+#[test]
+fn for_json_retains_one_original_json_field_after_function_validation() {
+    let c = catalog();
+    let cols = collations();
+    let context = Context {
+        collations: &cols,
+        language: Language::UsEnglish,
+    };
+    for sql in [
+        "SELECT CONCAT_WS(',', 'a', 'b') AS x FOR JSON PATH",
+        "SELECT CONCAT_WS(',', 'a', 'b') AS x, TRANSLATE('a','a','z') AS y FOR JSON PATH",
+        "SELECT CONCAT_WS(',', 'a', 'b') AS x FOR JSON PATH, WITHOUT_ARRAY_WRAPPER",
+    ] {
+        let q = query(sql);
+        let ordinary = msduck_sql::projection::query_fields(&c, &q, &Scope::default()).unwrap();
+        let bound = binding::fields(&c, &q, &Scope::default(), &context).unwrap();
+        assert_eq!(bound.len(), 1);
+        assert_eq!(bound[0].info, ordinary[0].info);
+        assert_eq!(bound[0].name, ordinary[0].name);
+        assert_eq!(bound[0].collation, ordinary[0].collation);
+        assert_eq!(bound[0].properties, ordinary[0].properties);
+        assert_eq!(bound[0].json_fragment, ordinary[0].json_fragment);
+    }
+    let q = query("SELECT CONCAT_WS('a') AS x FOR JSON PATH");
+    assert!(matches!(
+        binding::fields(&c, &q, &Scope::default(), &context),
+        Err(Error::Function(_))
+    ));
+}
+
+#[test]
+fn string_literal_storage_boundaries_promote_original_declarations_to_max() {
+    let c = catalog();
+    let cols = collations();
+    let context = Context {
+        collations: &cols,
+        language: Language::UsEnglish,
+    };
+    for (national, width, max) in [
+        (false, 8000, false),
+        (false, 8001, true),
+        (true, 4000, false),
+        (true, 4001, true),
+    ] {
+        let sql = format!(
+            "SELECT CONCAT_WS(NULL,{}'{}',NULL)",
+            if national { "N" } else { "" },
+            "a".repeat(width)
+        );
+        let q = query(&sql);
+        let plans = binding::query(&c, &q, &Scope::default(), &context).unwrap();
+        let length = if max {
+            Length::Max
+        } else {
+            Length::Bounded(width as u16)
+        };
+        assert_eq!(
+            plans[0].1.conversion().result().declaration.length(),
+            length
+        );
+        assert_eq!(
+            plans[0].1.declarations()[1].source.unwrap(),
+            msduck_core::types::Type::Character(
+                msduck_core::character::CharacterType::new(
+                    if national {
+                        Family::Nvarchar
+                    } else {
+                        Family::Varchar
+                    },
+                    length
+                )
+                .unwrap()
+            )
+        );
+    }
+}
