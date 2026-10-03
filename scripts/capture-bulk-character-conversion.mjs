@@ -139,13 +139,22 @@ function trace(connection, budget) {
   const detach = () => {outgoing.off('data', onOut); incoming.off('data', onIn)}
   const fail = (error, direction, input) => {
     if (failureRecord) return
-    failureRecord = {...failure(error), direction, observedBytes: input.length,
-      sha256: createHash('sha256').update(input).digest('hex')}
+    const segments = Array.isArray(input) ? input : [input]
+    const observedBytes = segments.reduce((size, segment) => size + segment.length, 0)
+    const digest = createHash('sha256')
+    for (const segment of segments) digest.update(segment)
+    failureRecord = {...failure(error), direction, observedBytes, sha256: digest.digest('hex')}
     // Retain bounded malformed bytes too. Oversized inputs retain a labelled
     // prefix and digest, never pretend to be complete captured frames.
     const retainedBytes = packets.reduce((size, p) => size + p.rawHex.length / 2, 0)
-    const prefix = input.subarray(0, Math.min(input.length, 256, LIMIT - retainedBytes))
-    try {budget.take(prefix.length * 2 + 256); failureRecord.inputPrefixHex = prefix.toString('hex')} catch {}
+    const prefixSize = Math.min(observedBytes, 256, LIMIT - retainedBytes)
+    try {
+      budget.take(prefixSize * 2 + 256)
+      const prefix = []
+      let remaining = prefixSize
+      for (const segment of segments) {const length = Math.min(segment.length, remaining); prefix.push(segment.subarray(0,length)); remaining -= length; if (!remaining) break}
+      failureRecord.inputPrefixHex = Buffer.concat(prefix, prefixSize).toString('hex')
+    } catch {}
     detach()
     rejectTrace(error)
     try {connection.close()} catch {}
@@ -161,9 +170,11 @@ function trace(connection, budget) {
   }
   const onOut = packet => {try {retain('out', packet)} catch (error) {fail(error, 'out', packet)}}
   const onIn = chunk => {
+    let combined = false
     try {
       assert.ok(chunk.length + pending.length <= LIMIT, 'bounded incoming buffer')
       pending = Buffer.concat([pending, chunk])
+      combined = true
       while (pending.length >= 8) {
         const size = pending.readUInt16BE(2)
         assert.ok(size >= 8 && size <= 32767, 'bounded incoming frame')
@@ -171,7 +182,7 @@ function trace(connection, budget) {
         retain('in', pending.subarray(0, size))
         pending = pending.subarray(size)
       }
-    } catch (error) {fail(error, 'in', chunk)}
+    } catch (error) {fail(error, 'in', combined ? pending : [pending, chunk])}
   }
   outgoing.on('data', onOut)
   incoming.on('data', onIn)

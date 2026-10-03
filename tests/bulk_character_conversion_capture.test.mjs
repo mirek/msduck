@@ -193,14 +193,21 @@ test('uniform request-type corruption cannot hide behind unchanged payload signa
 })
 
 test('asynchronous trace guards close the connection and preserve bounded failed evidence through the awaited exchange', {timeout:10000}, async () => {
-  for(const direction of ['in','out']) {
+  for(const mode of ['in','out','split-header','oversized-with-prefix']) {
+    const direction=mode==='out'?'out':'in'
     const incoming=new EventEmitter(),outgoing=new EventEmitter()
     let closed=0
     const connection={messageIo:{outgoingMessageStream:outgoing,socket:incoming},close(){closed++}}
     const prefix=Buffer.from('040100090039010000','hex')
-    const invalid=direction==='in'?Buffer.alloc(2*1024*1024+1,0x61):Buffer.from('0701000a00000100ff','hex')
+    const invalid=mode==='split-header'?Buffer.from('0401000000390100','hex')
+      :mode==='oversized-with-prefix'?Buffer.concat([Buffer.from('04010009','hex'),Buffer.alloc(2*1024*1024+1,0x61)])
+      :direction==='in'?Buffer.alloc(2*1024*1024+1,0x61):Buffer.from('0701000a00000100ff','hex')
     const record=await exchange(connection,()=>{
-      queueMicrotask(()=>{incoming.emit('data',prefix);(direction==='in'?incoming:outgoing).emit('data',invalid)})
+      queueMicrotask(()=>{
+        incoming.emit('data',prefix)
+        if(mode==='split-header'||mode==='oversized-with-prefix') {incoming.emit('data',invalid.subarray(0,4));incoming.emit('data',invalid.subarray(4))}
+        else (direction==='in'?incoming:outgoing).emit('data',invalid)
+      })
       return new Promise(()=>{})
     },budget())
     assert.equal(closed,1)

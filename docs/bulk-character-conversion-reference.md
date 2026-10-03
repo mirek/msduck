@@ -156,6 +156,10 @@ of at most 256 bytes within the remaining exchange/aggregate budget. An oversize
 or malformed input is not presented as a complete validated packet. Asynchronous
 oversized incoming and malformed outgoing tests verify promise completion,
 cleanup and preservation of this partial evidence and its comparison sidecar.
+Failure length/hash/prefix cover the accumulated unretained bytes, including a
+header split across TCP chunks. If the combined input exceeds the buffer bound,
+the hash and bounded prefix are assembled across existing segments without
+allocating their oversized concatenation.
 Each exchange reserves a 4 KiB diagnostic allowance before installing listeners,
 from a separate 64 KiB budget inside the existing capture-envelope reserve.
 An exhausted payload budget still returns previously retained packets and an
