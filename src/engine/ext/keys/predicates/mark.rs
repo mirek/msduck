@@ -170,6 +170,29 @@ fn collate(catalog: &Catalog, operands: &mut [&mut Expr]) -> Collated {
     Collated::Wrapped
 }
 
+/// Whether `expr` calls a function that gives a new value on each call. A
+/// simple CASE over it cannot become comparisons that each evaluate it.
+fn volatile(expr: &Expr) -> bool {
+    struct Find;
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            match expr {
+                Expr::Function(f)
+                    if matches!(
+                        f.name.to_string().to_ascii_uppercase().as_str(),
+                        "NEWID" | "NEWSEQUENTIALID" | "RAND" | "CRYPT_GEN_RANDOM"
+                    ) =>
+                {
+                    ControlFlow::Break(())
+                }
+                _ => ControlFlow::Continue(()),
+            }
+        }
+    }
+    expr.visit(&mut Find).is_break()
+}
+
 /// SQL Server's name for the collation operation of a comparison operator.
 fn operation(op: &BinaryOperator) -> Option<&'static str> {
     Some(match op {
@@ -401,7 +424,7 @@ pub(super) fn literals(parameters: &Parameters, expr: &mut Expr) {
             operand: Some(operand),
             conditions,
             ..
-        } => {
+        } if !volatile(operand) => {
             let mut operands = vec![operand.as_mut()];
             operands.extend(conditions.iter_mut().map(|c| &mut c.condition));
             operands
@@ -494,7 +517,7 @@ pub(super) fn rewrite<T: VisitMut>(
                     operand: Some(operand),
                     conditions,
                     ..
-                } => {
+                } if !volatile(operand) => {
                     let mut operands = vec![operand.as_mut()];
                     operands.extend(conditions.iter_mut().map(|c| &mut c.condition));
                     mark(self.0, "equal to", operands)
@@ -565,6 +588,20 @@ pub(super) fn rewrite<T: VisitMut>(
                     };
                     let member =
                         matches!(value.as_ref(), Expr::Function(f) if f.name.to_string() == MEMBER);
+                    // A column with a collation of its own compares through
+                    // the explicit COLLATE lowering instead.
+                    if !member
+                        && !collated(value)
+                        && let Some(name) = own_collation(self.0, value).map(str::to_owned)
+                    {
+                        let inner =
+                            std::mem::replace(value.as_mut(), Expr::Value(Value::Null.into()));
+                        **value = Expr::Collate {
+                            expr: Box::new(inner),
+                            collation: ObjectName::from(vec![Ident::new(name)]),
+                        };
+                        return ControlFlow::Continue(());
+                    }
                     if !member
                         && !collated(value)
                         && (unicode(self.0, value) || projected.is_some_and(|p| unicode(self.0, p)))
