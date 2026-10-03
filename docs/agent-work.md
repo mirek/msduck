@@ -185,14 +185,19 @@ After a task's PR merges, its worker publishes the `done` state promptly. Stale
 dependent tasks.
 Use `list --available` to see ready, unclaimed tasks with completed dependencies.
 The full `list` looks up every claim tag in one request.
-Add a successor only after the original worker stops. Never import every project
-item into the registry or enable automatic intake.
+For an ordinary handoff, add a successor after the original worker stops.
+For stopped or unresponsive work, follow the standing stale-task recovery
+procedure below without another approval or mandatory delay. Never import every
+project item into the registry or enable automatic intake.
 
 A worker updates Claim/Review/Blocked board fields using the helper and publishes
 completion in the registry and board after its PR merges and acceptance criteria
-are met. If the worker stops before finishing, the owner may designate an
-integrator or authorize a successor only after confirming local and remote jobs
-have stopped. A Done card alone does not satisfy dependency checks. Immutable
+are met. The owner may designate an integrator for unfinished work. For stale
+tasks, the standing recovery authorization below permits a fresh successor
+without further owner confirmation: inspect and stop attributable jobs where
+accessible, revoke the old task, isolate successor outputs and honor shared
+locks. An unreachable worker or job does not require proof that it stopped.
+A Done card alone does not satisfy dependency checks. Immutable
 claim tags remain as historical receipts even after completion.
 
 ## Abandonment and recovery
