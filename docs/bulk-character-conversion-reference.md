@@ -207,7 +207,12 @@ different in raw evidence. A further SPID-hardened capture from source
 also completed with exit zero, raw SHA256
 `c7c0775f354ba2ac867b73662fd16ef37c881c1403ff1e7c5116e847005e6c4d`.
 These recorded capture sources remain explicitly admitted for offline checking.
-Both local and Linux focused suites pass seventeen tests, including duplicate-run,
+The two MAX probes also pin packet direction/type/status/length/ID/window
+sequences for execution and readback, excluding only the separately checked
+ephemeral SPID. All four retained runs and three later captures agree. Moving
+bytes between adjacent packets is rejected even when concatenated payloads and
+recomputed raw difference summaries are unchanged.
+Both local and Linux focused suites pass eighteen tests, including duplicate-run,
 extra-cell, packet-status, SPID/type corruption, asynchronous trace guards and
 aborted-startup negatives.
 

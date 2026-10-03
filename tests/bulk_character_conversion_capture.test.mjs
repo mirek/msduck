@@ -122,6 +122,25 @@ test('MAX request and response packets split inside UTF8 characters without chan
   }
 })
 
+test('uniform MAX packet repartition cannot hide behind identical payloads and recomputed comparisons', async () => {
+  for (const name of ['utf8-max-fragmented','cp1251-to-utf8-max-fragmented']) for (const phase of ['execution','readback']) {
+    const actual = await load()
+    for (const run of actual.runs) {
+      const record = find(run,name)[phase]
+      const packets = record.packets.filter(p => phase==='readback' ? p.direction==='in' : p.direction==='out' && p.rawHex.startsWith('07'))
+      const originalPayload = packets.map(p=>p.rawHex.slice(16)).join('')
+      const first = Buffer.from(packets[1].rawHex,'hex'), second = Buffer.from(packets[2].rawHex,'hex')
+      const shorter = first.subarray(0,first.length-1)
+      const longer = Buffer.concat([second.subarray(0,8),first.subarray(first.length-1),second.subarray(8)])
+      shorter.writeUInt16BE(shorter.length,2); longer.writeUInt16BE(longer.length,2)
+      packets[1].rawHex=shorter.toString('hex'); packets[2].rawHex=longer.toString('hex')
+      assert.equal(packets.map(p=>p.rawHex.slice(16)).join(''),originalPayload)
+    }
+    actual.comparisons=actual.runs.slice(1).map(run=>compare(run,actual.runs[0]))
+    assert.throws(()=>validate(actual),/fixed MAX fragmentation/)
+  }
+})
+
 test('capture reads reject oversized sparse files and symlinks before allocating their payload', async () => {
   await scratch(async dir => {
     const file = join(dir,'large.json'); await writeFile(file,''); await truncate(file,CAPTURE_LIMIT+1)
