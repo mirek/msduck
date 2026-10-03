@@ -52,8 +52,10 @@ suppressed instead of displayed as potential untrusted text.
 Receipts live under ignored `.msduck/claims/`, never in Git or PR descriptions
 (include only the claim SHA). A failed or interrupted claim can leave a receipt:
 run `verify` in the same original session. If verification fails, do not start.
-Do not delete a receipt and retry blindly. A different session may resume only
-through explicit owner handoff after the earlier worker has stopped.
+Do not delete a receipt and retry blindly. A different session must not adopt
+the original receipt. An ordinary handoff requires explicit owner direction;
+stale-task recovery uses the standing authorization below and a fresh successor
+claim, without another approval request.
 
 ### Parallel workers on one host
 
@@ -185,14 +187,19 @@ After a task's PR merges, its worker publishes the `done` state promptly. Stale
 dependent tasks.
 Use `list --available` to see ready, unclaimed tasks with completed dependencies.
 The full `list` looks up every claim tag in one request.
-Add a successor only after the original worker stops. Never import every project
-item into the registry or enable automatic intake.
+For an ordinary handoff, add a successor after the original worker stops.
+For stopped or unresponsive work, follow the standing stale-task recovery
+procedure below without another approval or mandatory delay. Never import every
+project item into the registry or enable automatic intake.
 
 A worker updates Claim/Review/Blocked board fields using the helper and publishes
 completion in the registry and board after its PR merges and acceptance criteria
-are met. If the worker stops before finishing, the owner may designate an
-integrator or authorize a successor only after confirming local and remote jobs
-have stopped. A Done card alone does not satisfy dependency checks. Immutable
+are met. The owner may designate an integrator for unfinished work. For stale
+tasks, the standing recovery authorization below permits a fresh successor
+without further owner confirmation: inspect and stop attributable jobs where
+accessible, revoke the old task, isolate successor outputs and honor shared
+locks. An unreachable worker or job does not require proof that it stopped.
+A Done card alone does not satisfy dependency checks. Immutable
 claim tags remain as historical receipts even after completion.
 
 ## Abandonment and recovery
@@ -205,34 +212,60 @@ reassigned. Recovery, however, does not wait for the owner.
 The owner usually leaves sessions running unattended for days and checks in
 only occasionally. On 2026-10-01 the owner gave this standing authorization.
 Any session working on owner-approved work may resolve a stale claim or
-reservation that blocks that work, without asking first. Report what you did
-afterwards, in the PR, the final report or the next owner check-in. Do not
-stop and wait.
+reservation that blocks that work, without asking first or imposing a mandatory
+six-hour delay. Follow the canonical contribution skill's
+[unresponsive-worker takeover procedure](../.agents/skills/contribute/SKILL.md#unresponsive-worker-takeover).
+Report the recovery afterwards in the PR, final report or next owner check-in.
+Keep unrelated work progressing.
 
 A claimed task, or a ready task that reserves files you need, is **stale** when
 at least one of these holds:
 
 - its worker reports that it has stopped or cannot continue;
-- its branch and PR have had no pushes, commits or updates for **6 hours**,
-  and no live local worker is still using it. Check that no process runs in
-  its worktree, no files there changed recently, and no background job of
-  that worker is pending;
-- it was claimed more than 6 hours ago and has no branch or PR at all.
+- available checkpoint, worktree and local/remote job evidence establishes that
+  the worker is unresponsive after attempting contact through an available
+  owner-approved coordination channel. Record what was checked and the contact
+  attempt; do not wait indefinitely once the evidence establishes unresponsiveness.
+- a ready reservation is unclaimed, no attributable worker/job is pursuing it,
+  and the current owner-approved snapshot, checkpoint or dependency state shows
+  it is obsolete or cannot proceed as scoped. Recheck the protected registry and
+  permanent claim ref before publishing recovery. No worker contact is required
+  when there is no worker; record the evidence and why a bounded successor is
+  needed. An unclaimed task's age alone does not make it obsolete.
 
-A worker that is still pushing, verifying, waiting on CI, or polling for a
-reservation is live, never stale. Check the evidence first; do not guess.
+Age, a missing branch or PR, and a pending review/check alone are insufficient.
+A responsive worker or an actively progressing build is not stale. Verify
+available worker/job status rather than assuming a pending check or reservation
+means a worker is still active. Claims never expire automatically.
 
 To resolve a stale task:
 
-1. Record the evidence: last push, PR update time, and worktree and process
-   checks.
+1. Record the latest approved checkpoint, available worker/job status and contact
+   attempt. Respect the owner's separately held work; recovery is not permission
+   to take over it.
 2. Publish `states: {OLD-ID: "blocked"}` with the helper, putting the evidence
    in the change's authorization.
 3. In the same or a later change, publish a **new task ID** with the bounded
    remaining scope, or a companion task for just the files you need.
-4. Claim the new task and continue.
+4. Acquire the new task's exclusive claim with a fresh private receipt before
+   work. Keep its scope disjoint from other ready tasks and do not mark incomplete
+   dependencies done to make it claimable.
+5. Inspect and stop only local/remote jobs attributable to the displaced task
+   where accessible. An unreachable old worker does not require another owner
+   confirmation. Isolate successor outputs and honor shared build locks; never
+   kill unrelated jobs or overwrite an executable still in use.
 
-Leave the old branch, PR, claim tag and receipt untouched. A suspended process
+6. Preserve downstream work explicitly: published dependency IDs are immutable,
+   and completing the successor alone does not release tasks depending on the
+   old ID. After the successor merges, publish the old ID as `done` only if the
+   combined retained and successor evidence satisfies all of its original
+   acceptance criteria. If it does not, keep the old ID blocked and publish
+   affected dependent work under fresh IDs with truthful dependencies, recording
+   the supersession and blocking obsolete reservations to avoid scope conflicts.
+   Claim each replacement separately; never fabricate completion to release work.
+
+Preserve the old branch, receipt, permanent claim and verification evidence;
+never adopt or delete the old receipt or claim. A suspended process
 that wakes up later must verify again, and stop when its task is no longer
 ready. Approval from the owner is still required for real product decisions
 and for external submissions. Routine unblocking does not need it.
