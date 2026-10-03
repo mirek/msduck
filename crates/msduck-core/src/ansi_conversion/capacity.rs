@@ -1,8 +1,8 @@
 //! BulkLoad capacity after source declaration/wire admission, before storage.
 //! This is not CAST/assignment policy or a whole-load transaction implementation.
 use super::{
-    CP1251_TO_CP1252, CP1251_TO_SQL_CHAR, CP1252_TO_SQL_CHAR, ProjectedValue, ProjectionError,
-    ProjectionLimits, ProjectionTarget, Resource, allocate, check_limit,
+    CP1251_TO_CP1252, CP1251_TO_SQL_CHAR, CP1252_TO_CP1251, CP1252_TO_SQL_CHAR, ProjectedValue,
+    ProjectionError, ProjectionLimits, ProjectionTarget, Resource, allocate, check_limit,
 };
 use crate::ansi_bytes::{AnsiBytes, AnsiView, ByteError, EncodingIdentity};
 use std::fmt;
@@ -89,7 +89,10 @@ impl Plan {
             return Err(ProjectionError::UnsupportedSource(source).into());
         }
         if let ProjectionTarget::Native(encoding) = target
-            && !matches!(encoding, EncodingIdentity::Cp1252 | EncodingIdentity::Utf8)
+            && !matches!(
+                encoding,
+                EncodingIdentity::Cp1251 | EncodingIdentity::Cp1252 | EncodingIdentity::Utf8
+            )
         {
             return Err(ProjectionError::UnsupportedTarget(encoding).into());
         }
@@ -139,13 +142,12 @@ impl Plan {
         if let Capacity::Bounded(width) = self.capacity
             && input.len() > width
         {
-            // Bounded sources and same-CP1252 MAX conversion inspect all
+            // Bounded sources and same-codepage MAX conversion inspect all
             // overflow; cross-encoding MAX conversion has a shorter window.
             // Do not infer source form from values or replace this with
             // universal rtrim/a Unicode whitespace predicate.
             let end = if self.source_form == SourceForm::Bounded
-                || (self.source == EncodingIdentity::Cp1252
-                    && self.target == ProjectionTarget::Native(EncodingIdentity::Cp1252))
+                || self.target == ProjectionTarget::Native(self.source)
             {
                 input.len()
             } else {
@@ -206,6 +208,14 @@ impl Plan {
             ProjectionTarget::Native(encoding) => {
                 let mut bytes = allocate(final_len, output_bytes)?;
                 match encoding {
+                    EncodingIdentity::Cp1251 if self.source == EncodingIdentity::Cp1251 => {
+                        bytes.extend_from_slice(&input[..prefix_len])
+                    }
+                    EncodingIdentity::Cp1251 => bytes.extend(
+                        input[..prefix_len]
+                            .iter()
+                            .map(|&byte| CP1252_TO_CP1251[usize::from(byte)]),
+                    ),
                     EncodingIdentity::Cp1252 if self.source == EncodingIdentity::Cp1252 => {
                         bytes.extend_from_slice(&input[..prefix_len])
                     }
