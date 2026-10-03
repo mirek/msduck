@@ -77,10 +77,12 @@ yet established. It is not a passing final verification.
 
 The frozen collector SHA256 is
 `64070f28616c759978e91efbb1f98a7cb0482f49f60f093d1dc44e1b72f2be69`.
-Its fresh four-database reproduction is running; it is not yet counted as a
-successful verification. Final raw hashes and complete comparison evidence will
-be recorded after that process terminates and its outputs are independently
-checked.
+Its complete fresh reproduction has 14,779,045 bytes and SHA256
+`fdf330b66d8de7fa3cd4e9edaeb11cb3df02c1a586ad3a890755ad548b5e06b0`.
+The process completed successfully and awaited container cleanup. Across eight
+runs, 3,328 original BulkLoad requests and 53,248 fixed semantic/request/response/
+framing pins agree. The full fresh comparison sidecar contains 10,593 differences
+and was independently recomputed in full without normalizing original records.
 
 All 16 focused tests pass on macOS (45,314.456875 ms) and Linux (43,332.38962 ms),
 with zero failures/skips/TODO/cancellations.
