@@ -90,7 +90,8 @@ without those words (`column_keys.rs`).
   current default, or NULL; a default that is not a key fails with 547.
   Keys that a SET NULL or SET DEFAULT action resets carry the reset value to
   their own ON UPDATE actions, so an ON UPDATE CASCADE copies the NULL or
-  default and ON UPDATE SET DEFAULT applies.
+  default (each value is evaluated once, so a NEWID() default is copied
+  as stored) and ON UPDATE SET DEFAULT applies.
 - **Cascade paths.** Definitions that could reach a table along two cascade
   paths, or reach a table already on the path (including their own), fail
   with 1785 and 1750, like SQL Server. As SQL Server does, the check walks
@@ -238,10 +239,12 @@ The feature uses the extension hooks (docs/extension-hooks.md):
   time functions, NEXT VALUE FOR), MERGE that changes a key referenced with
   cascading or differing actions, or a cascade through columns that are not
   a copy of the updated key or reset by SET NULL or SET DEFAULT; these fail
-  with an explicit error instead of guessing old and new keys. A SET DEFAULT
-  reset of a key with a nondeterministic default evaluates the default
-  separately for the key map, so a downstream ON UPDATE CASCADE may copy a
-  different value.
+  with an explicit error instead of guessing old and new keys. A SET NULL
+  or SET DEFAULT reset of a key that ON UPDATE actions reference evaluates
+  each value once, except in a table whose user column named `rowid` hides
+  the native row id, where a nondeterministic default is evaluated again for
+  the stored row and a downstream ON UPDATE CASCADE may copy a different
+  value.
 - Rows changed by referential actions do not fire triggers.
 - Bulk loads (INSERT BULK) do not check CHECK and FOREIGN KEY constraints,
   like SQL Server's default without CHECK_CONSTRAINTS, but they do not mark

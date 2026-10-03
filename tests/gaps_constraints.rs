@@ -372,6 +372,26 @@ fn set_null_actions_follow_on_update_cascades() {
         ints(&session, "SELECT * FROM g ORDER BY id"),
         [[Some(100), Some(7), None], [Some(200), Some(7), Some(2)]]
     );
+    // A volatile default is evaluated once: the cascade copies the value
+    // the reset stored.
+    ok(
+        &mut session,
+        "CREATE TABLE vp(a int, b UNIQUEIDENTIFIER, CONSTRAINT pk_vp PRIMARY KEY (a, b)); \
+         CREATE TABLE vc(id int PRIMARY KEY, a int, b UNIQUEIDENTIFIER DEFAULT NEWID() CONSTRAINT uq_vc UNIQUE, \
+           CONSTRAINT fvc FOREIGN KEY (a, b) REFERENCES vp(a, b) ON DELETE SET DEFAULT); \
+         CREATE TABLE vg(id int PRIMARY KEY, b UNIQUEIDENTIFIER CONSTRAINT fvg REFERENCES vc(b) ON UPDATE CASCADE); \
+         INSERT vp VALUES (1, '00000000-0000-0000-0000-000000000001'), (2, '00000000-0000-0000-0000-000000000002'); \
+         INSERT vc VALUES (10, 1, '00000000-0000-0000-0000-000000000001'), (20, 2, '00000000-0000-0000-0000-000000000002'); \
+         INSERT vg VALUES (100, '00000000-0000-0000-0000-000000000001'), (200, '00000000-0000-0000-0000-000000000002'); DELETE vp",
+    );
+    assert_eq!(
+        ints(
+            &session,
+            "SELECT count(*) FROM vg JOIN vc ON vc.b = vg.b \
+             WHERE vc.a IS NULL AND vc.id * 10 = vg.id"
+        ),
+        [[Some(2)]]
+    );
 }
 
 #[test]
