@@ -1023,6 +1023,8 @@ fn snapshot_transactions_need_the_option_and_read_their_snapshot() {
     run(&mut a, "UPDATE x SET v = 2 FROM #tmp AS x").unwrap();
     run(&mut a, "DELETE x FROM #tmp AS x").unwrap();
     assert_eq!(run(&mut a, "UPDATE x SET v = 2 FROM t AS x"), Err(3952));
+    assert_eq!(run(&mut a, "SELECT v FROM t AS t"), Err(3952));
+    assert_eq!(run(&mut a, "UPDATE t SET v = 2 FROM t AS t"), Err(3952));
     run(&mut a, "WITH t AS (SELECT 1 AS v) SELECT v FROM t").unwrap();
     assert_eq!(
         run(

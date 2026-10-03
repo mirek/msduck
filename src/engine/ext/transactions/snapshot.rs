@@ -15,8 +15,8 @@ use anyhow::{Result, bail};
 use msduck_core::diagnostic::SqlError;
 use msduck_sql::dialect::alter_database::{Request, Termination};
 use sqlparser::ast::{
-    FromTable, ObjectName, Query, SetExpr, Statement, TableFactor, TableObject, TableWithJoins,
-    UpdateTableFromKind, Visit, Visitor,
+    Delete, FromTable, ObjectName, Query, SetExpr, Statement, TableFactor, TableObject,
+    TableWithJoins, UpdateTableFromKind, Visit, Visitor,
 };
 use std::{collections::HashMap, ops::ControlFlow};
 
@@ -221,16 +221,15 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
 }
 
 /// Every table name a statement reads or writes, excluding table-valued
-/// function calls, and one-part names of the statement's common table
-/// expressions or table aliases, such as the target of `UPDATE x ... FROM
-/// t AS x` (anywhere in the statement, so they also hide a table of the
-/// same name outside their own scope).
+/// function calls, an UPDATE or DELETE target that names the alias of a
+/// FROM relation (`UPDATE x ... FROM t AS x`), and one-part names of the
+/// statement's common table expressions (anywhere in the statement, so a
+/// CTE also hides a table of the same name outside its own scope).
 fn relations(statement: &Statement) -> Vec<ObjectName> {
     struct Relations {
         names: Vec<ObjectName>,
         functions: Vec<ObjectName>,
         ctes: Vec<String>,
-        aliases: Vec<String>,
     }
     impl Visitor for Relations {
         type Break = ();
@@ -250,15 +249,12 @@ fn relations(statement: &Statement) -> Vec<ObjectName> {
         }
         fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
             if let TableFactor::Table {
-                name, args, alias, ..
+                name,
+                args: Some(_),
+                ..
             } = factor
             {
-                if args.is_some() {
-                    self.functions.push(name.clone());
-                }
-                if let Some(alias) = alias {
-                    self.aliases.push(alias.name.value.to_lowercase());
-                }
+                self.functions.push(name.clone());
             }
             ControlFlow::Continue(())
         }
@@ -267,23 +263,27 @@ fn relations(statement: &Statement) -> Vec<ObjectName> {
         names: Vec::new(),
         functions: Vec::new(),
         ctes: Vec::new(),
-        aliases: Vec::new(),
     };
     let _ = statement.visit(&mut visitor);
     let Relations {
-        names,
+        mut names,
         functions,
         ctes,
-        aliases,
     } = visitor;
+    // The target is visited before its FROM relations; only that one
+    // occurrence is the alias.
+    if let Some(placeholder) = alias_target(statement)
+        && let Some(index) = names.iter().position(|name| *name == placeholder)
+    {
+        names.remove(index);
+    }
     names
         .into_iter()
         .filter(|name| !functions.contains(name))
         .filter(|name| match name.0.as_slice() {
-            [part] => part.as_ident().is_none_or(|ident| {
-                let name = ident.value.to_lowercase();
-                !ctes.contains(&name) && !aliases.contains(&name)
-            }),
+            [part] => part
+                .as_ident()
+                .is_none_or(|ident| !ctes.contains(&ident.value.to_lowercase())),
             _ => true,
         })
         .collect()
@@ -390,13 +390,12 @@ fn write_target(statement: &Statement) -> Option<ObjectName> {
             &update.table.relation
         }
         Statement::Delete(delete) => {
-            let tables = match &delete.from {
-                FromTable::WithFromKeyword(tables) | FromTable::WithoutKeyword(tables) => tables,
-            };
             // DELETE alias FROM table AS alias names the alias first.
-            if let [name] = delete.tables.as_slice() {
-                return Some(aliased(name, tables).unwrap_or_else(|| name.clone()));
+            if let Some((name, tables)) = delete_target(delete) {
+                return Some(aliased(&name, tables).unwrap_or(name));
             }
+            let (FromTable::WithFromKeyword(tables) | FromTable::WithoutKeyword(tables)) =
+                &delete.from;
             &tables.first()?.relation
         }
         Statement::Merge(merge) => &merge.table,
@@ -406,6 +405,58 @@ fn write_target(statement: &Statement) -> Option<ObjectName> {
         TableFactor::Table { name, .. } => Some(name.clone()),
         _ => None,
     }
+}
+
+/// An UPDATE or DELETE target that is the alias of one of its FROM
+/// relations, also after a WITH clause.
+fn alias_target(statement: &Statement) -> Option<ObjectName> {
+    match statement {
+        Statement::Query(query) => match query.body.as_ref() {
+            SetExpr::Update(inner) | SetExpr::Delete(inner) => alias_target(inner),
+            _ => None,
+        },
+        Statement::Update(update) => {
+            let TableFactor::Table {
+                name, alias: None, ..
+            } = &update.table.relation
+            else {
+                return None;
+            };
+            let (UpdateTableFromKind::BeforeSet(tables) | UpdateTableFromKind::AfterSet(tables)) =
+                update.from.as_ref()?;
+            aliased(name, tables).map(|_| name.clone())
+        }
+        Statement::Delete(delete) => {
+            let (name, tables) = delete_target(delete)?;
+            aliased(&name, tables).map(|_| name)
+        }
+        _ => None,
+    }
+}
+
+/// A DELETE's syntactic target and the relations its alias may name: the
+/// FROM relations of `DELETE x FROM t AS x`, or the USING relations of the
+/// canonical `DELETE FROM x USING t AS x` the batch parser produces.
+fn delete_target(delete: &Delete) -> Option<(ObjectName, &[TableWithJoins])> {
+    let (FromTable::WithFromKeyword(tables) | FromTable::WithoutKeyword(tables)) = &delete.from;
+    if let [name] = delete.tables.as_slice() {
+        return Some((name.clone(), tables));
+    }
+    let [
+        TableWithJoins {
+            relation: TableFactor::Table {
+                name, alias: None, ..
+            },
+            joins,
+        },
+    ] = tables.as_slice()
+    else {
+        return None;
+    };
+    if !joins.is_empty() {
+        return None;
+    }
+    Some((name.clone(), delete.using.as_deref().unwrap_or_default()))
 }
 
 /// The table a one-part DML target names when it is the alias of a FROM
