@@ -60,6 +60,11 @@ Subsequent script changes strengthen offline semantic and allocation-bound
 validation; they do not change the 29 cases or captured requests. The fixed
 readback descriptor array hash is
 `488a820956ff22530072a249001c6b42fb4c60f7845a452cb6a63f4a20cbeb5c`.
+Offline replay also pins the complete setup, trigger, transaction and cleanup
+results, including their empty diagnostics and exact completion counts. The
+version query's descriptors, rows and completion are checked independently of
+the recomputed between-run differences. A failed ancillary step cannot become
+accepted evidence by changing all four runs identically.
 
 In these runs, each successful load with FIRE_TRIGGERS invoked the trigger once
 with the entire load, including mixed-default loads of 1501 rows and 1001

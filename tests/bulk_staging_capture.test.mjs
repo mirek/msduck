@@ -102,6 +102,43 @@ test('oversized encoded packets and unfinished EOM are rejected before acceptanc
   assert.throws(() => validate(incomplete), /complete EOM framing/)
 })
 
+test('uniform setup, trigger, transaction and cleanup failures cannot become gold evidence', async () => {
+  const retained = await load()
+  const mutations = [
+    result => {result.errors.push({number: 50000, state: 1, class: 16, message: 'failed step'})},
+    result => {result.info.push({number: 3621, message: 'unexpected diagnostic'})},
+    result => {result.done[0].more = !result.done[0].more},
+    result => {result.rowCount += 1},
+    result => {result.returnStatus = 99},
+    result => {result.sets.push({columns: [], rows: [[]]})}
+  ]
+  for (const step of ['setup', 'trigger', 'begin', 'rollback', 'cleanup']) {
+    for (const mutate of mutations) {
+      const actual = structuredClone(retained)
+      for (const run of actual.runs) mutate(run.observations.find(o => o.case.transaction)[step].result)
+      actual.comparisons = actual.runs.slice(1).map(run => compare(run, actual.runs[0]))
+      assert.throws(() => validate(actual), new RegExp(`fixed ${step} result`))
+    }
+  }
+})
+
+test('version and readback diagnostics and descriptors are pinned independently of comparisons', async () => {
+  const retained = await load()
+  for (const mutate of [
+    run => {run.version.result.errors.push({number: 50000})},
+    run => {run.version.result.done[0].rowCount = 0},
+    run => {run.version.result.sets[0].columns[0].flags ^= 1},
+    run => {run.observations[0].readback.result.info.push({number: 3621})},
+    run => {run.observations[0].readback.result.returnStatus = 99},
+    run => {run.observations[0].begin = structuredClone(run.observations.find(o => o.case.transaction).begin)}
+  ]) {
+    const actual = structuredClone(retained)
+    for (const run of actual.runs) mutate(run)
+    actual.comparisons = actual.runs.slice(1).map(run => compare(run, actual.runs[0]))
+    assert.throws(() => validate(actual), /fixed version|fixed readback|no unrequested begin/)
+  }
+})
+
 test('uniformly changed image and server version cannot relabel retained provenance', async () => {
   const retained = await load()
   const image = structuredClone(retained)

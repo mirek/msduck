@@ -187,9 +187,18 @@ function packetBytes(packet, remaining = LIMIT) {
 // Fixed gold observations from the independently inspected four 29-case runs.
 // These are fixture checks, not promises about unprobed SQL Server workloads.
 const READBACK_COLUMNS_SHA = '488a820956ff22530072a249001c6b42fb4c60f7845a452cb6a63f4a20cbeb5c'
+const VERSION_COLUMNS_SHA = '9736f17bf22a24f23ce258a4024eab29437fd91ec51af7e985a061e1cdb5dce9'
+function validateStatement(step, counts, label) {
+  exact(step.result, {
+    sets: [], done: counts.map((rowCount, index) => ({kind: 'done', rowCount, more: index < counts.length - 1})),
+    errors: [], info: [], returnStatus: null, rowCount: counts.reduce((sum, count) => sum + (count ?? 0), 0)
+  }, `fixed ${label} result`)
+}
 function validateReadback(observation, database) {
   const entry = observation.case, result = observation.readback.result
   assert.equal(result.errors.length, 0, 'readback succeeds')
+  exact(result.info, [], 'fixed readback informational diagnostics')
+  assert.equal(result.returnStatus, null, 'fixed readback return status')
   assert.equal(result.sets.length, 8, 'all readback sets retained')
   const descriptorHash = createHash('sha256').update(JSON.stringify(result.sets.map(set => set.columns))).digest('hex')
   assert.equal(descriptorHash, READBACK_COLUMNS_SHA, 'fixed captured readback descriptors')
@@ -240,10 +249,28 @@ export function validate(value) {
     assert.equal(run.version.result.sets[0].rows[0][0], GOLD_VERSION, 'fixed captured server version')
     const database = run.version.result.sets[0].rows[0][1]
     assert.match(database, /^msduck_audit_[0-9a-f]{32}$/)
+    exact(run.version.result.errors, [], 'fixed version errors')
+    exact(run.version.result.info, [], 'fixed version informational diagnostics')
+    exact(run.version.result.done, [{kind: 'done', rowCount: 1, more: false}], 'fixed version completion')
+    assert.equal(run.version.result.returnStatus, null, 'fixed version return status')
+    assert.equal(run.version.result.rowCount, 1, 'fixed version callback count')
+    assert.equal(run.version.result.sets.length, 1, 'fixed version result sets')
+    assert.equal(createHash('sha256').update(JSON.stringify(run.version.result.sets[0].columns)).digest('hex'), VERSION_COLUMNS_SHA, 'fixed version descriptors')
+    exact(run.version.result.sets[0].rows, [[GOLD_VERSION, database]], 'fixed version rows')
     assert.equal(run.observations.length, cases.length)
     for (const [index, observation] of run.observations.entries()) {
       assert.ok(isDeepStrictEqual(observation.case, cases[index]), 'exact case manifest')
       assert.ok(isDeepStrictEqual(observation.input, rowsFor(cases[index])), 'exact original input')
+      validateStatement(observation.setup, [null, null, null, null, null, 1, null], 'setup')
+      validateStatement(observation.trigger, [null], 'trigger')
+      validateStatement(observation.cleanup, [null, null, null, null, null, null], 'cleanup')
+      if (observation.case.transaction) {
+        validateStatement(observation.begin, [null], 'begin')
+        validateStatement(observation.rollback, [null], 'rollback')
+      } else {
+        assert.equal(observation.begin, null, 'no unrequested begin')
+        assert.equal(observation.rollback, null, 'no unrequested rollback')
+      }
       if (observation.case.transaction) {
         assert.equal(observation.begin.result.errors.length, 0, 'BEGIN TRAN succeeds')
         const first = observation.execution.packets.find(packet => packet.direction === 'out')
