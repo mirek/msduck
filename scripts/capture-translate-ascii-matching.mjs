@@ -566,7 +566,7 @@ function validate(run) {
     }
   }
 }
-const retainedDigests=[]
+const retainedDigests=[{"id":"container0/database0","sha256":"ba4ac4f768748f101cdd2060b45abe9ff92844ca9bb10213bf00157900face27"},{"id":"container0/database1","sha256":"ba4ac4f768748f101cdd2060b45abe9ff92844ca9bb10213bf00157900face27"},{"id":"container1/database0","sha256":"ba4ac4f768748f101cdd2060b45abe9ff92844ca9bb10213bf00157900face27"},{"id":"container1/database1","sha256":"ba4ac4f768748f101cdd2060b45abe9ff92844ca9bb10213bf00157900face27"}]
 function digestRun(run){return createHash('sha256').update(JSON.stringify(run)).digest('hex')}
 function runDigests(actual){return actual.containers.flatMap((c,ci)=>c.runs.map((run,ri)=>({id:`container${ci}/database${ri}`,sha256:digestRun(run)})))}
 function variablePath(record,segments) {
@@ -734,18 +734,22 @@ async function persistAcquiredCapture(actual,path) {
   await writeFile(path,raw,{flag:'wx'})
   return createHash('sha256').update(raw).digest('hex')
 }
+async function retainAndDerive(actual,output,oneDatabase) {
+  actual.acquiredSha256=await persistAcquiredCapture(actual,output+'.raw.json')
+  if(!oneDatabase){actual.runDigests=runDigests(actual);actual.variationReport=variationReport(actual);actual.relations=actual.containers.map(c=>c.runs.map(relationReport))}
+}
 async function testRawRetention(retained) {
   const root=resolve('.tmp');await mkdir(root,{recursive:true})
   const temporary=await mkdtemp(resolve(root,'translate-ascii-invalid-'))
   try {
-    const invalid=structuredClone(retained.containers[0].runs[0][1])
+    const run=structuredClone(retained.containers[0].runs[0]);const invalid=run[1]
     invalid.result.errors.push({number:529,state:1,class:16,message:'retained synthetic server failure'})
-    const acquired={containers:[{runs:[[invalid]]}]}
-    const path=resolve(temporary,'acquired.raw.json')
-    const hash=await persistAcquiredCapture(acquired,path)
-    assert.throws(()=>gridRelation(invalid),/ASCII program must succeed/)
+    const acquired={containers:[{runs:[run]}]}
+    const output=resolve(temporary,'acquired.json'),path=output+'.raw.json'
+    await assert.rejects(retainAndDerive(acquired,output,false),/ASCII program must succeed/)
+    const hash=acquired.acquiredSha256
     assert.equal(createHash('sha256').update(await readFile(path)).digest('hex'),hash,'failed relation leaves raw bytes intact')
-    assert.equal(JSON.parse(await readFile(path,'utf8')).containers[0].runs[0][0].result.errors.at(-1).number,529,'original invalid diagnostic retained')
+    assert.equal(JSON.parse(await readFile(path,'utf8')).containers[0].runs[0][1].result.errors.at(-1).number,529,'original invalid diagnostic retained')
     await assert.rejects(persistAcquiredCapture(acquired,path),error=>error.code==='EEXIST','raw evidence is exclusive')
     console.log('Invalid relation retains original acquired raw observations and exclusive destination')
   } finally {await rm(temporary,{recursive:true,force:true})}
@@ -923,9 +927,7 @@ if (selfTest) {
   const actual = { hostname:referenceHostname,exclusions,containers }
   // Preserve the complete acquired observations before any semantic relation
   // derivation can reject errors, sentinel behavior or independent evaluations.
-  const acquiredSha256=await persistAcquiredCapture(actual,output+'.raw.json')
-  actual.acquiredSha256=acquiredSha256
-  if(!oneDatabase){actual.runDigests=runDigests(actual);actual.variationReport=variationReport(actual);actual.relations=containers.map(c=>c.runs.map(relationReport))}
+  await retainAndDerive(actual,output,oneDatabase)
   // Retain the raw artifact before validation so a failing capture can be inspected.
   const serialized=JSON.stringify(actual)+'\n'
   assert(Buffer.byteLength(serialized)<=captureByteLimit,'capture byte bound')
