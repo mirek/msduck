@@ -366,7 +366,7 @@ fn validate_projected(
             }
             self.depth += 1;
             self.nodes += 1;
-            if self.depth >= MAX_SCOPE_DEPTH || self.nodes > 4096 {
+            if self.depth >= MAX_SCOPE_DEPTH || self.nodes > MAX_TRAVERSAL_NODES {
                 return std::ops::ControlFlow::Break(Error::UnsupportedSyntax);
             }
             if let Err(error) = call(expr) {
@@ -443,7 +443,7 @@ fn query_in<'a>(
     if depth >= MAX_SCOPE_DEPTH {
         return Err(Error::UnsupportedSyntax);
     }
-    if !contains_functions(query) {
+    if !contains_functions(query)? {
         return Ok(Vec::new());
     }
     let SetExpr::Select(select) = query.body.as_ref() else {
@@ -482,24 +482,84 @@ fn query_in<'a>(
     Ok(result)
 }
 
-fn contains_functions(query: &Query) -> bool {
-    struct Find(bool);
-    impl Visitor for Find {
-        type Break = ();
-        fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<()> {
-            if matches!(expr,Expr::Function(f) if matches!(f.name.to_string().to_ascii_lowercase().as_str(),"concat_ws"|"translate"))
-            {
-                self.0 = true;
-                return std::ops::ControlFlow::Break(());
+fn contains_functions(query: &Query) -> Result<bool, Error> {
+    struct Find {
+        found: bool,
+        depth: usize,
+        nodes: usize,
+    }
+    impl Find {
+        fn enter(&mut self) -> std::ops::ControlFlow<Error> {
+            self.depth += 1;
+            self.nodes += 1;
+            if self.depth >= MAX_SCOPE_DEPTH || self.nodes > MAX_TRAVERSAL_NODES {
+                std::ops::ControlFlow::Break(Error::UnsupportedSyntax)
+            } else {
+                std::ops::ControlFlow::Continue(())
+            }
+        }
+        // Set-operation nesting has no Visitor hook of its own. Check it
+        // iteratively before the generic visitor recurses into query.body.
+        fn body(&mut self, body: &SetExpr) -> std::ops::ControlFlow<Error> {
+            let mut pending = vec![(body, 1usize)];
+            while let Some((body, depth)) = pending.pop() {
+                self.nodes += 1;
+                if self.depth + depth >= MAX_SCOPE_DEPTH || self.nodes > MAX_TRAVERSAL_NODES {
+                    return std::ops::ControlFlow::Break(Error::UnsupportedSyntax);
+                }
+                if let SetExpr::SetOperation { left, right, .. } = body {
+                    pending.push((right, depth + 1));
+                    pending.push((left, depth + 1));
+                }
             }
             std::ops::ControlFlow::Continue(())
         }
     }
-    let mut find = Find(false);
-    let _ = query.visit(&mut find);
-    find.0
+    impl Visitor for Find {
+        type Break = Error;
+        fn pre_visit_query(&mut self, query: &Query) -> std::ops::ControlFlow<Error> {
+            self.enter()?;
+            self.body(&query.body)
+        }
+        fn post_visit_query(&mut self, _: &Query) -> std::ops::ControlFlow<Error> {
+            self.depth -= 1;
+            std::ops::ControlFlow::Continue(())
+        }
+        fn pre_visit_table_factor(&mut self, _: &TableFactor) -> std::ops::ControlFlow<Error> {
+            self.enter()
+        }
+        fn post_visit_table_factor(&mut self, _: &TableFactor) -> std::ops::ControlFlow<Error> {
+            self.depth -= 1;
+            std::ops::ControlFlow::Continue(())
+        }
+        fn pre_visit_expr(&mut self, expr: &Expr) -> std::ops::ControlFlow<Error> {
+            self.enter()?;
+            if matches!(expr,Expr::Function(f) if matches!(f.name.to_string().to_ascii_lowercase().as_str(),"concat_ws"|"translate"))
+            {
+                self.found = true;
+            }
+            // Continue after finding a function so a large/deep suffix cannot
+            // evade the whole-query budget through an early discovery exit.
+            std::ops::ControlFlow::Continue(())
+        }
+        fn post_visit_expr(&mut self, _: &Expr) -> std::ops::ControlFlow<Error> {
+            self.depth -= 1;
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    let mut find = Find {
+        found: false,
+        depth: 0,
+        nodes: 0,
+    };
+    match query.visit(&mut find) {
+        std::ops::ControlFlow::Continue(()) => Ok(find.found),
+        std::ops::ControlFlow::Break(error) => Err(error),
+    }
 }
+
 const MAX_SCOPE_DEPTH: usize = 64;
+const MAX_TRAVERSAL_NODES: usize = 4096;
 fn scope_with_functions(
     catalog: &CatalogSnapshot,
     query: &Query,
@@ -639,7 +699,7 @@ fn fields_in(
     if depth >= MAX_SCOPE_DEPTH {
         return Err(Error::UnsupportedSyntax);
     }
-    if !contains_functions(query) {
+    if !contains_functions(query)? {
         return query_fields(catalog, query, outer).ok_or(Error::UnknownOperand);
     }
     let SetExpr::Select(select) = query.body.as_ref() else {

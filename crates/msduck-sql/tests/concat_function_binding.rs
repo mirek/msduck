@@ -942,3 +942,95 @@ fn string_literal_storage_boundaries_promote_original_declarations_to_max() {
         );
     }
 }
+
+#[test]
+fn initial_discovery_bounds_deep_wide_and_late_function_asts() {
+    let c = catalog();
+    let cols = collations();
+    let context = Context {
+        collations: &cols,
+        language: Language::UsEnglish,
+    };
+    for target_first in [false, true] {
+        let mut q = query("SELECT 'a',CONCAT_WS(NULL,'a','b')");
+        let SetExpr::Select(select) = q.body.as_mut() else {
+            panic!()
+        };
+        let literal = select.projection[0].clone();
+        let target = select.projection[1].clone();
+        select.projection = if target_first {
+            vec![target.clone()]
+        } else {
+            Vec::new()
+        };
+        select.projection.extend(std::iter::repeat_n(literal, 4096));
+        if !target_first {
+            select.projection.push(target);
+        }
+        for result in [
+            binding::query(&c, &q, &Scope::default(), &context).map(|_| ()),
+            binding::fields(&c, &q, &Scope::default(), &context).map(|_| ()),
+        ] {
+            assert_eq!(result, Err(Error::UnsupportedSyntax));
+        }
+    }
+    let mut q = query("SELECT 'a',CONCAT_WS(NULL,'a','b')");
+    let SetExpr::Select(select) = q.body.as_mut() else {
+        panic!()
+    };
+    let SelectItem::UnnamedExpr(expr) = &mut select.projection[0] else {
+        panic!()
+    };
+    for _ in 0..65 {
+        *expr = Expr::Nested(Box::new(expr.clone()));
+    }
+    assert!(matches!(
+        binding::query(&c, &q, &Scope::default(), &context),
+        Err(Error::UnsupportedSyntax)
+    ));
+    assert!(matches!(
+        binding::fields(&c, &q, &Scope::default(), &context),
+        Err(Error::UnsupportedSyntax)
+    ));
+    // Set bodies and nested join factors recurse independently of Expr hooks.
+    let mut q = query("SELECT CONCAT_WS(NULL,'a','b')");
+    let leaf = query("SELECT 'a'").body;
+    for _ in 0..65 {
+        q.body = Box::new(SetExpr::SetOperation {
+            op: sqlparser::ast::SetOperator::Union,
+            set_quantifier: sqlparser::ast::SetQuantifier::All,
+            left: q.body,
+            right: leaf.clone(),
+        });
+    }
+    assert!(matches!(
+        binding::query(&c, &q, &Scope::default(), &context),
+        Err(Error::UnsupportedSyntax)
+    ));
+    assert!(matches!(
+        binding::fields(&c, &q, &Scope::default(), &context),
+        Err(Error::UnsupportedSyntax)
+    ));
+    let mut q = query("SELECT CONCAT_WS(NULL,'a','b') FROM t");
+    let SetExpr::Select(select) = q.body.as_mut() else {
+        panic!()
+    };
+    for _ in 0..65 {
+        let relation = select.from.remove(0);
+        select.from.push(sqlparser::ast::TableWithJoins {
+            relation: sqlparser::ast::TableFactor::NestedJoin {
+                table_with_joins: Box::new(relation),
+                alias: None,
+            },
+            joins: Vec::new(),
+        });
+    }
+    assert!(matches!(
+        binding::query(&c, &q, &Scope::default(), &context),
+        Err(Error::UnsupportedSyntax)
+    ));
+    assert!(matches!(
+        binding::fields(&c, &q, &Scope::default(), &context),
+        Err(Error::UnsupportedSyntax)
+    ));
+}

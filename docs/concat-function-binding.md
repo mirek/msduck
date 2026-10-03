@@ -41,8 +41,12 @@ function results use the canonical result type identity, never an operand alias
 ID. ResultType adaptation receives the validated character declaration without
 values or transport types.
 
-Scope/nesting depth is limited to 64 and projected expression traversal to 4096
-nodes. Function arity remains the reviewed 3..254/3 contract. Unknown source,
+Scope/nesting depth is limited to 64 and traversal to 4096 semantic nodes.
+Initial discovery bounds query/operand/table-factor traversal and checks set-body
+nesting iteratively before generic recursion; it scans the whole admitted query
+so a function at the start cannot hide an oversized/deep suffix. Standalone
+function binds use the same projected operand validator. Function arity remains
+the reviewed 3..254/3 contract. Unknown source,
 collation, encoding or conversion properties remain explicit errors; known
 function diagnostics retain their complete captured number/state/message.
 Recursive CTEs and set members containing these functions remain unsupported in
