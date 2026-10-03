@@ -11373,6 +11373,31 @@
         "Fresh exclusiveclaim after genuine completed deps; reuse existing isolated worker/private reference resources only, no newagents/trees/nativecaches or canonicalLinux source/build/cache writes. Claiming worker owns source checkpoints/draftPR, finalsource-pinned full four-run reproduction/complete raw sidecar, focusedtests bothhosts, independent/Codex review or genuinefallback, exactrequiredCI, merge and promptissue/registry/projectcompletion. NoRust/engine/runtime/collationgate edits; root907fullverifier sharedlock respected."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Plgb8"
+    },
+    {
+      "id": "bulk-character-utf8-boundary-reference-v1",
+      "title": "Capture native UTF8 boundary and malformed conversion outcomes",
+      "issue": 913,
+      "state": "ready",
+      "authorization": "Owner continuing full-server goal. Native UTF8 source projection remains unimplemented, and actual malformed SQL conversion differs from client/platform strict/lossy decoding. Capture missing source/target boundary evidence before implementing converters.",
+      "scope": [
+        "scripts/capture-bulk-character-utf8-boundary.mjs",
+        "reference/bulk-character-utf8-boundary.json",
+        "tests/bulk_character_utf8_boundary_capture.test.mjs",
+        "docs/bulk-character-utf8-boundary-reference.md"
+      ],
+      "dependencies": [
+        "bulk-character-conversion-reference-v1",
+        "bulk-character-capacity-reference-v1",
+        "bulk-character-cp1252-reference-v1",
+        "bulk-character-adapter-plan-v1"
+      ],
+      "acceptance": [
+        "Freeze24 UTF8 source byte sequences times four targets (nativeCP1251/nativeCP1252/nativeUTF8 VARCHAR(MAX), UnicodeNVARCHAR(MAX)), exactly96 probes with NULL plus isolated challenge so an earlier bad row cannot hide an outcome. Valid controls00,7f,c280,c2a9,dfbf,e0a080,ed9fbf,ee8080,efbfbf,f0908080,f48fbfbf,c2bf; truncatedc2,df,e0a0,ed9f,f09080,f48fbf; malformedc228,e08080,eda080,f0808080,f4908080,f5808080. Preserve actual nativebytes, SQLUTF16 units and clientdisplay separately. Unexpected outcomes remain original; no guessed universaldecoder/best-fit/capacity/assignment profile.",
+        "Four fresh databases/two pinnedSQLServer17.0.4065.4 containers with actual source/image/Tedious20/Node provenance. Reuse reviewed895/899 bounded helpers and pin ancestor/helper inputs. Original postloginframes excludingcredentials, typeddescriptors, all errors/info/DONE/callbacks and original-session counters must survive. Bounded raw+complete unnormalized sidecar before goldvalidation; independently pin complete semantics/request/response/framing and reject uniform corruption or payload-preserving repartition with recomputed comparisons. Raw-first capture under timeout/asynchronous failure/comparison exhaustion, output alias refusal and cleanup remain verified.",
+        "Fresh exclusive receipt after genuine dependenciesDone. Reuse existing isolated worker/private reference resources only; no newagents/worktrees/nativecaches or canonicalLinux source/build/cache writes. Worker owns checkpoints/draftPR, focused meaningful tests bothhosts, full finalsource-pinned four-run reproduction with independently recomputed complete sidecar, independent/Codex review or genuine fallback, exactrequiredCI/merge and promptregistry/issue/projectcompletion. No Rust/engine/catalog/output/BulkLoad edits; finite evidence leaves general Unicode/codepage and runtime integration gaps explicit."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PliNW"
     }
   ]
 }
