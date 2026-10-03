@@ -1017,6 +1017,15 @@ fn snapshot_transactions_need_the_option_and_read_their_snapshot() {
         "SELECT 1; INSERT #tmp VALUES (1); SELECT v FROM #tmp; DECLARE @x TABLE (v INT); INSERT @x VALUES (1); SELECT COUNT(*) FROM sys.objects",
     )
     .unwrap();
+    // A common table expression shadows the table of the same name.
+    run(&mut a, "WITH t AS (SELECT 1 AS v) SELECT v FROM t").unwrap();
+    assert_eq!(
+        run(
+            &mut a,
+            "WITH c AS (SELECT 1 AS v) SELECT t.v FROM t JOIN c ON 1 = 1"
+        ),
+        Err(3952)
+    );
     let tokens = a
         .batch_response("SELECT v FROM t", &Default::default(), false, None)
         .0;
@@ -1087,6 +1096,21 @@ fn snapshot_transactions_need_the_option_and_read_their_snapshot() {
     check(
         &mut a,
         "@@TRANCOUNT = 0 AND (SELECT v FROM t WHERE id = 1) = 4",
+    )
+    .unwrap();
+    // DML after a WITH clause reports the conflict too.
+    run(&mut a, "BEGIN TRAN; SELECT v FROM t").unwrap();
+    run(&mut b, "UPDATE t SET v = 6 WHERE id = 1").unwrap();
+    assert_eq!(
+        run(
+            &mut a,
+            "WITH s AS (SELECT 1 AS id) UPDATE t SET v = 7 WHERE id IN (SELECT id FROM s)"
+        ),
+        Err(3960)
+    );
+    check(
+        &mut a,
+        "@@TRANCOUNT = 0 AND (SELECT v FROM t WHERE id = 1) = 6",
     )
     .unwrap();
     // Writes to other rows commit.

@@ -14,7 +14,9 @@ use super::super::super::{Execution, Parameter, Session, StatementErrors};
 use anyhow::{Result, bail};
 use msduck_core::diagnostic::SqlError;
 use msduck_sql::dialect::alter_database::{Request, Termination};
-use sqlparser::ast::{FromTable, ObjectName, Statement, TableFactor, TableObject, Visit, Visitor};
+use sqlparser::ast::{
+    FromTable, ObjectName, Query, SetExpr, Statement, TableFactor, TableObject, Visit, Visitor,
+};
 use std::{collections::HashMap, ops::ControlFlow};
 
 /// TDS numbering of SNAPSHOT.
@@ -218,14 +220,27 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
 }
 
 /// Every table name a statement reads or writes, excluding table-valued
-/// function calls.
+/// function calls and one-part names of the statement's common table
+/// expressions (anywhere in the statement, so a CTE also hides a table of
+/// the same name outside its own scope).
 fn relations(statement: &Statement) -> Vec<ObjectName> {
     struct Relations {
         names: Vec<ObjectName>,
         functions: Vec<ObjectName>,
+        ctes: Vec<String>,
     }
     impl Visitor for Relations {
         type Break = ();
+        fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
+            if let Some(with) = &query.with {
+                self.ctes.extend(
+                    with.cte_tables
+                        .iter()
+                        .map(|cte| cte.alias.name.value.to_lowercase()),
+                );
+            }
+            ControlFlow::Continue(())
+        }
         fn pre_visit_relation(&mut self, relation: &ObjectName) -> ControlFlow<()> {
             self.names.push(relation.clone());
             ControlFlow::Continue(())
@@ -245,12 +260,23 @@ fn relations(statement: &Statement) -> Vec<ObjectName> {
     let mut visitor = Relations {
         names: Vec::new(),
         functions: Vec::new(),
+        ctes: Vec::new(),
     };
     let _ = statement.visit(&mut visitor);
-    let Relations { names, functions } = visitor;
+    let Relations {
+        names,
+        functions,
+        ctes,
+    } = visitor;
     names
         .into_iter()
         .filter(|name| !functions.contains(name))
+        .filter(|name| match name.0.as_slice() {
+            [part] => part
+                .as_ident()
+                .is_none_or(|ident| !ctes.contains(&ident.value.to_lowercase())),
+            _ => true,
+        })
         .collect()
 }
 
@@ -324,9 +350,19 @@ pub(super) fn write(
     .into())
 }
 
-/// The table an INSERT, UPDATE, DELETE or MERGE writes.
+/// The table an INSERT, UPDATE, DELETE or MERGE writes, also after a WITH
+/// clause.
 fn write_target(statement: &Statement) -> Option<ObjectName> {
     let factor = match statement {
+        Statement::Query(query) => {
+            return match query.body.as_ref() {
+                SetExpr::Insert(inner)
+                | SetExpr::Update(inner)
+                | SetExpr::Delete(inner)
+                | SetExpr::Merge(inner) => write_target(inner),
+                _ => None,
+            };
+        }
         Statement::Insert(insert) => {
             return match &insert.table {
                 TableObject::TableName(name) => Some(name.clone()),
