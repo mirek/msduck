@@ -11102,6 +11102,30 @@
         "Reuse existing isolated root worktree/cache and sharedLinux builder lock, no new agents/worktrees/nativecaches. Focused core suite, fmt, workspace Rust, strictalltargetClippy, fulltedious client suite and raw325case audit with exacthead/source/binary evidence. Independent and verified Codex review or genuine fallback, requiredCI, exacthead merge and promptregistry/project completion. Runtime storage/bulk/output adoption remains explicitly pending with separate scoped tasks."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PlCvt"
+    },
+    {
+      "id": "bulk-character-capacity-reference-v1",
+      "title": "Capture BulkLoad charset capacity ordering",
+      "state": "ready",
+      "authorization": "Continuing owner goal; first-party 895 captures copyright-expansion and Omega-shrink capacitydifferences. No thirdparty content or runtime/engine/export scope. Availability requires genuine completed deps.",
+      "issue": 899,
+      "scope": [
+        "scripts/capture-bulk-character-capacity.mjs",
+        "reference/bulk-character-capacity.json",
+        "tests/bulk_character_capacity_capture.test.mjs",
+        "docs/bulk-character-capacity-reference.md"
+      ],
+      "dependencies": [
+        "bulk-character-conversion-reference-v1",
+        "bulk-character-adapter-plan-v1"
+      ],
+      "acceptance": [
+        "At most96 bounded byte-controlled probes, each<=260rows; matrix distinguishes source byte capacity, target ANSI byte capacity and Unicode code-unit capacity. Cover CP1251/CP1252/UTF8 bounded VARCHAR and CHAR sources to CP1252/UTF8 VARCHAR/CHAR and NVARCHAR/NCHAR widths1/2/3/4 plus relevantMAX controls. Use multi-character CP1251 and CP1252 expanding to Unicode/UTF8, UTF8 two/three/four-byte valid characters shrinking to CP1252 or Unicode, ASCII prefixes/suffixes, source declared/wire width controls and NULL/empty. Include enough controls to distinguish checking original bytes, converted bytes and Unicode units rather than guessing; preserve fixed padding/truncation/2628/4815 precedence, full diagnostics including partial surrogates, rowatomicity and original-session counters. Finite bulk evidence is not universalCAST/assignment semantics or a best-fit map; explicittransactions/staging composition and arbitrarycollations remain deferred.",
+        "Four independent fresh databases on two pinned SQLServer17.0.4065.4 containers, same captured client20/packet512; all original postlogin request/reply frames excludingcredentials, descriptor bytes and declaration/target facts, native/SQLUTF16/public display, errors/state/class/message/INFO/DONE/callbacks/counters. Separate replacement sessions. Fixed image/version/client/source and reusedhelper provenance; original exact raw differences saved beforefixedgoldvalidation. No fixture overwrite/normalization or guessed error behavior.",
+        "Use reviewed895 bounded capture primitives rather than reproduce its stream/capacity holes; exact request message phase/SPID/status/ID/EOM validation, safe awaited listener failures, reserveddiagnostic budget and assignedpartialfailure records. Exchanges<=2MiB/1024frames and wholeartifact/completecomparison<=48MiB; preflight allocations/copies and refuseexisting/symlink/hardlink outputs beforeDocker. Independently pinned complete semantics/payloads rejectuniform4run corruption even with recomputedcomparison summaries. Meaningful focused offline-negative tests cover capacity-result corruption and omittedfailedrecords/resource exhaustion, aliases and fixedsource/helperhashes.",
+        "Reuse worker447 existing isolatedworktree/private reference dependencies/read-onlynode_modules, no extraagents/worktrees/nativecache. Coordinate source/dependency reads againstcanonicalbuilder ifneeded; no sharedsource/cache/executable writes forreference. Consult owner-copiedTDS/tediousskills and raw895 evidence. Exacthead focused tests bothhosts, requiredCI and independent/Codexreview or genuinefallback. Workerowns ownreceipt/checkpoints/PRfollowup/exactheadmerge and registry/projectcompletion. No runtime/core/TDS/commonhelper/engine/export edits. Future generalcapacity implementation needs this groundtruth plus separate scoped task."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PlJwT"
     }
   ]
 }
