@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {readFile, mkdir, mkdtemp, writeFile, symlink, link, rm} from 'node:fs/promises'
 import {join} from 'node:path'
 import {spawnSync} from 'node:child_process'
-import {cases, rowsFor, compare, validate, guardOutput} from '../scripts/capture-bulk-staging-reference.mjs'
+import {cases, rowsFor, compare, validate, guardOutput, persistCapture} from '../scripts/capture-bulk-staging-reference.mjs'
 
 const fixture = new URL('../reference/bulk-staging-reference.json', import.meta.url)
 const load = async () => JSON.parse(await readFile(fixture, 'utf8'))
@@ -125,5 +125,26 @@ test('existing files, hard links, dangling links and symlink parents are refused
     }
     await guardOutput(join(directory, 'new.json'))
     assert.equal(await readFile(existing, 'utf8'), 'retained')
+  } finally { await rm(directory, {recursive: true, force: true}) }
+})
+
+test('a rejected changed observation retains both raw capture and full comparison sidecar', async () => {
+  const originalBytes = await readFile(fixture)
+  const actual = JSON.parse(originalBytes)
+  for (const run of actual.runs) {
+    run.observations.find(o => o.case.name === 'trigger-foreign-key-check0-tran0').readback.result.sets[0].rows[0][0] = 0
+  }
+  actual.comparisons = actual.runs.slice(1).map(run => compare(run, actual.runs[0]))
+  await mkdir(new URL('../.tmp/', import.meta.url), {recursive: true})
+  const directory = await mkdtemp(new URL('../.tmp/bulk-staging-rejected-', import.meta.url))
+  try {
+    const output = join(directory, 'changed.json')
+    await assert.rejects(persistCapture(actual, output), /fixed failed-load identity/)
+    assert.deepEqual(JSON.parse(await readFile(output, 'utf8')), actual)
+    const sidecar = JSON.parse(await readFile(`${output}.comparison.json`, 'utf8'))
+    assert.equal(sidecar.retained, true)
+    assert.deepEqual(sidecar.differences, compare(actual, JSON.parse(originalBytes)))
+    assert.ok(sidecar.differences.some(d => d.path.includes('/readback/result/sets/0/rows/0/0') && d.local === 0 && d.reference === 547))
+    assert.deepEqual(await readFile(fixture), originalBytes)
   } finally { await rm(directory, {recursive: true, force: true}) }
 })

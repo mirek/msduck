@@ -283,6 +283,23 @@ export function validate(value) {
   assert.ok(isDeepStrictEqual(value.comparisons, expected), 'comparisons exactly reflect retained observations')
 }
 
+export async function persistCapture(actual, output, write = false) {
+  // Preserve the whole comparison even when fixed gold validation rejects a
+  // newly observed variation. Neither artifact is a claim of validation success.
+  await guardOutput(output)
+  await guardOutput(`${output}.comparison.json`)
+  await mkdir(dirname(output), {recursive: true})
+  await writeFile(output, JSON.stringify(actual) + '\n', {flag: 'wx'})
+  let retained
+  try { retained = JSON.parse(await readFile(fixture, 'utf8')) } catch (error) { if (error.code !== 'ENOENT') throw error }
+  const comparison = retained ? compare(actual, retained) : []
+  await writeFile(`${output}.comparison.json`, JSON.stringify({retained: Boolean(retained), differences: comparison}) + '\n', {flag: 'wx'})
+  validate(actual)
+  if (retained) validate(retained)
+  if (write) await writeFile(fixture, JSON.stringify(actual) + '\n', {flag: 'wx'})
+  return {retained: Boolean(retained), comparison}
+}
+
 export async function main(args = process.argv.slice(2)) {
   const allowed = new Set(['--write-fixture', '--replay-fixture'])
   assert.ok(args.filter(arg => arg.startsWith('--')).every(arg => allowed.has(arg)), 'known flags only')
@@ -308,14 +325,7 @@ export async function main(args = process.argv.slice(2)) {
     runs.push(...result.runs)
   }
   const actual = {format: 1, containers, runs, comparisons: runs.slice(1).map(run => compare(run, runs[0]))}
-  await mkdir(dirname(output), {recursive: true})
-  await writeFile(output, JSON.stringify(actual) + '\n', {flag: 'wx'})
-  validate(actual)
-  let retained
-  try { retained = JSON.parse(await readFile(fixture, 'utf8')) } catch (error) { if (error.code !== 'ENOENT') throw error }
-  const comparison = retained ? compare(actual, retained) : []
-  await writeFile(`${output}.comparison.json`, JSON.stringify({retained: Boolean(retained), differences: comparison}) + '\n', {flag: 'wx'})
-  if (write) await writeFile(fixture, JSON.stringify(actual) + '\n', {flag: 'wx'})
+  const {retained, comparison} = await persistCapture(actual, output, write)
   console.log(`Captured ${cases.length} cases in four fresh databases; ${retained ? `${comparison.length} retained-fixture differences` : 'no prior retained baseline'}`)
   if (retained && comparison.length) throw Error('raw reference drift preserved; inspect output and comparison sidecar')
 }
