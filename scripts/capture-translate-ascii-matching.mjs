@@ -522,7 +522,8 @@ function relationReport(run) {
         if(matrix[a][b])for(let c=0;c<128;c++)if(matrix[b][c]&&!matrix[a][c])failures.transitive.push([a,b,c])
       }
     }
-    return {collation,declaration,matrix,failures,classification:Object.values(failures).every(x=>x.length===0)?'observed equivalence within ASCII only':'inconsistent observed relation; unknown'}
+    const rowsHex=matrix.map(row=>{const bytes=Buffer.alloc(16);row.forEach((matched,index)=>{if(matched)bytes[index>>3]|=1<<(index&7)});return bytes.toString('hex')})
+    return {collation,declaration,alphabetSize:128,rowAxis:'mapping ASCII code',bitAxis:'source ASCII code; least significant bit first within each byte',rowsHex,failures,classification:Object.values(failures).every(x=>x.length===0)?'observed equivalence within ASCII only':'inconsistent observed relation; unknown'}
   }))
 }
 function validate(run) {
@@ -779,7 +780,9 @@ async function testObserver(retained) {
   for (const mutate of corruptions) {
     const actual=structuredClone(retained)
     for (const container of actual.containers) for (const copy of container.runs) mutate(copy)
-    assert.throws(()=>validateFourCaptures(actual,true),'identical four-copy corruption must fail')
+    actual.runDigests=runDigests(actual)
+    actual.acquiredSha256=createHash('sha256').update(JSON.stringify({hostname:actual.hostname,exclusions:actual.exclusions,containers:actual.containers})+'\n').digest('hex')
+    assert.throws(()=>validateFourCaptures(actual,false),'identical four-copy corruption must fail after refreshing integrity fields')
   }
   console.log('All RETURNVALUE splits/bytewise fragments pass; truncation and eighteen identical four-copy corruptions rejected')
 }
