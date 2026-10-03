@@ -108,6 +108,7 @@ test('LIKE, DISTINCT counts and extrema follow the column collations', async t =
   await query(connection, "CREATE TABLE dbo.agg (n nvarchar(10), v varchar(10), cs nvarchar(10) COLLATE Latin1_General_CS_AS, ai varchar(10) COLLATE Latin1_General_CI_AI); INSERT dbo.agg VALUES (N'Foo', 'Foo', N'a', 'Fóo'), (N'foo', 'foo', N'A', 'foo'), (N'FOO  ', 'FOO  ', N'a  ', 'FOO'), (N'bar', 'bar', NULL, NULL)")
   assert.deepEqual((await query(connection, 'SELECT count(DISTINCT n), count(DISTINCT v), count(DISTINCT cs), count(DISTINCT ai) FROM dbo.agg')).rows, [[2, 2, 2, 1]])
   assert.deepEqual((await query(connection, 'SELECT MIN(n), UPPER(MAX(n)), MIN(v), UPPER(RTRIM(MAX(v))) FROM dbo.agg')).rows, [['bar', 'FOO', 'bar', 'FOO']])
+  assert.deepEqual((await query(connection, 'SELECT MIN(DISTINCT n), UPPER(MAX(DISTINCT n)) FROM dbo.agg')).rows, [['bar', 'FOO']])
   assert.deepEqual((await query(connection, 'SELECT n, count(*) FROM dbo.agg GROUP BY n HAVING count(*) > 1')).rows.map(([, c]) => c), [3])
   assert.deepEqual((await query(connection, 'SELECT count(*) FROM (SELECT DISTINCT n FROM dbo.agg) d')).rows, [[2]])
   // ANSI values ignore no unit: CHAR(0) still distinguishes them.

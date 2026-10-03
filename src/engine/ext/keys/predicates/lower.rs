@@ -685,8 +685,12 @@ fn aggregate(name: &str, expr: &Expr) -> Option<Expr> {
     let with = |name: &str, args: Vec<Expr>| {
         let mut lowered = expr.clone();
         if let Expr::Function(f) = &mut lowered {
+            let extremum = matches!(name.to_ascii_lowercase().as_str(), "min" | "max");
             f.name = ObjectName::from(vec![Ident::new(name)]);
             if let FunctionArguments::List(list) = &mut f.args {
+                if extremum {
+                    list.duplicate_treatment = None;
+                }
                 list.args = args
                     .into_iter()
                     .map(|arg| FunctionArg::Unnamed(FunctionArgExpr::Expr(arg)))
@@ -719,7 +723,8 @@ fn aggregate(name: &str, expr: &Expr) -> Option<Expr> {
         }),
         // The extremum of (key, value) pairs; NULL values stay NULL so the
         // aggregate (and the NULL-elimination warning) still sees them.
-        "min" | "max" if !distinct && converted(value) => {
+        // DISTINCT cannot change an extremum.
+        "min" | "max" if converted(value) => {
             let pair = keyed_pair(value)?;
             Some(case(
                 Expr::BinaryOp {
