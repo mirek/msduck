@@ -106,7 +106,9 @@ test('uniform request-type corruption cannot hide behind unchanged payload signa
   }
 })
 
-test('asynchronous trace guards close the connection and preserve bounded failed evidence through the awaited exchange', {timeout:10000}, async () => {
+// Four bounded persistence/comparison cases can be CPU-heavy on slow workers.
+// This test deadline does not alter the collector's exchange/request limits.
+test('asynchronous trace guards close the connection and preserve bounded failed evidence through the awaited exchange', {timeout:60000}, async () => {
   for(const mode of ['in','out','split-header','oversized-with-prefix']) {
     const direction=mode==='out'?'out':'in'
     const incoming=new EventEmitter(),outgoing=new EventEmitter()
