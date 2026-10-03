@@ -10472,6 +10472,39 @@
       ],
       "issue": 858,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkdtQ"
+    },
+    {
+      "id": "concat-function-execution-v1",
+      "title": "Integrate typed CONCAT_WS and TRANSLATE in root execution adapters",
+      "state": "backlog",
+      "authorization": "Owner continuing full SQL Server compatibility goal and core/shell guidance. Read-only current source verifies existing root binding/lowering/registration hooks, logical MAX wire mapping gap and standalone9828 diagnostic gap. Follow published pure typed conversion/binding/matching tasks; preserve separately owned engine.rs. Owner-run references and pinned upstream architecture only; no third-party input.",
+      "scope": [
+        "src/query_catalog.rs",
+        "src/concat_lower.rs",
+        "src/concat_lower/concat_functions.rs",
+        "src/unicode_carrier.rs",
+        "src/unicode_carrier/concat_functions.rs",
+        "src/result_types.rs",
+        "src/query_error.rs",
+        "tests/concat_function_execution.rs",
+        "tests/compatibility.test.mjs",
+        "docs/concat-function-execution.md"
+      ],
+      "dependencies": [
+        "concat-source-conversion-binding-v1",
+        "concat-function-binding-v1",
+        "translate-matching-keys-v1"
+      ],
+      "acceptance": [
+        "Read-only discovery verified existing `query_catalog::bind_unicode_operations` and `bind_unicode_expression` are called during query preparation, execution and standalone expression binding; `concat_lower::lower` is already called by Translator; `unicode_carrier::register` is already registered. Extend these parent adapters with focused child modules and existing pure binder plans over explicit CatalogSnapshot/Scope, parameter declarations and database collation/language context. Cover aliases/columns/CTEs/derived/APPLY/correlations and prepared/empty/NULL result metadata. Acquiring catalog/session inputs stays in root; no DuckDB/session/I/O effects in deterministic crates.",
+        "Lower original AST operands exactly once into bound native calls retaining their original typed payloads and explicit conversion plans. Decode original integer widths, exact decimal coefficients/money, real/float bits, stored temporal ticks/scale/local offsets/GUID byte order, binary bytes and legacy/modern character encodings. Never round-trip through generic backend text formatting or JavaScript dates, duplicate volatile operands, normalize raw units, silently promote source types or replan compile metadata from runtime values. Preserve value/ separator boundary behavior, first duplicate mapping/non-chaining replacements, NULL separators and typed NULL/error priority using the reviewed deterministic evaluators and grounded matching provider.",
+        "Implement native carrier reads/writes with validity and type/length checks before pointer access, 16 MiB cell/64 MiB chunk bounds, bounded plan/certificate parsing and explicit unsupported shapes. Logical result family/length/flags/collation comes from the pure compiled plan even for empty/NULL/prepared sets. Correct the root logical-to-wire mapping for known NVARCHAR(MAX) (231/-1) instead of fabricating bounded or fallback descriptors. Use descriptor-only SC/UTF8 support only where actual Unicode/native encoding is proven; do not enable ANSI UTF8 operational encoding merely from wire descriptors or use generic name-based comparison/folding.",
+        "At query error attachment, preserve exact canonical runtime SQL diagnostics and original row/completion prefixes without repurposing integer/money/binary diagnostic identities. Root discovery found the engine's `runtime_diagnostic` chain does not recognize9828 and standalone `eval_expression` calls DuckDB directly; this task may not modify that owner-held file. Record the exact narrow diagnostic decoder/hook needed for later engine integration and test/report standalone mismatches honestly. Successful standalone values still need actual integration proof. Never claim complete function/runtime parity while that gap remains, or hide it with skipped/normalized comparisons.",
+        "Replay applicable immutable #807/#815/#818/#827/#831/#833/#835/#841/#854 reference programs through the actual server/native adapters, retaining original source declarations and native bytes, result descriptors/flags/userType/collation, exact rows, diagnostics, DONE/status and prepared repeated/failing/successful controls. Include real native volatile evaluation-count and malformed/NULL/vector/resource/empty-result regressions, scope/idempotence and independent tedious client checks in the existing npm-covered file. No fixture edits, comparison filtering, timeout/assertion weakening or implicit fallback for unknown cases. Report raw remaining differences and the exact revision each proof covers; rootside tests belong outside pure crates.",
+        "Fresh exclusive claim in an existing completed worktree after dependencies; no additional workers/worktrees/native caches. Consult T-SQL/TDS/tedious skills and the reviewed owner mssqlite pin7f71f2081602f8e3051998f5c11f058e65fe24ec (architecture evidence, not SQL Server behavior). Honor canonical Linux sync/build/client lock. Run fmt, strict workspace Clippy, workspace Rust, workspace all-target build, full npm client and raw audit checks plus exact-head required CI/independent/Codex review. The claiming worker owns review follow-up, merge and registry/project completion."
+      ],
+      "issue": 859,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pkekg"
     }
   ]
 }
