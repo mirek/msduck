@@ -6,6 +6,7 @@ use serde_json::Value;
 
 const CONVERSION: &str = include_str!("../../../reference/bulk-character-conversion.json");
 const ENCODING: &str = include_str!("../../../reference/bulk-character-encoding.json");
+const CP1252: &str = include_str!("../../../reference/bulk-character-cp1252.json");
 
 fn object_end(text: &str, start: usize) -> usize {
     assert_eq!(text.as_bytes()[start], b'{');
@@ -259,9 +260,10 @@ fn unsupported_declarations_are_rejected_before_null_empty_or_limits() {
         output_bytes: 0,
     };
     for source in [
-        EncodingIdentity::Cp1252,
         EncodingIdentity::Utf8,
         EncodingIdentity::Opaque(1251),
+        EncodingIdentity::Opaque(1252),
+        EncodingIdentity::Opaque(65001),
     ] {
         for input in [None, Some(AnsiView::new(source, &[], 0).unwrap())] {
             assert_eq!(
@@ -419,5 +421,211 @@ fn resource_limit_is_not_a_sql_width_or_padding_policy() {
             o["readback"]["result"]["sets"][1]["rows"][3][2]["value"],
             ""
         );
+    }
+}
+
+fn assert_cp1252_projection(
+    input: Option<&[u8]>,
+    target: ProjectionTarget,
+    expected: Option<&[u8]>,
+) {
+    let actual = project(
+        EncodingIdentity::Cp1252,
+        AnsiView::nullable(
+            EncodingIdentity::Cp1252,
+            input,
+            input.map_or(0, <[u8]>::len),
+        )
+        .unwrap(),
+        target,
+        ProjectionLimits {
+            input_bytes: input.map_or(0, <[u8]>::len),
+            output_bytes: expected.map_or(0, <[u8]>::len),
+        },
+    )
+    .unwrap();
+    match (actual, target, expected) {
+        (None, _, None) => {}
+        (
+            Some(ProjectedValue::Native(value)),
+            ProjectionTarget::Native(encoding),
+            Some(expected),
+        ) => {
+            assert_eq!(value.view().encoding(), encoding);
+            assert_eq!(value.view().bytes(), expected)
+        }
+        (Some(ProjectedValue::SqlUtf16(units)), ProjectionTarget::SqlUtf16, Some(expected)) => {
+            assert_eq!(units, sql_units(expected))
+        }
+        other => panic!("unexpected CP1252 projection {other:?}"),
+    }
+}
+
+#[test]
+fn every_cp1252_byte_and_mixed_fragmented_values_match_all_four_native_runs() {
+    for (domain, target) in [
+        ("cp1252", ProjectionTarget::Native(EncodingIdentity::Cp1252)),
+        ("cp1251", ProjectionTarget::Native(EncodingIdentity::Cp1251)),
+        ("utf8", ProjectionTarget::Native(EncodingIdentity::Utf8)),
+        ("unicode", ProjectionTarget::SqlUtf16),
+    ] {
+        for form in ["every-byte", "mixed", "fragmented"] {
+            for o in observations(CP1252, &format!("cp1252-{form}-to-{domain}")) {
+                let inputs = o["input"].as_array().unwrap();
+                let rows = o["readback"]["result"]["sets"][1]["rows"]
+                    .as_array()
+                    .unwrap();
+                assert_eq!(inputs.len(), rows.len());
+                if form == "every-byte" {
+                    assert_eq!(inputs.len(), 258);
+                    for (byte, input) in inputs[2..].iter().enumerate() {
+                        assert_eq!(hex(input["valueHex"].as_str().unwrap()), [byte as u8]);
+                    }
+                }
+                for (input, row) in inputs.iter().zip(rows) {
+                    assert_eq!(input["id"], row[0]);
+                    let source = input["valueHex"].as_str().map(hex);
+                    let expected = binary(&row[2]);
+                    assert_cp1252_projection(source.as_deref(), target, expected.as_deref());
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn undefined_cp1252_bytes_keep_sql_control_units_and_direct_utf8_identity() {
+    let native = observations(CP1252, "cp1252-every-byte-to-cp1252");
+    let utf8 = observations(CP1252, "cp1252-every-byte-to-utf8");
+    for (native, utf8) in native.iter().zip(utf8) {
+        for byte in [0x81u8, 0x8d, 0x8f, 0x90, 0x9d] {
+            let row = &native["readback"]["result"]["sets"][1]["rows"][usize::from(byte) + 2];
+            assert_eq!(row[1], "\u{fffd}");
+            assert_eq!(binary(&row[2]), Some(vec![byte]));
+            assert_eq!(binary(&row[4]), Some(vec![byte, 0]));
+            assert_cp1252_projection(Some(&[byte]), ProjectionTarget::SqlUtf16, Some(&[byte, 0]));
+            assert_cp1252_projection(
+                Some(&[byte]),
+                ProjectionTarget::Native(EncodingIdentity::Cp1251),
+                Some(b"?"),
+            );
+            let utf8_row = &utf8["readback"]["result"]["sets"][1]["rows"][usize::from(byte) + 2];
+            let expected = binary(&utf8_row[2]).unwrap();
+            assert_eq!(expected, [0xc2, byte]);
+            assert_cp1252_projection(
+                Some(&[byte]),
+                ProjectionTarget::Native(EncodingIdentity::Utf8),
+                Some(&expected),
+            );
+        }
+    }
+}
+
+#[test]
+fn cp1252_plans_validate_identity_before_bounds_and_preserve_null_empty() {
+    let zero = ProjectionLimits {
+        input_bytes: 0,
+        output_bytes: 0,
+    };
+    for target in [
+        ProjectionTarget::SqlUtf16,
+        ProjectionTarget::Native(EncodingIdentity::Cp1252),
+        ProjectionTarget::Native(EncodingIdentity::Cp1251),
+        ProjectionTarget::Native(EncodingIdentity::Utf8),
+    ] {
+        assert_cp1252_projection(None, target, None);
+        assert_cp1252_projection(Some(&[]), target, Some(&[]));
+        for actual in [
+            EncodingIdentity::Cp1251,
+            EncodingIdentity::Utf8,
+            EncodingIdentity::Opaque(1252),
+        ] {
+            let value = AnsiView::new(actual, &[0x81], 1).unwrap();
+            assert_eq!(
+                project(EncodingIdentity::Cp1252, Some(value), target, zero),
+                Err(ProjectionError::SourceEncodingMismatch {
+                    declared: EncodingIdentity::Cp1252,
+                    actual
+                })
+            );
+        }
+    }
+    for target in [
+        EncodingIdentity::Opaque(1251),
+        EncodingIdentity::Opaque(1252),
+        EncodingIdentity::Opaque(65001),
+    ] {
+        for value in [
+            None,
+            AnsiView::nullable(EncodingIdentity::Cp1252, Some(&[]), 0).unwrap(),
+        ] {
+            assert_eq!(
+                project(
+                    EncodingIdentity::Cp1252,
+                    value,
+                    ProjectionTarget::Native(target),
+                    zero
+                ),
+                Err(ProjectionError::UnsupportedTarget(target))
+            );
+        }
+    }
+}
+
+#[test]
+fn cp1252_limits_count_utf16_bytes_and_utf8_expansion_before_copying() {
+    let input = [0, 0x81, 0x80, 0xa9, 0x8c];
+    let view = AnsiView::new(EncodingIdentity::Cp1252, &input, 5).unwrap();
+    for (target, output_bytes) in [
+        (ProjectionTarget::Native(EncodingIdentity::Cp1252), 5),
+        (ProjectionTarget::Native(EncodingIdentity::Cp1251), 5),
+        (ProjectionTarget::Native(EncodingIdentity::Utf8), 10),
+        (ProjectionTarget::SqlUtf16, 10),
+    ] {
+        assert!(
+            project(
+                EncodingIdentity::Cp1252,
+                Some(view),
+                target,
+                ProjectionLimits {
+                    input_bytes: 5,
+                    output_bytes
+                }
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            project(
+                EncodingIdentity::Cp1252,
+                Some(view),
+                target,
+                ProjectionLimits {
+                    input_bytes: 4,
+                    output_bytes
+                }
+            ),
+            Err(ProjectionError::Limit {
+                resource: Resource::Input,
+                requested: 5,
+                maximum: 4
+            })
+        );
+        assert_eq!(
+            project(
+                EncodingIdentity::Cp1252,
+                Some(view),
+                target,
+                ProjectionLimits {
+                    input_bytes: 5,
+                    output_bytes: output_bytes - 1
+                }
+            ),
+            Err(ProjectionError::Limit {
+                resource: Resource::Output,
+                requested: output_bytes,
+                maximum: output_bytes - 1
+            })
+        );
+        assert_eq!(view.bytes(), input);
     }
 }
