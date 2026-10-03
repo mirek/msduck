@@ -9943,6 +9943,27 @@
         "Unregistered module with path-included integration tests; no lib.rs/root/engine/helper exports edits. Fresh exclusive claim in completed existing prepared worker worktree from approved merged main55e3917, retain old branches/receipts. No new worktrees/native caches/agents; private pure Linux proof reads compatible cached dependencies and removes own outputs. Root90454 is live; never synchronize shared source or change its executable while active. Required exact-head formatter/strictClippy/workspace/client/audit gates coordinated after builder handoff, independent and verified Codex review or availability fallback. Claiming worker owns focused PR review follow-up/merge and registry/project/issue completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkINS"
+    },
+    {
+      "id": "float-default-grid-reference-v1",
+      "title": "Capture REAL/FLOAT default-format exponent and rounding grids",
+      "issue": 830,
+      "state": "ready",
+      "authorization": "Continuing owner SQL Server-compatible Rust/DuckDB goal and authorized parallel factory; first-party follow-up to merged numeric reference827 and inference-based formatter829. Expand retained exponent/tie ground truth without altering engine, formatter or test expectations. No external submission.",
+      "scope": [
+        "scripts/capture-float-default-grid.mjs",
+        "reference/float-default-grid.json",
+        "docs/float-default-grid.md"
+      ],
+      "dependencies": [
+        "concat-numeric-format-reference-v1"
+      ],
+      "acceptance": [
+        "Retain typed REAL/FLOAT exact IEEE original bits and actual outgoing TYPE_INFO/length/payload, including signed zero driver handling. Cover positive and negative representable powers of ten over REAL/FLOAT finite decimal-exponent range, adjacent finite bit patterns at selected underflow/subnormal/normal/maximum and fixed-scientific boundaries, and six-digit ties/carries across an explicit spread of exponents. Define a bounded deterministic input grid (at most2500programs/run), reject/drop no admitted input silently, document finite exclusions. Distinguish native/source binary storage, implicit CONCAT_WS/TRANSLATE and explicit style0 in separate labelled controls, with ANSI/Unicode domains and fixed declarations. No conclusion from decoded text alone; no source value changes or field normalization.",
+        "Reuse approved827 raw observer design: complete rows/UTF16 and exact numeric carriers, full metadata/userType/collation/schema/udt/tableName, exact errors/server/procedure identity and ordered COLMETADATA/ROW/RETURNSTATUS/RETURNVALUE/DONE evidence. Fixed explicit hostname and pinned SQLServer image86cc6144..., independently owned containers/fresh databases, four complete observations and a second full reproduction. Retain immutable fixture and complete hashes, meaningful coherent corruption/CLI no-overwrite/fragment/truncation/lifecycle tests; memory/request/total watchdog limits, cleanup own labelled terminal resources only. Document observed formula differences/unknowns; no runtime/exhaustive-finite-bit compatibility claim.",
+        "Fresh claim/receipt in completed existing concat reference worktree from approved main55e3917, preserving oldbranches/receipts. Private Linux reference staging/cached immutable Node deps and resource-limited containers; no new worktree/nativecache/agent, no shared runner synchronization/executable changes while root90700 ownslock. Preserve raw captures remotely and avoid duplicate localJSON; exactsource reproduction, source/link/syntax/diff/selftests and requiredCI/independent/Codexreview or fallback. Compare candidate829 exactapprovedsource privately if useful without changing its claimedfiles; report any counterexample with exactbits/rawevidence to its worker. Worker owns focusedPRreview/merge and registry/project/issuecompletion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkJWn"
     }
   ]
 }
