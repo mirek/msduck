@@ -970,7 +970,11 @@ impl Session {
         node: &T,
         statement: Option<&Statement>,
     ) -> Result<CrossDatabase> {
-        let relations = Relations::collect(node, self.current_alias()?);
+        let relations = Relations::collect(
+            node,
+            self.current_alias()?,
+            &statement.map(alias_targets).unwrap_or_default(),
+        );
         let Some((database, written)) = relations.foreign.first_key_value() else {
             return Ok(CrossDatabase::Local);
         };
@@ -1390,7 +1394,8 @@ impl Session {
                 match self.cross_database(&qualified, Some(&qualified))? {
                     CrossDatabase::Local => {}
                     CrossDatabase::Home(home, others) => {
-                        rehome(&mut qualified, &home, &self.current_alias()?);
+                        let targets = alias_targets(&qualified);
+                        rehome(&mut qualified, &home, &self.current_alias()?, &targets);
                         let _others = self.use_others(&others)?;
                         let home = self.enter_home(&home)?;
                         let result = self.validate_prepared_dml(qualified, &mut parameters);
@@ -1553,6 +1558,29 @@ impl Session {
     ) -> Result<duckdb::core::LogicalTypeId> {
         self.lower_database_functions(&mut expression)?;
         self.qualify_databases_across(&mut expression)?;
+        // Other databases are entered as execution enters them.
+        match self.cross_database(&expression, None)? {
+            CrossDatabase::Local => self.validate_prepared_expression_here(expression, parameters),
+            CrossDatabase::Home(home, others) => {
+                rehome(&mut expression, &home, &self.current_alias()?, &[]);
+                let _others = self.use_others(&others)?;
+                let home = self.enter_home(&home)?;
+                let result = self.validate_prepared_expression_here(expression, parameters);
+                self.leave_home(home);
+                result
+            }
+            CrossDatabase::Mixed(others) => {
+                let _others = self.use_others(&others)?;
+                self.validate_prepared_expression_here(expression, parameters)
+            }
+        }
+    }
+
+    fn validate_prepared_expression_here(
+        &self,
+        mut expression: Expr,
+        parameters: &HashMap<String, Parameter>,
+    ) -> Result<duckdb::core::LogicalTypeId> {
         let lowered = self.lower_session_functions_shared(&mut expression, parameters)?;
         let parameters = &*lowered;
         ext::rewrite(self, &mut expression, parameters)?;
@@ -2764,7 +2792,8 @@ impl Session {
                 // DB_NAME() and DB_ID() keep naming the session's database;
                 // features see the other one as current.
                 self.lower_database_functions(&mut *qualified)?;
-                rehome(&mut *qualified, &home, &self.current_alias()?);
+                let targets = alias_targets(&qualified);
+                rehome(&mut *qualified, &home, &self.current_alias()?, &targets);
                 Routed::Home(qualified, home, others)
             }
             CrossDatabase::Mixed(others) => Routed::Mixed(qualified, others),
@@ -4244,7 +4273,7 @@ impl Session {
         match self.cross_database(&expression, None)? {
             CrossDatabase::Local => {}
             CrossDatabase::Home(home, others) => {
-                rehome(&mut expression, &home, &self.current_alias()?);
+                rehome(&mut expression, &home, &self.current_alias()?, &[]);
                 let _others = self.use_others(&others)?;
                 let home = self.enter_home(&home)?;
                 let result =
@@ -7785,29 +7814,68 @@ mod duplicate_index_runtime_tests {
     }
 }
 
+/// The table a one-part name means when it is the alias of one of `tables`.
+fn resolve_alias(name: &ObjectName, tables: &[&TableWithJoins]) -> Option<ObjectName> {
+    let [ObjectNamePart::Identifier(single)] = name.0.as_slice() else {
+        return None;
+    };
+    tables.iter().find_map(|table| {
+        std::iter::once(&table.relation)
+            .chain(table.joins.iter().map(|join| &join.relation))
+            .find_map(|factor| match factor {
+                TableFactor::Table {
+                    name: table,
+                    alias: Some(alias),
+                    ..
+                } if alias.name.value.eq_ignore_ascii_case(&single.value) => Some(table.clone()),
+                _ => None,
+            })
+    })
+}
+
+/// The lower-case one-part UPDATE or DELETE targets that name a FROM alias
+/// (`UPDATE i ... FROM t AS i`) rather than a table.
+fn alias_targets(statement: &Statement) -> Vec<String> {
+    let statement = match statement {
+        Statement::Query(query) => match query.body.as_ref() {
+            SetExpr::Update(statement) | SetExpr::Delete(statement) => statement,
+            _ => return vec![],
+        },
+        statement => statement,
+    };
+    let (written, tables): (Vec<&ObjectName>, Vec<&TableWithJoins>) = match statement {
+        Statement::Update(update) => {
+            let TableFactor::Table { name, .. } = &update.table.relation else {
+                return vec![];
+            };
+            let mut tables = vec![&update.table];
+            if let Some(
+                UpdateTableFromKind::BeforeSet(from) | UpdateTableFromKind::AfterSet(from),
+            ) = &update.from
+            {
+                tables.extend(from);
+            }
+            (vec![name], tables)
+        }
+        Statement::Delete(delete) => {
+            let (FromTable::WithFromKeyword(from) | FromTable::WithoutKeyword(from)) = &delete.from;
+            (delete.tables.iter().collect(), from.iter().collect())
+        }
+        _ => return vec![],
+    };
+    written
+        .into_iter()
+        .filter(|name| resolve_alias(name, &tables).is_some())
+        .filter_map(|name| name.0[0].as_ident().map(|ident| ident.value.to_lowercase()))
+        .collect()
+}
+
 /// The relation an INSERT, UPDATE or DELETE writes, with a FROM alias
 /// resolved to its table.
 fn dml_target(statement: &Statement) -> Option<ObjectName> {
-    fn resolve(name: &ObjectName, tables: &[&TableWithJoins]) -> ObjectName {
-        if let [ObjectNamePart::Identifier(single)] = name.0.as_slice() {
-            for table in tables {
-                for factor in std::iter::once(&table.relation)
-                    .chain(table.joins.iter().map(|join| &join.relation))
-                {
-                    if let TableFactor::Table {
-                        name: table,
-                        alias: Some(alias),
-                        ..
-                    } = factor
-                        && alias.name.value.eq_ignore_ascii_case(&single.value)
-                    {
-                        return table.clone();
-                    }
-                }
-            }
-        }
-        name.clone()
-    }
+    let resolve = |name: &ObjectName, tables: &[&TableWithJoins]| {
+        resolve_alias(name, tables).unwrap_or_else(|| name.clone())
+    };
     match statement {
         Statement::Insert(insert) => match &insert.table {
             TableObject::TableName(name) => Some(name.clone()),
@@ -7849,17 +7917,18 @@ struct Relations {
     local: usize,
     ctes: std::collections::HashSet<String>,
     functions: std::collections::HashSet<String>,
-    /// FROM aliases, which UPDATE and DELETE targets may name.
-    aliases: std::collections::HashSet<String>,
+    /// UPDATE and DELETE targets that name a FROM alias (`alias_targets`).
+    targets: std::collections::HashSet<String>,
     /// The second pass, once the names above are known.
     counting: bool,
     /// Whether a temporary table or table variable is among the relations.
     temporary: bool,
 }
 impl Relations {
-    fn collect<T: Visit>(node: &T, current: String) -> Self {
+    fn collect<T: Visit>(node: &T, current: String, targets: &[String]) -> Self {
         let mut relations = Relations {
             current,
+            targets: targets.iter().cloned().collect(),
             ..Default::default()
         };
         let _ = node.visit(&mut relations);
@@ -7868,9 +7937,10 @@ impl Relations {
         relations
     }
 
-    /// A one-part name that is no table: a CTE, table function or alias.
+    /// A one-part name that is no table: a CTE, table function or the alias
+    /// an UPDATE or DELETE target names.
     fn named(&self, single: &Ident) -> bool {
-        [&self.ctes, &self.functions, &self.aliases]
+        [&self.ctes, &self.functions, &self.targets]
             .iter()
             .any(|names| names.contains(&single.value.to_lowercase()))
     }
@@ -7924,12 +7994,6 @@ impl Visitor for Relations {
             && let [ObjectNamePart::Identifier(function)] = name.0.as_slice()
         {
             self.functions.insert(function.value.to_lowercase());
-        }
-        if let TableFactor::Table {
-            alias: Some(alias), ..
-        } = factor
-        {
-            self.aliases.insert(alias.name.value.to_lowercase());
         }
         ControlFlow::Continue(())
     }
@@ -7987,8 +8051,8 @@ enum CrossDatabase {
 /// Name relations as seen from `home`, the database a statement runs in:
 /// drop `home`'s catalog and give relations of `current`, the session's
 /// database, its catalog.
-fn rehome<T: Visit + VisitMut>(node: &mut T, home: &str, current: &str) {
-    let relations = Relations::collect(&*node, current.to_string());
+fn rehome<T: Visit + VisitMut>(node: &mut T, home: &str, current: &str, targets: &[String]) {
+    let relations = Relations::collect(&*node, current.to_string(), targets);
     let _ = visit_relations_mut(node, |relation| {
         match relation.0.as_slice() {
             [ObjectNamePart::Identifier(database), _, _] if database.value == home => {

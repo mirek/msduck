@@ -297,3 +297,60 @@ fn single_user_databases_admit_only_their_user() {
     ok(&mut owner, "ALTER DATABASE solo SET MULTI_USER");
     ok(&mut other, "SELECT id FROM solo.dbo.t");
 }
+
+#[test]
+fn aliases_exempt_only_the_update_or_delete_target_they_name() {
+    let (_server, mut session) = fixture();
+    // `loc` is an outer alias of foo's table, but the inner `loc` is
+    // master's table: the statement reads both databases.
+    ok(
+        &mut session,
+        "IF (SELECT COUNT(*) FROM foo.dbo.items AS loc WHERE EXISTS (SELECT 1 FROM loc AS inner_loc WHERE inner_loc.label = N'one')) <> 1 THROW 50001, 'wrong loc', 1",
+    );
+    ok(
+        &mut session,
+        "UPDATE loc SET v = 'a' FROM foo.dbo.items AS loc WHERE EXISTS (SELECT 1 FROM dbo.loc AS l WHERE l.id = loc.id)",
+    );
+    assert_eq!(
+        native(&session, "SELECT v FROM foo.dbo.items WHERE id = 1"),
+        "a"
+    );
+    assert_eq!(catalog(&session), "memory.dbo");
+}
+
+#[test]
+fn preparing_expressions_checks_access_to_other_databases() {
+    let server = Server::open(":memory:").unwrap();
+    let mut owner = session(&server);
+    ok(&mut owner, "CREATE DATABASE solo");
+    ok(
+        &mut owner,
+        "USE solo; CREATE TABLE dbo.t (id INT); INSERT dbo.t VALUES (1); USE master",
+    );
+    let other = session(&server);
+    for sql in [
+        "IF EXISTS (SELECT 1 FROM solo.dbo.t WHERE id = @id) SELECT 1",
+        "DECLARE @n INT = (SELECT COUNT(*) FROM solo.dbo.t WHERE id = @id)",
+    ] {
+        other
+            .validate_prepared_sql(sql, &[("@id".into(), Type::Int)])
+            .unwrap_or_else(|error| panic!("{sql}: {error:#}"));
+    }
+    ok(&mut owner, "ALTER DATABASE solo SET SINGLE_USER");
+    for sql in [
+        "IF EXISTS (SELECT 1 FROM solo.dbo.t WHERE id = @id) SELECT 1",
+        "DECLARE @n INT = (SELECT COUNT(*) FROM solo.dbo.t WHERE id = @id)",
+    ] {
+        let error = other
+            .validate_prepared_sql(sql, &[("@id".into(), Type::Int)])
+            .unwrap_err();
+        assert_eq!(
+            error
+                .downcast_ref::<msduck_core::diagnostic::SqlError>()
+                .map(|error| error.number),
+            Some(924),
+            "{sql}: {error:#}"
+        );
+    }
+    assert_eq!(catalog(&other), "memory.dbo");
+}
