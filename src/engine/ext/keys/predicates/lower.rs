@@ -712,13 +712,7 @@ fn aggregate(name: &str, expr: &Expr) -> Option<Expr> {
                 },
                 CaseWhen {
                     condition: type_in(&sample, &["VARCHAR"]),
-                    result: with(
-                        "count",
-                        vec![call(
-                            "lower",
-                            vec![call("rtrim", vec![value.clone(), text(" ")])],
-                        )],
-                    ),
+                    result: with("count", vec![ansi_key(value.clone())]),
                 },
             ],
             else_result: Some(Box::new(expr.clone())),
@@ -742,6 +736,13 @@ fn aggregate(name: &str, expr: &Expr) -> Option<Expr> {
         }
         _ => None,
     }
+}
+
+/// The equality key of VARCHAR text: lowercased, without trailing spaces.
+/// The trim binds for every type (`__msduck_collation_key`), so it can sit in
+/// a `typeof` branch that DuckDB binds for other types too.
+fn ansi_key(value: Expr) -> Expr {
+    call("lower", vec![call("__msduck_collation_key", vec![value])])
 }
 
 /// `{key, value}` of a carrier for MIN/MAX, NULL for NULL, evaluating the
@@ -834,11 +835,17 @@ fn function(name: &str, expr: &Expr) -> Option<Expr> {
                 null(),
             ))
         }
+        // VARCHAR groups by its lowercased text without trailing spaces (no
+        // unit is ignored); carriers by their Unicode key.
         GROUP => {
             let [value] = args.as_slice() else {
                 return None;
             };
-            Some(key((*value).clone()))
+            Some(case(
+                type_in(value, &["VARCHAR"]),
+                call("encode", vec![ansi_key((*value).clone())]),
+                key((*value).clone()),
+            ))
         }
         TIE => {
             let [value] = args.as_slice() else {
@@ -1127,7 +1134,7 @@ mod tests {
             count,
             "CASE WHEN typeof(any_value(n)) IN ('STRUCT(__msduck_utf16le BLOB)') \
              THEN count(DISTINCT __msduck_unicode_order_key(__msduck_unicode_input(n))) \
-             WHEN typeof(any_value(n)) IN ('VARCHAR') THEN count(DISTINCT lower(rtrim(n, ' '))) \
+             WHEN typeof(any_value(n)) IN ('VARCHAR') THEN count(DISTINCT lower(__msduck_collation_key(n))) \
              ELSE count(DISTINCT n) END"
         );
         let least = lowered("min(n)");
@@ -1145,7 +1152,8 @@ mod tests {
         );
         assert_eq!(
             lowered("__msduck_unicode_group(n)"),
-            "__msduck_unicode_order_key(__msduck_unicode_input(n))"
+            "CASE WHEN typeof(n) IN ('VARCHAR') THEN encode(lower(__msduck_collation_key(n))) \
+             ELSE __msduck_unicode_order_key(__msduck_unicode_input(n)) END"
         );
     }
 
