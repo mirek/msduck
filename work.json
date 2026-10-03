@@ -9888,7 +9888,7 @@
       "id": "concat-numeric-format-reference-v1",
       "title": "Capture numeric implicit formatting boundaries for CONCAT_WS and TRANSLATE",
       "issue": 823,
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner compatibility goal; establish complete retained first-party SQL Server evidence for uncovered numeric function formatting, using approved815 observer design and existing formatter candidates only as comparison subjects.",
       "scope": [
         "scripts/capture-concat-numeric-format.mjs",
