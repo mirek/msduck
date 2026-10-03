@@ -7,6 +7,14 @@ import { start } from '../tests/support/client.mjs'
 import { canonical, complete, differences, runCase } from './lib/compatibility.mjs'
 import { referenceConfig, isolatedReference, connect, command } from './lib/reference.mjs'
 
+// Explicit exit is safe only after queued stdout has reached the pipe.
+async function outputAndExit(output) {
+  await new Promise((resolve, reject) => {
+    process.stdout.write(output, error => error ? reject(error) : resolve())
+  })
+  process.exit(0)
+}
+
 const args = process.argv.slice(2)
 const usage = 'Usage: node scripts/compatibility.mjs [--compare] [--case EXACT_NAME ...] [--plan | --list-cases]'
 let compare = false
@@ -339,8 +347,7 @@ const probes = [
 ]
 const allCases = [...corpus, ...probes]
 if (listCases) {
-  for (const entry of allCases) console.log(entry.name)
-  process.exit(0)
+  await outputAndExit(allCases.map(entry => entry.name).join('\n') + '\n')
 }
 const requested = new Set(requestedNames)
 if (requested.size !== requestedNames.length) throw new Error('Each --case name must be selected only once')
@@ -355,8 +362,7 @@ const suffix = requested.size
   : mode
 const output = `artifacts/compatibility/${suffix}.json`
 if (plan) {
-  console.log(JSON.stringify({ mode, totalCases: allCases.length, selectedCases: selected.map(entry => entry.name), output }, null, 2))
-  process.exit(0)
+  await outputAndExit(JSON.stringify({ mode, totalCases: allCases.length, selectedCases: selected.map(entry => entry.name), output }, null, 2) + '\n')
 }
 const config = compare ? referenceConfig() : null
 let referenceVersion

@@ -13,7 +13,9 @@ if (preflight.status !== 0) {
   process.exit(preflight.status ?? 1)
 }
 if (listing || planning) {
-  process.stdout.write(preflight.stdout)
+  await new Promise((resolve, reject) => {
+    process.stdout.write(preflight.stdout, error => error ? reject(error) : resolve())
+  })
   process.exit(0)
 }
 
