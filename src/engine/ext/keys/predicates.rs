@@ -108,7 +108,7 @@ fn rewrite<T: Visit + VisitMut + 'static>(
     if !catalog.has_carriers() && !catalog.has_collations() && !likes(node) && !grouped {
         return Ok(());
     }
-    mark::rewrite(&catalog, parameters, node);
+    mark::rewrite(&catalog, parameters, node)?;
     if pin::sites(node) && pin::rewrite(&catalog, node, false) {
         catalog.declare(db, node)?;
         pin::rewrite(&catalog, node, true);
