@@ -9926,7 +9926,7 @@
       "id": "concat-numeric-text-v1",
       "title": "Implement deterministic numeric text conversion from retained SQL Server evidence",
       "issue": 828,
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner SQL Server-compatible Rust/DuckDB goal and requested independent parallel factory; first-party implementation from owner-approved merged references815/827 and pure conversion820. No external submission, no engine.rs reservation.",
       "scope": [
         "crates/msduck-sql/src/numeric_text.rs",
