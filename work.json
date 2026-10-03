@@ -9840,6 +9840,30 @@
         "Keep module unregistered; no lib.rs, root, engine, source adapter edits. Reuse existing isolated worktree and fresh claim/receipt; no new native caches/worktrees/agents. Private pure Linux proof uses read-only cached dependencies and removes own compiled outputs. Worker owns PR review, exact CI/appropriate full gates, merge and issue/project/registry completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkBHv"
+    },
+    {
+      "id": "concat-binary-binding-v1",
+      "title": "Compose captured binary conversion contracts with CONCAT_WS and TRANSLATE",
+      "issue": 821,
+      "state": "backlog",
+      "authorization": "Continuing owner compatibility goal; complete captured binary semantics from reference815 through explicit deterministic conversion/core inputs after812/816/819 complete.",
+      "scope": [
+        "crates/msduck-sql/src/lib.rs",
+        "crates/msduck-sql/src/concat_ws.rs",
+        "crates/msduck-sql/tests/concat_ws_translate.rs",
+        "docs/concat-ws-binary-binding.md"
+      ],
+      "dependencies": [
+        "concat-ws-translate-core-recovery-v1",
+        "concat-ws-translate-export-v1",
+        "concat-text-conversion-rules-v1"
+      ],
+      "acceptance": [
+        "Register the merged conversion helper after816 releaseslib, and compose its captured binary contracts with core planning/evaluation. Preserve original binary source declarations, explicit result-domain/collation/diagnostic inputs, byte/storage bounds and fixed padding, NULL and value/separator truncation. Lift TRANSLATE noncharacter-MAX barrier only for binary declarations established by815; keep uncaptured formatters/styles/encodings unsupported. No metadata from currentvalues, fabricated character sources, hiddeneffects or root/engine edits.",
+        "Compare composed binary outputs/full descriptors and prepared rebinding stability against all applicable raw four-observation815 fixtures, including9001-byteMAX/oddbytes/UTF16LE U+4241/NULL. Retain rawunits/BIGINTs, firstmapping/nochain/mismatchdiagnostics and resource limits. Do not certify unrelated numeric/temporal/GUID formatters or native/wire/server support.",
+        "Activate only after dependencies complete and ready scopes are disjoint; fresh own receipt in an existing isolated worktree. No new local native caches/agents, honor shared Linux buildlock. Required formatter/strictClippy/workspace/client/audit gates on exactrevision, independent/Codexreview or ownerfallback, claimingworker owns PRmerge and registry/project/issuecompletion. engine.rs remains unreserved."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkEIC"
     }
   ]
 }
