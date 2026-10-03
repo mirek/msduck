@@ -10970,7 +10970,7 @@
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pk0fb"
     },
     {
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner full SQL Server compatible Rust/DuckDB objective; first-party merged884 byte evidence and claimed890 architecture plan. Bounded deterministic implementation, not runtime compatibility completion. No third-party input or reserved export/engine scope.",
       "dependencies": [
         "bulk-character-adapter-plan-v1",
@@ -11018,7 +11018,7 @@
     {
       "id": "ansi-byte-export-v1",
       "title": "Export deterministic native ANSI byte carrier",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing goal and standing unresponsive-worker takeover. At2026-10-03 recovery checked owner8561 draftPR165 unchanged checkpointa69fd41 sinceSeptember24, permanentclaimb5b20ab retained, no legacy export worktree in git worktree list, no attributable local/remote jobs or team worker. Owner-approved contact5969228690 onPR165 received no response after more than60seconds. Required modulePR129 remains draft/unmerged and legacy_datetime.rs is absent from approvedmain, so oldexport cannot proceed as scoped. Revoke only legacy-datetime-export-v1; preserve branch, receipt, review/build evidence, do not mark incomplete work done. No ownerengine853 scope or unrelated jobs touched. Companion to ownansi-byte-carrier-v1 shipped together inPR894 after freshclaim.",
       "issue": 892,
       "scope": [
