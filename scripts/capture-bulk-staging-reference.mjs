@@ -16,6 +16,7 @@ const LIMIT = 8 * 1024 * 1024
 const MAX_PACKETS = 8192
 const GOLD_IMAGE = 'mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a'
 const GOLD_VERSION = '17.0.4065.4'
+const RETAINED_SHA256 = '37827e03eeeafde346c4776e233af2cc287781b9a9c9ac7a6edb1721d5232b34'
 export const cases = [
   ...[1, 332, 333, 334, 499, 500, 501, 999, 1000, 1001, 1501].map(count => ({name: `defaults-${count}`, count, fireTriggers: true})),
   {name: 'keep-nulls-staged', count: 1001, fireTriggers: true, keepNulls: true},
@@ -313,6 +314,13 @@ export function validate(value) {
   assert.ok(isDeepStrictEqual(value.comparisons, expected), 'comparisons exactly reflect retained observations')
 }
 
+export function validateRetained(bytes) {
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), RETAINED_SHA256, 'fixed retained fixture bytes')
+  const retained = JSON.parse(bytes.toString())
+  validate(retained)
+  return retained
+}
+
 export async function persistCapture(actual, output, write = false) {
   // Preserve the whole comparison even when fixed gold validation rejects a
   // newly observed variation. Neither artifact is a claim of validation success.
@@ -320,12 +328,15 @@ export async function persistCapture(actual, output, write = false) {
   await guardOutput(`${output}.comparison.json`)
   await mkdir(dirname(output), {recursive: true})
   await writeFile(output, JSON.stringify(actual) + '\n', {flag: 'wx'})
-  let retained
-  try { retained = JSON.parse(await readFile(fixture, 'utf8')) } catch (error) { if (error.code !== 'ENOENT') throw error }
+  let retained, retainedBytes
+  try {
+    retainedBytes = await readFile(fixture)
+    retained = JSON.parse(retainedBytes.toString())
+  } catch (error) { if (error.code !== 'ENOENT') throw error }
   const comparison = retained ? compare(actual, retained) : []
   await writeFile(`${output}.comparison.json`, JSON.stringify({retained: Boolean(retained), differences: comparison}) + '\n', {flag: 'wx'})
   validate(actual)
-  if (retained) validate(retained)
+  if (retained) validateRetained(retainedBytes)
   if (write) await writeFile(fixture, JSON.stringify(actual) + '\n', {flag: 'wx'})
   return {retained: Boolean(retained), comparison}
 }
@@ -338,7 +349,7 @@ export async function main(args = process.argv.slice(2)) {
   const write = args.includes('--write-fixture'), replay = args.includes('--replay-fixture')
   assert.ok(!(write && replay), 'choose writing or replay')
   if (replay) {
-    validate(JSON.parse(await readFile(fixture, 'utf8')))
+    validateRetained(await readFile(fixture))
     console.log('Validated four retained BulkLoad staging reference runs and exact raw differences')
     return
   }

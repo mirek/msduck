@@ -53,6 +53,11 @@ Run
 
 The retained 17,788,143-byte fixture has SHA256
 `37827e03eeeafde346c4776e233af2cc287781b9a9c9ac7a6edb1721d5232b34`.
+Replay and retained-side comparison verify this fixed whole-file hash before
+accepting the reviewed artifact. This protects raw request/response payloads
+even when packet framing and decoded semantic summaries still agree. Fresh
+captures are not required to have identical dynamic packet bytes: their full
+raw differences and comparison sidecar remain preserved.
 The four real runs report SQL Server `17.0.4065.4`; their pinned image is recorded
 in the artifact. The capture source SHA256 is
 `775db11a16c64ae94a1be8d6d1ca7d6ba8afaf03263d6876887dd64b0a8a0663`.

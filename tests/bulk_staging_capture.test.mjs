@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {readFile, mkdir, mkdtemp, writeFile, symlink, link, rm} from 'node:fs/promises'
 import {join} from 'node:path'
 import {spawnSync} from 'node:child_process'
-import {cases, rowsFor, compare, validate, guardOutput, persistCapture} from '../scripts/capture-bulk-staging-reference.mjs'
+import {cases, rowsFor, compare, validate, validateRetained, guardOutput, persistCapture} from '../scripts/capture-bulk-staging-reference.mjs'
 
 const fixture = new URL('../reference/bulk-staging-reference.json', import.meta.url)
 const load = async () => JSON.parse(await readFile(fixture, 'utf8'))
@@ -23,11 +23,29 @@ test('captured cases preserve threshold inputs and three independent default pat
 })
 
 test('four-run retained evidence validates without normalizing packet differences', async () => {
-  const value = await load()
-  validate(value)
+  const value = validateRetained(await readFile(fixture))
   assert.deepEqual(compare(value, structuredClone(value)), [])
   assert.equal(value.runs.length, 4)
   assert.equal(value.runs[0].observations.length, cases.length)
+})
+
+test('retained byte pin rejects framed payload corruption with matching semantic summaries', async () => {
+  const bytes = await readFile(fixture)
+  validateRetained(bytes)
+  for (const direction of ['out', 'in']) {
+    const actual = JSON.parse(bytes)
+    for (const run of actual.runs) {
+      const packet = run.observations[0].setup.packets.find(p => p.direction === direction)
+      const raw = Buffer.from(packet.rawHex, 'hex')
+      raw[raw.length - 1] ^= 1 // Payload only: retain length, type, direction and EOM.
+      packet.rawHex = raw.toString('hex')
+    }
+    actual.comparisons = actual.runs.slice(1).map(run => compare(run, actual.runs[0]))
+    // General capture validation still accepts independently observed raw drift;
+    // only the previously reviewed retained artifact must match its byte pin.
+    validate(actual)
+    assert.throws(() => validateRetained(Buffer.from(JSON.stringify(actual) + '\n')), /fixed retained fixture bytes/)
+  }
 })
 
 test('raw packet drift cannot hide changed identity mapping, trigger membership, errors or counts', async () => {
