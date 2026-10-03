@@ -10343,6 +10343,28 @@
       "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Decomposed by the queue-publishing session from the remaining limits listed in docs/workload-gaps.md at main 2fde4d4. No external submission is input.",
       "dependencies": [],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkZAG"
+    },
+    {
+      "id": "translate-ascii-matching-reference-v1",
+      "title": "Capture complete ASCII TRANSLATE matching relationships across retained profiles",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility goal and parallel factory. Read-only investigation of merged841 by existing worker447 establishes that pair-only observations cannot supply general matching keys; full128-character function controls are needed. First-party approved SQL Server observations only; do not infer from SQL equality or collation names. Reuse completed447 worktree/receipt isolation and existing cached Node dependencies; no extra workers/native caches.",
+      "scope": [
+        "scripts/capture-translate-ascii-matching.mjs",
+        "reference/translate-ascii-matching.json",
+        "docs/translate-ascii-matching.md"
+      ],
+      "dependencies": [
+        "translate-character-matching-reference-v1"
+      ],
+      "acceptance": [
+        "Capture actual complete128x128 ASCII source-to-single-mapping relationships for all eight841 collations in VARCHAR512 and NVARCHAR512 domains:128 mapping programs per16profiles=2048, plus bounded server/reuse/prepared controls below2500programs/run. Each retains all128 ASCII source characters in native bytes, original construction/domain/collation, and independently executes two TRANSLATE controls with distinguishable nonASCII replacement sentinels whose actual native payloads are retained. Choose representable markers such as e-acute/Euro, prove after declared-domain conversion that each marker is one SQL character and outside the source alphabet; do not confuse unchanged source with replacement, discard errors or derive relationships from ordinary equality. Preserve ANSI databaseCP1252-to-UTF8 recoding, control/NUL/trailing-space bytes and source identity.",
+        "Reuse reviewed841 full ordered observer and fragment-safe rawROW/RETURNVALUE machinery without altering its immutable script/fixture: same-evaluation rawtext bytes, separately evaluated binary projections as independent controls, full descriptors/messages/DONE/RETURNSTATUS, stable prepare metadata and actual emitted typed parameter bytes, successful reuse after every program. Original VARCHAR/NVARCHAR declarations and varied/NULL/repeated prepared bindings must stay explicit; no lossy repair/normalization. Bounded cells/phases/captures/requests/program count, pinned image+hostname,4GiB/2CPU/512PID owned containers,1GiBheap/2GiBRSS/30min or justified recorded wallwatchdog; cleanup only exact attributable ownership.",
+        "Retain four complete independent observations and second freshfour from frozen finalsource, exact hashes/runIDs/all differences and raw wire carriers. Independently validate complete program inventory, sentinels/native bytes, both controls and all128x128 relationships. Check whether the measured relation is reflexive/symmetric/transitive without assuming it; any inconsistent or varying relationship remains unknown and raw, not a fabricated class. Add meaningful validator corruption, fragment/destination/CLI/lifecycle proofs in the three-file capture scope. Keep unknown beyond ASCII and original841 nonASCII/malformed results explicit, and never call this full linguistic collation support.",
+        "Fresh exclusive own claim in completed existing447 worktree, no new agent/worktree/native cache or shared builder synchronization. Bounded private reference jobs may reuse compatible cachedNode dependencies; preserve bulky raw captures remotely, canonical fixture locally only. Source/checksum/fixture proofs, exact-head requiredCI, completed independent/Codexreview or ownerauthorized service fallback, claimingworker owns merge and registry/project/issuecompletion. Corpus/runtime Rust adapters and engine.rs are outside scope; captured relation will support subsequent executable key/provider and runtime tasks."
+      ],
+      "issue": 854,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkZHr"
     }
   ]
 }
