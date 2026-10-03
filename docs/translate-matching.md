@@ -54,7 +54,8 @@ SQL conversion/native decoding before this boundary. It must use a TRANSLATE
 plan, validate context/plan before NULL, and preserve the existing core's
 payload validation, character-length 9828 diagnostic and empty-input precedence.
 The validation checks the stored plan operation and exact TRANSLATE descriptor
-flags (readonly, nullable and case sensitivity) as well as domain, encoding and SC properties. Collation record identity
+flags (expression origin, nullable and case sensitivity) as well as domain,
+encoding and SC properties. Collation record identity
 uses ASCII case-insensitive names; every supplied catalog property still must
 match its retained profile. Public result flags cannot change plan operation.
 When evaluation requires matching, the certificate's `key` can be passed to
