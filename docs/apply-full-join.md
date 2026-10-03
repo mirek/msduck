@@ -63,11 +63,12 @@ The following FULL JOINs are left unchanged:
 
 The unchanged cases still fail with DuckDB's error.
 
-A reference to the outer query is a qualifier that the join's operands do
-not define, a column in a table-valued function argument such as
-`OPENJSON(lhs)`, or any unqualified column in the join condition. Without a
-catalog, an unqualified column may belong to the enclosing row; rewriting a
-join that is in fact uncorrelated gives the same rows.
+A join counts as correlated when it uses a qualifier that its operands do
+not define in scope, or any unqualified column in its operands or condition
+(for example `OPENJSON(lhs)`). Without a catalog, an unqualified column may
+belong to the enclosing row. Rewriting a join that is in fact uncorrelated
+gives the same rows, so only fully qualified uncorrelated joins stay
+native.
 
 ## Evidence
 

@@ -465,52 +465,34 @@ fn volatile(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> boo
     find.0
 }
 
-/// Whether the join references a name its own operands do not define, or a
-/// table-valued function argument names an unqualified column (siblings are
-/// not visible to a function's arguments, so such a column is an outer
-/// reference). Qualifiers resolve through the lexical scopes of the join and
-/// of each nested query, so a name defined only inside an operand's subquery
-/// does not hide an outer reference in the condition.
+/// Whether the join may reference the enclosing query. Without a catalog an
+/// unqualified column anywhere in the operands or the condition may belong
+/// to the enclosing row, so any counts; rewriting a join that is in fact
+/// uncorrelated still gives the same rows. Qualifiers resolve through the
+/// lexical scopes of the join and of each nested query, so a name defined
+/// only inside an operand's subquery does not hide an outer reference.
 fn correlated(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> bool {
     struct Scopes {
         scopes: Vec<HashSet<String>>,
         outer: bool,
     }
-    fn unqualified_columns(args: &impl Visit) -> bool {
-        struct Columns(bool);
-        impl Visitor for Columns {
-            type Break = ();
-            fn pre_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
-                // A subquery argument resolves its own names.
-                ControlFlow::Break(())
-            }
-            fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
-                if matches!(expr, Expr::Identifier(ident) if !ident.value.starts_with('@')) {
-                    self.0 = true;
-                    return ControlFlow::Break(());
-                }
-                ControlFlow::Continue(())
-            }
-        }
-        let mut columns = Columns(false);
-        let _ = args.visit(&mut columns);
-        columns.0
-    }
     impl Visitor for Scopes {
         type Break = ();
         fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
-            self.outer |= match factor {
-                TableFactor::Table { args, .. } => args
-                    .as_ref()
-                    .is_some_and(|args| unqualified_columns(&args.args)),
-                TableFactor::OpenJsonTable { json_expr, .. } => unqualified_columns(json_expr),
-                TableFactor::Function { args, .. } => unqualified_columns(args),
-                TableFactor::TableFunction { expr, .. } => unqualified_columns(expr),
-                TableFactor::UNNEST { array_exprs, .. } => unqualified_columns(array_exprs),
-                TableFactor::Derived { .. } | TableFactor::NestedJoin { .. } => false,
-                // Unknown factor kinds count as outer references.
-                _ => true,
-            };
+            // Unknown factor kinds count as outer references.
+            if !matches!(
+                factor,
+                TableFactor::Table { .. }
+                    | TableFactor::OpenJsonTable { .. }
+                    | TableFactor::Function { .. }
+                    | TableFactor::TableFunction { .. }
+                    | TableFactor::UNNEST { .. }
+                    | TableFactor::Derived { .. }
+                    | TableFactor::NestedJoin { .. }
+            ) {
+                self.outer = true;
+                return ControlFlow::Break(());
+            }
             ControlFlow::Continue(())
         }
         fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
@@ -524,34 +506,22 @@ fn correlated(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> b
             self.scopes.push(names);
             ControlFlow::Continue(())
         }
-        fn pre_visit_select(&mut self, select: &Select) -> ControlFlow<()> {
-            // Without FROM, an unqualified column can only be an outer one.
-            if select.from.is_empty()
-                && (select.projection.iter().any(|item| match item {
-                    SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } => {
-                        unqualified_columns(expr)
-                    }
-                    _ => false,
-                }) || select.selection.as_ref().is_some_and(unqualified_columns))
-            {
-                self.outer = true;
-                return ControlFlow::Break(());
-            }
-            ControlFlow::Continue(())
-        }
         fn post_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
             self.scopes.pop();
             ControlFlow::Continue(())
         }
         fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
-            if let Expr::CompoundIdentifier(parts) = expr
-                && parts.len() >= 2
-            {
-                let qualifier = parts[parts.len() - 2].value.to_lowercase();
-                if !self.scopes.iter().any(|scope| scope.contains(&qualifier)) {
-                    self.outer = true;
-                    return ControlFlow::Break(());
+            let outer = match expr {
+                Expr::Identifier(ident) => !ident.value.starts_with('@'),
+                Expr::CompoundIdentifier(parts) if parts.len() >= 2 => {
+                    let qualifier = parts[parts.len() - 2].value.to_lowercase();
+                    !self.scopes.iter().any(|scope| scope.contains(&qualifier))
                 }
+                _ => false,
+            };
+            if outer {
+                self.outer = true;
+                return ControlFlow::Break(());
             }
             ControlFlow::Continue(())
         }
@@ -566,26 +536,7 @@ fn correlated(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> b
     let _ = left.visit(&mut scopes);
     let _ = right.visit(&mut scopes);
     let _ = condition.visit(&mut scopes);
-    // Without a catalog an unqualified condition column may belong to the
-    // enclosing row; rewriting an uncorrelated join is still equivalent.
-    scopes.outer || unqualified_columns_anywhere(condition)
-}
-
-fn unqualified_columns_anywhere(condition: &Expr) -> bool {
-    struct Columns(bool);
-    impl Visitor for Columns {
-        type Break = ();
-        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
-            if matches!(expr, Expr::Identifier(ident) if !ident.value.starts_with('@')) {
-                self.0 = true;
-                return ControlFlow::Break(());
-            }
-            ControlFlow::Continue(())
-        }
-    }
-    let mut columns = Columns(false);
-    let _ = condition.visit(&mut columns);
-    columns.0
+    scopes.outer
 }
 
 /// Names a query's own FROM clauses define, without nested queries.
@@ -772,6 +723,14 @@ mod tests {
             "SELECT (SELECT __msduck_full_join.* FOR JSON PATH) AS j FROM OPENJSON(lhs) l FULL JOIN OPENJSON(rhs) r ON l.[key] = r.[key]",
         );
         assert!(sql.contains(&format!("AS {SIDES}_1 ({SIDE})")), "{sql}");
+    }
+
+    #[test]
+    fn unqualified_columns_in_operand_queries_count() {
+        let sql = rewritten(
+            "SELECT 1 FROM (SELECT id AS k FROM (VALUES (0)) v(x)) AS l FULL JOIN (SELECT 1 AS k) AS r ON l.k = r.k",
+        );
+        assert!(!sql.contains("FULL"), "{sql}");
     }
 
     #[test]
