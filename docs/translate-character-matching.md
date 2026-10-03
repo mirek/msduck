@@ -62,9 +62,12 @@ differing path/run identity. Three run digests are
 `2c024ae0752f86b2a6db4059b7df5b96db044831bf4344a2e192504c4144828d`;
 container0/database1 instead has
 `2b9c1f9680ea17c9bfb63bf296f20125b7d9c3c69a33b14de7ea5f53602e044f`.
-Two paths differ in the SC_UTF8 lone-low suffix program: the separately evaluated
-binary projection and its raw row carrier. All original source, declaration,
-metadata and error fields remain equal. Malformed UTF16 outputs are measured
+Two paths differ in the SC_UTF8 lone-low suffix program: the translated text
+cell at `/1659/result/sets/1/rows/0/0` and its raw row carrier. The text changes
+from U+0058 U+DE00 U+0000 to U+0058 U+DE00 U+0002; the actual first-cell raw
+payload changes from `580000de0000` to `580000de0200`. The separately evaluated
+binary projection stays `580000de0000` in both runs. All original source,
+declaration, metadata and error fields remain equal. Malformed UTF16 outputs are measured
 variable evidence and remain unknown; this is not a global equality pass.
 
 Earlier diagnostic pilots remain on Linux, including rejected multi-SELECT and
