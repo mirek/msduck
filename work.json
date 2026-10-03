@@ -10009,7 +10009,7 @@
     {
       "id": "temporal-guid-text-core-v1",
       "title": "Implement deterministic temporal and GUID source formatting",
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner SQL Server-compatible Rust/DuckDB goal and requested parallel factory; merged first-party835 supplies exact stored temporal/GUID bytes, declared types, language contexts and separately labelled formatting roles. No external input.",
       "scope": [
         "crates/msduck-sql/src/temporal_guid_text.rs",
