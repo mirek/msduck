@@ -96,6 +96,18 @@ fn default_match(a: &[u16], b: &[u16]) -> Option<bool> {
     }
     None
 }
+fn captured_default_key(unit: &[u16]) -> Option<Vec<u16>> {
+    // Only equivalence classes established for the retained default-collation
+    // probes. These are not general SQL Server linguistic weights.
+    match unit {
+        [x] if *x < 128 => Some(vec![(*x as u8).to_ascii_lowercase().into()]),
+        [0xe9] => Some(vec![0xe9]),
+        [0xd83d] | [0xde00] => Some(vec![0xd800]),
+        [0xd83d, 0xde00] => Some(vec![0xd83d, 0xde00]),
+        _ => None,
+    }
+}
+
 #[test]
 fn ordinary_character_values_and_metadata_match_all_four_captures() {
     let cases: &[(&str, Function, bool, &[Option<&str>])] = &[
@@ -237,6 +249,11 @@ fn ordinary_character_values_and_metadata_match_all_four_captures() {
                 let before = values.clone();
                 let plan = rules::plan(*function, &args, DEFAULT, &catalog()).unwrap();
                 let result = rules::evaluate(&plan, &values, &default_match).unwrap();
+                assert_eq!(
+                    rules::evaluate_with_keys(&plan, &values, &captured_default_key).unwrap(),
+                    result,
+                    "indexed {name}"
+                );
                 let expected = observed(run, name);
                 let actual = result.map(|u| String::from_utf16(&u).unwrap());
                 assert_eq!(json!([[actual]]), expected["sets"][0]["rows"], "{name}");
@@ -1094,6 +1111,11 @@ fn translate_supplementary_utf8_and_mismatch_cases_retain_captured_contracts() {
             for (name, arguments, values) in &declared_cases {
                 let p = rules::plan(Function::Translate, arguments, DEFAULT, &catalog).unwrap();
                 let result = rules::evaluate(&p, values, &default_match);
+                assert_eq!(
+                    rules::evaluate_with_keys(&p, values, &captured_default_key),
+                    result,
+                    "indexed {name}"
+                );
                 let captured = observed(run, name);
                 let column = &captured["sets"][0]["columns"][0];
                 assert_eq!(column["flags"], p.flags, "{name}");
@@ -1639,4 +1661,104 @@ fn translate_noncharacter_max_conversion_never_fabricates_bounded_metadata() {
         .unwrap(),
         text(&"b".repeat(9000))
     );
+}
+
+#[test]
+fn max_repeated_characters_do_not_repeat_mapping_scans() {
+    let p = rules::plan(
+        Function::Translate,
+        &vec![arg(Family::Nvarchar, Length::Max); 3],
+        DEFAULT,
+        &catalog(),
+    )
+    .unwrap();
+    let values = vec![
+        Some(vec![100; 1_000_000]),
+        Some(vec![97; 8000]),
+        Some(vec![98; 8000]),
+    ];
+    let calls = std::cell::Cell::new(0usize);
+    let result = rules::evaluate(&p, &values, &|a, b| {
+        calls.set(calls.get() + 1);
+        // The old implementation fails immediately on the second input
+        // character, without allowing the regression to run billions of calls.
+        assert!(
+            calls.get() <= 8000,
+            "repeated input character rescanned its mapping"
+        );
+        Some(a == b)
+    })
+    .unwrap()
+    .unwrap();
+    assert_eq!(result, vec![100; 1_000_000]);
+    assert_eq!(calls.get(), 8000);
+}
+
+#[test]
+fn opaque_matching_work_is_bounded_and_keys_handle_the_same_large_input() {
+    let p = rules::plan(
+        Function::Translate,
+        &vec![arg(Family::Nvarchar, Length::Max); 3],
+        DEFAULT,
+        &catalog(),
+    )
+    .unwrap();
+    let input: Vec<u16> = (0x1000..0x2000).collect();
+    let values = vec![
+        Some(input.clone()),
+        Some(vec![97; 8000]),
+        Some(vec![98; 8000]),
+    ];
+    let comparisons = std::cell::Cell::new(0usize);
+    assert_eq!(
+        rules::evaluate(&p, &values, &|a, b| {
+            comparisons.set(comparisons.get() + 1);
+            Some(a == b)
+        }),
+        Err(Error::ComparisonLimit)
+    );
+    assert_eq!(comparisons.get(), rules::MAX_MATCH_COMPARISONS);
+    let keys = std::cell::Cell::new(0usize);
+    let result = rules::evaluate_with_keys(&p, &values, &|unit| {
+        keys.set(keys.get() + 1);
+        Some(unit.to_vec())
+    })
+    .unwrap();
+    assert_eq!(result, Some(input));
+    assert_eq!(keys.get(), 8000 + 4096);
+}
+
+#[test]
+fn indexed_keys_keep_first_mapping_no_chaining_and_empty_mapping_semantics() {
+    let args = vec![arg(Family::Nvarchar, Length::Max); 3];
+    let p = rules::plan(Function::Translate, &args, DEFAULT, &catalog()).unwrap();
+    // Explicit ASCII case-insensitive equivalence classes. These are not an
+    // implementation of SQL Server weights for uncaptured character families.
+    let key = |unit: &[u16]| {
+        (unit.len() == 1 && unit[0] < 128).then(|| (unit[0] as u8).to_ascii_lowercase())
+    };
+    for (input, from, to, expected) in [("AaB", "aa", "xy", "xxB"), ("abc", "ab", "bc", "bcc")] {
+        assert_eq!(
+            rules::evaluate_with_keys(&p, &[text(input), text(from), text(to)], &key).unwrap(),
+            text(expected)
+        );
+    }
+    assert_eq!(
+        rules::evaluate_with_keys(&p, &[text("abc"), text(""), text("")], &|_| None::<u8>).unwrap(),
+        text("abc")
+    );
+    assert_eq!(
+        rules::evaluate_with_keys(&p, &[None, text("a"), text("b")], &|_| None::<u8>).unwrap(),
+        None
+    );
+    assert_eq!(
+        rules::evaluate_with_keys(&p, &[text("abc"), text("a"), text("b")], &|_| None::<u8>),
+        Err(Error::UnknownComparison)
+    );
+    let values = [text("abc"), text("ab"), text("x")];
+    let Err(Error::Sql(error)) = rules::evaluate_with_keys(&p, &values, &|_| None::<u8>) else {
+        panic!("mismatch diagnostic must precede unknown weights")
+    };
+    assert_eq!(error.number, 9828);
+    assert_eq!(error.state, 3);
 }

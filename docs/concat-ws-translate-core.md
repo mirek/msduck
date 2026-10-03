@@ -36,7 +36,7 @@ and ANSI UTF-8 evaluation do not acquire invented behavior. Character payloads
 must respect their declared widths and fixed-width padding. Core CP1252 encoding
 validates ANSI payloads; Unicode payloads retain isolated surrogate units.
 
-Eighteen private Rust tests pass using cached, compiler-compatible Linux
+Twenty-one private Rust tests pass using cached, compiler-compatible Linux
 dependencies and isolated temporary binaries, with strict Clippy and formatting.
 They compare 21 ordinary character cases across all four captures (84 comparisons),
 26 declaration/collation cases (104 comparisons), 10 supplementary/UTF-8/mismatch
@@ -75,6 +75,25 @@ TRANSLATE first operand with an explicit MAX conversion width also returns
 8000 and silently truncate. The new VARBINARY(MAX) regression fails on checkpoint
 2adc076 and passes with that barrier. Reference task #814 is capturing this
 missing rule alongside individual source-format declarations.
+
+Large TRANSLATE inputs can use `evaluate_with_keys`, with caller-supplied,
+established SQL character equivalence keys. A deterministic BTreeMap preserves
+the first mapping and gives O((input + mapping characters) * log(distinct mapping
+keys)) lookup work without hidden randomness. Key extraction occurs once per
+mapping/input character, and input splitting streams instead of allocating an
+array for the entire input. No chaining or surrogate normalization is introduced.
+The original comparison callback path caches each distinct input unit and stops
+with `ComparisonLimit` after one million comparisons; that barrier is not a SQL
+Server diagnostic. Adapters must supply stable weights/keys and choose a supported
+strategy instead of translating a work limit into an invented SQL error.
+
+Performance regressions verify a million-character repeated input with an
+8000-character mapping takes 8000 matcher calls, while the actual old 15ecc3e
+implementation fails immediately at call 8001. A distinct-input case reaches the
+explicit comparison limit; the indexed path returns the correct value with only
+12096 key extractions. Captured ordinary and supplementary/UTF-8/mismatch probes
+also check the indexed path using only their established equivalence classes.
+Keys remain unknown for unestablished linguistic behavior.
 
 Full final-head checks, CI and review must pass before merge. Registration and
 runtime binding/execution need separate claimed successors. This deterministic

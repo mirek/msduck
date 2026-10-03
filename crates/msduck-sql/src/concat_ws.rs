@@ -68,6 +68,7 @@ pub enum Error {
     UnknownConversionWidth,
     UnknownConversion,
     UnknownComparison,
+    ComparisonLimit,
     UnknownEncoding,
     UnknownDiagnosticContext,
     InvalidDeclaration,
@@ -309,15 +310,90 @@ pub fn plan_with_context(
     })
 }
 
+/// Maximum pairwise comparisons in the compatibility matcher path. Callers
+/// with established collation keys can use the indexed evaluator instead.
+pub const MAX_MATCH_COMPARISONS: usize = 1_000_000;
+
 /// Already formatted and converted into the result's text domain by adapters.
 /// NULL is None; UTF-16 units preserve isolated surrogates. For ANSI results the
 /// adapter must have applied the chosen code page before supplying these units.
 /// The matcher operates on one SQL character (unit or surrogate pair), returning
 /// None when its explicitly supplied collation weights do not establish equality.
+/// Comparisons must be stable for the call; repeated input units reuse the result.
+/// ComparisonLimit is an explicit work barrier, not a fabricated SQL diagnostic.
 pub fn evaluate(
     plan: &Plan,
     values: &[Option<Vec<u16>>],
     matches: &impl Fn(&[u16], &[u16]) -> Option<bool>,
+) -> Result<Option<Vec<u16>>, Error> {
+    evaluate_with_translator(
+        plan,
+        values,
+        &|plan, input, source, replacements, output| {
+            let mut resolved = std::collections::BTreeMap::<&[u16], &[u16]>::new();
+            let mut comparisons = 0;
+            for unit in characters(input, plan.supplementary) {
+                let replacement = if let Some(replacement) = resolved.get(unit) {
+                    *replacement
+                } else {
+                    let mut replacement = unit;
+                    for (candidate, mapped) in source.iter().zip(replacements) {
+                        if comparisons == MAX_MATCH_COMPARISONS {
+                            return Err(Error::ComparisonLimit);
+                        }
+                        comparisons += 1;
+                        if matches(unit, candidate).ok_or(Error::UnknownComparison)? {
+                            replacement = mapped;
+                            break;
+                        }
+                    }
+                    resolved.insert(unit, replacement);
+                    replacement
+                };
+                append(output, replacement, plan.declaration.length());
+            }
+            Ok(())
+        },
+    )
+}
+
+/// Keys must equate exactly the SQL characters equated by the selected
+/// collation, including ignorable units and supplementary behavior. The caller
+/// supplies established keys; unavailable weights remain unknown. BTreeMap
+/// keeps lookup deterministic, without process randomness, and costs
+/// O((mapping characters + input characters) * log(distinct mapping keys)).
+/// The first mapping for an equal key wins; replacements are never remapped.
+pub fn evaluate_with_keys<K: Ord>(
+    plan: &Plan,
+    values: &[Option<Vec<u16>>],
+    key: &impl Fn(&[u16]) -> Option<K>,
+) -> Result<Option<Vec<u16>>, Error> {
+    evaluate_with_translator(
+        plan,
+        values,
+        &|plan, input, source, replacements, output| {
+            let mut lookup = std::collections::BTreeMap::new();
+            for (candidate, mapped) in source.iter().zip(replacements) {
+                lookup
+                    .entry(key(candidate).ok_or(Error::UnknownComparison)?)
+                    .or_insert(*mapped);
+            }
+            for unit in characters(input, plan.supplementary) {
+                let resolved = lookup
+                    .get(&key(unit).ok_or(Error::UnknownComparison)?)
+                    .copied()
+                    .unwrap_or(unit);
+                append(output, resolved, plan.declaration.length());
+            }
+            Ok(())
+        },
+    )
+}
+
+fn evaluate_with_translator(
+    plan: &Plan,
+    values: &[Option<Vec<u16>>],
+    translate: &impl Fn(&Plan, &[u16], &[&[u16]], &[&[u16]], &mut Vec<u16>) -> Result<(), Error>,
 ) -> Result<Option<Vec<u16>>, Error> {
     if values.len() != plan.arguments.len() {
         return Err(Error::InvalidPayload);
@@ -390,20 +466,15 @@ pub fn evaluate(
             let [Some(input), Some(from), Some(to)] = values else {
                 return Ok(None);
             };
-            let source = characters(from, plan.supplementary);
-            let replacements = characters(to, plan.supplementary);
+            let source: Vec<_> = characters(from, plan.supplementary).collect();
+            let replacements: Vec<_> = characters(to, plan.supplementary).collect();
             if source.len() != replacements.len() {
                 return Err(sql(9828, if unicode(plan.declaration) { 3 } else { 1 }, "The second and third arguments of the TRANSLATE built-in function must contain an equal number of characters.".into()));
             }
-            for unit in characters(input, plan.supplementary) {
-                let mut replacement = unit;
-                for (candidate, mapped) in source.iter().zip(&replacements) {
-                    if matches(unit, candidate).ok_or(Error::UnknownComparison)? {
-                        replacement = mapped;
-                        break;
-                    }
-                }
-                append(&mut output, replacement, plan.declaration.length());
+            if source.is_empty() {
+                append(&mut output, input, plan.declaration.length());
+            } else {
+                translate(plan, input, &source, &replacements, &mut output)?;
             }
         }
     }
@@ -416,10 +487,12 @@ fn append(output: &mut Vec<u16>, value: &[u16], length: Length) {
     };
     output.extend_from_slice(&value[..available.min(value.len())]);
 }
-fn characters(units: &[u16], supplementary: bool) -> Vec<&[u16]> {
-    let mut result = Vec::new();
+fn characters(units: &[u16], supplementary: bool) -> impl Iterator<Item = &[u16]> {
     let mut offset = 0;
-    while offset < units.len() {
+    std::iter::from_fn(move || {
+        if offset == units.len() {
+            return None;
+        }
         let width = if supplementary
             && (0xd800..=0xdbff).contains(&units[offset])
             && units
@@ -430,8 +503,8 @@ fn characters(units: &[u16], supplementary: bool) -> Vec<&[u16]> {
         } else {
             1
         };
-        result.push(&units[offset..offset + width]);
+        let unit = &units[offset..offset + width];
         offset += width;
-    }
-    result
+        Some(unit)
+    })
 }
