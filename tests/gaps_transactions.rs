@@ -554,8 +554,8 @@ fn waitfor_delay_and_time_wait_and_validate() {
     // otherwise waits until tomorrow, which is correct server behavior but an
     // unbounded test. Cancellation is a failure here, never a successful wait.
     let flag = Arc::new(AtomicBool::new(false));
-    let watchdog = RequestWatchdog::new(flag.clone(), Duration::from_secs(10));
     let started = Instant::now();
+    let watchdog = RequestWatchdog::new(flag.clone(), Duration::from_secs(10));
     let outcome = s.batch_response_with_read_cancel(
         "DECLARE @t INT = DATEDIFF(SECOND, CAST(CAST(GETDATE() AS DATE) AS DATETIME), GETDATE()) + 5; WAITFOR TIME @t",
         &Default::default(),
@@ -605,8 +605,8 @@ fn missed_waitfor_time_target_is_cancelled_before_the_next_day() {
     let server = Server::open(":memory:").unwrap();
     let mut s = session(&server);
     let flag = Arc::new(AtomicBool::new(false));
-    let watchdog = RequestWatchdog::new(flag.clone(), Duration::from_secs(4));
     let started = Instant::now();
+    let watchdog = RequestWatchdog::new(flag.clone(), Duration::from_secs(4));
     let outcome = s.batch_response_with_read_cancel(
         "DECLARE @t INT = DATEDIFF(SECOND, CAST(CAST(GETDATE() AS DATE) AS DATETIME), GETDATE()) + 1;
          WAITFOR DELAY '00:00:02'; WAITFOR TIME @t; THROW 51000, 'missed target ran a later statement', 1",
