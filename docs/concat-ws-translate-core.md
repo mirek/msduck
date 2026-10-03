@@ -36,7 +36,7 @@ and ANSI UTF-8 evaluation do not acquire invented behavior. Character payloads
 must respect their declared widths and fixed-width padding. Core CP1252 encoding
 validates ANSI payloads; Unicode payloads retain isolated surrogate units.
 
-Twenty-five private Rust tests pass using cached, compiler-compatible Linux
+Twenty-seven private Rust tests pass using cached, compiler-compatible Linux
 dependencies and isolated temporary binaries, with strict Clippy and formatting.
 They compare 21 ordinary character cases across all four captures (84 comparisons),
 26 declaration/collation cases (104 comparisons), 10 supplementary/UTF-8/mismatch
@@ -119,10 +119,26 @@ SQL Server MAX capacity. NULL values contribute no separator gaps.
 
 A private four-observation SQL Server boundary capture (SHA-256
 `49208568faacbb583ba24ec3ec6fc45841e773625f0ff53ce6b872939d441e29`)
-shows bounded CONCAT_WS drops a valid surrogate pair crossing the 4000-unit cap
+shows bounded CONCAT_WS drops a valid surrogate pair cut inside a value argument at the 4000-unit cap
 under both ordinary and SC collations; SC TRANSLATE does the same on replacement
 growth. Native CAST retains the high surrogate and therefore is not a substitute
-for these function rules. Evaluation retains one lookahead unit across append
-boundaries, then trims once, preventing a later value from filling space freed by
-pair truncation. The capture worker is retaining expanded boundary/lone-surrogate
+for these function rules. Further four identical 36-record observations (SHA-256
+`f0f0e55238001a905f96eb3de8c5607573ef7732f4bc9f2f11ced4bae0cbbdc6`)
+establish that argument boundaries must remain visible: CONCAT_WS retains a high
+surrogate whose low half arrives in a later argument, and retains a lone high
+surrogate at the cap. A pair cut inside one argument is dropped, and a later
+argument cannot refill the space. Evaluation therefore truncates each append
+independently and latches exhaustion, rather than flattening and trimming the
+whole output. The actual earlier whole-output implementation at 3ed52ac fails
+the new cross-argument regression (25 pass / 1 fail). The capture worker is retaining expanded boundary/lone-surrogate
 controls as a separate reference task before final merge.
+
+Four identical expanded 44-record captures (SHA-256
+`a9aacc82bdfd34f6fb854cf95d2a8fda9a2a3b9eb20b46e55fb6d78c13219ecf`)
+show that CONCAT_WS separator truncation differs again: a separator pair cut at
+the cap retains its high surrogate under ordinary and SC collations. An exactly
+fitting separator pair remains intact, with the following value excluded. The
+append operation therefore receives an explicit value/separator role. The prior
+per-value-only snapshot fails the added separator regression (26 pass / 1 fail).
+Raw UTF-16 carriers preserve these differences instead of replacing isolated
+surrogates or borrowing CAST behavior.

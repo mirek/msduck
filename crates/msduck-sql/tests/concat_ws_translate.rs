@@ -1916,3 +1916,82 @@ fn captured_function_width_boundary_drops_crossing_pairs() {
         text(&"a".repeat(3999))
     );
 }
+
+#[test]
+fn captured_concat_leaf_boundaries_preserve_cross_argument_surrogates_without_refill() {
+    // Four identical boundary captures: f0f0e55238001a905f96eb3de8c5607573ef7732f4bc9f2f11ced4bae0cbbdc6.
+    // Keep raw UTF-16 units; String::from_utf16 would lose these distinctions.
+    for collation in [DEFAULT, SC] {
+        let prefix = vec![97; 3999];
+        let mut high_prefix = prefix.clone();
+        high_prefix.push(0xd83d);
+        let cases = [
+            (
+                vec![prefix.clone(), vec![0xd83d, 0xde00], vec![90]],
+                prefix.clone(),
+            ),
+            (
+                vec![prefix.clone(), vec![0xd83d], vec![0xde00, 90]],
+                high_prefix.clone(),
+            ),
+            (
+                vec![high_prefix.clone(), vec![0xde00, 90]],
+                high_prefix.clone(),
+            ),
+            (vec![prefix.clone(), vec![0xd83d], vec![90]], high_prefix),
+            (vec![vec![97; 3998], vec![0xd83d, 0xde00], vec![90]], {
+                let mut value = vec![97; 3998];
+                value.extend([0xd83d, 0xde00]);
+                value
+            }),
+        ];
+        for (leaves, expected) in cases {
+            let mut arguments = vec![Argument::null_literal()];
+            arguments.extend(
+                leaves
+                    .iter()
+                    .map(|leaf| arg(Family::Nvarchar, Length::Bounded(leaf.len() as u16))),
+            );
+            arguments[1].collation = Some(Label::Explicit(collation.into()));
+            let p = rules::plan(Function::ConcatWs, &arguments, DEFAULT, &catalog()).unwrap();
+            assert_eq!(p.declaration.length(), Length::Bounded(4000));
+            let mut values = vec![None];
+            values.extend(leaves.into_iter().map(Some));
+            assert_eq!(
+                rules::evaluate(&p, &values, &default_match).unwrap(),
+                Some(expected)
+            );
+        }
+    }
+}
+
+#[test]
+fn captured_concat_separator_truncation_retains_split_high_surrogate() {
+    // Four identical 44-record captures:
+    // a9aacc82bdfd34f6fb854cf95d2a8fda9a2a3b9eb20b46e55fb6d78c13219ecf.
+    for collation in [DEFAULT, SC] {
+        for prefix_length in [3999, 3998] {
+            let mut arguments = vec![
+                arg(Family::Nvarchar, Length::Bounded(2)),
+                arg(Family::Nvarchar, Length::Bounded(prefix_length)),
+                arg(Family::Nvarchar, Length::Bounded(1)),
+            ];
+            arguments[1].collation = Some(Label::Explicit(collation.into()));
+            let p = rules::plan(Function::ConcatWs, &arguments, DEFAULT, &catalog()).unwrap();
+            let values = [
+                text("😀"),
+                Some(vec![97; usize::from(prefix_length)]),
+                text("Z"),
+            ];
+            let mut expected = vec![97; usize::from(prefix_length)];
+            expected.push(0xd83d);
+            if prefix_length == 3998 {
+                expected.push(0xde00);
+            }
+            assert_eq!(
+                rules::evaluate(&p, &values, &default_match).unwrap(),
+                Some(expected)
+            );
+        }
+    }
+}

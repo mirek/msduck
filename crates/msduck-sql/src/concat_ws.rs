@@ -360,7 +360,7 @@ pub fn evaluate(
                     resolved.insert(unit, replacement);
                     replacement
                 };
-                append(output, replacement, plan)?;
+                append(output, replacement, plan, Boundary::Value)?;
             }
             Ok(())
         },
@@ -395,7 +395,7 @@ pub fn evaluate_with_keys<K: Ord>(
                     .get(&key(unit).ok_or(Error::UnknownComparison)?)
                     .copied()
                     .unwrap_or(unit);
-                append(output, resolved, plan)?;
+                append(output, resolved, plan, Boundary::Value)?;
             }
             Ok(())
         },
@@ -405,7 +405,7 @@ pub fn evaluate_with_keys<K: Ord>(
 fn evaluate_with_translator(
     plan: &Plan,
     values: &[Option<Vec<u16>>],
-    translate: &impl Fn(&Plan, &[u16], &[u16], &[u16], &mut Vec<u16>) -> Result<(), Error>,
+    translate: &impl Fn(&Plan, &[u16], &[u16], &[u16], &mut Output) -> Result<(), Error>,
 ) -> Result<Option<Vec<u16>>, Error> {
     if values.len() != plan.arguments.len() {
         return Err(Error::InvalidPayload);
@@ -464,7 +464,7 @@ fn evaluate_with_translator(
         }
     }
 
-    let mut output = Vec::new();
+    let mut output = Output::default();
     match plan.function {
         Function::ConcatWs => {
             let separator = values[0].as_deref().unwrap_or(&[]);
@@ -492,9 +492,9 @@ fn evaluate_with_translator(
             let mut first = true;
             for value in values[1..].iter().flatten() {
                 if !first {
-                    append(&mut output, separator, plan)?;
+                    append(&mut output, separator, plan, Boundary::Separator)?;
                 }
-                append(&mut output, value, plan)?;
+                append(&mut output, value, plan, Boundary::Value)?;
                 first = false;
             }
         }
@@ -510,44 +510,57 @@ fn evaluate_with_translator(
                 return Err(sql(9828, if unicode(plan.declaration) { 3 } else { 1 }, "The second and third arguments of the TRANSLATE built-in function must contain an equal number of characters.".into()));
             }
             if from.is_empty() {
-                append(&mut output, input, plan)?;
+                append(&mut output, input, plan, Boundary::Value)?;
             } else {
                 translate(plan, input, from, to, &mut output)?;
             }
         }
     }
-    if let Length::Bounded(width) = plan.declaration.length() {
-        let width = usize::from(width);
-        if output.len() > width {
-            // Retain one lookahead unit across argument/replacement boundaries.
-            // Function output truncation drops a pair crossing the cap; CAST's
-            // truncation rule differs. Do not refill the freed final unit.
-            let next = output[width];
-            output.truncate(width);
-            if unicode(plan.declaration)
-                && output
-                    .last()
-                    .is_some_and(|unit| (0xd800..=0xdbff).contains(unit))
-                && (0xdc00..=0xdfff).contains(&next)
-            {
-                output.pop();
-            }
-        }
-    }
-    Ok(Some(output))
+    Ok(Some(output.units))
 }
-fn append(output: &mut Vec<u16>, value: &[u16], plan: &Plan) -> Result<(), Error> {
+#[derive(Default)]
+struct Output {
+    units: Vec<u16>,
+    exhausted: bool,
+}
+#[derive(Clone, Copy)]
+enum Boundary {
+    Value,
+    Separator,
+}
+fn append(
+    output: &mut Output,
+    value: &[u16],
+    plan: &Plan,
+    boundary: Boundary,
+) -> Result<(), Error> {
+    if output.exhausted {
+        return Ok(());
+    }
     let available = match plan.declaration.length() {
         Length::Max => value.len(),
-        // One sentinel establishes whether the final bounded unit is the high
-        // half of a pair, including pairs crossing append boundaries.
-        Length::Bounded(n) => (usize::from(n) + 1).saturating_sub(output.len()),
+        Length::Bounded(n) => usize::from(n).saturating_sub(output.units.len()),
     };
-    let count = available.min(value.len());
-    if count > MAX_OUTPUT_UNITS.saturating_sub(output.len()) {
+    let mut count = available.min(value.len());
+    if count < value.len() {
+        // SQL Server truncates each argument/replacement independently. A pair
+        // cut inside this append is dropped, but a high surrogate from a prior
+        // argument is retained even when this argument starts with its low half.
+        // Separators instead retain the exact prefix, including a split high.
+        output.exhausted = true;
+        if matches!(boundary, Boundary::Value)
+            && unicode(plan.declaration)
+            && count > 0
+            && (0xd800..=0xdbff).contains(&value[count - 1])
+            && (0xdc00..=0xdfff).contains(&value[count])
+        {
+            count -= 1;
+        }
+    }
+    if count > MAX_OUTPUT_UNITS.saturating_sub(output.units.len()) {
         return Err(Error::OutputLimit);
     }
-    output.extend_from_slice(&value[..count]);
+    output.units.extend_from_slice(&value[..count]);
     Ok(())
 }
 fn characters(units: &[u16], supplementary: bool) -> impl Iterator<Item = &[u16]> {
