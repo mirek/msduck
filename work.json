@@ -9904,6 +9904,23 @@
         "Fresh exclusive claim in clean completed msduck-concat-ws-translate-core worktree from approved main5f6dd8b; retain old quoted-registration branch/receipt. No new worktrees/nativecaches/agents; never sync/build/change the live shared root job81480 workspace. Private reference staging/cached immutable Node deps only, resource-limited containers. Exact-head CI, independent and owner-enabledCodex review or fallback, worker owns PRmerge and prompt registry/project/issuecompletion. No engine.rs edit/reservation."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkFdl"
+    },
+    {
+      "id": "waitfor-time-test-watchdog-v1",
+      "title": "Bound real-clock WAITFOR TIME verification without changing server semantics",
+      "issue": 825,
+      "state": "ready",
+      "authorization": "Continuing owner goal and fast verification cycle; fix first-party observed next-day test hang in tests/gaps_transactions.rs. Keep engine.rs free and actual clock/runtime behavior unchanged.",
+      "scope": [
+        "tests/gaps_transactions.rs",
+        "docs/waitfor-time-verification.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Give real-clock WAITFOR TIME probe a reasonable future margin and bounded request-cancellation watchdog, requiring successful completion and meaningful lower/upper elapsed bounds. Missed target or ignored wait must fail promptly, not pass or holdbuilderaday. Ensure prompt watchdog cleanup on success/failure; preserve existing DELAY/type/diagnostic/transaction/cancellation coverage and exact next-occurrence behavior, no skipping/time manipulation/engine edits. Retain pure until() boundary authority and original stalled81480 log as evidence; do not claim prior partial checks are fullpasses.",
+        "Fresh own claim/receipt in clean existing greatest-least-core worktree from approved5f6dd8b; preserve priorbranch/receipt, no newworktree/nativecache/agent. Honor sharedbuilderlock and explicit handoff after822, run focused regression and required exact-head formatter/strictClippy/workspace/client/audit gates, CI and independent/Codexreview or fallback. Claimingworker owns focusedPRmerge and registry/project completion. Root812 can then rebase and finish final fullverification. No engine.rs reservation and no fullcompatibility claim."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkGJq"
     }
   ]
 }
