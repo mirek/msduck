@@ -43,7 +43,7 @@ The acquired raw-only artifact, written exclusively before semantic relation
 validation, has SHA256
 `9cdf600f1105b9bd8698f6c6aedf3560f70038d841e96a89b00359baf0a317a4`.
 The frozen generator has SHA256
-`2ac181ce4515800a92b25d5537b018c7bb5ee0c19512ae14893fc830f902f94b`.
+`ef1ae619faa1761c5ccb972aa47fd14908c8fb1bae1e84778b50a5bf803b091e`.
 Fresh four observations and a second fresh four reproduce the entire fixture
 with zero differing raw fields. Each frozen capture took 31.01 seconds, with
 peak RSS 1,164,832,768 and 1,346,211,840 bytes respectively. All 16 profiles
@@ -84,7 +84,7 @@ field remains complete. Axiom failures count every violation but retain at most
 
 The production raw-first path has a failure regression proving an invalid
 relationship leaves the acquired server diagnostic and original raw bytes
-intact. Eighteen coherent four-copy corruption tests refresh integrity hashes
+intact. Twenty identical four-copy corruption tests refresh integrity hashes
 before checking observer/input semantics; five packed-relation corruptions are
 also rejected independently of raw digest pins. ROW/NBCROW and RETURNVALUE
 fragment tests preserve NULL/isolated units and reject truncation/over-limit

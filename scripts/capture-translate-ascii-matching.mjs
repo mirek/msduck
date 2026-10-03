@@ -325,6 +325,7 @@ for(const collation of collations)for(const declaration of domains) {
   const bindingSets=[{s:String.fromCharCode(...alphabet),m:'A',t:'é',u:'€'},{s:'aAaA',m:'a',t:'é',u:'€'},{s:' -\0 ',m:' ',t:'é',u:'€'},{s:null,m:'A',t:'é',u:'€'},{s:'ab',m:'ab',t:'é',u:'€'},{s:String.fromCharCode(...alphabet),m:'A',t:'é',u:'€'}]
   preparedPrograms.push([name,sql,['s','m','t','u'].map(x=>[x,wireType,{length:512}]),bindingSets]);provenance.set(name,{kind:'prepared ASCII matching',declaration,collation,bindings:bindingSets,roles:['native emitted operands','first and second TRANSLATE']})
 }
+const programSql=new Map([...cases,...preparedPrograms].map(([name,sql])=>[name,sql]))
 assert.equal(cases.length,2048)
 assert(cases.length+preparedPrograms.length+2<=2500,'fixed program bound')
 const exclusions={grid:'Complete128x128 ASCII function relationships under eight exact profiles and two declared domains. Original ANSI bytes recode through the captured database domain; no directly stored malformed UTF8 evidence.',matching:'Two independently evaluated nonASCII sentinels and same-evaluation raw text ROW bytes; no ordinary equality, name-based folding or presumed relation axioms. Unknown beyond ASCII and all841 malformed-variable outputs.',prepared:'Original VARCHAR/NVARCHAR512 declarations; full alphabet, varied case/control/space, typedNULL, genuine9828 length mismatch, original repeat; actual emitted typed payload bytes retained.'}
@@ -548,12 +549,14 @@ function validate(run) {
   assert.equal(run.length,2+cases.length+preparedPrograms.length)
   assertSameCapture(run.map(x=>x.name),['server version',...cases.map(x=>x[0]),...preparedPrograms.map(x=>x[0]),'connection reusable'])
   for(const record of run)if(provenance.has(record.name)) {
+    assert.equal(record.sql,programSql.get(record.name),record.name+': exact generated SQL input')
     assertSameCapture(record.input,canonical(provenance.get(record.name)),record.name+': exact input')
     assert(record.reuse,record.name+': reuse retained');assert.equal(record.reuse.errors.length,0);assertSameCapture(record.reuse.sets[0].rows,[[0,1]])
     if(!record.prepared)gridRelation(record)
     else {
       assert.equal(record.prepared.prepare.prepared,true)
       assert.equal(record.prepared.executions.length,record.input.bindings.length)
+      assertSameCapture(record.declarations.map(d=>({name:d.name,type:d.type,length:d.options?.length})),['s','m','t','u'].map(name=>({name,type:record.input.declaration.startsWith('NVARCHAR')?'NVarChar':'VarChar',length:512})),'original prepared declarations')
       assert.equal(record.context.errors.length,0)
       for(const [index,execution] of record.prepared.executions.entries()) {
         assertSameCapture(execution.values,record.input.bindings[index],'original prepared binding')
@@ -801,6 +804,8 @@ async function testObserver(retained) {
     r=>r.find(x=>x.prepared).bindingWire[0][0].payload='00',
     r=>r.find(x=>x.prepared).prepared.executions[0].result.returnStatus=99,
     r=>r[1].input.mapping=127,
+    r=>r[1].sql='SELECT 1',
+    r=>r.find(x=>x.prepared).declarations[0].options.length=1,
     r=>r[1].result.sets[0].rows[0][2]={kind:'binary',value:'58'},
     r=>r[1].result.tokens.find(t=>t.token==='ROW').raw.hex='00',
   ]
@@ -816,7 +821,7 @@ async function testObserver(retained) {
     for(const container of actual.relations)for(const reports of container)mutate(reports[0])
     assert.throws(()=>validateFourCaptures(actual,false),'packed relation corruption rejected independently of raw/run digest pins')
   }
-  console.log('All RETURNVALUE fragments pass; eighteen refreshed-integrity capture corruptions and five packed-relation corruptions rejected')
+  console.log('All RETURNVALUE fragments pass; twenty refreshed-integrity capture corruptions and five packed-relation corruptions rejected')
 }
 async function testCliSafety() {
   const root=resolve('.tmp')
