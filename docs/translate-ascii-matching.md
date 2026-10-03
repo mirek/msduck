@@ -45,8 +45,9 @@ validation, has SHA256
 The frozen generator has SHA256
 `ef1ae619faa1761c5ccb972aa47fd14908c8fb1bae1e84778b50a5bf803b091e`.
 Fresh four observations and a second fresh four reproduce the entire fixture
-with zero differing raw fields. Each frozen capture took 31.01 seconds, with
-peak RSS 1,164,832,768 and 1,346,211,840 bytes respectively. All 16 profiles
+with zero differing raw fields. Each final frozen capture took 30.01 seconds, with
+peak RSS 1,257,222,144 and 1,262,723,072 bytes respectively.
+Final fidelity tests took 67.01 seconds with peak RSS 1,476,485,120 bytes. All 16 profiles
 satisfy the measured reflexivity, symmetry and transitivity checks within ASCII.
 
 | Captured profile | Measured ASCII classes in each declared domain |
