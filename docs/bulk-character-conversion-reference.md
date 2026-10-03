@@ -50,6 +50,10 @@ password or credential is retained. The copied
 [tedious skill](../.agents/skills/tedious/SKILL.md) and
 [TDS skill](../.agents/skills/tds-protocol/SKILL.md) inform capture structure;
 their upstream implementation notes are not msduck support claims.
+Replay also requires four distinct database names, two distinct server
+identities paired with their two databases, exactly three version identity
+cells, and the observed packet status bytes 0 or 1. Extra data cannot disappear
+inside an identity projection.
 
 ## Measured outcomes
 
@@ -157,14 +161,15 @@ its subsequent offline replay passes. The earlier exploratory source SHA256
 recorded only two version columns and is preserved separately, not substituted
 for retained evidence.
 
-A fresh capture with the final validation source
+A fresh capture with the source before subsequent validation hardening
 `6e63054a9948f52b315249ddb59503fb390ebbd54a94c74f3dc09f5c41bfa585`
 completed with exit zero. Its 10,357,418-byte raw artifact has SHA256
 `ba4c8c4320608c94587e4afd7c266250bd1254149d2da7462c3071bbd8ac0373`;
 its complete 6,659,908-byte comparison sidecar contains 5,331 differences
 against the retained fixture. All semantic and payload projections match the
 independent pins; original ephemeral identities and packet headers remain
-different in raw evidence. Both local and Linux focused suites pass ten tests.
+different in raw evidence. Both local and Linux focused suites pass twelve tests,
+including duplicate-run, extra-cell, packet-status and aborted-startup negatives.
 
 Legacy TEXT, arbitrary collation/codepage profiles, a general best-fit map,
 Unicode-source isolated surrogates and combinations of large values with all

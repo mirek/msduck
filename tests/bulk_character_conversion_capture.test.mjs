@@ -145,6 +145,25 @@ test('uniform request and response corruption is rejected independently of decod
   }
 })
 
+test('duplicate capture identities, added version cells and unsupported packet status cannot disappear in projections', async () => {
+  const retained = await load()
+  const duplicate = structuredClone(retained)
+  duplicate.runs = Array.from({length:4},()=>structuredClone(retained.runs[0]))
+  duplicate.comparisons = duplicate.runs.slice(1).map(run=>compare(run,duplicate.runs[0]))
+  assert.throws(()=>validate(duplicate),/independent database/)
+  const extra = structuredClone(retained)
+  for(const run of extra.runs) run.version.result.sets[0].rows[0].push('unapproved extra cell')
+  extra.comparisons = extra.runs.slice(1).map(run=>compare(run,extra.runs[0]))
+  assert.throws(()=>validate(extra),/row width/)
+  const status = structuredClone(retained)
+  for(const run of status.runs) {
+    const p=find(run,'zero-wire-collation').execution.packets.find(p=>p.direction==='in')
+    const bytes=Buffer.from(p.rawHex,'hex');bytes[1]|=0x80;p.rawHex=bytes.toString('hex')
+  }
+  status.comparisons=status.runs.slice(1).map(run=>compare(run,status.runs[0]))
+  assert.throws(()=>validate(status),/packet status/)
+})
+
 test('JSON preflight bounds exact UTF8 escaped size and rejects excessive or cyclic captures before serialization', () => {
   for (const value of [null,true,false,42,-0,'a\n\u0000é🦆\ud800',[null,'x'],{x:[1,2],s:'"\\'}]) assert.equal(jsonSize(value), Buffer.byteLength(JSON.stringify(value)))
   assert.equal(jsonSize(''), 2)
@@ -152,6 +171,10 @@ test('JSON preflight bounds exact UTF8 escaped size and rejects excessive or cyc
   const cyclic = {}; cyclic.self = cyclic
   assert.throws(() => jsonSize(cyclic), /acyclic/)
   assert.throws(() => jsonSize({missing:undefined}), /canonical/)
+  assert.throws(() => jsonSize(Array(4)), /canonical/)
+  assert.throws(() => jsonSize(new Date(0)), /plain/)
+  const overridden=[];overridden.toJSON=()=> 'unbounded override'
+  assert.throws(() => jsonSize(overridden), /plain/)
   let deep = null; for (let i = 0; i < 66; i++) deep = [deep]
   assert.throws(() => jsonSize(deep), /bounded/)
   assert.equal(Math.max(...cases.map(c => rowsFor(c).length)), 258)
@@ -185,5 +208,19 @@ test('invalid captures and complete comparison sidecars are preserved before sem
     assert.equal(comparison.retained,true)
     assert.ok(comparison.differences.some(d => d.path.includes('/execution/result/rowCount')))
     assert.equal(jsonSize(saved),Buffer.byteLength(JSON.stringify(saved)))
+  })
+})
+
+test('an aborted reference startup retains the partial capture and every comparison difference', async () => {
+  await scratch(async dir => {
+    const output=join(dir,'aborted.json')
+    const child=spawnSync(process.execPath,['scripts/capture-bulk-character-conversion.mjs',output],{cwd:new URL('../',import.meta.url),encoding:'utf8',env:{...process.env,PATH:''},timeout:10000})
+    assert.notEqual(child.status,0)
+    const partial=JSON.parse(await readFile(output,'utf8')),sidecar=JSON.parse(await readFile(output+'.comparison.json','utf8'))
+    assert.deepEqual(partial.runs,[])
+    assert.ok(partial.failure.message.includes('docker'))
+    assert.equal(sidecar.retained,true)
+    assert.deepEqual(sidecar.differences,compare(partial,await load()))
+    assert.ok(sidecar.differences.some(d=>d.path==='/runs/0'))
   })
 })
