@@ -75,11 +75,20 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
     crate::integer_conversion::register(db)?;
     crate::variant_cast::register(db)?;
     db.register_scalar_function::<DateFromParts>("__msduck_datefromparts")?;
+    // ISNULL takes the type of its first argument. A Unicode carrier (stored
+    // NVARCHAR, OPENJSON key/value) packs a text replacement as a carrier; a
+    // carrier replacement of text converts through its code units, never its
+    // STRUCT display text. typeof is a bind-time constant, so only the
+    // selected branch is evaluated, and the others only need to bind.
     db.execute_batch(
         "CREATE OR REPLACE MACRO main.__msduck_isnull(first_value, replacement) AS
         coalesce(first_value, CASE
         WHEN typeof(first_value) IN ('UTINYINT','SMALLINT','INTEGER','BIGINT') THEN
             cast_to_type(__msduck_integer_input(replacement, typeof(first_value)), first_value)
+        WHEN typeof(first_value) = 'STRUCT(__msduck_utf16le BLOB)' THEN
+            cast_to_type(__msduck_carrier_input(replacement), first_value)
+        WHEN typeof(replacement) = 'STRUCT(__msduck_utf16le BLOB)' THEN
+            cast_to_type(__msduck_unicode_text(CAST(replacement AS STRUCT(__msduck_utf16le BLOB))), first_value)
         ELSE cast_to_type(replacement, first_value) END)",
     )?;
     db.register_scalar_function::<crate::datalength::Bytes<0>>("__msduck_datalength_ansi")?;
