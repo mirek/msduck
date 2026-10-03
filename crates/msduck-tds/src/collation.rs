@@ -42,6 +42,19 @@ impl Collation {
         };
         Self::new(1033, flags, version, sort_id).ok()
     }
+
+    /// Captured wire descriptors, independent of runtime collation support.
+    /// Existing callers use `for_name` as an operational validation gate;
+    /// recognizing SC/UTF8 here must not enable their unsupported row codecs
+    /// or supplementary/linguistic operations there.
+    pub fn descriptor_for_name(name: &str) -> Option<Self> {
+        let flags = match name.to_ascii_lowercase().as_str() {
+            "latin1_general_100_ci_as_sc" => 13,
+            "latin1_general_100_ci_as_sc_utf8" => 77,
+            _ => return Self::for_name(name),
+        };
+        Self::new(1033, flags, 2, 0).ok()
+    }
 }
 
 #[cfg(test)]
