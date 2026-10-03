@@ -43,7 +43,22 @@ use std::ops::ControlFlow;
 const SIDES: &str = "__msduck_full_join";
 const SIDE: &str = "__msduck_full_join_side";
 const RIGHT: &str = "__msduck_full_join_right";
-const VOLATILE: [&str; 4] = ["newid", "newsequentialid", "rand", "crypt_gen_random"];
+/// Functions that return a different value on each evaluation (the list in
+/// `top.rs`).
+const VOLATILE: [&str; 12] = [
+    "newid",
+    "newsequentialid",
+    "rand",
+    "crypt_gen_random",
+    "random",
+    "gen_random_uuid",
+    "uuid",
+    "nextval",
+    "setseed",
+    "uuidv4",
+    "uuidv7",
+    "currval",
+];
 
 /// Rewrites every eligible SELECT inside an APPLY body. Idempotent: rewritten
 /// SELECTs no longer contain the FULL join.
@@ -62,6 +77,8 @@ pub fn rewrite(query: &mut Query) {
 fn rewrite_select(select: &mut Select) {
     let mut taken = relation_names(select);
     let base_names = !long_names(select);
+    // The side column must not capture an unqualified column reference.
+    let column = fresh(&mut column_names(select), SIDE);
     let mut filters = Vec::new();
     let mut sides = Vec::new();
     for item in &mut select.from {
@@ -114,7 +131,7 @@ fn rewrite_select(select: &mut Select) {
         let side = |n: i64| Expr::BinaryOp {
             left: Box::new(Expr::CompoundIdentifier(vec![
                 Ident::new(&alias),
-                Ident::new(SIDE),
+                Ident::new(&column),
             ])),
             op: BinaryOperator::Eq,
             right: Box::new(number(n)),
@@ -130,17 +147,19 @@ fn rewrite_select(select: &mut Select) {
                 set_quantifier: SetQuantifier::All,
                 left: Box::new(SetExpr::Select(Box::new(side_row(
                     1,
+                    &column,
                     exists(left.clone(), None, false),
                 )))),
                 right: Box::new(SetExpr::Select(Box::new(side_row(
                     2,
+                    &column,
                     exists(right_only, None, false),
                 )))),
             })),
             alias: Some(TableAlias {
                 explicit: true,
                 name: Ident::new(&alias),
-                columns: vec![TableAliasColumnDef::from_name(SIDE)],
+                columns: vec![TableAliasColumnDef::from_name(&column)],
                 at: None,
             }),
             sample: None,
@@ -192,7 +211,7 @@ fn rewrite_select(select: &mut Select) {
                 None => vec![],
             };
             for alias in &sides {
-                let side = ObjectName::from(vec![Ident::new(alias), Ident::new(SIDE)]);
+                let side = ObjectName::from(vec![Ident::new(alias), Ident::new(&column)]);
                 if !names.contains(&side) {
                     names.push(side);
                 }
@@ -351,6 +370,31 @@ fn wildcard_qualifiers(select: &Select, names: &mut HashSet<String>) {
     }
 }
 
+/// Lowercase names of every column the SELECT references.
+fn column_names(select: &Select) -> HashSet<String> {
+    struct Names(HashSet<String>);
+    impl Visitor for Names {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            match expr {
+                Expr::Identifier(ident) => {
+                    self.0.insert(ident.value.to_lowercase());
+                }
+                Expr::CompoundIdentifier(parts) => {
+                    if let Some(last) = parts.last() {
+                        self.0.insert(last.value.to_lowercase());
+                    }
+                }
+                _ => {}
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut names = Names(HashSet::new());
+    let _ = select.visit(&mut names);
+    names.0
+}
+
 /// A name no relation or qualifier of the SELECT uses, reserved for this one.
 fn fresh(taken: &mut HashSet<String>, base: &str) -> String {
     let name = (0..)
@@ -406,11 +450,11 @@ fn select(projection: Expr, from: Vec<TableWithJoins>, selection: Option<Expr>) 
     select
 }
 
-fn side_row(n: i64, condition: Expr) -> Select {
+fn side_row(n: i64, column: &str, condition: Expr) -> Select {
     let mut row = select(number(n), vec![], Some(condition));
     row.projection = vec![SelectItem::ExprWithAlias {
         expr: number(n),
-        alias: Ident::new(SIDE),
+        alias: Ident::new(column),
     }];
     row
 }
@@ -495,6 +539,7 @@ fn correlated(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> b
             }
             ControlFlow::Continue(())
         }
+        // A query's CTEs, then each SELECT arm's own FROM, form scopes.
         fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
             let mut names = HashSet::new();
             if let Some(with) = &query.with {
@@ -502,11 +547,22 @@ fn correlated(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> b
                     names.insert(cte.alias.name.value.to_lowercase());
                 }
             }
-            body_names(&query.body, &mut names);
             self.scopes.push(names);
             ControlFlow::Continue(())
         }
         fn post_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
+            self.scopes.pop();
+            ControlFlow::Continue(())
+        }
+        fn pre_visit_select(&mut self, select: &Select) -> ControlFlow<()> {
+            let mut names = HashSet::new();
+            for table in &select.from {
+                join_names(table, &mut names);
+            }
+            self.scopes.push(names);
+            ControlFlow::Continue(())
+        }
+        fn post_visit_select(&mut self, _: &Select) -> ControlFlow<()> {
             self.scopes.pop();
             ControlFlow::Continue(())
         }
@@ -537,22 +593,6 @@ fn correlated(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> b
     let _ = right.visit(&mut scopes);
     let _ = condition.visit(&mut scopes);
     scopes.outer
-}
-
-/// Names a query's own FROM clauses define, without nested queries.
-fn body_names(body: &SetExpr, names: &mut HashSet<String>) {
-    match body {
-        SetExpr::Select(select) => {
-            for table in &select.from {
-                join_names(table, names);
-            }
-        }
-        SetExpr::SetOperation { left, right, .. } => {
-            body_names(left, names);
-            body_names(right, names);
-        }
-        _ => {}
-    }
 }
 
 fn join_names(table: &TableWithJoins, names: &mut HashSet<String>) {
@@ -731,6 +771,20 @@ mod tests {
             "SELECT 1 FROM (SELECT id AS k FROM (VALUES (0)) v(x)) AS l FULL JOIN (SELECT 1 AS k) AS r ON l.k = r.k",
         );
         assert!(!sql.contains("FULL"), "{sql}");
+    }
+
+    #[test]
+    fn set_operation_arms_scopes_side_column_and_volatility() {
+        let sql = rewritten(
+            "SELECT 1 FROM (SELECT p.id AS k FROM (VALUES (0)) q(x) UNION ALL SELECT 1 FROM (VALUES (1)) p(x)) AS l FULL JOIN (VALUES (1)) AS r(k) ON l.k = r.k",
+        );
+        assert!(!sql.contains("FULL"), "{sql}");
+        let sql = rewritten(&format!(
+            "SELECT {SIDE} FROM OPENJSON(p.lhs) l FULL JOIN OPENJSON(p.rhs) r ON l.[key] = r.[key]"
+        ));
+        assert!(sql.contains(&format!("AS {SIDES} ({SIDE}_1)")), "{sql}");
+        let sql = "SELECT 1 FROM OPENJSON(p.lhs) l FULL JOIN OPENJSON(p.rhs) r ON l.[key] = r.[key] AND random() > 0.5";
+        assert!(rewritten(sql).contains("FULL JOIN"), "{sql}");
     }
 
     #[test]
