@@ -10028,6 +10028,28 @@
       ],
       "issue": 836,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkRAO"
+    },
+    {
+      "id": "concat-collation-wire-v1",
+      "title": "Encode captured SC and UTF8 collation descriptors",
+      "state": "ready",
+      "authorization": "Continuing owner SQL Server-compatible Rust/DuckDB goal and parallel factory; owner-approved merged reference807 retains four exact SQL Server observations. Completed resource-collation118 no longer reserves this codec. No external input.",
+      "scope": [
+        "crates/msduck-tds/src/collation.rs",
+        "crates/msduck-tds/tests/concat_collations.rs",
+        "docs/concat-collation-codec.md"
+      ],
+      "dependencies": [
+        "concat-ws-translate-reference-recovery-v1",
+        "catalog-resource-collation-v1"
+      ],
+      "acceptance": [
+        "Recognize only captured Latin1_General_100_CI_AS_SC (LCID1033 flags13 version2 sort0) and Latin1_General_100_CI_AS_SC_UTF8 (LCID1033 flags77 version2 sort0), with case-insensitive exact name lookup. Preserve unknown names and bounds; no suffix inference, comparison weights or ANSI UTF8 row codec claims.",
+        "Replay all applicable SC and UTF8 descriptors in all four retained reference/concat-ws-translate.json observations, verifying all five collation bytes and captured NVARCHAR metadata. Preserve fixture bytes including isolated UTF16 surrogates; do not lossy-normalize or drop records to parse JSON. Add unknown-lookalike and metadata encoding regressions and document wire mapping versus remaining runtime/encoding gaps.",
+        "Fresh claim/receipt in clean reused completed prepared-rpc worker worktree from approved merged mainbe7e53d or newer owner-approved revision; no new agents/worktrees/native caches or engine edits. Read TDS skill. Root20227 owns live shared builder; private deterministic proof reads compatible cached deps and removes own outputs, no shared sync/build until explicit terminal handoff. Exact-head required fmt/strictClippy/workspace/alltarget/client/audit verification under builder lock, independent and Codex review or authorized availability fallback, required CI. Claiming worker owns PR review follow-up, merge and registry/project/issue completion."
+      ],
+      "issue": 837,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkRbH"
     }
   ]
 }
