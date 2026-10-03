@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { isDeepStrictEqual } from 'node:util'
 import { resolve } from 'node:path'
 import { Request, TYPES } from 'tedious'
-import { capture, canonical } from './lib/compatibility.mjs'
+import { canonical } from './lib/compatibility.mjs'
 import { referenceImage, withReferenceContainer } from './lib/reference-container.mjs'
 import { isolatedReference } from './lib/reference.mjs'
 
@@ -109,7 +109,7 @@ const taps = new WeakMap()
 const message = token => ({ number: token.number, state: token.state, class: token.class, lineNumber: token.lineNumber, procName: token.procName, message: token.message })
 const done = token => ({ status: token.raw.status, command: token.raw.command, count: token.raw.count })
 for (const [method, describe] of Object.entries({
-  onColMetadata: token => ({ columns: token.columns.map(column => column.colName) }),
+  onColMetadata: token => ({ columns: token.columns.map(column => column.colName), descriptors: token.columns.map(columnDescriptor) }),
   onRow: () => ({}),
   onOrder: token => ({ columns: token.orderColumns }),
   onErrorMessage: message,
@@ -225,19 +225,32 @@ const preparedPrograms = [
 ]
 const errorFields = e => ({ number: e.number, state: e.state, class: e.class, lineNumber: e.lineNumber, message: e.message })
 
+const columnDescriptor = x => ({ name: x.colName, type: x.type.name, userType: x.userType, length: x.dataLength ?? null, precision: x.precision ?? null, scale: x.scale ?? null, flags: x.flags, collation: canonical(x.collation ?? null) })
 async function observed(connection, sql, parameters) {
-  const tokens = []
-  const transport = {
-    on: (...args) => connection.on(...args),
-    off: (...args) => connection.off(...args),
-    execSqlBatch(request) {
-      taps.set(request, tokens)
-      if (!parameters) return connection.execSqlBatch(request)
-      for (const [name, type, value, options] of parameters) request.addParameter(name, type, value, options)
+  return new Promise(resolveDone => {
+    const result={sets:[],done:[],errors:[],info:[],returnStatus:null,tokens:[]}
+    const request=new Request(sql,(error,rowCount)=>{
+      connection.off('errorMessage',onError)
+      connection.off('infoMessage',onInfo)
+      result.rowCount=rowCount
+      if (error && !result.errors.length) result.errors.push({message:error.message,number:error.number??null})
+      resolveDone(canonical(result))
+    })
+    const onError=error=>result.errors.push(errorFields(error))
+    const onInfo=info=>result.info.push(errorFields(info))
+    connection.on('errorMessage',onError)
+    connection.on('infoMessage',onInfo)
+    taps.set(request,result.tokens)
+    request.on('columnMetadata',columns=>result.sets.push({columns:columns.map(columnDescriptor),rows:[]}))
+    request.on('row',row=>result.sets.at(-1).rows.push(row.map(x=>x.value)))
+    for (const kind of ['done','doneInProc','doneProc']) request.on(kind,(rowCount,more)=>result.done.push({kind,rowCount:rowCount??null,more}))
+    request.on('doneProc',(_count,_more,status)=>{result.returnStatus=status})
+    if (!parameters) connection.execSqlBatch(request)
+    else {
+      for (const [name,type,value,options] of parameters) request.addParameter(name,type,value,options)
       connection.execSql(request)
-    },
-  }
-  return { ...canonical(await capture(transport, sql)), tokens }
+    }
+  })
 }
 
 // Prepare once, execute each value set on the same handle, then unprepare.
@@ -251,7 +264,7 @@ async function prepared(connection, sql, declarations, valueSets) {
   const onInfo = e => result?.info.push(errorFields(e))
   connection.on('errorMessage', onError)
   connection.on('infoMessage', onInfo)
-  request.on('columnMetadata', columns => result?.sets.push({ columns: columns.map(x => ({ name: x.colName, type: x.type.name, length: x.dataLength ?? null, precision: x.precision ?? null, scale: x.scale ?? null, flags: x.flags, collation: canonical(x.collation ?? null) })), rows: [] }))
+  request.on('columnMetadata', columns => result?.sets.push({ columns: columns.map(columnDescriptor), rows: [] }))
   request.on('row', row => result.sets.at(-1).rows.push(row.map(x => x.value)))
   for (const kind of ['done', 'doneInProc', 'doneProc']) request.on(kind, (rowCount, more) => result?.done.push({ kind, rowCount: rowCount ?? null, more }))
   request.on('doneProc', (_count, _more, status) => { if (result) result.returnStatus = status })
@@ -340,7 +353,7 @@ function validate(run) {
   }
 }
 function validateContract(run) {
-  const expected='81131cf39a04bf7a3fc53bdc604ad1f826d94f1dd726f4e4637cf48969ffb512'
+  const expected='05f8f45d5fd21aab61688514713c6b4d1b400cc58c3042dd1d789fdf08345af4'
   assert.equal(createHash('sha256').update(JSON.stringify(run)).digest('hex'),expected,'complete conversion observation contract')
 }
 function firstDifference(left, right) {
@@ -389,6 +402,8 @@ function validateTokens(run) {
           activeSet = phase.sets[setIndex++]
           assert(activeSet, record.name + ': unexpected COLMETADATA')
           assert.deepEqual(token.columns, activeSet.columns.map(column => column.name), record.name + ': ordered column names')
+          assert.deepEqual(token.descriptors,activeSet.columns,record.name+': complete ordered descriptors')
+          for (const column of activeSet.columns) assert(Number.isInteger(column.userType) && column.userType>=0 && column.userType<=0xffffffff,record.name+': userType')
           rows = 0
         } else if (token.token === 'ROW' || token.token === 'NBCROW') {
           assert(activeSet, record.name + ': row outside result metadata')
@@ -476,6 +491,8 @@ async function testObserver(retained) {
   const corruptions=[
     r=>r[1].result.sets[0].rows[0][0]='corrupted',
     r=>r[1].result.sets[0].columns[0].length=7,
+    r=>delete r[1].result.sets[0].columns[0].userType,
+    r=>r[1].result.sets[0].columns[0].userType=1,
     r=>r[1].result.tokens.splice(0,1),
     r=>r[1].result.tokens.find(t=>t.token==='DONE').count='999',
     r=>r.find(x=>x.prepared).prepared.prepare.tokens.find(t=>t.token==='RETURNVALUE').raw.hex='00',
@@ -486,7 +503,7 @@ async function testObserver(retained) {
     for (const container of actual.containers) for (const copy of container.runs) mutate(copy)
     assert.throws(()=>validateFourCaptures(actual),'identical four-copy corruption must fail')
   }
-  console.log('All RETURNVALUE splits/bytewise fragments pass; truncation and six identical four-copy corruptions rejected')
+  console.log('All RETURNVALUE splits/bytewise fragments pass; truncation and eight identical four-copy corruptions rejected')
 }
 if (selfTest) {
   const retained=await readRetained()
