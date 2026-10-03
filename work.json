@@ -10812,6 +10812,38 @@
       "dependencies": [],
       "issue": 865,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pkgvg"
+    },
+    {
+      "id": "bulk-staging-semantics-v1",
+      "title": "Preserve BulkLoad staging order, whole-load triggers and scoped constraints",
+      "state": "backlog",
+      "authorization": "Continuing owner full SQL Server compatibility goal, decomposed from first-party source and raw29-case four-database/two-container reference37827e03. No third-party input. Start only after reference878 and active root trigger/constraint predecessor tasks complete; no engine.rs reservation or additional native cache.",
+      "issue": 882,
+      "scope": [
+        "src/engine/ext/bulk/load.rs",
+        "src/engine/ext/bulk/plan.rs",
+        "src/engine/ext/constraints.rs",
+        "src/engine/ext/constraints/enforce.rs",
+        "src/engine/ext/triggers.rs",
+        "src/engine/ext/triggers/fire.rs",
+        "src/engine/ext/rowversion_identity.rs",
+        "src/engine/ext/rowversion_identity/scope.rs",
+        "tests/bulk_staging_semantics.rs",
+        "tests/compat/bulk_staging_semantics.test.mjs",
+        "docs/bulk-staging-semantics.md"
+      ],
+      "dependencies": [
+        "bulk-staging-interactions-reference-v1",
+        "limits-merge-triggers-v1",
+        "v025-cascade-paths-v1"
+      ],
+      "acceptance": [
+        "Fix staged mixed-default insertion semantics established by the preserved reference: source-marker/identity mapping for these inputs, NULL/default distinctions and one trigger with whole-load inserted membership at333/285 parameter boundaries,1000/1001/1501 rows and all-default rows. Preserve bounded buffering/staging and load atomicity; evaluate volatile defaults/operands once per row, not once per pattern or through repeated AST copies. Do not infer unprobed general ordering or default behavior; obtain additional first-party evidence where needed.",
+        "Scope CHECK/FK suspension to the bulk target; FIRE_TRIGGERS writes to other tables must enforce constraints and preserve their trust. Match captured547 state/class/procedure/termination tokens and row/callback counts for CHECK/FK trigger failures under autocommit and explicit transactions. Preserve generated/listed target SCOPE_IDENTITY and IDENT_CURRENT while nested trigger identity still determines @@IDENTITY; restore caller IDENTITY_INSERT settings. Use narrow per-session root feature APIs and keep effects out of deterministic crates.",
+        "Add meaningful real socket/tedious regressions covering reference inputs and exact metadata/rows/error/completion differences. Keep29-case fixture immutable; previous23-case @@ERROR0 variation remains explicit uncertainty, not a normalized pass or fabricated universal547 rule. Report unprobed/unsupported cases honestly. No engine.rs, transport, codec/parser or raw reference edits; publish a disjoint companion if scope proves insufficient.",
+        "Run AGENTS.md fmt/workspaceRust/strictall-targetClippy/fullnpm/audit for exact frozen head, retain raw audit differences and requiredCI/independent/Codex review or availability fallback. Reuse existing worktree/cache and honor shared builder locks; claiming worker owns focusedPR, review follow-up, exact-head merge and registry/project completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PksRa"
     }
   ]
 }
