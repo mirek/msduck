@@ -381,6 +381,14 @@ Remaining limits:
 - ALTER TABLE ADD CONSTRAINT over NVARCHAR/NCHAR stays unsupported (the
   constraints feature), and its 1505 for existing CHAR/VARCHAR duplicates
   shows the first value it finds rather than SQL Server's.
+- Set operations (UNION, INTERSECT, EXCEPT) over NVARCHAR/NCHAR carriers
+  remove duplicates by exact units, and ALTER TABLE ALTER COLUMN to CHAR or
+  VARCHAR creates a column without the `nocase` collation (that path does
+  not go through the column declaration lowering).
+- Collation names are checked against SQL Server's grammar (designator and
+  suffixes), not the exact list of `sys.fn_helpcollations()`, so a
+  combination such as Latin1_General_CI_AS_SC, which SQL Server lacks, is
+  accepted in expressions instead of raising 448.
 - Tables created before this change keep binary VARCHAR columns and
   case-sensitive key indexes. Foreign keys still compare exactly.
 - Columns of different collations combined without a comparison (CASE or
