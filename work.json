@@ -11550,6 +11550,33 @@
         "Fresh own claim after genuineDone dependencies. Reuse existingroot isolated tree/privateSQLworkspace, no newagents/worktrees/nativecaches/canonical source/cache writes. Worker923 owns frozen canonicalLinuxbuild until explicit release. Claimingworker owns checkpoints/draftPR/focusedtests bothhosts/independent andCodexreview or genuinefallback/exactrequiredCI/merge and promptregistry/issue/projectcompletion. No Rust/engine/Value/catalog/TDS/lib/runtime/operationalgate edits."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PlyYh"
+    },
+    {
+      "id": "utf8-valid-projection-v1",
+      "title": "Implement valid UTF8 native and SQL UTF16 projection",
+      "issue": 926,
+      "state": "ready",
+      "authorization": "Continuing owner full-server compatibility goal and explicit owner-directed valid UTF8 follow-up after completed CP1251 capacity #921; source/native/SQL-unit evidence from owner references #895, #913 and #919.",
+      "scope": [
+        "crates/msduck-core/src/ansi_conversion.rs",
+        "crates/msduck-core/tests/ansi_conversion.rs",
+        "crates/msduck-core/tests/ansi_utf8_projection.rs",
+        "docs/ansi-conversion.md"
+      ],
+      "dependencies": [
+        "bulk-character-adapter-plan-v1",
+        "bulk-character-conversion-reference-v1",
+        "ansi-cp1252-projection-v1",
+        "bulk-character-utf8-boundary-reference-v1",
+        "bulk-character-utf8-bounded-target-reference-v1"
+      ],
+      "acceptance": [
+        "Admit explicit valid UTF8 scalar-domain complete projection to native UTF8 identity and SQL UTF16 scalar units only. UTF8 to CP1251/CP1252 and opaque plans remain unsupported before NULL; non-NULL identity/mismatch and active source byte bounds precede validation/copying. Malformed/truncated bytes return a structured byte error, never lossy decode or fabricated SQL errors/context admission. Preserve existing CP1251/CP1252 tables/API behavior.",
+        "Checked output byte sizing and active payload budgets precede fallible final allocation, with no expanded temporary; NULL/empty, supplementary/minimum/maximum scalar boundaries and source immutability are explicit. Capacity remains unsupported for UTF8 sources; no capacity.rs/root/engine/Value/TDS/lib/collation/runtime edits. Existing tests change only the obsolete UnsupportedSource(Utf8) expectation and grounded additional assertions.",
+        "Replay every applicable actual valid original control across all four runs of retained conversion895, UTF8 boundary913 and bounded-target919, using actual native bytes/SQL units/typed profiles; exclude declaration-admission failures explicitly. Invalid/truncated retained controls remain explicit unsupported outcomes; preserve raw errors/counters/context differences and honest malformed/runtime unknowns. Verify active caps/NULL precedence/mismatch and meaningful actual predecessor failure.",
+        "Fresh exclusive own receipt in reused existing worker worktree; no new agent/tree/native cache. Full exact-head fmt/workspace Rust/strict all-target Clippy/build, all client tests and raw audit with complete source/binary/client provenance. Independent/Codex exact-head reviews or genuine authorized fallback, required CI and worker-owned merge/registry/issue/project completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pl1WT"
     }
   ]
 }
