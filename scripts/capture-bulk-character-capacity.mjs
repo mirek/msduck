@@ -27,7 +27,7 @@ const fixture = fileURLToPath(new URL('../reference/bulk-character-capacity.json
 const LIMIT = 2 * 1024 * 1024
 const MAX_PACKETS = 1024
 const GOLD = {
-  "sourceSha": "1d37bd76d977efb2ff32b3f8c573bcc70b75a8aeb6a7a4f1bdef7cba8a4f3316",
+  "sourceSha": "0a62a38a082ab493620b5c26d074126f97cbf733cfa078fbcc725ded60dce227",
   "version": "1509703d2c117014f2615f5ff9fcdd4775a2e1a1db43be28520ccd71e9f919fd",
   "versionRequest": "3f611a97ed172bd33f68a477c73486bd09fb937d9d6cdd2e5783d763a434631f",
   "versionResponse": "fbb3249ff9242ae6fe494716c62f9ac3a6395dcfa7f152dfbbd1529e38dc3e68",
@@ -65,7 +65,7 @@ const GOLD = {
     "cp1252-varchar-to-utf8-char-width3": "2ba0657fe9a29e839fb8100706bdf7b3a14669453b36d524384c9d0cc2dde2fa",
     "cp1252-varchar-to-utf8-char-width4": "6ba5dc1e9b6dcae2ea7a427248365206c5b7c333a04f07359b51e74b7dd62330",
     "cp1252-varchar-to-unicode-nvarchar-width3": "e66cecc3269cb2c4b9b7281ddcc12a3ed4e4644e9b0866b76e1c20ce865da30c",
-    "cp1252-varchar-to-unicode-nvarchar-width4": "2b3013566703e03e672e955e24f5abf3894f96ca76893db74dc51c17ac01246b",
+    "cp1251-row2-declared1-wire1": "ebc97325d381bd0dd0f875addc280f6e8653d0de02ad96e64fafe2e2ed8b2615",
     "cp1252-varchar-to-unicode-nchar-width3": "a1241302672b6437c1342401872285fcff56f37dd23e9c2421db0aa54196f324",
     "cp1252-varchar-to-unicode-nchar-width4": "b109f62342a90a127149cc59d8d81d1ffc084710fc08a8f1fbd31345910e361a",
     "cp1252-char-to-cp1252-varchar-width3": "cfe8278a3863d2ac315fb6d7ede58caf4d9036f16e5131b892ac506f7e7c218d",
@@ -89,7 +89,7 @@ const GOLD = {
     "utf8-varchar-to-utf8-char-width2": "4d6006e584d37681c21e7a310f59a43c0f0b3dcc3767f40d00dd819883d0c3bb",
     "utf8-varchar-to-utf8-char-width3": "1b2a475ffad721c5c11c7d978c56cc0012bbf1aa9084575fad6918214b9c17c8",
     "utf8-varchar-to-unicode-nvarchar-width1": "4d7c8b2fba9a08216b0b8490047f527b88b041d29049d2fabf1c85048caf3774",
-    "utf8-varchar-to-unicode-nvarchar-width2": "04e78720e3529ec4b602d633990cdba38e7a045cb7a5bea53903522b8e0254c4",
+    "utf8-row2-declared1-wire1": "7724a34136c94906d2d2ab2004ac441df6b028846d2e30b57b3755e06bf1f6c5",
     "utf8-varchar-to-unicode-nchar-width1": "a3b9be694124a62468c2c75c6e89490ab082569bf9f48fd086a5b7195a128aac",
     "utf8-varchar-to-unicode-nchar-width2": "59e65838bbd42b6658ba8c4c88041d8ffe0cb751822db70ae4354ae45f5980c8",
     "utf8-char-to-cp1252-varchar-width1": "18c00cbec1fa0c9cc825bc42aad9235a8e842a794eda7f4c19b6f56e615497b9",
@@ -361,10 +361,10 @@ const GOLD = {
       "readback": "5c612a952fea0baaccac6152392bc56788581cd7be1fa692beb55c0d38f4cb4d",
       "cleanup": "0ba3bae70da6b5eac124a592148d8a792a27d293f11f940677a175d8b527eb52"
     },
-    "cp1252-varchar-to-unicode-nvarchar-width4": {
-      "metadata": "49bf34071e33a80960e64dc860341a1876f8a10ed24e407c508994a4da2a44d0",
-      "setup": "2f60be4fb6594fe7378ebd3492d94a7f583a3765968c0e01a2c1295bccfad51b",
-      "execution": "3ab1ea2faebe4f12120981f063b8cf2c155db6690d2730dcdec50ac84bfe8c80",
+    "cp1251-row2-declared1-wire1": {
+      "metadata": "aa392fdd46eddfa49fa4397f75996ea5a3629e787b64e58a89aaa98264a26ab3",
+      "setup": "fdcca1c2254fb3022fd629422058b9e634b91b9ceb548f045233f434d1806bb9",
+      "execution": "55080551daffc01780abc4f100b88dacfe32f9034afcf650b3332a7d8b1ceb94",
       "readback": "5c612a952fea0baaccac6152392bc56788581cd7be1fa692beb55c0d38f4cb4d",
       "cleanup": "0ba3bae70da6b5eac124a592148d8a792a27d293f11f940677a175d8b527eb52"
     },
@@ -529,10 +529,10 @@ const GOLD = {
       "readback": "5c612a952fea0baaccac6152392bc56788581cd7be1fa692beb55c0d38f4cb4d",
       "cleanup": "0ba3bae70da6b5eac124a592148d8a792a27d293f11f940677a175d8b527eb52"
     },
-    "utf8-varchar-to-unicode-nvarchar-width2": {
-      "metadata": "a41da61cd392d852a11cbd074dbfb796f26824b0cbfaf90aa8e5b2ea02dd5538",
-      "setup": "f33d856fc6e601c6fc69f181ff1634ce8025796192a567b480f4a53d75e1bf86",
-      "execution": "9d2f2cd72742ea97ae949f23562ed13183240d3a52034462a5017af566f9c761",
+    "utf8-row2-declared1-wire1": {
+      "metadata": "388268a64029135da71c0a81fe9e5da195b2b971cf70cf77b2b63b3f0c251821",
+      "setup": "fdcca1c2254fb3022fd629422058b9e634b91b9ceb548f045233f434d1806bb9",
+      "execution": "dceb32ecaa6330ed5e7452231e19a384523d086b2f70789f0ce3b39e1fc5b3e9",
       "readback": "5c612a952fea0baaccac6152392bc56788581cd7be1fa692beb55c0d38f4cb4d",
       "cleanup": "0ba3bae70da6b5eac124a592148d8a792a27d293f11f940677a175d8b527eb52"
     },
@@ -1035,11 +1035,11 @@ const GOLD = {
       "readback": "03aaa3d95b59a6a678e46857dfcac4513e8055140264ba0d82441e7caf0c5080",
       "cleanup": "224aefcffdd8c15de62184740c22f8c530eb2a7f842d7b6be1800ff6c5e7a745"
     },
-    "cp1252-varchar-to-unicode-nvarchar-width4": {
-      "metadata": "701b639a40d068cb318638b522868b955527e3b368006e86e835a387b250410a",
+    "cp1251-row2-declared1-wire1": {
+      "metadata": "2ca2a4237fd04c8f435a4e75c192ee6002f655dccc89af79b179a464aa3cccf7",
       "setup": "0e31de0385c07455d0260e83a11b66c884997ecce063b5bd8dd00e2195203fca",
-      "execution": "4b1e80e01ab7823500e082c0850248545e3a508caa0e6a530df2645e484e5ca0",
-      "readback": "2398729666d597c7fb7851d075c5a3a3cf6e9c1813e223a2d972ac06f257d0be",
+      "execution": "ca542dfa117a13196067eeb099b8931e2342db67abb3ea9677fc53bc5e851308",
+      "readback": "8cd12242dbff31d06b8a46817160b85c16277eb7ffac5357b3168a0717ca32a3",
       "cleanup": "224aefcffdd8c15de62184740c22f8c530eb2a7f842d7b6be1800ff6c5e7a745"
     },
     "cp1252-varchar-to-unicode-nchar-width3": {
@@ -1203,11 +1203,11 @@ const GOLD = {
       "readback": "503efbfb3f5ccedc5555fd2e8454ab16284c780133fba2641d475395dd80d75c",
       "cleanup": "224aefcffdd8c15de62184740c22f8c530eb2a7f842d7b6be1800ff6c5e7a745"
     },
-    "utf8-varchar-to-unicode-nvarchar-width2": {
-      "metadata": "46584fbfaf503cc4abcc4213b40f5a4d0c166d3a6ed4a06c09da52760ef5cb20",
+    "utf8-row2-declared1-wire1": {
+      "metadata": "99b9412231b7b488cdaf15eab6ac292c58b59b7780e74ae91b8d31ea03bd9c58",
       "setup": "0e31de0385c07455d0260e83a11b66c884997ecce063b5bd8dd00e2195203fca",
-      "execution": "4b1e80e01ab7823500e082c0850248545e3a508caa0e6a530df2645e484e5ca0",
-      "readback": "3b27c9c2d2f68430e70a440ce4b23206ef268ed3784d11383f5e622c028ee5ab",
+      "execution": "ca542dfa117a13196067eeb099b8931e2342db67abb3ea9677fc53bc5e851308",
+      "readback": "8cd12242dbff31d06b8a46817160b85c16277eb7ffac5357b3168a0717ca32a3",
       "cleanup": "224aefcffdd8c15de62184740c22f8c530eb2a7f842d7b6be1800ff6c5e7a745"
     },
     "utf8-varchar-to-unicode-nchar-width1": {
@@ -1709,11 +1709,11 @@ const GOLD = {
       "readback": "49c8c34130b7da5b4c73dc53bfe34370586b588b01b6248f798f13b7b17cbb1e",
       "cleanup": "7d526d2bb794dbe0ab44dd6d9bbf8607c39bdb55e136cbec0732d481eeb893b9"
     },
-    "cp1252-varchar-to-unicode-nvarchar-width4": {
-      "metadata": "a436312448ef87b01c40e3c766014c0f17d6bb7bc46d33795b0aaab1f5938ab4",
-      "setup": "fbd5b3a34c9f5880de6f8fc1db1814392ca7d32add6b3ad6017aa0e0e73569b5",
-      "execution": "bb5281ec2d98bda5f18b1bc080a01c5d4f4c8448db29b3250d72dcdd72337b9f",
-      "readback": "49c8c34130b7da5b4c73dc53bfe34370586b588b01b6248f798f13b7b17cbb1e",
+    "cp1251-row2-declared1-wire1": {
+      "metadata": "7de6b0ea33d80b595d994baf22fe9ed7521c9c47e2660259ce0d99f3de5d183d",
+      "setup": "5d47643dc999477258827c3649c02b3d04ff190e03647b38c915752a143233a7",
+      "execution": "e61efe253350492b941d0b802dae6173d088185a8fc8211ed0de9b7ebca49c72",
+      "readback": "2ef0ab53bd632c804a181c7c2d463453ddd942f076a580ac6b6415c513ce2a0b",
       "cleanup": "7d526d2bb794dbe0ab44dd6d9bbf8607c39bdb55e136cbec0732d481eeb893b9"
     },
     "cp1252-varchar-to-unicode-nchar-width3": {
@@ -1877,11 +1877,11 @@ const GOLD = {
       "readback": "dd4326b26bec75394e19f7cba44e7886f76ce942e8c6434061c0fd4fc35eeb64",
       "cleanup": "7d526d2bb794dbe0ab44dd6d9bbf8607c39bdb55e136cbec0732d481eeb893b9"
     },
-    "utf8-varchar-to-unicode-nvarchar-width2": {
-      "metadata": "a436312448ef87b01c40e3c766014c0f17d6bb7bc46d33795b0aaab1f5938ab4",
-      "setup": "fbd5b3a34c9f5880de6f8fc1db1814392ca7d32add6b3ad6017aa0e0e73569b5",
-      "execution": "8cd0d41ee9f59071624ecc9f16aebe0f5cbdc01ffe3f684e60258dbbf244dac2",
-      "readback": "dd4326b26bec75394e19f7cba44e7886f76ce942e8c6434061c0fd4fc35eeb64",
+    "utf8-row2-declared1-wire1": {
+      "metadata": "f622d3838f490b4d7d08b0173c35f76430fd75645d9129f376a0e54249d3ef39",
+      "setup": "5d47643dc999477258827c3649c02b3d04ff190e03647b38c915752a143233a7",
+      "execution": "61a45be8e78b343be74a15b97a931bfaf78424c6da2accd9de7109a1192b8f12",
+      "readback": "2ef0ab53bd632c804a181c7c2d463453ddd942f076a580ac6b6415c513ce2a0b",
       "cleanup": "7d526d2bb794dbe0ab44dd6d9bbf8607c39bdb55e136cbec0732d481eeb893b9"
     },
     "utf8-varchar-to-unicode-nchar-width1": {
@@ -2152,7 +2152,7 @@ const GOLD = {
     }
   }
 }
-const RETAINED_SHA256 = '402bfeacfbe28559769b9ab863f2a1ce1d81b0a293b2689092ff52d6d8394531'
+const RETAINED_SHA256 = 'cd82a8853bcac9f3fee98c1fb6c6f17564443918868ece1f1d9f66b3abb0ec92'
 const REVIEWED_RECAPTURE_SOURCES = []
 const targets = [
   ['cp1252','varchar'], ['cp1252','char'], ['utf8','varchar'], ['utf8','char'], ['unicode','nvarchar'], ['unicode','nchar']
@@ -2178,6 +2178,16 @@ for (const profile of ['cp1251','cp1252','utf8']) for (const sourceFamily of ['v
 for (const profile of ['cp1251','cp1252','utf8']) for (const [target,targetFamily] of [['utf8','char'],['unicode','nchar']]) cases.push(entry(`${profile}-char-null-empty-to-${targetFamily}4`, {declared:profile,wire:profile,sourceFamily:'char',sourceWidth:1,wireWidth:1,target,targetFamily,values:[null,'','41']}))
 for (const [profile,target,targetFamily,hex] of [['cp1251','utf8','varchar','cff0'],['cp1252','utf8','varchar','a9e9'],['utf8','cp1252','varchar','cea9e282acf09fa686'],['utf8','unicode','nvarchar','cea9e282acf09fa686']]) cases.push(entry(`${profile}-max-to-${target}-${targetFamily}-max`, {declared:profile,wire:profile,sourceWidth:'max',wireWidth:'max',target,targetFamily,targetWidth:'max',values:[null,'','41','41'.repeat(401)+hex.repeat(profile==='utf8'?1000:3000)]}))
 for (const targetWidth of [1,3]) cases.push(entry(`utf8-euro-to-cp1252-varchar-width${targetWidth}`, {target:'cp1252',sourceWidth:3,wireWidth:3,targetWidth,values:[null,'','41','e282ac']}))
+// Equal declared/wire widths with oversized ROW bytes distinguish row-length
+// rejection from the separate 4816 declaration/TYPE_INFO mismatch controls.
+for (const [replaceName,profile,hex] of [
+  ['cp1252-varchar-to-unicode-nvarchar-width4','cp1251','cff0'],
+  ['utf8-varchar-to-unicode-nvarchar-width2','utf8','cea9']
+]) {
+  const index = cases.findIndex(c => c.name === replaceName)
+  assert.ok(index >= 0)
+  cases[index] = entry(`${profile}-row2-declared1-wire1`, {declared:profile,wire:profile,sourceFamily:'char',sourceWidth:1,wireWidth:1,targetFamily:'char',targetWidth:4,values:[null,'','41',hex]})
+}
 assert.equal(cases.length, 96)
 assert.equal(new Set(cases.map(c => c.name)).size, cases.length)
 export function rowsFor(c) {

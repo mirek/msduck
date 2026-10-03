@@ -17,6 +17,25 @@ const scratch = async work => {
   try {await work(dir)} finally {await rm(dir,{recursive:true,force:true})}
 }
 
+test('uniform MAX packet repartition cannot hide behind identical payloads and recomputed comparisons', async () => {
+  for (const name of ['utf8-max-to-unicode-nvarchar-max','cp1251-max-to-utf8-varchar-max']) for (const phase of ['execution','readback']) {
+    const actual = await load()
+    for (const run of actual.runs) {
+      const record = find(run,name)[phase]
+      const packets = record.packets.filter(p => phase==='readback' ? p.direction==='in' : p.direction==='out' && p.rawHex.startsWith('07'))
+      const originalPayload = packets.map(p=>p.rawHex.slice(16)).join('')
+      const first = Buffer.from(packets[1].rawHex,'hex'), second = Buffer.from(packets[2].rawHex,'hex')
+      const shorter = first.subarray(0,first.length-1)
+      const longer = Buffer.concat([second.subarray(0,8),first.subarray(first.length-1),second.subarray(8)])
+      shorter.writeUInt16BE(shorter.length,2); longer.writeUInt16BE(longer.length,2)
+      packets[1].rawHex=shorter.toString('hex'); packets[2].rawHex=longer.toString('hex')
+      assert.equal(packets.map(p=>p.rawHex.slice(16)).join(''),originalPayload)
+    }
+    actual.comparisons=actual.runs.slice(1).map(run=>compare(run,actual.runs[0]))
+    assert.throws(()=>validate(actual),/fixed complete packet framing/)
+  }
+})
+
 test('capture reads reject oversized sparse files and symlinks before allocating their payload', async () => {
   await scratch(async dir => {
     const file = join(dir,'large.json'); await writeFile(file,''); await truncate(file,CAPTURE_LIMIT+1)
@@ -254,11 +273,12 @@ test('four complete capacity captures retain byte expansion, shrink, fixed paddi
     assert.ok(partial.execution.result.errors[0].message.endsWith("Truncated value: '\ud83e'."))
     for(const o of run.observations) {
       if(o.execution.result.errors.length) {
-        assert.equal(o.execution.result.errors[0].class,16)
+        assert.equal(o.execution.result.errors[0].class,o.case.name.includes('-row2-')?17:16)
         assert.deepEqual(o.readback.result.sets[1].rows,[],'atomic failed rowset '+o.case.name)
         assert.deepEqual(o.readback.result.sets[0].rows,[[o.execution.result.errors[0].number,0,0,0]])
       }
-      if(o.case.name.includes('-declared')) assert.equal(o.execution.result.errors[0].number,4816)
+      if(o.case.name.includes('-declared') && !o.case.name.includes('-row2-')) assert.equal(o.execution.result.errors[0].number,4816)
+      if(o.case.name.includes('-row2-')) assert.equal(o.execution.result.errors[0].number,4815)
     }
     for(const profile of ['cp1251','cp1252','utf8']) for(const target of ['char','nchar']) {
       const rows=find(run,`${profile}-char-null-empty-to-${target}4`).readback.result.sets[1].rows
