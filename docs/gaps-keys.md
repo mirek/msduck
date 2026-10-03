@@ -255,7 +255,8 @@ through a separate connection.
   - A Unicode or ANSI key value is shown as written when the failing
     statement's literals or parameters hold it (with its case and trailing
     spaces). Otherwise (a value computed or read from another table, or
-    CREATE UNIQUE INDEX over existing rows) it is shown without trailing
+    CREATE UNIQUE INDEX over existing rows, or INSERT ... SELECT of
+    columns) it is shown without trailing
     spaces and, under a case-insensitive collation, in lower case. SQL
     Server shows the stored text.
 - **Clustering of constraints.** The CLUSTERED/NONCLUSTERED keyword on

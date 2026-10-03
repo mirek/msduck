@@ -4,6 +4,7 @@
 // so a regression and a fix both show up here (docs/unicode-collation.md
 // explains each one).
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { capture, canonical } from '../../scripts/lib/compatibility.mjs'
@@ -11,18 +12,21 @@ import { start, query } from '../support/client.mjs'
 
 const fixture = JSON.parse(readFileSync(new URL('../../reference/default-collation.json', import.meta.url)))
 
-// Cases that differ from SQL Server: the fields that differ, and why. Every
-// other field of these cases must still match exactly.
+// Cases that differ from SQL Server, and why: each differing field with a
+// digest of msduck's current value, so a further change to it shows up too.
+// Every other field of these cases must match SQL Server exactly.
 const known = new Map([
-  ['ignorable unicode units', [['rows', 'errors'], 'NCHAR of a surrogate code unit is unsupported']],
-  ['surrogate pair', [['columns', 'rows', 'errors'], 'NCHAR of a surrogate code unit is unsupported']],
-  ['accented letter order', [['rows'], 'values derived from literals (VALUES) sort by code point']],
-  ['ordering weights', [['rows'], 'punctuation and digits follow code points, not SQL Server sort weights']],
-  ['group by', [['rows'], 'grouping by an expression of a column keeps DuckDB grouping (trailing spaces)']],
-  ['alter table add unique', [['errors'], 'ALTER TABLE ADD UNIQUE over nvarchar is unsupported (constraints)']],
-  ['catalog', [['columns'], 'sys.columns names are nvarchar(max), and the _SC_UTF8 column keeps the default descriptor']],
-  ['add column', [['columns'], 'sys.columns.collation_name is nvarchar(max), not sysname']],
+  ['ignorable unicode units', [{ rows: 'cf1cbb66a638b486', errors: '7c5585b9d3735287' }, 'NCHAR of a surrogate code unit is unsupported']],
+  ['surrogate pair', [{ columns: '4f53cda18c2baa0c', rows: '4f53cda18c2baa0c', errors: '7c5585b9d3735287' }, 'NCHAR of a surrogate code unit is unsupported']],
+  ['accented letter order', [{ rows: 'ed6338449bc566d6' }, 'values derived from literals (VALUES) sort by code point']],
+  ['ordering weights', [{ rows: '7045db03e0a7ec48' }, 'punctuation and digits follow code points, not SQL Server sort weights']],
+  ['group by', [{ rows: '376c6c4fd566b688' }, 'grouping by an expression of a column keeps DuckDB grouping (trailing spaces)']],
+  ['alter table add unique', [{ errors: '86db6c41a158b5de' }, 'ALTER TABLE ADD UNIQUE over nvarchar is unsupported (constraints)']],
+  ['catalog', [{ columns: 'ff93e68ebc34ca4b' }, 'sys.columns names are nvarchar(max), and the _SC_UTF8 column keeps the default descriptor']],
+  ['add column', [{ columns: 'b7fa9741740ab3e1' }, 'sys.columns.collation_name is nvarchar(max), not sysname']],
 ])
+
+const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16)
 
 // System-generated constraint names end in a random hexadecimal suffix.
 const message = text => text.replace(/__[0-9A-F]{16}'/g, "__<hash>'")
@@ -51,11 +55,12 @@ test('comparisons, grouping, keys and column collations match the SQL Server cap
       rows: entry.sets.map(set => set.rows),
       errors: entry.errors.map(e => [e.number, e.state, e.class, message(e.message)]),
     }
-    const [fields = []] = known.get(entry.name) ?? []
+    const [fields = {}] = known.get(entry.name) ?? []
     for (const field of ['columns', 'rows', 'errors']) {
       const same = JSON.stringify(local[field]) === JSON.stringify(reference[field])
-      if (fields.includes(field)) {
+      if (field in fields) {
         if (same) problems.push(`${entry.name}: ${field} now matches`)
+        else if (digest(local[field]) !== fields[field]) problems.push(`${entry.name}: ${field} changed to ${JSON.stringify(local[field]).slice(0, 300)}`)
         else seen.add(entry.name)
       } else if (!same) {
         problems.push(`${entry.name}: ${field} ${JSON.stringify(local[field]).slice(0, 300)}`)
