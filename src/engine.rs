@@ -860,9 +860,12 @@ impl Session {
                 };
                 let catalog = self.session.database.catalog();
                 let resolved = match catalog.resolve(&self.session.db, &database.value) {
-                    // A name this pass already qualified with master's catalog.
+                    // A name the engine itself qualified with master's
+                    // catalog; client SQL carries source spans and cannot
+                    // name DuckDB's catalog.
                     Ok(None)
                         if database.quote_style == Some('"')
+                            && database.span == sqlparser::tokenizer::Span::empty()
                             && database.value == catalog.primary() =>
                     {
                         Ok(Some(catalog.primary().to_string()))

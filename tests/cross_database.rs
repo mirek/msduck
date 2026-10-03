@@ -160,6 +160,11 @@ fn statements_in_another_database_run_there_and_restore_the_catalog() {
 #[test]
 fn another_database_does_not_take_ddl_or_temporary_objects() {
     let (_server, mut session) = fixture();
+    // DuckDB's name for master's catalog is not a database name.
+    assert_eq!(
+        fails(&mut session, "SELECT * FROM \"memory\".dbo.loc"),
+        (208, 1, 16, "Invalid object name 'memory.dbo.loc'.".into())
+    );
     let (number, _, _, message) = fails(&mut session, "CREATE TABLE foo.dbo.made (id INT)");
     assert_eq!(number, 40515);
     assert_eq!(
