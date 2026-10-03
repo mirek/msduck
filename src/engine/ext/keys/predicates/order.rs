@@ -14,7 +14,7 @@
 use super::catalog::Catalog;
 use super::lower::{SORT, TIE};
 use sqlparser::ast::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::ops::ControlFlow;
 
 /// The column an ORDER BY item names, if it names one.
@@ -106,19 +106,15 @@ pub(super) fn sites(statement: &Statement) -> bool {
 }
 
 pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
-    let carriers: HashMap<String, Option<String>> = candidates(statement)
+    let carriers: HashSet<String> = candidates(statement)
         .into_iter()
         .filter(|name| catalog.carrier_named(name))
-        .map(|name| {
-            let collation = catalog.carrier_collation(&name).map(str::to_owned);
-            (name, collation)
-        })
         .collect();
     if carriers.is_empty() {
         return;
     }
-    struct Rewrite(HashMap<String, Option<String>>);
-    impl VisitorMut for Rewrite {
+    struct Rewrite<'a>(&'a Catalog, HashSet<String>);
+    impl VisitorMut for Rewrite<'_> {
         type Break = ();
         fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
             let (Some(order), SetExpr::Select(select)) = (&mut query.order_by, query.body.as_ref())
@@ -134,12 +130,19 @@ pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
             let mut rewritten = Vec::with_capacity(items.len());
             for item in items.drain(..) {
                 let target = column(&item.expr, select)
-                    .filter(|c| last_name(c).is_some_and(|n| self.0.contains_key(&n)))
+                    .filter(|c| last_name(c).is_some_and(|n| self.1.contains(&n)))
                     .cloned();
+                // The collation of the carrier column the item names, when it
+                // compares differently from the default.
                 let collation = target
                     .as_ref()
-                    .and_then(last_name)
-                    .and_then(|n| self.0.get(&n).cloned().flatten());
+                    .filter(|t| self.0.carrier(t).is_some())
+                    .and_then(|t| self.0.collation(t))
+                    .filter(|name| {
+                        use msduck_sql::dialect::ext::keys::collation::{Sensitivity, sensitivity};
+                        sensitivity(name) == Some(Sensitivity::Other)
+                    })
+                    .map(str::to_owned);
                 match (target, collation) {
                     // A column collation of its own orders through the
                     // explicit COLLATE lowering.
@@ -170,5 +173,5 @@ pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
             ControlFlow::Continue(())
         }
     }
-    let _ = VisitMut::visit(statement, &mut Rewrite(carriers));
+    let _ = VisitMut::visit(statement, &mut Rewrite(catalog, carriers));
 }

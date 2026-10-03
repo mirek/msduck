@@ -87,3 +87,21 @@ test('LIKE, DISTINCT counts and extrema follow the column collations', async t =
   assert.deepEqual((await query(connection, 'SELECT count(*) FROM (SELECT DISTINCT n FROM dbo.agg) d')).rows, [[2]])
 })
 
+test('duplicates show each key column as written, and ORDER BY resolves qualified columns', async t => {
+  const connection = await start(t)
+  await query(connection, "CREATE TABLE dbo.pair (a nvarchar(10) NOT NULL, b varchar(10) NOT NULL, CONSTRAINT uq_pair UNIQUE (a, b)); INSERT dbo.pair VALUES (N'base', 'base')")
+  await assert.rejects(query(connection, "INSERT dbo.pair VALUES (N'BASE', 'Base')"), error => error.number === 2627 && /\(BASE, Base\)/.test(error.message))
+  await assert.rejects(query(connection, "INSERT dbo.pair (b, a) VALUES ('bAse', N'baSE')"), error => error.number === 2627 && /\(baSE, bAse\)/.test(error.message))
+  await query(connection, "INSERT dbo.pair VALUES (N'x', 'x')")
+  await assert.rejects(query(connection, "UPDATE dbo.pair SET a = N'BASE', b = 'BASE' WHERE a = N'x'"), error => error.number === 2627 && /\(BASE, BASE\)/.test(error.message))
+  await query(connection, "CREATE TABLE dbo.left_side (id int, v nvarchar(10) COLLATE Latin1_General_CS_AS); CREATE TABLE dbo.right_side (id int, v int); INSERT dbo.left_side VALUES (1, N'b'), (2, N'B'); INSERT dbo.right_side VALUES (1, 20), (2, 10)")
+  assert.deepEqual((await query(connection, 'SELECT r.id FROM dbo.left_side l JOIN dbo.right_side r ON l.id = r.id ORDER BY r.v')).rows, [[2], [1]])
+  assert.deepEqual((await query(connection, 'SELECT l.id FROM dbo.left_side l JOIN dbo.right_side r ON l.id = r.id ORDER BY l.v')).rows, [[1], [2]])
+  // Conflicting column collations in DML predicates, LIKE included.
+  await query(connection, "CREATE TABLE dbo.two (ci nvarchar(10) COLLATE Latin1_General_CI_AS, d nvarchar(10)); INSERT dbo.two VALUES (N'a', N'A')")
+  for (const sql of ["UPDATE dbo.two SET ci = N'b' WHERE ci = d", "DELETE FROM dbo.two WHERE d LIKE ci"]) {
+    await assert.rejects(query(connection, sql), error => error.number === 468 && error.state === 9 && /Latin1_General_CI_AS/.test(error.message), sql)
+  }
+  assert.deepEqual((await query(connection, 'SELECT ci FROM dbo.two')).rows, [['a']])
+})
+
