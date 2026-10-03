@@ -1,0 +1,519 @@
+//! Rewrite correlated FULL OUTER JOINs inside APPLY bodies.
+//!
+//! DuckDB cannot flatten a FULL OUTER JOIN whose operands or condition
+//! reference the enclosing query, which is the usual shape of an inline
+//! function joining `OPENJSON(@lhs)` and `OPENJSON(@rhs)` under APPLY. Inside
+//! an APPLY body (including nested derived tables and subqueries) such a join
+//!
+//! ```sql
+//! FROM A FULL JOIN B ON c [rest] WHERE w
+//! ```
+//!
+//! becomes two row "sides" that only need LEFT joins and EXISTS tests:
+//!
+//! ```sql
+//! FROM (SELECT 1 WHERE EXISTS (SELECT 1 FROM A)
+//!       UNION ALL SELECT 2 WHERE EXISTS (SELECT 1 FROM B)) AS s(side)
+//! LEFT JOIN A ON s.side = 1
+//! LEFT JOIN LATERAL (SELECT * FROM B WHERE (s.side = 1 AND (c)) OR s.side = 2) AS b ON TRUE
+//! [rest]
+//! WHERE (s.side = 1 OR NOT EXISTS (SELECT 1 FROM A WHERE c)) AND (w)
+//! ```
+//!
+//! Side 1 is `A LEFT JOIN B ON c`; side 2 is every row of B that no row of A
+//! matches. An aliased B reads the condition in a lateral filter because
+//! DuckDB rejects outer-join conditions that reference the enclosing query;
+//! an unaliased B joins `ON (s.side = 1 AND (c)) OR s.side = 2` directly.
+//! The side rows exist only when their operand has rows, so an empty
+//! operand never produces a NULL-extended phantom row. Both operands keep
+//! their own aliases, so qualified, unqualified and `alias.*` references in
+//! the rest of the SELECT bind as before; the side column is excluded from an
+//! unqualified `*`. Duplicates and NULL comparison results follow the
+//! original condition, because `c` is evaluated unchanged in both places.
+//!
+//! A, B and `c` are evaluated more than once, so joins with volatile
+//! functions are left unchanged, as are uncorrelated joins (DuckDB runs them
+//! natively), joins with USING or NATURAL, and FROM items where a RIGHT or
+//! FULL join follows (their NULL-extended rows would fail the side filter).
+use sqlparser::ast::*;
+use sqlparser::ast::{Visit, VisitMut, Visitor, VisitorMut};
+use std::collections::HashSet;
+use std::ops::ControlFlow;
+
+const SIDES: &str = "__msduck_full_join";
+const SIDE: &str = "__msduck_full_join_side";
+const VOLATILE: [&str; 4] = ["newid", "newsequentialid", "rand", "crypt_gen_random"];
+
+/// Rewrites every eligible SELECT inside an APPLY body. Idempotent: rewritten
+/// SELECTs no longer contain the FULL join.
+pub fn rewrite(query: &mut Query) {
+    struct Rewrite(usize);
+    impl VisitorMut for Rewrite {
+        type Break = ();
+        fn post_visit_select(&mut self, select: &mut Select) -> ControlFlow<()> {
+            rewrite_select(select, &mut self.0);
+            ControlFlow::Continue(())
+        }
+    }
+    let _ = VisitMut::visit(query, &mut Rewrite(0));
+}
+
+fn rewrite_select(select: &mut Select, counter: &mut usize) {
+    let mut filters = Vec::new();
+    let mut sides = Vec::new();
+    for item in &mut select.from {
+        let Some(index) = item
+            .joins
+            .iter()
+            .position(|join| matches!(join.join_operator, JoinOperator::FullOuter(_)))
+        else {
+            continue;
+        };
+        let JoinOperator::FullOuter(JoinConstraint::On(condition)) =
+            &item.joins[index].join_operator
+        else {
+            continue;
+        };
+        let rest_ok = item.joins[index + 1..].iter().all(|join| {
+            !matches!(
+                join.join_operator,
+                JoinOperator::Right(_)
+                    | JoinOperator::RightOuter(_)
+                    | JoinOperator::FullOuter(_)
+                    | JoinOperator::RightSemi(_)
+                    | JoinOperator::RightAnti(_)
+            )
+        });
+        let left = TableWithJoins {
+            relation: item.relation.clone(),
+            joins: item.joins[..index].to_vec(),
+        };
+        let right = &item.joins[index].relation;
+        if !rest_ok || volatile(&left, right, condition) || !correlated(&left, right, condition) {
+            continue;
+        }
+        let condition = condition.clone();
+        let right = right.clone();
+        let alias = if *counter == 0 {
+            SIDES.to_string()
+        } else {
+            format!("{SIDES}_{counter}")
+        };
+        *counter += 1;
+        let side = |n: i64| Expr::BinaryOp {
+            left: Box::new(Expr::CompoundIdentifier(vec![
+                Ident::new(&alias),
+                Ident::new(SIDE),
+            ])),
+            op: BinaryOperator::Eq,
+            right: Box::new(number(n)),
+        };
+        let right_only = TableWithJoins {
+            relation: right.clone(),
+            joins: vec![],
+        };
+        let relation = TableFactor::Derived {
+            lateral: false,
+            subquery: Box::new(query(SetExpr::SetOperation {
+                op: SetOperator::Union,
+                set_quantifier: SetQuantifier::All,
+                left: Box::new(SetExpr::Select(Box::new(side_row(
+                    1,
+                    exists(left.clone(), None, false),
+                )))),
+                right: Box::new(SetExpr::Select(Box::new(side_row(
+                    2,
+                    exists(right_only, None, false),
+                )))),
+            })),
+            alias: Some(TableAlias {
+                explicit: true,
+                name: Ident::new(&alias),
+                columns: vec![TableAliasColumnDef::from_name(SIDE)],
+                at: None,
+            }),
+            sample: None,
+        };
+        let left_factor = if left.joins.is_empty() {
+            left.relation.clone()
+        } else {
+            TableFactor::NestedJoin {
+                table_with_joins: Box::new(left.clone()),
+                alias: None,
+            }
+        };
+        let mut joins = vec![
+            Join {
+                relation: left_factor,
+                global: false,
+                join_operator: JoinOperator::LeftOuter(JoinConstraint::On(side(1))),
+            },
+            right_join(right, &side, &condition),
+        ];
+        joins.extend(item.joins.drain(index + 1..));
+        item.relation = relation;
+        item.joins = joins;
+        filters.push(Expr::Nested(Box::new(Expr::BinaryOp {
+            left: Box::new(side(1)),
+            op: BinaryOperator::Or,
+            right: Box::new(exists(left, Some(condition), true)),
+        })));
+        sides.push(alias);
+    }
+    if sides.is_empty() {
+        return;
+    }
+    if let Some(selection) = select.selection.take() {
+        filters.push(Expr::Nested(Box::new(selection)));
+    }
+    select.selection = filters.into_iter().reduce(|left, right| Expr::BinaryOp {
+        left: Box::new(left),
+        op: BinaryOperator::And,
+        right: Box::new(right),
+    });
+    // Hide the side column from an unqualified `*`; `alias.*` never sees it.
+    for item in &mut select.projection {
+        if let SelectItem::Wildcard(options) = item {
+            let side = ObjectName::from(vec![Ident::new(SIDE)]);
+            let mut names = match options.opt_exclude.take() {
+                Some(ExcludeSelectItem::Single(name)) => vec![name],
+                Some(ExcludeSelectItem::Multiple(names)) => names,
+                None => vec![],
+            };
+            if !names.contains(&side) {
+                names.push(side);
+            }
+            options.opt_exclude = Some(ExcludeSelectItem::Multiple(names));
+        }
+    }
+}
+
+/// B joins on side 1 by the original condition and on side 2 to every row.
+/// DuckDB rejects outer-join conditions that reference the enclosing query,
+/// and an unqualified name in the condition may do so, so an aliased B reads
+/// the condition in a lateral filter instead (`LEFT JOIN LATERAL (SELECT *
+/// FROM B WHERE ...) AS b ON TRUE`); the alias keeps `b.column` and `b.*`.
+fn right_join(right: TableFactor, side: &dyn Fn(i64) -> Expr, condition: &Expr) -> Join {
+    let matched = Expr::BinaryOp {
+        left: Box::new(Expr::Nested(Box::new(Expr::BinaryOp {
+            left: Box::new(side(1)),
+            op: BinaryOperator::And,
+            right: Box::new(Expr::Nested(Box::new(condition.clone()))),
+        }))),
+        op: BinaryOperator::Or,
+        right: Box::new(side(2)),
+    };
+    let Some(name) = alias(&right).map(|alias| alias.name.clone()) else {
+        return Join {
+            relation: right,
+            global: false,
+            join_operator: JoinOperator::LeftOuter(JoinConstraint::On(matched)),
+        };
+    };
+    let mut filtered = select(
+        number(1),
+        vec![TableWithJoins {
+            relation: right,
+            joins: vec![],
+        }],
+        Some(matched),
+    );
+    filtered.projection = vec![SelectItem::Wildcard(WildcardAdditionalOptions::default())];
+    Join {
+        relation: TableFactor::Derived {
+            lateral: true,
+            subquery: Box::new(query(SetExpr::Select(Box::new(filtered)))),
+            alias: Some(TableAlias {
+                explicit: true,
+                name,
+                columns: vec![],
+                at: None,
+            }),
+            sample: None,
+        },
+        global: false,
+        join_operator: JoinOperator::LeftOuter(JoinConstraint::On(Expr::Value(
+            Value::Boolean(true).into(),
+        ))),
+    }
+}
+
+fn alias(factor: &TableFactor) -> Option<&TableAlias> {
+    match factor {
+        TableFactor::Table { alias, .. }
+        | TableFactor::Derived { alias, .. }
+        | TableFactor::OpenJsonTable { alias, .. }
+        | TableFactor::Function { alias, .. }
+        | TableFactor::TableFunction { alias, .. }
+        | TableFactor::UNNEST { alias, .. } => alias.as_ref(),
+        _ => None,
+    }
+}
+
+fn number(n: i64) -> Expr {
+    Expr::Value(Value::Number(n.to_string(), false).into())
+}
+
+fn query(body: SetExpr) -> Query {
+    Query {
+        with: None,
+        body: Box::new(body),
+        order_by: None,
+        limit_clause: None,
+        fetch: None,
+        locks: vec![],
+        for_clause: None,
+        settings: None,
+        format_clause: None,
+        pipe_operators: vec![],
+    }
+}
+
+fn select(projection: Expr, from: Vec<TableWithJoins>, selection: Option<Expr>) -> Select {
+    let mut select = match sqlparser::parser::Parser::parse_sql(
+        &sqlparser::dialect::GenericDialect {},
+        "SELECT 1",
+    )
+    .ok()
+    .and_then(|mut statements| statements.pop())
+    {
+        Some(Statement::Query(query)) => match *query.body {
+            SetExpr::Select(select) => *select,
+            _ => unreachable!("SELECT 1 parses as a SELECT"),
+        },
+        _ => unreachable!("SELECT 1 parses as a query"),
+    };
+    select.projection = vec![SelectItem::UnnamedExpr(projection)];
+    select.from = from;
+    select.selection = selection;
+    select
+}
+
+fn side_row(n: i64, condition: Expr) -> Select {
+    let mut row = select(number(n), vec![], Some(condition));
+    row.projection = vec![SelectItem::ExprWithAlias {
+        expr: number(n),
+        alias: Ident::new(SIDE),
+    }];
+    row
+}
+
+fn exists(from: TableWithJoins, selection: Option<Expr>, negated: bool) -> Expr {
+    Expr::Exists {
+        subquery: Box::new(query(SetExpr::Select(Box::new(select(
+            number(1),
+            vec![from],
+            selection,
+        ))))),
+        negated,
+    }
+}
+
+fn volatile(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> bool {
+    struct Find(bool);
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            if let Expr::Function(function) = expr
+                && let Some(name) = function.name.0.last().and_then(|part| part.as_ident())
+                && VOLATILE.contains(&name.value.to_ascii_lowercase().as_str())
+            {
+                self.0 = true;
+                return ControlFlow::Break(());
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut find = Find(false);
+    let _ = left.visit(&mut find);
+    let _ = right.visit(&mut find);
+    let _ = condition.visit(&mut find);
+    find.0
+}
+
+/// Whether the join references a name its own operands do not define, or a
+/// table-valued function argument names a column (siblings are not visible to
+/// a function's arguments, so any column there is an outer reference).
+fn correlated(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> bool {
+    #[derive(Default)]
+    struct Names {
+        defined: HashSet<String>,
+        qualifiers: HashSet<String>,
+        function_columns: bool,
+    }
+    fn arguments(names: &mut Names, args: &impl Visit) {
+        struct Columns(bool);
+        impl Visitor for Columns {
+            type Break = ();
+            fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+                match expr {
+                    Expr::Identifier(ident) if !ident.value.starts_with('@') => {
+                        self.0 = true;
+                        ControlFlow::Break(())
+                    }
+                    Expr::CompoundIdentifier(_) => {
+                        self.0 = true;
+                        ControlFlow::Break(())
+                    }
+                    _ => ControlFlow::Continue(()),
+                }
+            }
+        }
+        let mut columns = Columns(false);
+        let _ = args.visit(&mut columns);
+        names.function_columns |= columns.0;
+    }
+    impl Visitor for Names {
+        type Break = ();
+        fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
+            let alias = match factor {
+                TableFactor::Table {
+                    name, alias, args, ..
+                } => {
+                    if let Some(last) = name.0.last().and_then(|part| part.as_ident()) {
+                        self.defined.insert(last.value.to_lowercase());
+                    }
+                    if let Some(args) = args {
+                        arguments(self, &args.args);
+                    }
+                    alias
+                }
+                TableFactor::OpenJsonTable {
+                    json_expr, alias, ..
+                } => {
+                    arguments(self, json_expr);
+                    alias
+                }
+                TableFactor::Function { args, alias, .. } => {
+                    arguments(self, args);
+                    alias
+                }
+                TableFactor::TableFunction { expr, alias } => {
+                    arguments(self, expr);
+                    alias
+                }
+                TableFactor::UNNEST {
+                    array_exprs, alias, ..
+                } => {
+                    arguments(self, array_exprs);
+                    alias
+                }
+                TableFactor::Derived { alias, .. } | TableFactor::NestedJoin { alias, .. } => alias,
+                _ => {
+                    // Unknown factor kinds count as outer references.
+                    self.function_columns = true;
+                    &None
+                }
+            };
+            if let Some(alias) = alias {
+                self.defined.insert(alias.name.value.to_lowercase());
+            }
+            ControlFlow::Continue(())
+        }
+        fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
+            if let Some(with) = &query.with {
+                for cte in &with.cte_tables {
+                    self.defined.insert(cte.alias.name.value.to_lowercase());
+                }
+            }
+            ControlFlow::Continue(())
+        }
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            if let Expr::CompoundIdentifier(parts) = expr
+                && parts.len() >= 2
+            {
+                self.qualifiers
+                    .insert(parts[parts.len() - 2].value.to_lowercase());
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut names = Names::default();
+    let _ = left.visit(&mut names);
+    let _ = right.visit(&mut names);
+    let _ = condition.visit(&mut names);
+    names.function_columns || !names.qualifiers.is_subset(&names.defined)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlparser::parser::Parser;
+
+    fn rewritten(sql: &str) -> String {
+        let mut statement = Parser::parse_sql(&crate::dialect::ServerDialect, sql)
+            .unwrap()
+            .remove(0);
+        let Statement::Query(query) = &mut statement else {
+            panic!("not a query")
+        };
+        rewrite(query);
+        statement.to_string()
+    }
+
+    #[test]
+    fn correlated_openjson_full_join_becomes_left_joins() {
+        let sql = rewritten(
+            "SELECT COALESCE(l.[key], r.[key]) AS k FROM OPENJSON(p.lhs) l FULL OUTER JOIN OPENJSON(p.rhs) r ON l.[key] = r.[key] WHERE r.[value] IS NULL",
+        );
+        assert!(!sql.contains("FULL"), "{sql}");
+        assert!(sql.contains("UNION ALL"), "{sql}");
+        assert!(
+            sql.contains(&format!(
+                "WHERE ({SIDES}.{SIDE} = 1 OR NOT EXISTS (SELECT 1 FROM OPENJSON(p.lhs) l WHERE l.[key] = r.[key])) AND (r.[value] IS NULL)"
+            )),
+            "{sql}"
+        );
+    }
+
+    #[test]
+    fn uncorrelated_and_volatile_joins_are_unchanged() {
+        for sql in [
+            "SELECT a.k, b.k FROM (VALUES (1)) a(k) FULL JOIN (VALUES (2)) b(k) ON a.k = b.k",
+            "SELECT 1 FROM t a FULL JOIN u b ON a.k = b.k",
+            "SELECT 1 FROM OPENJSON(p.lhs) l FULL JOIN OPENJSON(p.rhs) r ON l.[key] = r.[key] AND RAND() > 0.5",
+            "SELECT 1 FROM OPENJSON(p.lhs) l FULL JOIN OPENJSON(p.rhs) r ON l.[key] = r.[key] RIGHT JOIN t ON 1 = 1",
+            "SELECT 1 FROM OPENJSON(p.lhs) l FULL JOIN OPENJSON(p.rhs) r USING ([key])",
+        ] {
+            let before = Parser::parse_sql(&crate::dialect::ServerDialect, sql)
+                .unwrap()
+                .remove(0)
+                .to_string();
+            assert_eq!(rewritten(sql), before, "{sql}");
+        }
+    }
+
+    #[test]
+    fn correlation_in_condition_or_unqualified_function_argument_counts() {
+        for sql in [
+            "SELECT 1 FROM (VALUES (1)) a(k) FULL JOIN (VALUES (2)) b(k) ON a.k = b.k AND p.id = 1",
+            "SELECT 1 FROM OPENJSON(lhs) l FULL JOIN OPENJSON(N'[]') r ON l.[key] = r.[key]",
+        ] {
+            assert!(!rewritten(sql).contains("FULL"), "{sql}");
+        }
+    }
+
+    #[test]
+    fn unqualified_star_excludes_the_side_column_and_rewrite_is_idempotent() {
+        let mut statement = Parser::parse_sql(
+            &crate::dialect::ServerDialect,
+            "SELECT * FROM OPENJSON(p.lhs) l FULL JOIN OPENJSON(p.rhs) r ON l.[key] = r.[key] JOIN t ON t.k = l.[key]",
+        )
+        .unwrap()
+        .remove(0);
+        let Statement::Query(query) = &mut statement else {
+            panic!("not a query")
+        };
+        rewrite(query);
+        let once = query.to_string();
+        assert!(once.contains(&format!("* EXCLUDE ({SIDE})")), "{once}");
+        assert!(
+            once.ends_with(&format!(
+                "JOIN t ON t.k = l.[key] WHERE ({SIDES}.{SIDE} = 1 OR NOT EXISTS (SELECT 1 FROM OPENJSON(p.lhs) l WHERE l.[key] = r.[key]))"
+            )),
+            "{once}"
+        );
+        rewrite(query);
+        assert_eq!(query.to_string(), once);
+    }
+}
