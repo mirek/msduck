@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import test from 'node:test'
 
 const script = 'scripts/compatibility.mjs'
@@ -58,3 +58,62 @@ test('Docker wrapper lists, plans and rejects unknown cases before starting Dock
   assert.notEqual(unknown.status, 0)
   assert.match(unknown.stderr, /Unknown case: unknown case/)
 })
+
+
+// Add bounded bytes to the same real stdout pipe just before the CLI's first
+// write. Delay consumption from that signal so the test establishes actual
+// backpressure independently of module load or machine scheduling speed.
+const pressureBytes = 2 * 1024 * 1024
+const pressureImport = 'data:text/javascript,' + encodeURIComponent(`
+  import { writeSync } from 'node:fs';
+  const write = process.stdout.write;
+  let first = true;
+  process.stdout.write = function (...args) {
+    if (first) {
+      first = false;
+      write.call(this, Buffer.alloc(${pressureBytes}, 0x78));
+      writeSync(3, 'ready');
+    }
+    return write.apply(this, args);
+  };
+`)
+const delayedOutput = (path, args) => new Promise((resolve, reject) => {
+  const child = spawn(process.execPath, ['--import', pressureImport, path, ...args], {
+    stdio: ['ignore', 'pipe', 'pipe', 'pipe']
+  })
+  const chunks = [], errors = []
+  child.stdout.on('data', chunk => chunks.push(chunk))
+  child.stdout.pause()
+  child.stderr.on('data', chunk => errors.push(chunk))
+  let resumeTimer
+  child.stdio[3].once('data', () => {
+    resumeTimer = setTimeout(() => child.stdout.resume(), 100)
+  })
+  const timeout = setTimeout(() => {
+    child.kill('SIGKILL')
+    child.stdout.resume()
+    reject(new Error('CLI did not complete under bounded output backpressure'))
+  }, 10000)
+  child.once('error', reject)
+  child.once('close', (status, signal) => {
+    clearTimeout(timeout)
+    clearTimeout(resumeTimer)
+    resolve({status, signal, stdout: Buffer.concat(chunks), stderr: Buffer.concat(errors).toString()})
+  })
+})
+for (const path of [script, 'scripts/docker-compare.mjs']) {
+  for (const mode of ['--list-cases', '--plan']) {
+    test(`${path} ${mode} preserves complete output with a delayed pipe reader`, async () => {
+      const expected = spawnSync(process.execPath, [path, mode], {encoding: 'utf8'})
+      assert.equal(expected.status, 0, expected.stderr)
+      if (mode === '--list-cases') assert.ok(expected.stdout.endsWith('numeric literal descriptors\n'))
+      else assert.ok(JSON.parse(expected.stdout).selectedCases.includes('numeric literal descriptors'))
+      const actual = await delayedOutput(path, [mode])
+      assert.equal(actual.status, 0, actual.stderr)
+      assert.equal(actual.signal, null)
+      assert.equal(actual.stdout.length, pressureBytes + Buffer.byteLength(expected.stdout), 'complete prefix and CLI output byte count')
+      assert.ok(actual.stdout.subarray(0, pressureBytes).equals(Buffer.alloc(pressureBytes, 0x78)), 'unchanged backpressure prefix')
+      assert.equal(actual.stdout.subarray(pressureBytes).toString(), expected.stdout)
+    })
+  }
+}
