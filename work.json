@@ -10752,6 +10752,27 @@
       "dependencies": [],
       "issue": 865,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pkgvg"
+    },
+    {
+      "id": "bulk-staging-interactions-reference-v1",
+      "title": "Capture BulkLoad staging, defaults, identity and trigger interactions",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility objective; first-party source investigation at56f80e28 identifies unverified combined large-load behavior documented in docs/gaps-bulk.md. Publish bounded SQL Server reference before runtime changes, without engine.rs reservation or additional factory agents/native caches.",
+      "issue": 878,
+      "scope": [
+        "scripts/capture-bulk-staging-reference.mjs",
+        "reference/bulk-staging-reference.json",
+        "tests/bulk_staging_capture.test.mjs",
+        "docs/bulk-staging-reference.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Capture two independent fresh databases per each of two pinned SQL Server containers. Record exact version/image, client options/generated INSERT BULK and post-login type7 request/response bytes, descriptors, errors including state/class/message, callbacks and DONE tokens. Preserve raw artifacts before comparison with exclusive writes and bounded capture limits; exclude login credentials. Dynamic server/database/SPID differences are retained and reported separately, never silently normalized.",
+        "Cover small and staged-size loads around1000 rows and the wide-row parameter threshold, at least three alternating default patterns and all-default rows; KEEP_NULLS/FIRE_TRIGGERS, listed versus generated identity, CHECK_CONSTRAINTS, and trigger writes to a separately constrained table. Preserve source-marker/identity mappings, actual trigger invocation count and inserted membership, @@IDENTITY/SCOPE_IDENTITY/IDENT_CURRENT, constraint trust, rows and XACT_STATE/@@TRANCOUNT after success and failure. Do not assume SQL Server identity order or trigger batching; document raw observed disagreements or nondeterminism.",
+        "Add meaningful offline replay/mutation and prelaunch output overwrite/alias guard tests. Demonstrate that altered identity mapping, trigger membership/count, other-table constraint error or DONE count cannot be hidden by dynamic packet fields. Document limits without treating runtime gaps as accepted compatibility. Existing source/helpers/fixtures and runtime remain untouched.",
+        "Reuse existing worktree and isolated reference resources, honor shared builder locks, no new factory agent or cold native cache. Run syntax and focused Node tests plus required owner exact-head CI, independent review and verified Codex review or availability fallback. Focused PR links878; claiming worker handles review follow-up, exact-head merge and protected registry/project completion. No native Rust gates for this reference-only task."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PknDd"
     }
   ]
 }
