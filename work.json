@@ -1562,7 +1562,7 @@
     {
       "id": "legacy-datetime-export-v1",
       "title": "Export deterministic legacy datetime conversion from msduck-core",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner handoff on 2026-09-24: \"Worker stopped; authorize the handoff\" for crates/msduck-core/src/lib.rs previously reserved by unicode-case-core-v1. Preserve its permanent claim, branch and evidence; revoke the stopped task and transfer only the export file to this successor. PR #129 supplies the conversion module.",
       "scope": [
         "crates/msduck-core/src/lib.rs"
@@ -11014,6 +11014,43 @@
         "Fresh own receipt/existing worktree/cache, no extra agent/nativecache. Focused TDS tests/formatter/strictalltargetClippy and appropriate AGENTS gates/shared builderhandoff. Exacthead requiredCI, independent/Codex review or genuinefallback, claimingworker owns PRmerge/completion; retain exactbyte/revision proof and remaining unsupported/publicexport/runtime gaps."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pk1rP"
+    },
+    {
+      "id": "ansi-byte-export-v1",
+      "title": "Export deterministic native ANSI byte carrier",
+      "state": "ready",
+      "authorization": "Owner continuing goal and standing unresponsive-worker takeover. At2026-10-03 recovery checked owner8561 draftPR165 unchanged checkpointa69fd41 sinceSeptember24, permanentclaimb5b20ab retained, no legacy export worktree in git worktree list, no attributable local/remote jobs or team worker. Owner-approved contact5969228690 onPR165 received no response after more than60seconds. Required modulePR129 remains draft/unmerged and legacy_datetime.rs is absent from approvedmain, so oldexport cannot proceed as scoped. Revoke only legacy-datetime-export-v1; preserve branch, receipt, review/build evidence, do not mark incomplete work done. No ownerengine853 scope or unrelated jobs touched. Companion to ownansi-byte-carrier-v1 shipped together inPR894 after freshclaim.",
+      "issue": 892,
+      "scope": [
+        "crates/msduck-core/src/lib.rs"
+      ],
+      "dependencies": [
+        "bulk-character-adapter-plan-v1"
+      ],
+      "acceptance": [
+        "Export ansi_bytes as a public deterministic msduck-core module supplied by the companion carrier task. No unrelated module, value, conversion, backend, root or wire changes. The carrier tests owned separately must compile through the public module, not a private path import.",
+        "Acquire a new exclusive receipt, retain oldimmutableclaim/branch/evidence. Ship inPR894 with fresh exacthead purecoretests/strictClippy/fmt plus requiredworkspace/client/audit and exacthead CI, independent/Codex review or genuine availability fallback. Worker ownsmerge andcompletion of bothclaims. No extra agent/worktree/nativecache; sharedbuilder handoff mandatory."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pk1rA"
+    },
+    {
+      "id": "legacy-datetime-export-recovery-v1",
+      "title": "Recover legacy datetime export after conversion module merges",
+      "state": "backlog",
+      "authorization": "Owner continuing goal and standing unresponsive-worker takeover. At2026-10-03 recovery checked owner8561 draftPR165 unchanged checkpointa69fd41 sinceSeptember24, permanentclaimb5b20ab retained, no legacy export worktree in git worktree list, no attributable local/remote jobs or team worker. Owner-approved contact5969228690 onPR165 received no response after more than60seconds. Required modulePR129 remains draft/unmerged and legacy_datetime.rs is absent from approvedmain, so oldexport cannot proceed as scoped. Revoke only legacy-datetime-export-v1; preserve branch, receipt, review/build evidence, do not mark incomplete work done. No ownerengine853 scope or unrelated jobs touched. Preserve unfinished legacy export under a dependency-correct successor.",
+      "issue": 164,
+      "scope": [
+        "crates/msduck-core/src/lib.rs"
+      ],
+      "dependencies": [
+        "ansi-byte-export-v1",
+        "legacy-datetime-conversion-core-v1"
+      ],
+      "acceptance": [
+        "Only activate after bothdependencies genuinelymerge andcomplete and corelibscope isfree. Newclaim/receipt; do not adoptoldclaim. Export legacy_datetime supplied by reviewedmergedconversionmodule withoutchangingsemantics.",
+        "Exacthead tests/fmt/strictClippy andappropriateAGENTS requiredgates, CI and independent/Codex review or genuinefallback. Retain rawevidence; owner-worker handlesmerge/completion. Never fabricate completion of old164 or conversion128."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PKD64"
     }
   ]
 }
