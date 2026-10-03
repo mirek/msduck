@@ -63,22 +63,34 @@ const VOLATILE: [&str; 12] = [
 /// Rewrites every eligible SELECT inside an APPLY body. Idempotent: rewritten
 /// SELECTs no longer contain the FULL join.
 pub fn rewrite(query: &mut Query) {
-    struct Rewrite;
+    // Names anywhere in the body, including ORDER BY clauses that a SELECT
+    // does not contain, stay clear of the synthetic names.
+    struct Rewrite {
+        relations: HashSet<String>,
+        columns: HashSet<String>,
+    }
     impl VisitorMut for Rewrite {
         type Break = ();
         fn post_visit_select(&mut self, select: &mut Select) -> ControlFlow<()> {
-            rewrite_select(select);
+            rewrite_select(select, &self.relations, &self.columns);
             ControlFlow::Continue(())
         }
     }
-    let _ = VisitMut::visit(query, &mut Rewrite);
+    let mut rewrite = Rewrite {
+        relations: relation_names(&*query),
+        columns: column_names(&*query),
+    };
+    let _ = VisitMut::visit(query, &mut rewrite);
 }
 
-fn rewrite_select(select: &mut Select) {
+fn rewrite_select(select: &mut Select, relations: &HashSet<String>, columns: &HashSet<String>) {
     let mut taken = relation_names(select);
+    taken.extend(relations.iter().cloned());
     let base_names = !long_names(select);
     // The side column must not capture an unqualified column reference.
-    let column = fresh(&mut column_names(select), SIDE);
+    let mut referenced = column_names(select);
+    referenced.extend(columns.iter().cloned());
+    let column = fresh(&mut referenced, SIDE);
     let mut filters = Vec::new();
     let mut sides = Vec::new();
     for item in &mut select.from {
@@ -321,7 +333,7 @@ fn long_names(select: &Select) -> bool {
 /// Lowercase aliases and table names of every relation in the SELECT, and
 /// every qualifier it uses, so the side alias shadows neither a relation of
 /// this SELECT nor a correlated outer alias.
-fn relation_names(select: &Select) -> HashSet<String> {
+fn relation_names(node: &(impl Visit + Root)) -> HashSet<String> {
     struct Names(HashSet<String>);
     impl Visitor for Names {
         type Break = ();
@@ -350,9 +362,27 @@ fn relation_names(select: &Select) -> HashSet<String> {
         }
     }
     let mut names = Names(HashSet::new());
-    let _ = select.visit(&mut names);
-    wildcard_qualifiers(select, &mut names.0);
+    let _ = node.visit(&mut names);
+    if let Some(select) = node.select() {
+        wildcard_qualifiers(select, &mut names.0);
+    }
     names.0
+}
+
+/// A visited root: a SELECT's own projection is not seen by
+/// `pre_visit_select`, a query's SELECTs are.
+trait Root {
+    fn select(&self) -> Option<&Select>;
+}
+impl Root for Select {
+    fn select(&self) -> Option<&Select> {
+        Some(self)
+    }
+}
+impl Root for Query {
+    fn select(&self) -> Option<&Select> {
+        None
+    }
 }
 
 /// `alias.*` is not an expression, but it references `alias` too.
@@ -371,7 +401,7 @@ fn wildcard_qualifiers(select: &Select, names: &mut HashSet<String>) {
 }
 
 /// Lowercase names of every column the SELECT references.
-fn column_names(select: &Select) -> HashSet<String> {
+fn column_names(node: &impl Visit) -> HashSet<String> {
     struct Names(HashSet<String>);
     impl Visitor for Names {
         type Break = ();
@@ -391,7 +421,7 @@ fn column_names(select: &Select) -> HashSet<String> {
         }
     }
     let mut names = Names(HashSet::new());
-    let _ = select.visit(&mut names);
+    let _ = node.visit(&mut names);
     names.0
 }
 
@@ -585,12 +615,21 @@ fn correlated(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> b
     let mut names = HashSet::new();
     join_names(left, &mut names);
     factor_names(right, &mut names);
+    // An operand's own alias is not visible inside its definition, so the
+    // factors see none of the join's names; join conditions see them all.
     let mut scopes = Scopes {
-        scopes: vec![names],
+        scopes: vec![HashSet::new()],
         outer: false,
     };
-    let _ = left.visit(&mut scopes);
+    let _ = left.relation.visit(&mut scopes);
+    for join in &left.joins {
+        let _ = join.relation.visit(&mut scopes);
+    }
     let _ = right.visit(&mut scopes);
+    scopes.scopes = vec![names];
+    for join in &left.joins {
+        let _ = join.join_operator.visit(&mut scopes);
+    }
     let _ = condition.visit(&mut scopes);
     scopes.outer
 }
@@ -785,6 +824,25 @@ mod tests {
         assert!(sql.contains(&format!("AS {SIDES} ({SIDE}_1)")), "{sql}");
         let sql = "SELECT 1 FROM OPENJSON(p.lhs) l FULL JOIN OPENJSON(p.rhs) r ON l.[key] = r.[key] AND random() > 0.5";
         assert!(rewritten(sql).contains("FULL JOIN"), "{sql}");
+    }
+
+    #[test]
+    fn order_by_qualifiers_and_self_referencing_derived_aliases() {
+        let mut statement = Parser::parse_sql(
+            &crate::dialect::ServerDialect,
+            "SELECT TOP 1 l.[key] FROM OPENJSON(lhs) l FULL JOIN OPENJSON(rhs) r ON l.[key] = r.[key] ORDER BY __msduck_full_join.id",
+        )
+        .unwrap()
+        .remove(0);
+        let Statement::Query(query) = &mut statement else {
+            panic!("not a query")
+        };
+        rewrite(query);
+        let sql = query.to_string();
+        assert!(sql.contains(&format!("AS {SIDES}_1 ({SIDE})")), "{sql}");
+        let sql =
+            rewritten("SELECT 1 FROM (SELECT p.id AS k FROM t) AS p FULL JOIN u AS r ON p.k = r.k");
+        assert!(!sql.contains("FULL"), "{sql}");
     }
 
     #[test]
