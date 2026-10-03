@@ -371,7 +371,8 @@ const FOLDED: &[(u16, u16)] = &[
 ];
 
 /// The lowercase unit a key folds `unit` to: its simple lowercase mapping
-/// within [`FOLDED`] when that keeps the high byte, otherwise `unit`.
+/// within [`FOLDED`] (U+0130 to `i`, as comparisons fold it), otherwise
+/// `unit`.
 pub fn key_fold(unit: u16) -> u16 {
     if !FOLDED
         .iter()
@@ -379,12 +380,15 @@ pub fn key_fold(unit: u16) -> u16 {
     {
         return unit;
     }
+    if unit == 0x130 {
+        return 0x69;
+    }
     let Some(character) = char::from_u32(u32::from(unit)) else {
         return unit;
     };
     let mut lower = character.to_lowercase();
     match (lower.next(), lower.next()) {
-        (Some(single), None) if (single as u32) >> 8 == u32::from(unit >> 8) => single as u16,
+        (Some(single), None) if (single as u32) < 0x10000 => single as u16,
         _ => unit,
     }
 }
@@ -430,7 +434,9 @@ pub fn fold_rules() -> Vec<(String, String)> {
             }
             let (a, b, c) = ((unit >> 4) & 0xF, unit & 0xF, unit >> 8);
             let (a2, b2) = ((lower >> 4) & 0xF, lower & 0xF);
-            if b == b2 {
+            if lower >> 8 != c {
+                whole.push((unit, lower));
+            } else if b == b2 {
                 high_nibble.entry((c, a, a2)).or_default().push(b);
             } else if a == a2 {
                 low_nibble.entry((c, b, b2)).or_default().push(a);
@@ -731,7 +737,8 @@ mod tests {
         assert_eq!(key_fold(0x100), 0x101);
         assert_eq!(key_fold(0x410), 0x430);
         assert_eq!(key_fold(0xD7), 0xD7);
-        assert_eq!(key_fold(0x178), 0x178);
+        assert_eq!(key_fold(0x178), 0xFF);
+        assert_eq!(key_fold(0x130), 0x69);
         assert!(ignorable(0) && ignorable(0xD83E) && ignorable(0xFEFF));
         assert!(!ignorable(0x1) && !ignorable(0xAD) && !ignorable(0x200B) && !ignorable(0xE000));
         let mut default = Column {
