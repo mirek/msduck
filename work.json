@@ -10572,7 +10572,7 @@
     {
       "id": "v025-apply-full-join-v1",
       "title": "Execute correlated APPLY over FULL OUTER JOIN bodies",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03): \"please find the following compatibility report and work on it; definition of done is when all this functionality lands in published container; feel free to schedule multiple agents working on multiple prs\". The owner pasted a first-party workload compatibility report for the v0.2.5 image (umbrella #864); only its generic reproductions are used. No external content.",
       "scope": [
         "crates/msduck-sql/src/apply.rs",
