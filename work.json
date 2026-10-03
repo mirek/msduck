@@ -3279,7 +3279,7 @@
     {
       "id": "bulk-load-wire-reference-v1",
       "title": "Capture first-party SQL Server BulkLoad wire requests and responses",
-      "state": "blocked",
+      "state": "done",
       "authorization": "Direct owner instruction of 2026-09-26 to continue full SQL Server compatibility work and explicitly publish this first-party BulkLoad wire capture task; no external submission is input.",
       "scope": [
         "scripts/capture-bulk-load-wire.mjs",
@@ -10721,7 +10721,7 @@
     {
       "id": "bulk-load-reference-recovery-v1",
       "title": "Recover BulkLoad wire reference with exhaustive raw drift validation",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner standing immediate unresponsive-worker takeover and continuing full SQL Server compatibility goal; old341/PR343 owner8561 at6834683, contact5967270419, no live factory worker, clean old worktree/no attributable local or accessible Linux capture jobs, no new response/checkpoint. Preserve old claim/branch/receipt/raw captures. Confirmed owner-initiated Codex4112892305 raw drift finding.",
       "issue": 872,
       "scope": [
