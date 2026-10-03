@@ -122,7 +122,9 @@ pub(super) fn alter(session: &mut Session, request: Request) -> Result<Execution
     if previous != target {
         // Only transactions that began before the transition are waited
         // for. Holding the transaction table orders the cutoff and the
-        // transition against reads that check the state and register.
+        // transition against reads that check the state and register. A
+        // BEGIN racing this registers later and counts as beginning during
+        // the change; DuckDB versions its writes regardless of the state.
         let cutoff = {
             let _transactions = active_transactions();
             catalog.set_snapshot_isolation(&session.db, &alias, transition)?;
