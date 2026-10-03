@@ -52,8 +52,10 @@ suppressed instead of displayed as potential untrusted text.
 Receipts live under ignored `.msduck/claims/`, never in Git or PR descriptions
 (include only the claim SHA). A failed or interrupted claim can leave a receipt:
 run `verify` in the same original session. If verification fails, do not start.
-Do not delete a receipt and retry blindly. A different session may resume only
-through explicit owner handoff after the earlier worker has stopped.
+Do not delete a receipt and retry blindly. A different session must not adopt
+the original receipt. An ordinary handoff requires explicit owner direction;
+stale-task recovery uses the standing authorization below and a fresh successor
+claim, without another approval request.
 
 ### Parallel workers on one host
 
