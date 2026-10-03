@@ -1,7 +1,6 @@
-#[path = "../src/ansi_bytes.rs"]
-mod ansi_bytes;
-
-use ansi_bytes::{AnsiBytes, AnsiView, ByteError, EncodingIdentity, checked_byte_total};
+use msduck_core::ansi_bytes::{
+    AnsiBytes, AnsiView, ByteError, EncodingIdentity, checked_byte_total,
+};
 
 #[test]
 fn every_byte_survives_borrowing_ownership_and_explicit_encoding_identity() {

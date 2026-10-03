@@ -27,8 +27,11 @@ Some controls fail SQL insertion, others are accepted, and native bytes differ
 from SQL Unicode conversion and client display. Carrier construction does not
 claim any of those inputs is valid SQL character data.
 
-Standalone integration tests path-import the module while core lib.rs is owned
-by legacy-datetime-export-v1. Public crate registration requires a separately
-claimed companion. No common Value/Parameter variant, conversion algorithm,
-backend storage or server output path changes here. Those steps remain required
-before the lossless carrier can satisfy runtime character compatibility.
+The separately claimed `ansi-byte-export-v1` companion exports the module as
+`msduck_core::ansi_bytes`; integration tests exercise this public library API.
+The old stalled export reservation was revoked through the protected registry,
+retaining its claim and branch. Its unfinished datetime export remains a
+dependency-correct successor, not completed work. No common Value/Parameter
+variant, conversion algorithm, backend storage or server output path changes
+here. Those steps remain required before the lossless carrier can satisfy
+runtime character compatibility.
