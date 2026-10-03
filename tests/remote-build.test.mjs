@@ -228,3 +228,26 @@ test('migration unlinks a stamp link itself and failed npm does not record succe
     assert.equal(readFileSync(external, 'utf8'), 'external evidence')
   } finally { rmSync(temporary, {recursive: true, force: true}) }
 })
+
+test('remote client concurrency rejects shell text before SSH and exports a validated quoted value', () => {
+  const temporary = fixture('msduck-client-jobs-')
+  try {
+    const bin = join(temporary,'bin')
+    mkdirSync(bin)
+    const recorded = join(temporary,'ssh-arguments')
+    writeFileSync(join(bin,'ssh'), '#!/bin/sh\nprintf "%s\\n" "$@" > "$MSDUCK_TEST_SSH_RECORD"\nexit 1\n', {mode:0o755})
+    const env = {...process.env,PATH:`${bin}:${process.env.PATH}`,MSDUCK_TEST_SSH_RECORD:recorded,
+      MSDUCK_BUILD_HOST:'linux.local',MSDUCK_BUILD_DIR:'/owned/cache',MSDUCK_CLIENT_JOBS:'4'}
+    const result = spawnSync(process.execPath,['scripts/remote-build.mjs','test'],{env,encoding:'utf8',timeout:10000})
+    assert.notEqual(result.status,0)
+    assert.match(readFileSync(recorded,'utf8'),/export MSDUCK_CLIENT_JOBS=/)
+    assert.match(readFileSync(recorded,'utf8'),/4/)
+    rmSync(recorded)
+    for (const value of ['0','17','4;touch stolen','$(id)','01','']) {
+      const bad = spawnSync(process.execPath,['scripts/remote-build.mjs','test'],{env:{...env,MSDUCK_CLIENT_JOBS:value},encoding:'utf8',timeout:10000})
+      assert.notEqual(bad.status,0)
+      assert.match(bad.stderr,/integer from 1 to 16/)
+      assert(!existsSync(recorded))
+    }
+  } finally {rmSync(temporary,{recursive:true,force:true})}
+})
