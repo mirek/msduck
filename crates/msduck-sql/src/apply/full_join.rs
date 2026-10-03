@@ -47,18 +47,19 @@ const VOLATILE: [&str; 4] = ["newid", "newsequentialid", "rand", "crypt_gen_rand
 /// Rewrites every eligible SELECT inside an APPLY body. Idempotent: rewritten
 /// SELECTs no longer contain the FULL join.
 pub fn rewrite(query: &mut Query) {
-    struct Rewrite(usize);
+    struct Rewrite;
     impl VisitorMut for Rewrite {
         type Break = ();
         fn post_visit_select(&mut self, select: &mut Select) -> ControlFlow<()> {
-            rewrite_select(select, &mut self.0);
+            rewrite_select(select);
             ControlFlow::Continue(())
         }
     }
-    let _ = VisitMut::visit(query, &mut Rewrite(0));
+    let _ = VisitMut::visit(query, &mut Rewrite);
 }
 
-fn rewrite_select(select: &mut Select, counter: &mut usize) {
+fn rewrite_select(select: &mut Select) {
+    let mut taken = relation_names(&select.from);
     let mut filters = Vec::new();
     let mut sides = Vec::new();
     for item in &mut select.from {
@@ -94,12 +95,18 @@ fn rewrite_select(select: &mut Select, counter: &mut usize) {
         }
         let condition = condition.clone();
         let right = right.clone();
-        let alias = if *counter == 0 {
-            SIDES.to_string()
-        } else {
-            format!("{SIDES}_{counter}")
-        };
-        *counter += 1;
+        // A fresh alias no relation of this SELECT (or its subqueries) uses.
+        let alias = (0..)
+            .map(|n| {
+                if n == 0 {
+                    SIDES.to_string()
+                } else {
+                    format!("{SIDES}_{n}")
+                }
+            })
+            .find(|name| !taken.contains(&name.to_lowercase()))
+            .expect("an unused alias");
+        taken.insert(alias.to_lowercase());
         let side = |n: i64| Expr::BinaryOp {
             left: Box::new(Expr::CompoundIdentifier(vec![
                 Ident::new(&alias),
@@ -250,6 +257,30 @@ fn alias(factor: &TableFactor) -> Option<&TableAlias> {
     }
 }
 
+/// Lowercase aliases and unaliased table names of every relation in `from`.
+fn relation_names(from: &[TableWithJoins]) -> HashSet<String> {
+    struct Names(HashSet<String>);
+    impl Visitor for Names {
+        type Break = ();
+        fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
+            if let Some(alias) = alias(factor) {
+                self.0.insert(alias.name.value.to_lowercase());
+            }
+            if let TableFactor::Table { name, .. } = factor
+                && let Some(last) = name.0.last().and_then(|part| part.as_ident())
+            {
+                self.0.insert(last.value.to_lowercase());
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut names = Names(HashSet::new());
+    for table in from {
+        let _ = table.visit(&mut names);
+    }
+    names.0
+}
+
 fn number(n: i64) -> Expr {
     Expr::Value(Value::Number(n.to_string(), false).into())
 }
@@ -370,7 +401,10 @@ fn correlated(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> b
                 TableFactor::Table {
                     name, alias, args, ..
                 } => {
-                    if let Some(last) = name.0.last().and_then(|part| part.as_ident()) {
+                    // An alias hides the base name: `t.c` then means an outer `t`.
+                    if alias.is_none()
+                        && let Some(last) = name.0.last().and_then(|part| part.as_ident())
+                    {
                         self.defined.insert(last.value.to_lowercase());
                     }
                     if let Some(args) = args {
@@ -491,6 +525,19 @@ mod tests {
         ] {
             assert!(!rewritten(sql).contains("FULL"), "{sql}");
         }
+    }
+
+    #[test]
+    fn side_alias_avoids_existing_relation_names_and_aliases_hide_base_names() {
+        let sql = rewritten(
+            "SELECT 1 FROM OPENJSON(p.lhs) __msduck_full_join FULL JOIN OPENJSON(p.rhs) r ON __msduck_full_join.[key] = r.[key]",
+        );
+        assert!(sql.contains(&format!("AS {SIDES}_1 ({SIDE})")), "{sql}");
+        assert!(sql.contains(&format!("{SIDES}_1.{SIDE} = 1")), "{sql}");
+        // `t.id` names the outer row, because `dbo.t AS a` hides `t`.
+        let sql =
+            rewritten("SELECT 1 FROM dbo.t AS a FULL JOIN dbo.u AS b ON a.k = b.k AND t.id = 1");
+        assert!(!sql.contains("FULL"), "{sql}");
     }
 
     #[test]

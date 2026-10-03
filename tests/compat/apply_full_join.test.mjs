@@ -22,44 +22,48 @@ const reset = 'DROP TRIGGER IF EXISTS docs_audit; DROP FUNCTION IF EXISTS dbo.fo
 // COALESCE over the OPENJSON key column widens to nvarchar(max), OPENJSON's
 // type column is int, duplicate derived-table column names are not rejected
 // (8156), the ambiguous column is DuckDB's binder error rather than 209, and
-// ISNULL over an OPENJSON value with an N'' fallback fails to convert. They are
-// kept exact so any change, fix or regression, shows up here.
-const keyLength = name => `${name}: first difference at .sets[0].columns[1][2]: actual 65535, expected 8000`
-const knownDifferences = [
-  keyLength('report repro cross apply'),
-  keyLength('report repro outer apply'),
-  'function star metadata: first difference at .sets[0].columns[0][2]: actual 65535, expected 8000',
-  keyLength('multirow cross apply'),
-  keyLength('multirow outer apply'),
-  keyLength('derived cross apply'),
-  keyLength('derived outer apply'),
-  'star of both sides: first difference at .sets[0] (array length 1 vs 0): actual object(2 keys), expected undefined',
-  'qualified star of one side: first difference at .sets[0].columns[3][2]: actual 4, expected 1',
-  keyLength('top and order in body'),
-  'ambiguous column: first difference at .errors[0].number: actual 50000, expected 209',
-  'trigger diff of json snapshots: first difference at .sets[0] (array length 0 vs 1): actual undefined, expected object(2 keys)',
-]
-// Cases whose rows and DONE counts differ, not only column metadata.
-const knownRowDifferences = ['star of both sides', 'trigger diff of json snapshots']
-const rowsOf = result => ({ rows: result.sets.map(set => set.rows), done: result.done })
+// ISNULL over an OPENJSON value with an N'' fallback fails to convert. Each
+// known case asserts msduck's complete current result, so any further change,
+// fix or regression, fails here.
+const lengths = changes => reference => {
+  const result = structuredClone(reference)
+  for (const [index, length] of changes) result.sets[0].columns[index][2] = length
+  return result
+}
+const max = 65535
+const knownResults = {
+  'report repro cross apply': lengths([[1, max]]),
+  'report repro outer apply': lengths([[1, max]]),
+  'function star metadata': lengths([[0, max]]),
+  'multirow cross apply': lengths([[1, max]]),
+  'multirow outer apply': lengths([[1, max]]),
+  'derived cross apply': lengths([[1, max], [4, 4], [5, 4]]),
+  'derived outer apply': lengths([[1, max], [4, 4], [5, 4]]),
+  'star of both sides': () => ({"sets": [{"columns": [["id", "Int", null], ["key", "NVarChar", 8000], ["value", "NVarChar", 65535], ["type", "IntN", 4], ["key", "NVarChar", 8000], ["value", "NVarChar", 65535], ["type", "IntN", 4]], "rows": [[1, "a", "1", 2, "a", "2", 2]]}], "errors": [], "done": [1]}),
+  'qualified star of one side': lengths([[3, 4]]),
+  'top and order in body': lengths([[1, max]]),
+  'ambiguous column': () => ({"sets": [], "errors": [{"number": 50000, "class": 16, "state": 1, "message": "Binder Error: Ambiguous reference to column name \"key\" (use: \"l.key\" or \"r.key\")\n\nLINE 1: ...LECT i.id, x.\"key\" FROM items i CROSS JOIN LATERAL (SELECT \"key\" FROM (SELECT 1 AS __msduck_full_join_side WHERE EXISTS...\n                                                                      ^"}], "done": [null]}),
+  'trigger diff of json snapshots': () => ({"sets": [], "errors": [{"number": 245, "class": 16, "state": 1, "message": "Conversion Error: Type VARCHAR with value '' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: ...() || '.dbo.audit', 'key') AS \"__store_col_1\", __msduck_check_store_nvarchar(__msduck_carrier_input(__value2), -1, __msdu...\n                                                                         ^"}], "done": [null]}),
+}
 
 test('correlated FULL JOIN APPLY bodies match the SQL Server capture', async t => {
   const connection = await start(t)
   assert.equal(reference.cases.length, 24)
   // Every case runs, so one report lists all differences.
   const differences = []
-  const rowDifferences = []
+  const differingFromReference = []
   for (const entry of reference.cases) {
     for (const batch of [reset, ...entry.setup]) {
       const setup = await capture(connection, batch)
       assert.equal(setup.errors.length, 0, `${entry.name}: setup failed with ${setup.errors[0]?.number}`)
     }
     const actual = keep(await capture(connection, entry.query))
-    if (!isDeepStrictEqual(actual, entry.result)) differences.push(`${entry.name}: ${describeFirstDifference(actual, entry.result)}`)
-    if (!isDeepStrictEqual(rowsOf(actual), rowsOf(entry.result))) rowDifferences.push(entry.name)
+    const expected = knownResults[entry.name]?.(entry.result) ?? entry.result
+    if (!isDeepStrictEqual(actual, expected)) differences.push(`${entry.name}: ${describeFirstDifference(actual, expected)}`)
+    if (!isDeepStrictEqual(actual, entry.result)) differingFromReference.push(entry.name)
   }
-  assert.deepEqual(rowDifferences, knownRowDifferences)
-  assert.deepEqual(differences, knownDifferences)
+  assert.deepEqual(differences, [])
+  assert.deepEqual(differingFromReference, Object.keys(knownResults))
 })
 
 test('the report repro returns the changed key through CROSS and OUTER APPLY', async t => {
