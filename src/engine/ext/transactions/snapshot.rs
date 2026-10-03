@@ -192,8 +192,6 @@ struct Active {
     /// The server's database catalog (its address), so that servers in one
     /// process stay apart.
     catalog: usize,
-    /// The session was at SNAPSHOT when the transaction began.
-    snapshot: bool,
     /// The databases (DuckDB catalog aliases) the transaction used.
     databases: HashMap<String, Usage>,
 }
@@ -229,7 +227,6 @@ fn new_active(session: &Session) -> Active {
     Active {
         sequence: SEQUENCE.fetch_add(1, Ordering::SeqCst),
         catalog: catalog_id(session),
-        snapshot: active(session),
         databases,
     }
 }
@@ -245,10 +242,21 @@ pub(super) fn end(session: &Session) {
     active_transactions().remove(&session.ext.token);
 }
 
+/// Update how the session's transaction uses a database. Outside a
+/// transaction this starts an entry for its autocommit transactions.
 fn usage(session: &Session, alias: &str, update: impl FnOnce(&mut Usage)) {
-    if let Some(active) = active_transactions().get_mut(&session.ext.token) {
-        update(active.databases.entry(alias.to_owned()).or_default());
-    }
+    let mut transactions = active_transactions();
+    let active = if session.transactions == 0 {
+        transactions
+            .entry(session.ext.token)
+            .or_insert_with(|| new_active(session))
+    } else {
+        match transactions.get_mut(&session.ext.token) {
+            Some(active) => active,
+            None => return,
+        }
+    };
+    update(active.databases.entry(alias.to_owned()).or_default());
 }
 
 /// Note a write of the session's transaction, or of its autocommit
@@ -266,6 +274,11 @@ pub(super) fn track_write(session: &mut Session, statement: &Statement) -> Resul
         Statement::CreateIndex(index) => vec![index.table_name.clone()],
         Statement::CreateView(view) => vec![view.name.clone()],
         Statement::AlterView { name, .. } => vec![name.clone()],
+        Statement::CreateSchema { .. } => {
+            let alias = session.database.alias().to_owned();
+            usage(session, &alias, |usage| usage.wrote = true);
+            Vec::new()
+        }
         Statement::Query(query) => match query.body.as_ref() {
             SetExpr::Select(select) => select
                 .into
@@ -299,11 +312,6 @@ pub(super) fn track_write(session: &mut Session, statement: &Statement) -> Resul
             },
             _ => session.database.alias().to_owned(),
         };
-        if session.transactions == 0 {
-            active_transactions()
-                .entry(session.ext.token)
-                .or_insert_with(|| new_active(session));
-        }
         usage(session, &alias, |usage| usage.wrote = true);
     }
     Ok(())
@@ -323,7 +331,8 @@ fn temporary(ident: &Ident) -> bool {
 /// Wait until the other sessions' transactions that an
 /// ALLOW_SNAPSHOT_ISOLATION change waits for have ended (ON waits for
 /// transactions that wrote to the database, OFF also for SNAPSHOT
-/// transactions that used it), then `publish` the final state. The last
+/// transactions that read it; an idle one is not waited for), then
+/// `publish` the final state. The last
 /// check and `publish` hold the transaction table, so no waited-for
 /// transaction can start writing in between.
 fn wait_for_transactions(
@@ -344,7 +353,7 @@ fn wait_for_transactions(
                 && active
                     .databases
                     .get(alias)
-                    .is_some_and(|usage| usage.wrote || (!on && active.snapshot))
+                    .is_some_and(|usage| usage.wrote || (!on && usage.read))
         });
         if !blocked {
             return publish();
@@ -507,7 +516,8 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
 fn relations(statement: &Statement) -> Vec<ObjectName> {
     struct Relations {
         names: Vec<ObjectName>,
-        functions: Vec<ObjectName>,
+        /// The next relation is the name of a table-valued function call.
+        function: bool,
         /// The CTE names of each enclosing query, innermost last.
         scopes: Vec<Vec<String>>,
     }
@@ -529,6 +539,9 @@ fn relations(statement: &Statement) -> Vec<ObjectName> {
             ControlFlow::Continue(())
         }
         fn pre_visit_relation(&mut self, relation: &ObjectName) -> ControlFlow<()> {
+            if std::mem::take(&mut self.function) {
+                return ControlFlow::Continue(());
+            }
             let cte = match relation.0.as_slice() {
                 [part] => part.as_ident().is_some_and(|ident| {
                     let name = ident.value.to_lowercase();
@@ -542,28 +555,18 @@ fn relations(statement: &Statement) -> Vec<ObjectName> {
             ControlFlow::Continue(())
         }
         fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
-            if let TableFactor::Table {
-                name,
-                args: Some(_),
-                ..
-            } = factor
-            {
-                self.functions.push(name.clone());
-            }
+            // Its name is the next relation visited.
+            self.function = matches!(factor, TableFactor::Table { args: Some(_), .. });
             ControlFlow::Continue(())
         }
     }
     let mut visitor = Relations {
         names: Vec::new(),
-        functions: Vec::new(),
+        function: false,
         scopes: Vec::new(),
     };
     let _ = statement.visit(&mut visitor);
-    let Relations {
-        mut names,
-        functions,
-        ..
-    } = visitor;
+    let mut names = visitor.names;
     // The target is visited before its FROM relations; only that one
     // occurrence is the alias.
     if let Some(placeholder) = alias_target(statement)
@@ -572,9 +575,6 @@ fn relations(statement: &Statement) -> Vec<ObjectName> {
         names.remove(index);
     }
     names
-        .into_iter()
-        .filter(|name| !functions.contains(name))
-        .collect()
 }
 
 /// Whether a table or view exists, matching names case-insensitively.

@@ -1251,6 +1251,32 @@ fn allow_snapshot_isolation_changes_wait_for_open_transactions() {
     )
     .unwrap();
     run(&mut observer, "SET TRANSACTION ISOLATION LEVEL SNAPSHOT").unwrap();
+    // Nor is a SNAPSHOT transaction that has not accessed data.
+    run(
+        &mut reader,
+        "SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT 1",
+    )
+    .unwrap();
+    let (result, elapsed) = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF")
+        .join()
+        .unwrap();
+    assert_eq!(result, Ok(()));
+    assert!(elapsed < Duration::from_secs(2), "{elapsed:?}");
+    run(
+        &mut reader,
+        "COMMIT; SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
+    )
+    .unwrap();
+    run(
+        &mut observer,
+        "SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
+    )
+    .unwrap();
+    run(
+        &mut observer,
+        "ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON",
+    )
+    .unwrap();
     // Temporary-table DDL is not a write to the database.
     run(&mut writer, "BEGIN TRAN; CREATE TABLE #scratch (v INT)").unwrap();
     let (result, elapsed) = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF")

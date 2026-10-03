@@ -111,9 +111,9 @@ order, before `is_read_committed_snapshot_on`. As captured:
   statement completes with no row count and leaves `@@ROWCOUNT` 0. It works
   inside `sp_executesql`.
 - A change waits for other sessions' open transactions: ON for those that
-  wrote to the database, OFF also for SNAPSHOT transactions that use it
-  (even before their first data access). Read-only transactions at other
-  levels do not delay it. Meanwhile the state is 3 or 2, and a SNAPSHOT
+  wrote to the database, OFF also for SNAPSHOT transactions that read it.
+  Read-only transactions at other levels, and SNAPSHOT transactions that
+  have not accessed data yet, do not delay it. Meanwhile the state is 3 or 2, and a SNAPSHOT
   transaction that accesses the database fails with 3956 ("…because the
   ALTER DATABASE command which enables snapshot isolation for this database
   has not finished yet…") or 3954 ("…because the ALTER DATABASE command that
