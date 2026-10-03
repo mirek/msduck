@@ -11055,7 +11055,7 @@
     {
       "id": "bulk-character-conversion-reference-v1",
       "title": "Capture BulkLoad character conversion and capacity contracts",
-      "state": "ready",
+      "state": "done",
       "issue": 895,
       "authorization": "Continuing owner implementation goal and approved merged891 adapter plan, raw884 evidence. First-party expanded ground truth before deterministic conversion/storage implementation.",
       "scope": [
