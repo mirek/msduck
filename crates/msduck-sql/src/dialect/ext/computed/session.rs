@@ -432,11 +432,147 @@ fn integer_variable(name: &str) -> Expr {
     }
 }
 
+/// The operands of `expr` that a comparison or an explicit conversion
+/// consumes by value, looking through parentheses and the parser's explicit
+/// integer conversion marker. A sql_variant there converts from its base
+/// type, so its base-type value can stand in for it; anywhere else (a write,
+/// an assignment, a function argument) SQL Server keeps the sql_variant.
+pub fn value_operands(expr: &mut Expr) -> Vec<&mut Expr> {
+    let operands: Vec<&mut Expr> = match expr {
+        Expr::BinaryOp {
+            left,
+            op:
+                BinaryOperator::Eq
+                | BinaryOperator::NotEq
+                | BinaryOperator::Lt
+                | BinaryOperator::LtEq
+                | BinaryOperator::Gt
+                | BinaryOperator::GtEq,
+            right,
+        }
+        | Expr::IsDistinctFrom(left, right)
+        | Expr::IsNotDistinctFrom(left, right) => vec![left.as_mut(), right.as_mut()],
+        Expr::Between {
+            expr, low, high, ..
+        } => vec![expr.as_mut(), low.as_mut(), high.as_mut()],
+        Expr::InList { expr, list, .. } => std::iter::once(expr.as_mut())
+            .chain(list.iter_mut())
+            .collect(),
+        Expr::Case {
+            operand: Some(operand),
+            conditions,
+            ..
+        } => std::iter::once(operand.as_mut())
+            .chain(conditions.iter_mut().map(|when| &mut when.condition))
+            .collect(),
+        Expr::Cast {
+            expr: operand,
+            data_type,
+            ..
+        }
+        | Expr::Convert {
+            expr: operand,
+            data_type: Some(data_type),
+            ..
+        } if !crate::variant_pack::is_variant(data_type) => {
+            if crate::variant_cast::source(operand).is_some() {
+                let Expr::Function(marker) = operand.as_mut() else {
+                    unreachable!("the marker is a function")
+                };
+                let FunctionArguments::List(list) = &mut marker.args else {
+                    unreachable!("the marker has one argument")
+                };
+                let [FunctionArg::Unnamed(FunctionArgExpr::Expr(inner))] = list.args.as_mut_slice()
+                else {
+                    unreachable!("the marker has one argument")
+                };
+                vec![inner]
+            } else {
+                vec![operand.as_mut()]
+            }
+        }
+        _ => vec![],
+    };
+    operands
+        .into_iter()
+        .map(|mut operand| {
+            while let Expr::Nested(inner) = operand {
+                operand = inner;
+            }
+            operand
+        })
+        .collect()
+}
+
+/// The declared type name of a constant or explicitly converted expression,
+/// as conversion errors print it; `None` when it is not evident.
+fn static_type_name(expr: &Expr) -> Option<String> {
+    match expr {
+        Expr::Nested(inner) => static_type_name(inner),
+        Expr::Cast { data_type, .. }
+        | Expr::Convert {
+            data_type: Some(data_type),
+            ..
+        } => Some(type_name(data_type)),
+        Expr::Value(value) => match &value.value {
+            Value::NationalStringLiteral(_) => Some("nvarchar".into()),
+            Value::SingleQuotedString(_) => Some("varchar".into()),
+            Value::Number(text, _) if text.bytes().all(|b| b.is_ascii_digit()) => Some(
+                if text.parse::<i32>().is_ok() {
+                    "int"
+                } else {
+                    "numeric"
+                }
+                .into(),
+            ),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn implicit_variant_conversion(target: &str) -> anyhow::Error {
+    SqlError::new(
+        257,
+        3,
+        format!(
+            "Implicit conversion from data type sql_variant to {target} is not allowed. Use the CONVERT function to run this query."
+        ),
+    )
+    .into()
+}
+
+/// `ISNULL(check, replacement)` converts a sql_variant replacement to the
+/// type of `check`, which SQL Server refuses with 257 when the table is
+/// created. Only an evident `check` type is reported; others stay
+/// unsupported.
+fn check_isnull_replacement(expr: &Expr) -> Result<()> {
+    let Expr::Function(function) = expr else {
+        return Ok(());
+    };
+    if !function_name(function).is_some_and(|name| name.eq_ignore_ascii_case("ISNULL")) {
+        return Ok(());
+    }
+    let FunctionArguments::List(list) = &function.args else {
+        return Ok(());
+    };
+    if let [
+        FunctionArg::Unnamed(FunctionArgExpr::Expr(check)),
+        FunctionArg::Unnamed(FunctionArgExpr::Expr(replacement)),
+    ] = list.args.as_slice()
+        && variant_result(replacement)
+        && !variant_result(check)
+        && let Some(target) = static_type_name(check)
+    {
+        return Err(implicit_variant_conversion(&target));
+    }
+    Ok(())
+}
+
 /// `SQL_VARIANT_PROPERTY(SESSION_CONTEXT(key), property)` with a constant
 /// property: the property of the stored kind, in its base type
-/// (`nvarchar(128)` for BaseType and Collation, `int` otherwise). The value
-/// is compared and converted as that base type, which is how DEFAULT
-/// conditions use it.
+/// (`nvarchar(128)` for BaseType and Collation, `int` otherwise). Applied
+/// only to `value_operands`, where the base type is what SQL Server uses.
 fn lower_property(expr: &mut Expr) -> Result<bool> {
     let Some((function, property)) = variant_property(expr) else {
         return Ok(false);
@@ -537,14 +673,7 @@ pub fn rewrite_default(default: &mut Expr, target: &DataType) -> Result<bool> {
         bail!("unsupported sql_variant DEFAULT expression over SESSION_CONTEXT");
     }
     if variant_result(bare) && !variant_target {
-        bail!(SqlError::new(
-            257,
-            3,
-            format!(
-                "Implicit conversion from data type sql_variant to {} is not allowed. Use the CONVERT function to run this query.",
-                type_name(target)
-            )
-        ));
+        return Err(implicit_variant_conversion(&type_name(target)));
     }
     struct Rewrite {
         changed: bool,
@@ -552,13 +681,22 @@ pub fn rewrite_default(default: &mut Expr, target: &DataType) -> Result<bool> {
     impl VisitorMut for Rewrite {
         type Break = anyhow::Error;
         fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<anyhow::Error> {
-            for lower in [lower_conversion, lower_property, lower_null_test] {
+            if let Err(error) = check_isnull_replacement(expr) {
+                return ControlFlow::Break(error);
+            }
+            for lower in [lower_conversion, lower_null_test] {
                 match lower(expr) {
                     Ok(true) => {
                         self.changed = true;
                         return ControlFlow::Continue(());
                     }
                     Ok(false) => {}
+                    Err(error) => return ControlFlow::Break(error),
+                }
+            }
+            for operand in value_operands(expr) {
+                match lower_property(operand) {
+                    Ok(changed) => self.changed |= changed,
                     Err(error) => return ControlFlow::Break(error),
                 }
             }
@@ -720,6 +858,22 @@ mod tests {
                 "{sql}"
             );
         }
+        // ISNULL converts a sql_variant replacement to the check's type.
+        for (sql, target) in [
+            (
+                "CREATE TABLE t (v int DEFAULT (ISNULL(CAST(NULL AS int), SESSION_CONTEXT(N'k'))))",
+                "int",
+            ),
+            (
+                "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(N'x', SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'))))",
+                "nvarchar",
+            ),
+        ] {
+            let error = rewritten(sql).unwrap_err();
+            let error = error.downcast_ref::<SqlError>().unwrap();
+            assert_eq!(error.number, 257, "{sql}");
+            assert!(error.message.contains(&format!("to {target} is")), "{sql}");
+        }
         for (sql, message) in [
             (
                 "CREATE TABLE t (v sql_variant DEFAULT (SESSION_CONTEXT(N'foo')))",
@@ -731,6 +885,10 @@ mod tests {
             ),
             (
                 "CREATE TABLE t (v int DEFAULT (CASE WHEN SESSION_CONTEXT(N'foo') = 1 THEN 1 END))",
+                "unsupported SESSION_CONTEXT outside an explicit CAST or CONVERT in a DEFAULT",
+            ),
+            (
+                "CREATE TABLE t (v nvarchar(20) DEFAULT (UPPER(SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'BaseType'))))",
                 "unsupported SESSION_CONTEXT outside an explicit CAST or CONVERT in a DEFAULT",
             ),
             (

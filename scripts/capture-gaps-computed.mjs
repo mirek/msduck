@@ -179,6 +179,20 @@ export const cases = [
     'INSERT e DEFAULT VALUES',
     'SELECT id, v, w, present, iif_value FROM e ORDER BY id',
   ]],
+  ['session-variant-writes', [
+    "EXEC sp_set_session_context N'k', N'bar'",
+    'CREATE TABLE t (v nvarchar(128) NULL, n int NULL)',
+    "INSERT t (v) VALUES (SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'))",
+    "INSERT t (n) VALUES (SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'MaxLength'))",
+    "INSERT t (v) SELECT SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType')",
+    "INSERT t (v) VALUES (N'x'); UPDATE t SET v = SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType')",
+    "DECLARE @v nvarchar(128); SET @v = SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'); SELECT @v AS v",
+    'SELECT v, n FROM t',
+    "CREATE TABLE a (v int NULL DEFAULT (ISNULL(CAST(NULL AS int), SESSION_CONTEXT(N'k'))))",
+    "CREATE TABLE b (v nvarchar(10) NULL DEFAULT (ISNULL(N'x', SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'))))",
+    "CREATE TABLE c (v nvarchar(10) NULL DEFAULT (ISNULL(CONVERT(nvarchar(10), SESSION_CONTEXT(N'k')), SESSION_CONTEXT(N'k'))))",
+    "CREATE TABLE d (v int NULL DEFAULT (NULLIF(1, SESSION_CONTEXT(N'k'))))",
+  ]],
 ]
 
 // Importing this module (tests/compat/computed.test.mjs does) only reads the cases.

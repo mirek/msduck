@@ -295,8 +295,8 @@ impl Lower<'_> {
         };
         Ok(Some((text, value)))
     }
-    /// The property as its base type (`nvarchar(128)` or `int`), for
-    /// comparisons and conversions.
+    /// The property as its base type (`nvarchar(128)` or `int`), where a
+    /// comparison or explicit conversion consumes it.
     fn lower_property(&mut self, expr: &mut Expr) -> Result<()> {
         let Some((text, value)) = self.property(expr)? else {
             return Ok(());
@@ -318,7 +318,7 @@ impl Lower<'_> {
         };
         Ok(())
     }
-    /// A selected property is a sql_variant: a sysname for BaseType and
+    /// A select item's property is a sql_variant: a sysname for BaseType and
     /// Collation, an int otherwise.
     fn select_property(&mut self, expr: &mut Expr) -> Result<()> {
         let Some((_, value)) = self.property(expr)? else {
@@ -374,15 +374,14 @@ fn select_items(set: &mut SetExpr, each: &mut dyn FnMut(&mut Expr) -> Result<()>
 }
 
 impl VisitorMut for Lower<'_> {
-    /// A selected `SQL_VARIANT_PROPERTY` of a session value keeps its
-    /// sql_variant type; elsewhere `pre_visit_expr` uses the base type.
+    type Break = anyhow::Error;
+    /// A selected `SQL_VARIANT_PROPERTY` of a session value is a sql_variant.
     fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<anyhow::Error> {
         match select_items(&mut query.body, &mut |expr| self.select_property(expr)) {
             Ok(()) => ControlFlow::Continue(()),
             Err(error) => ControlFlow::Break(error),
         }
     }
-    type Break = anyhow::Error;
     /// Session values are read when a statement runs; a persisted definition
     /// (view, default, routine, trigger) would freeze today's value instead.
     fn pre_visit_statement(&mut self, statement: &mut Statement) -> ControlFlow<anyhow::Error> {
@@ -404,7 +403,22 @@ impl VisitorMut for Lower<'_> {
         ControlFlow::Continue(())
     }
     fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<anyhow::Error> {
-        match self.lower_property(expr).and_then(|()| self.lower(expr)) {
+        // Comparisons and explicit conversions use a property's base type.
+        // SQL Server keeps the sql_variant elsewhere, and refuses its
+        // implicit conversion in writes and assignments with 257; msduck's
+        // sql_variant carrier does not reproduce that, so those positions
+        // are refused.
+        let lowered = stored::value_operands(expr)
+            .into_iter()
+            .try_for_each(|operand| self.lower_property(operand))
+            .and_then(|()| match self.property(expr)? {
+                Some(_) => bail!(
+                    "unsupported SQL_VARIANT_PROPERTY of a session value outside a select item, comparison or explicit conversion"
+                ),
+                None => Ok(()),
+            })
+            .and_then(|()| self.lower(expr));
+        match lowered {
             Ok(()) => ControlFlow::Continue(()),
             Err(error) => ControlFlow::Break(error),
         }

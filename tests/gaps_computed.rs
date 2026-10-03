@@ -519,6 +519,15 @@ fn session_context_properties_in_queries() {
         &mut s,
         "SELECT SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'), SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'missing'), 'MaxLength')",
     );
+    // SQL Server refuses implicit sql_variant writes and assignments with
+    // 257; msduck refuses them explicitly instead of storing the base type.
+    for sql in [
+        "INSERT t (base) VALUES (SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'))",
+        "UPDATE t SET max_length = SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'MaxLength')",
+        "DECLARE @v nvarchar(128); SET @v = SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType')",
+    ] {
+        assert_eq!(fails(&mut s, sql).0, 40515, "{sql}");
+    }
 }
 
 #[test]
