@@ -11451,7 +11451,7 @@
       "id": "bulk-character-utf8-source-form-reference-v1",
       "title": "Capture UTF8 bounded and MAX source-form conversion differences",
       "issue": 918,
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner full-server goal; paired approved895 bounded and913 MAX evidence shows truncated native UTF8 target errors7339 versus4896. Capture declaration-form behavior explicitly before deterministic decoder work.",
       "scope": [
         "scripts/capture-bulk-character-utf8-source-form.mjs",
