@@ -76,8 +76,47 @@ passes. The raw-row bootstrap observer captured the retained fixture; the
 validator then added fixed INT decoding and passed an offline check of every
 raw field before exclusive fixture creation. The observer/query code is
 unchanged by that validation correction or the immutable per-run digest guard.
-Final frozen-source fresh-four and second-four reproductions, corruption/CLI/
-lifecycle proofs and exact-head review/CI are pending at this checkpoint. The
-ROW/NBCROW all-split, bytewise, NULL, unpaired-unit and truncation proof passed.
-No runtime implementation or complete collation support is claimed. Matching
-weights and malformed-unit generalization remain future integration work.
+The final frozen generator has SHA256
+`029a15fc260b046292774e8084d6084aaa26a6b0004dfff48551b10768a91f67`.
+It completed four fresh observations and a complete independent second four.
+Each set reproduced all ordinary controls, native source bytes, declarations,
+descriptors, diagnostics and prepared bindings unchanged. Each has eight exact
+malformed-output differences against the retained fixture, recorded with full
+values, paths and run identities; neither is a global equality pass. There are
+156 retained SQL diagnostics per run (9828 states 1 and 3), plus all prepared
+execution diagnostics, 16 prepares and 104 executions per run. Nothing is
+filtered or adjusted to obtain equality.
+
+The private Linux evidence remains under
+`/home/mirek/.cache/msduck/reference/translate-character-matching-3fcef9e/row-observer-v1`.
+The final four raw artifact `.tmp/final-four.json` has SHA256
+`76644eb423637276ffe6b4f99f2da3fb89312253508d3bb92a41bff8ac7f005c`;
+its complete comparison sidecar has
+`b28b823716c53fd4667b407439c5ded2ad08456724de796ea1870c4b7ae55a79`.
+The second four `.tmp/reproduction-four.json` has
+`e3f09f88f414adda695ce0dfa187ed62f82368b312dfca480b245a5b5a9195a9`;
+its comparison sidecar has
+`fba00406afd161373488a1c50678ecfaf87a701ee483cadf53881e5063e862c4`.
+The source and canonical fixture stayed unchanged throughout both captures.
+
+Four exact malformed controls were also repeated 20 times per session in three
+fresh databases. Each individual session's outputs were stable; across databases
+160 exact malformed-output paths differed. Source/declaration/metadata/error
+fields stayed unchanged. This distinguishes observed session repeatability from
+an established deterministic rule without attributing a cause. The full
+1,254,233-byte `.tmp/malformed-repeat.json` has SHA256
+`748de8cc007f620c544a0dc0a83e24b280836f93edbf8b858f4177d2a6dbf6d9`;
+its private observer source has
+`262822795df01c5e34959ec4fe058d280e7cd28f1a6e56ae071286ad65ca19a7`.
+
+ROW/NBCROW all-split, bytewise, NULL, unpaired-unit and truncation proofs pass;
+an actual over-limit consumed ROW payload is rejected. RETURNVALUE fragment
+proofs, 15 identical-four-copy corruption cases, nine pre-Docker destination/CLI
+negatives and five owned lifecycle success/failure cases pass. Immutable digests
+protect the exact retained observations, including variable outputs; they are
+integrity checks, not independent semantic proof. The Linux staging footprint
+is 409 MiB, with bulky raw evidence kept there and only the canonical fixture
+copied locally. Owned containers are terminal and removed. Exact-head CI and
+reviews are recorded on the PR. No runtime implementation or complete collation
+support is claimed; matching weights and malformed-unit behavior remain future
+integration work.
