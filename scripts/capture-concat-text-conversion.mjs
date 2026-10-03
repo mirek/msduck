@@ -206,6 +206,10 @@ for (const [name,type,value] of sources) {
   for (const [suffix,input] of [['value',value],['null','NULL']]) {
     const expr=`CAST(${input} AS ${type})`
     cases.push([`${name} ${suffix} source`, `SELECT ${expr} AS source,CONVERT(VARCHAR(MAX),${expr}) AS explicit_text`])
+    // IMAGE's failing explicit conversion must not hide its native descriptor/value.
+    // Retain the original combined diagnostic as well as independently observing both expressions.
+    if (type==='IMAGE') cases.push([`${name} ${suffix} native source`,`SELECT ${expr} AS source`],
+      [`${name} ${suffix} explicit conversion`,`SELECT CONVERT(VARCHAR(MAX),${expr}) AS explicit_text`])
     for (const [operation,sql] of [
       ['tr',`TRANSLATE(${expr},'','')`], ['tr unicode',`TRANSLATE(${expr},N'',N'')`],
       ['cws source',`CONCAT_WS('',${expr},'')`], ['cws separator',`CONCAT_WS(${expr},'a','b')`], ['cws last',`CONCAT_WS('','',${expr})`],
@@ -344,6 +348,14 @@ async function observe(connection) {
 function validate(run) {
   assert.equal(run.length, 2 + cases.length + preparedPrograms.length)
   assert.deepEqual(run.map(x=>x.name), ['server version',...cases.map(x=>x[0]),...preparedPrograms.map(x=>x[0]),'connection reusable'])
+  for (const suffix of ['value','null']) {
+    const native=run.find(record=>record.name===`image ${suffix} native source`).result
+    assert.equal(native.sets[0]?.columns[0].type,'Image','native IMAGE descriptor')
+    assert.equal(native.errors.length,0,'native IMAGE must not fail')
+    assert.deepEqual(native.sets[0].rows,[[suffix==='value'?{kind:'binary',value:'41'}:null]],'native IMAGE value/NULL')
+    const baseline=run.find(record=>record.name===`image ${suffix} explicit conversion`).result
+    assert.equal(baseline.errors[0]?.number,529,'IMAGE explicit conversion diagnostic')
+  }
   for (const record of run) {
     if (record.prepared) {
       assert.equal(record.prepared.prepare.prepared,true,record.name)
@@ -353,7 +365,7 @@ function validate(run) {
   }
 }
 function validateContract(run) {
-  const expected='05f8f45d5fd21aab61688514713c6b4d1b400cc58c3042dd1d789fdf08345af4'
+  const expected='9885e9ca0413119c9c298cdbcabfc44df4d24309da51536c2ee9664c189a2178'
   assert.equal(createHash('sha256').update(JSON.stringify(run)).digest('hex'),expected,'complete conversion observation contract')
 }
 function firstDifference(left, right) {
@@ -497,13 +509,14 @@ async function testObserver(retained) {
     r=>r[1].result.tokens.find(t=>t.token==='DONE').count='999',
     r=>r.find(x=>x.prepared).prepared.prepare.tokens.find(t=>t.token==='RETURNVALUE').raw.hex='00',
     r=>r.find(x=>x.result?.errors.length).result.errors[0].state=99,
+    r=>r.find(x=>x.name==='image value native source').result.sets=[],
   ]
   for (const mutate of corruptions) {
     const actual=structuredClone(retained)
     for (const container of actual.containers) for (const copy of container.runs) mutate(copy)
     assert.throws(()=>validateFourCaptures(actual),'identical four-copy corruption must fail')
   }
-  console.log('All RETURNVALUE splits/bytewise fragments pass; truncation and eight identical four-copy corruptions rejected')
+  console.log('All RETURNVALUE splits/bytewise fragments pass; truncation and nine identical four-copy corruptions rejected')
 }
 if (selfTest) {
   const retained=await readRetained()
