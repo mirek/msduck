@@ -11305,7 +11305,7 @@
       "id": "bulk-character-cp1252-reference-v1",
       "title": "Capture exhaustive native CP1252 SQL conversion projections",
       "issue": 906,
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full-server goal and parallel-work instruction; approved plan890 and reviewed raw884/895. CP1252 exhaustive source evidence is missing for complete conversion consumers.",
       "scope": [
         "scripts/capture-bulk-character-cp1252.mjs",
