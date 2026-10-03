@@ -8,7 +8,8 @@ import { createHash } from 'node:crypto'
 import { lstat, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { isDeepStrictEqual } from 'node:util'
+import { isDeepStrictEqual, promisify } from 'node:util'
+import { execFile } from 'node:child_process'
 import { resolve } from 'node:path'
 import { Request, TYPES } from 'tedious'
 import { canonical } from './lib/compatibility.mjs'
@@ -106,7 +107,7 @@ const metadata = value => ({
   precision: value.precision ?? null, scale: value.scale ?? null, collation: value.collation ?? null,
 })
 const taps = new WeakMap()
-const message = token => ({ number: token.number, state: token.state, class: token.class, lineNumber: token.lineNumber, procName: token.procName, message: token.message })
+const message = token => ({ number: token.number, state: token.state, class: token.class, lineNumber: token.lineNumber, serverName: token.serverName, procName: token.procName, message: token.message })
 const done = token => ({ status: token.raw.status, command: token.raw.command, count: token.raw.count })
 for (const [method, describe] of Object.entries({
   onColMetadata: token => ({ columns: token.columns.map(column => column.colName), descriptors: token.columns.map(columnDescriptor) }),
@@ -227,9 +228,20 @@ const preparedPrograms = [
   ['prepared binary max conversion', "SELECT TRANSLATE(@p,'A','Z') AS tr,CONCAT_WS('',@p,'') AS cws", [['p',TYPES.VarBinary,{length:9001}]], [{p:Buffer.from('AB')},{p:null},{p:Buffer.alloc(9001,65)},{p:Buffer.from('AB')}]],
   ['prepared decimal conversion', "SELECT TRANSLATE(@p,'','') AS tr,CONCAT_WS('',@p,'') AS cws", [['p',TYPES.Decimal,{precision:18,scale:4}]], [{p:1.25},{p:null},{p:-12345.5},{p:1.25}]],
 ]
-const errorFields = e => ({ number: e.number, state: e.state, class: e.class, lineNumber: e.lineNumber, message: e.message })
+const errorFields = message
 
-const columnDescriptor = x => ({ name: x.colName, type: x.type.name, userType: x.userType, length: x.dataLength ?? null, precision: x.precision ?? null, scale: x.scale ?? null, flags: x.flags, collation: canonical(x.collation ?? null) })
+const columnDescriptor = x => {
+  const { colName,type,userType,dataLength,precision,scale,flags,collation,...details }=x
+  return canonical({ name:colName,type:type.name,userType,length:dataLength??null,precision:precision??null,scale:scale??null,flags,collation:collation??null,...details })
+}
+// SQL Server includes its hostname in diagnostics. Pin this explicit input,
+// while the lifecycle helper retains independent random names/ports/databases.
+const referenceHostname='msduck-text-reference'
+const exec=promisify(execFile)
+async function ownedDocker(args,env) {
+  const command=args[0]==='run'?[args[0],'--hostname',referenceHostname,...args.slice(1)]:args
+  return (await exec('docker',command,{env:{...process.env,...env},maxBuffer:4*1024*1024})).stdout.trim()
+}
 async function observed(connection, sql, parameters) {
   return new Promise(resolveDone => {
     const result={sets:[],done:[],errors:[],info:[],returnStatus:null,tokens:[]}
@@ -365,7 +377,7 @@ function validate(run) {
   }
 }
 function validateContract(run) {
-  const expected='9885e9ca0413119c9c298cdbcabfc44df4d24309da51536c2ee9664c189a2178'
+  const expected='633cb66fecba51abfe692110a8ee4c68d084ad29a75e2e53ac75533c43a7dbe7'
   assert.equal(createHash('sha256').update(JSON.stringify(run)).digest('hex'),expected,'complete conversion observation contract')
 }
 function firstDifference(left, right) {
@@ -415,7 +427,11 @@ function validateTokens(run) {
           assert(activeSet, record.name + ': unexpected COLMETADATA')
           assert.deepEqual(token.columns, activeSet.columns.map(column => column.name), record.name + ': ordered column names')
           assert.deepEqual(token.descriptors,activeSet.columns,record.name+': complete ordered descriptors')
-          for (const column of activeSet.columns) assert(Number.isInteger(column.userType) && column.userType>=0 && column.userType<=0xffffffff,record.name+': userType')
+          for (const column of activeSet.columns) {
+            assert(Number.isInteger(column.userType) && column.userType>=0 && column.userType<=0xffffffff,record.name+': userType')
+            for (const field of ['schema','udtInfo','tableName']) assert(Object.hasOwn(column,field),record.name+': missing descriptor '+field)
+            if (['Text','NText','Image'].includes(column.type)) assert(Array.isArray(column.tableName) && column.tableName.every(x=>typeof x==='string'),record.name+': legacy LOB tableName')
+          }
           rows = 0
         } else if (token.token === 'ROW' || token.token === 'NBCROW') {
           assert(activeSet, record.name + ': row outside result metadata')
@@ -423,6 +439,8 @@ function validateTokens(run) {
         } else if (token.token === 'ERROR' || token.token === 'INFO') {
           const captured = token.token === 'ERROR' ? phase.errors[errorIndex++] : phase.info[infoIndex++]
           assert(captured, record.name + ': unexpected ordered message')
+          assert.equal(typeof captured.serverName,'string',record.name+': missing diagnostic serverName')
+          assert.equal(typeof captured.procName,'string',record.name+': missing diagnostic procName')
           for (const key of Object.keys(captured)) assert.deepEqual(token[key], captured[key], record.name + ': ordered message ' + key)
         } else if (/^DONE(INPROC|PROC)?$/.test(token.token)) {
           finishSet()
@@ -469,6 +487,7 @@ function validateTokens(run) {
 }
 
 function validateFourCaptures(actual) {
+  assert.equal(actual.hostname,referenceHostname,'explicit reference hostname')
   if (actual.containers.length !== 2) throw new Error('expected two containers')
   for (const container of actual.containers) {
     if (container.image !== referenceImage) throw new Error('unexpected reference image ' + container.image)
@@ -510,13 +529,15 @@ async function testObserver(retained) {
     r=>r.find(x=>x.prepared).prepared.prepare.tokens.find(t=>t.token==='RETURNVALUE').raw.hex='00',
     r=>r.find(x=>x.result?.errors.length).result.errors[0].state=99,
     r=>r.find(x=>x.name==='image value native source').result.sets=[],
+    r=>delete r.find(x=>x.result?.errors.length).result.errors[0].serverName,
+    r=>delete r.find(x=>x.name==='image value native source').result.sets[0].columns[0].tableName,
   ]
   for (const mutate of corruptions) {
     const actual=structuredClone(retained)
     for (const container of actual.containers) for (const copy of container.runs) mutate(copy)
     assert.throws(()=>validateFourCaptures(actual),'identical four-copy corruption must fail')
   }
-  console.log('All RETURNVALUE splits/bytewise fragments pass; truncation and nine identical four-copy corruptions rejected')
+  console.log('All RETURNVALUE splits/bytewise fragments pass; truncation and eleven identical four-copy corruptions rejected')
 }
 if (selfTest) {
   const retained=await readRetained()
@@ -543,9 +564,9 @@ if (selfTest) {
         runs.push(run)
       }
       containers.push({ image: container.image, runs })
-    })
+    },{docker:ownedDocker})
   }
-  const actual = { containers }
+  const actual = { hostname:referenceHostname,containers }
   // Retain the raw artifact before validation so a failing capture can be inspected.
   await writeFile(output, JSON.stringify(actual) + '\n', { flag: 'wx' })
   if (oneDatabase) { validate(containers[0].runs[0]); validateTokens(containers[0].runs[0]); validateContract(containers[0].runs[0]) }
