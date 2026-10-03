@@ -9758,6 +9758,27 @@
         "Fresh own receipt/branch in completed existing session-control worktree; no newworktree/localCargo caches/implementationagents. Private deterministic Linux tests use read-only cached deps and isolated terminal-cleaned outputs, honor sharednative runnerlock for full gates. Required exact-head formatter/Clippy/workspace/alltarget/client/audit appropriately, CI and verified independent/Codexreview or ownerfallback; worker owns PRmerge/completion. Runtime/export separate successors; no fullcompatibility claim."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PjzuI"
+    },
+    {
+      "id": "concat-text-conversion-reference-v1",
+      "title": "Capture per-type text conversion contracts for CONCAT_WS and TRANSLATE adapters",
+      "state": "ready",
+      "issue": 814,
+      "authorization": "Direct continuing owner SQL Server compatibility goal and small parallel-worker instruction; complete individual source widths/formatting before runtime adapters consume pure plans.",
+      "scope": [
+        "scripts/capture-concat-text-conversion.mjs",
+        "reference/concat-text-conversion.json",
+        "docs/concat-text-conversion.md"
+      ],
+      "dependencies": [
+        "concat-ws-translate-reference-recovery-v1"
+      ],
+      "acceptance": [
+        "Capture individual integer families, decimal precision/scale, FLOAT/REAL, money/bit, temporal families/scales, GUID and binary declared widths and exact formatted values, not aggregate-width guesses or width from current data. Include literal/typed NULL, bounded/MAX, Unicode promotion, separator/source positions and unsupported/invalid sources. Separate input conversion evidence from inferred output metadata.",
+        "Two freshDBs in each of two independently owned pinned SQL Server containers, four full observations with complete rows/descriptors/errors/ORDER/rawDONE/RETURNVALUE/token order and prepared metadata independence across bindings. Reuse approved807 capture machinery conceptually, preserve original fixtures and raw differences, inspect every discrepancy, unknowns explicit. CLI output collision/symlink/hardlink safety, bounded fragment observers, integrity checks and meaningful negative tests.",
+        "Fresh claim/receipt in completed existing prepared-rpc worker worktree; isolated Linux reference directory, random owned ports and read-only cached Node dependencies. No new worktrees/native cache/implementation agents, no shared native runner writes or lock bypass. Focused owner PR, source/reference validation and exact requiredCI/verifiedreview or authorizedfallback; claiming worker owns merge and prompt issue/project/registry completion. No engine reservation, runtime edits or server compatibility completion claim."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pj5U3"
     }
   ]
 }
