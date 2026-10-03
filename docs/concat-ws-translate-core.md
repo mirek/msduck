@@ -36,7 +36,7 @@ and ANSI UTF-8 evaluation do not acquire invented behavior. Character payloads
 must respect their declared widths and fixed-width padding. Core CP1252 encoding
 validates ANSI payloads; Unicode payloads retain isolated surrogate units.
 
-Twenty-nine private Rust tests pass using cached, compiler-compatible Linux
+Thirty private Rust tests pass using cached, compiler-compatible Linux
 dependencies and isolated temporary binaries, with strict Clippy and formatting.
 They compare 21 ordinary character cases across all four captures (84 comparisons),
 26 declaration/collation cases (104 comparisons), 10 supplementary/UTF-8/mismatch
@@ -161,3 +161,11 @@ the regression now preserves it. ANSI output still requires CP1252 text, and
 original byte conversion/storage bounds remain the adapter/helper responsibility.
 The source kind remains binary for declaration planning and unsupported/MAX
 barriers; it is not replaced with a fabricated character declaration.
+
+A resolved NoCollation operand retains its source encoding when both conflicting
+labels establish the same encoding, even if the database default differs. An
+explicit result collation does not recover provenance when source encodings
+differ; planning returns UnknownEncoding after preserving unresolved collation
+diagnostics. A regression with CP1252 source labels and a UTF-8 default rejects
+the actual f1550d3 behavior, which measured the source in the default byte domain.
+These are explicit-input domain checks, not additional SQL Server captures.

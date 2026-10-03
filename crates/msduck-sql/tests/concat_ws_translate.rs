@@ -2140,3 +2140,56 @@ fn already_converted_binary_preserves_the_established_result_text_domain() {
         Err(Error::InvalidPayload)
     );
 }
+
+#[test]
+fn resolved_no_collation_preserves_source_encoding_or_reports_unknown() {
+    let mut catalog = catalog();
+    catalog.push(Collation {
+        name: "explicit_utf8_input".into(),
+        supplementary: true,
+        case_sensitive: false,
+        encoding: Encoding::Utf8,
+    });
+    for function in [Function::ConcatWs, Function::Translate] {
+        let mut args = vec![arg(Family::Varchar, Length::Bounded(1)); 3];
+        args[0].collation = Some(Label::NoCollation {
+            left: DEFAULT.into(),
+            right: SC.into(),
+        });
+        args[2].collation = Some(Label::Explicit(DEFAULT.into()));
+        // The default is UTF-8, but both conflicting source labels are CP1252.
+        // Resolving the result label must not change the source byte domain.
+        let p = rules::plan(function, &args, "explicit_utf8_input", &catalog).unwrap();
+        let result = rules::evaluate(&p, &[text("é"), text("a"), text("b")], &|a, b| {
+            Some(a == b)
+        })
+        .unwrap();
+        assert_eq!(
+            result,
+            text(if function == Function::ConcatWs {
+                "aéb"
+            } else {
+                "é"
+            })
+        );
+        // If the two source encodings disagree, an explicit result label cannot
+        // supply the lost source provenance. The caller must resolve it.
+        args[0].collation = Some(Label::NoCollation {
+            left: DEFAULT.into(),
+            right: "explicit_utf8_input".into(),
+        });
+        assert_eq!(
+            rules::plan(function, &args, DEFAULT, &catalog),
+            Err(Error::UnknownEncoding)
+        );
+        args[2].collation = Some(Label::CoercibleDefault(DEFAULT.into()));
+        assert_eq!(
+            rules::plan(function, &args, DEFAULT, &catalog),
+            Err(if function == Function::ConcatWs {
+                Error::UnknownDiagnosticContext
+            } else {
+                Error::UnknownCollation
+            })
+        );
+    }
+}

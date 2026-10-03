@@ -216,9 +216,18 @@ pub fn plan_with_context(
                 },
             });
         }
-        source_encodings.push(match argument.collation.as_ref().and_then(Label::name) {
-            Some(name) => lookup(name)?.encoding,
-            None => lookup(default_collation)?.encoding,
+        source_encodings.push(match &argument.collation {
+            Some(Label::NoCollation { left, right }) => {
+                let left = lookup(left)?.encoding;
+                let right = lookup(right)?.encoding;
+                if left == right {
+                    Ok(left)
+                } else {
+                    Err(Error::UnknownEncoding)
+                }
+            }
+            Some(label) => Ok(lookup(label.name().ok_or(Error::UnknownCollation)?)?.encoding),
+            None => Ok(lookup(default_collation)?.encoding),
         });
     }
     let label = combined.unwrap_or_else(|| Label::CoercibleDefault(default_collation.into()));
@@ -308,7 +317,9 @@ pub fn plan_with_context(
         collation: label,
         supplementary: properties.supplementary,
         encoding: properties.encoding,
-        source_encodings,
+        // Preserve collation diagnostics above before reporting unresolved
+        // source encodings. An explicit result label cannot restore provenance.
+        source_encodings: source_encodings.into_iter().collect::<Result<_, _>>()?,
         arguments: arguments.to_vec(),
     })
 }
