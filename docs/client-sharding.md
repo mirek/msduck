@@ -63,8 +63,9 @@ or unexpected executed tests, process failures and incomplete/cancelled runs
 fail the command. Explicit focused runs after `--` retain intentional skips/TODOs separately,
 never as passes. Strict full client manifest runs (npm/ci, including the no-file default) additionally
 require passed==expected and reject assigned skips, TODOs, cancellations and
-failed nested results. Unselected shard names are Node filter skips and are
-not assigned tests; their complete raw events remain retained. Source, harness,
+failed nested results. Any unassigned tests reported as Node filter skips remain in the raw logs
+and are not assigned coverage. Node versions can omit filtered events;
+coverage is checked against discovered assigned identities in either case. Source, harness,
 reference and executable hashes are rechecked, including the source file list.
 Added/deleted or changed inputs fail the summary. Top-level counts are distinct from nested
 tests; the complete nested results remain in TAP logs.
@@ -78,7 +79,8 @@ runners to silently skip files; coverage checking also detects that failure.
 Run the harness regressions with:
 
 ```sh
-node --test tests/client-shards.test.mjs
+mkdir -p .tmp
+TMPDIR="$PWD/.tmp" node --test tests/client-shards.test.mjs tests/client-test-command.test.mjs tests/remote-build.test.mjs
 ```
 
 They cover exhaustive deterministic partitioning, exact name matching, duplicate
@@ -118,4 +120,41 @@ granularity and startup count changed, so this is not identical test source to
 the 404-test baseline. The observed wall-time ratio is 1.70 versus that baseline.
 These historical results do not substitute for current task847 measurements; concurrency remains opt-in for npm.
 
-Task847 final-revision serial and four-worker measurements are pending; no current speedup is claimed by this implementation checkpoint.
+Task847 freezes executable client sources at
+`bee9c214676bf17d19ea8f2c0a3e0f8cd00ec88c`. On the 32-CPU x86_64 Linux host,
+Node 24.13.0 ran complete canonical `npm test` invocations with client jobs 1
+and 4. Both invoked `cargo build --workspace --all-targets`, reusing the same
+feature graph/native cache (0.07 and 0.19 seconds respectively), and both
+passed every one of 520 assigned identities exactly once. Failures, assigned
+skips, TODOs, cancellations, omissions, repeated identities and changed inputs
+were all zero. The four-worker plan used 21 subprocesses; all reported terminal
+exit zero. No SQL assertions or timeouts changed.
+
+The runner's client elapsed times were 1565199.191146 ms (26m 05.2s) for the
+single Node invocation and 475381.771203 ms (7m 55.4s) for four workers. These
+exclude the preceding Cargo build and discovery; the observed ratio is 3.29.
+Independent native builds drove varying host load from about 0.5 at serial
+startup to 40–50 during execution, and the four-worker run started around 30.
+This is complete current-suite execution evidence, not a controlled speedup
+experiment, a general performance guarantee or a two-CPU GitHub runner proof.
+CI therefore retains the documented serial fallback.
+
+The executable SHA-256 was
+`9adfd0d2fe8ea5c8bfa2ca419027589dfd4b557d9f62f7728c7da7fb02504137`
+in both plans and after both runs. All 1212 repository source, reference and
+harness input hashes matched across runs; the serial plan also independently
+matched the committed local source. Full plans, JSONL events, TAP/console logs
+and summaries are preserved in the worker's `.tmp/client847/serial-bee9` and
+`.tmp/client847/four-bee9`. Their complete summary SHA-256 values are
+`9fa7593694119e05ea9ef5c97018f47d87c8a03471d31ec9ae8e5ef8d64922b4`
+and `09ec822b6a9194ec6bfd552ff643806cc895d46ea5a54a30e8eae22cae2bda86`.
+An independent event recount verified all 520 unique passing identities for
+each run. Raw evidence was copied before the shared builder handoff. An earlier
+partial run on predecessor `25eb55b` was stopped for the diagnostic-group
+correction, exited 255 and remains partial evidence; it is not a pass.
+
+All 22 command/shard/remote harness regressions pass independently. Their small
+private snapshots contain explicitly inert executable markers for harness
+accounting and never substitute for the real Cargo/native benchmark above.
+The tiny offline Cargo fingerprint probe cleans its own temporary output.
+These checks establish verification behavior, not full SQL Server compatibility.
