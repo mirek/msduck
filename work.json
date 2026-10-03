@@ -11079,7 +11079,7 @@
     {
       "id": "ansi-cp1251-projection-v1",
       "title": "Implement native CP1251 SQL projection kernels",
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner goal and bounded adapter plan890; reviewed reference895 and public carrier894. Availability requires genuine dependencycompletion, no mocked runtime compatibility.",
       "issue": 897,
       "scope": [
