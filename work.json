@@ -10347,7 +10347,7 @@
     {
       "id": "translate-ascii-matching-reference-v1",
       "title": "Capture complete ASCII TRANSLATE matching relationships across retained profiles",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server compatibility goal and parallel factory. Read-only investigation of merged841 by existing worker447 establishes that pair-only observations cannot supply general matching keys; full128-character function controls are needed. First-party approved SQL Server observations only; do not infer from SQL equality or collation names. Reuse completed447 worktree/receipt isolation and existing cached Node dependencies; no extra workers/native caches.",
       "scope": [
         "scripts/capture-translate-ascii-matching.mjs",
