@@ -171,3 +171,19 @@ differ; planning returns UnknownEncoding after preserving unresolved collation
 diagnostics. A regression with CP1252 source labels and a UTF-8 default rejects
 the actual f1550d3 behavior, which measured the source in the default byte domain.
 These are explicit-input domain checks, not additional SQL Server captures.
+
+A read-only runtime probe at server revision
+`361fa520c74341767de77ef06e9a83cd27371a04` confirms that backend function
+behavior still bypasses this unregistered core. For the exact retained query
+`SELECT CONCAT_WS(NULL,'a','b') AS value`, msduck returned NULL with
+NVarChar length 65535 and flags 1; all four SQL Server observations return
+`ab` with VarChar length 2 and flags 32. For the exact retained query
+`SELECT TRANSLATE('abc','ab','x') AS value`, msduck returned `xc` without an
+error, with the same NVarChar MAX descriptor; the reference emits VarChar length
+8000 and flags 33, no row, and error 9828/state 1. A subsequent SELECT succeeded.
+The diagnostic used a separate ephemeral listener and the existing public
+`compatibility.mjs` observer, retaining rows, descriptors, errors and public
+completion events privately; it is not a full raw-token comparison or a runtime
+pass. Registration alone cannot fix these differences: adapters must bind the
+declaration plan and route execution through the deterministic rules, preserving
+error metadata and statement behavior.
