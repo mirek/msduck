@@ -34,8 +34,6 @@ impl Collation {
             "sql_latin1_general_cp1_ci_as" => (13, 0, 52),
             "latin1_general_ci_as_ks_ws" => (1, 0, 0),
             "latin1_general_100_ci_as" => (13, 2, 0),
-            "latin1_general_100_ci_as_sc" => (13, 2, 0),
-            "latin1_general_100_ci_as_sc_utf8" => (77, 2, 0),
             "latin1_general_100_cs_as" => (12, 2, 0),
             "latin1_general_100_ci_ai" => (15, 2, 0),
             "latin1_general_100_cs_ai" => (14, 2, 0),
@@ -43,6 +41,19 @@ impl Collation {
             _ => return None,
         };
         Self::new(1033, flags, version, sort_id).ok()
+    }
+
+    /// Captured wire descriptors, independent of runtime collation support.
+    /// Existing callers use `for_name` as an operational validation gate;
+    /// recognizing SC/UTF8 here must not enable their unsupported row codecs
+    /// or supplementary/linguistic operations there.
+    pub fn descriptor_for_name(name: &str) -> Option<Self> {
+        let flags = match name.to_ascii_lowercase().as_str() {
+            "latin1_general_100_ci_as_sc" => 13,
+            "latin1_general_100_ci_as_sc_utf8" => 77,
+            _ => return Self::for_name(name),
+        };
+        Self::new(1033, flags, 2, 0).ok()
     }
 }
 
@@ -69,7 +80,7 @@ mod tests {
         for name in [
             "unknown",
             "Japanese_CI_AS",
-            "Latin1_General_100_CI_AS_SC_UTF8_unknown",
+            "Latin1_General_100_CI_AS_SC_UTF8",
         ] {
             assert!(Collation::for_name(name).is_none());
         }

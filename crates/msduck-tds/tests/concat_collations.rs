@@ -52,9 +52,9 @@ fn all_four_sc_and_utf8_observations_encode_exact_column_metadata() {
                 } else {
                     continue;
                 };
-                let collation = Collation::for_name(name).unwrap();
+                let collation = Collation::descriptor_for_name(name).unwrap();
                 assert_eq!(
-                    Collation::for_name(&name.to_ascii_lowercase()),
+                    Collation::descriptor_for_name(&name.to_ascii_lowercase()),
                     Some(collation)
                 );
                 for set in record["result"]["sets"].as_array().unwrap() {
@@ -132,14 +132,37 @@ fn only_exact_captured_names_are_recognized_and_bounds_stay_checked() {
         " Latin1_General_100_CI_AS_SC",
         "Latin1_General_100_CI_AS_SC ",
     ] {
+        assert!(Collation::descriptor_for_name(name).is_none(), "{name}");
         assert!(Collation::for_name(name).is_none(), "{name}");
     }
     for name in [SC, UTF8] {
         assert_eq!(
-            Collation::for_name(&name.to_ascii_uppercase()),
-            Collation::for_name(name)
+            Collation::descriptor_for_name(&name.to_ascii_uppercase()),
+            Collation::descriptor_for_name(name)
         );
     }
     assert!(Collation::new(0x100000, 13, 2, 0).is_err());
     assert!(Collation::new(1033, 77, 16, 0).is_err());
+}
+
+#[test]
+fn descriptor_mapping_does_not_enable_unsupported_runtime_collations() {
+    for name in [SC, UTF8] {
+        assert!(Collation::descriptor_for_name(name).is_some());
+        assert!(Collation::for_name(name).is_none());
+        assert!(Collation::for_name(&name.to_ascii_lowercase()).is_none());
+        assert!(Collation::for_name(&name.to_ascii_uppercase()).is_none());
+    }
+    for name in [
+        "SQL_Latin1_General_CP1_CI_AS",
+        "Latin1_General_100_CI_AS",
+        "Latin1_General_100_CS_AS",
+        "Latin1_General_100_BIN2",
+    ] {
+        assert_eq!(
+            Collation::descriptor_for_name(name),
+            Collation::for_name(name)
+        );
+        assert!(Collation::for_name(name).is_some());
+    }
 }

@@ -1,7 +1,8 @@
 # Captured SC and UTF8 wire collations
 
-The deterministic TDS collation lookup recognizes two additional exact names,
-case-insensitively. Both use LCID 1033, version 2 and sort ID 0:
+The deterministic TDS `Collation::descriptor_for_name` lookup recognizes two
+additional exact names, case-insensitively. Both use LCID 1033, version 2 and
+sort ID 0:
 
 | Name | Flags | Five wire bytes |
 | --- | --- | --- |
@@ -29,3 +30,13 @@ This change establishes descriptor lookup and byte encoding only. Function
 binding, runtime result metadata, supplementary-character operations, ANSI UTF8
 row codecs and linguistic comparison keys need their own implementation and
 reference verification. The collation name does not supply comparison weights.
+
+`Collation::for_name` remains the existing operational validation gate and still
+rejects both names. Root declaration and concatenation callers use that gate;
+they must not advertise UTF8 while sending CP1252 VARCHAR bytes, or adopt SC
+behavior from descriptor availability. The descriptor API delegates previously
+recognized names without changing their mappings. A separate regression checks
+this boundary. The predecessor's broad lookup failed this support-separation
+check; its partial full run was stopped and is not reported as a verification
+pass. Runtime adapters may adopt a descriptor only after their value encoding
+and operation semantics are established independently.
