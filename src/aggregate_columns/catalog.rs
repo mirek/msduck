@@ -16,7 +16,11 @@ pub fn annotate<T: VisitMut>(
         return Ok(());
     }
     let catalog = acquire(db, value);
-    resolve(&catalog, value, parameters)
+    let relations = other_databases(db, value)?;
+    if relations.is_empty() {
+        return resolve(&catalog, value, parameters);
+    }
+    msduck_sql::aggregate_columns::resolve_with_relations(&catalog, &relations, value, parameters)
 }
 
 /// Private images retain SQL declarations independently of native storage.
@@ -30,7 +34,55 @@ pub fn annotate_relations<T: VisitMut>(
         return Ok(());
     }
     let catalog = acquire(db, value);
-    msduck_sql::aggregate_columns::resolve_with_relations(&catalog, relations, value, parameters)
+    let mut relations = relations.clone();
+    for (name, columns) in other_databases(db, value)? {
+        relations.entry(name).or_insert(columns);
+    }
+    msduck_sql::aggregate_columns::resolve_with_relations(&catalog, &relations, value, parameters)
+}
+
+/// Declarations of relations the engine qualified with another database's
+/// DuckDB catalog (`"catalog".schema.table`), acquired from that catalog
+/// exactly as the current database's are.
+fn other_databases<T: VisitMut>(
+    db: &Connection,
+    value: &mut T,
+) -> Result<msduck_sql::aggregate_columns::Relations, String> {
+    let mut names = Vec::new();
+    let _ = visit_relations_mut(value, |name: &mut ObjectName| {
+        if name.0.len() == 3 && !names.contains(&*name) {
+            names.push(name.clone());
+        }
+        ControlFlow::<()>::Continue(())
+    });
+    let mut relations = msduck_sql::aggregate_columns::Relations::new();
+    if names.is_empty() {
+        return Ok(relations);
+    }
+    let current: String = db
+        .query_row("SELECT current_database()", [], |row| row.get(0))
+        .map_err(|error| error.to_string())?;
+    for name in names {
+        let Some((alias, local)) = crate::query_catalog::foreign_relation(db, &current, &name)
+            .map_err(|error| error.to_string())?
+        else {
+            continue;
+        };
+        let (Some(schema), Some(table)) = (local.0[0].as_ident(), local.0[1].as_ident()) else {
+            continue;
+        };
+        let (schema, table) = (schema.value.to_lowercase(), table.value.to_lowercase());
+        let columns =
+            crate::query_catalog::in_catalog(db, &alias, || Ok(columns(db, &schema, &table)))
+                .map_err(|error| error.to_string())??;
+        let key = name
+            .0
+            .iter()
+            .filter_map(|part| part.as_ident().map(|ident| ident.value.to_lowercase()))
+            .collect::<Vec<_>>();
+        relations.insert(key, columns);
+    }
+    Ok(relations)
 }
 
 pub(super) fn acquire<T: VisitMut>(db: &Connection, value: &mut T) -> Snapshot {
