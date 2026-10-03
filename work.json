@@ -11582,7 +11582,7 @@
       "id": "bulk-character-utf8-octet-reference-v1",
       "title": "Capture UTF8 octet and lead/next-byte boundary controls",
       "issue": 927,
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner full-server compatibility goal. Approved UTF8 context924 completes neighbors but not every lead/octet or next-byte boundary. Capture actual native and SQL-unit outcomes before inferring malformed transitions.",
       "scope": [
         "scripts/capture-bulk-character-utf8-octet.mjs",
