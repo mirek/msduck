@@ -4,8 +4,7 @@
 // captured from SQL Server by scripts/capture-cross-database.mjs. Known
 // differences are asserted as they are, not normalized away.
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { Connection, TYPES } from 'tedious'
@@ -21,30 +20,30 @@ const singleSetup = run.filter(observation => /^single setup \d+$/.test(observat
 const observations = run.filter(observation => !/^(server version|setup \d+|single setup \d+|single user .*)$/.test(observation.name))
   .map(observation => [observation.name, observation.sql])
 
-// What a client sees of a batch: descriptors, rows and errors.
+// What a client sees of a batch: complete descriptors (with all flags and
+// the collation), rows and errors.
 const brief = result => ({
-  columns: result.sets.map(set => set.columns.map(c => [c.name, c.type, c.length, c.precision, c.scale, c.flags & 1])),
+  columns: result.sets.map(set => set.columns.map(c => [c.name, c.type, c.length, c.precision, c.scale, c.flags, c.collation])),
   rows: result.sets.map(set => set.rows),
   errors: result.errors.map(e => [e.number, e.state, e.class, e.message]),
 })
-const same = (name, actual) => assert.equal(JSON.stringify(brief(actual)), JSON.stringify(brief(reference.get(name))), name)
+const same = (name, actual, patch = () => {}) => {
+  const expected = brief(reference.get(name))
+  patch(expected)
+  assert.equal(JSON.stringify(brief(actual)), JSON.stringify(expected), name)
+}
 
 // msduck's raw differences from the reference, by observation.
 const known = {
   // Expression metadata outside cross-database binding: msduck reports the
   // concatenation of a NOT NULL column as nullable and the product's
   // precision as 18, as it does in the current database.
-  expressions: actual => {
-    const [columns] = brief(actual).columns
-    assert.deepEqual(columns[0], ['bang', 'NVarChar', 102, null, null, 1])
-    assert.deepEqual(columns[3], ['twice', 'DecimalN', 17, 18, 2, 1])
-    assert.deepEqual(brief(actual).rows, brief(reference.get('expressions')).rows)
-  },
-  // SCOPE_IDENTITY() is decimal(38, 0) on the wire, as in the current database.
-  insert: actual => {
-    assert.equal(actual.sets[0].columns[0].type, 'DecimalN')
-    assert.deepEqual(brief(actual).rows, brief(reference.get('insert')).rows)
-  },
+  expressions: actual => same('expressions', actual, expected => {
+    expected.columns[0][0][5] = 33 // nullable bit; SQL Server sends 32
+    expected.columns[0][3][3] = 18 // precision; SQL Server sends 12
+  }),
+  // SCOPE_IDENTITY() is DecimalN on the wire, as in the current database.
+  insert: actual => same('insert', actual, expected => { expected.columns[0][0][1] = 'DecimalN' }),
   // DuckDB writes one attached database per transaction.
   'two databases in one transaction': actual => assert.deepEqual(brief(actual).errors, [[40515, 1, 16,
     "unsupported cross-database transaction: database 'xdb_foo' cannot be modified in a transaction that has already modified database 'master'; a transaction may write only one database"]]),
@@ -70,7 +69,10 @@ async function another(t, first) {
 test('three-part names read and write another database as SQL Server does', { timeout: 180000 }, async t => {
   // BACKUP and RESTORE can exceed the default request timeout on a busy host.
   const c = await start(t, { options: { requestTimeout: 60000 } })
-  const directory = mkdtempSync(join(tmpdir(), 'msduck-cross-database-'))
+  // Scratch data stays in the worktree's git-ignored .tmp/.
+  const scratch = join(process.cwd(), '.tmp')
+  mkdirSync(scratch, { recursive: true })
+  const directory = mkdtempSync(join(scratch, 'msduck-cross-database-'))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
   // The backup device lives in a scratch directory here.
   const local = sql => sql.replaceAll('/var/opt/mssql/data/xdb_foo.bak', join(directory, 'xdb_foo.bak'))
