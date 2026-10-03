@@ -11423,7 +11423,7 @@
       "id": "ansi-bulk-capacity-v1",
       "title": "Implement deterministic native ANSI BulkLoad capacity and padding rules",
       "issue": 914,
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full-server goal. Complete projections intentionally omit BulkLoad capacity; reviewed899/909 distinguish source overflow and trailing ASCIIspace from conversion expansion/cropping/padding. Required precursor to real root consumers.",
       "scope": [
         "crates/msduck-core/src/ansi_conversion.rs",
