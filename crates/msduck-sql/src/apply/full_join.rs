@@ -59,7 +59,7 @@ pub fn rewrite(query: &mut Query) {
 }
 
 fn rewrite_select(select: &mut Select) {
-    let mut taken = relation_names(&select.from);
+    let mut taken = relation_names(select);
     let mut filters = Vec::new();
     let mut sides = Vec::new();
     for item in &mut select.from {
@@ -261,8 +261,10 @@ fn alias(factor: &TableFactor) -> Option<&TableAlias> {
     }
 }
 
-/// Lowercase aliases and unaliased table names of every relation in `from`.
-fn relation_names(from: &[TableWithJoins]) -> HashSet<String> {
+/// Lowercase aliases and table names of every relation in the SELECT, and
+/// every qualifier it uses, so the side alias shadows neither a relation of
+/// this SELECT nor a correlated outer alias.
+fn relation_names(select: &Select) -> HashSet<String> {
     struct Names(HashSet<String>);
     impl Visitor for Names {
         type Break = ();
@@ -277,11 +279,17 @@ fn relation_names(from: &[TableWithJoins]) -> HashSet<String> {
             }
             ControlFlow::Continue(())
         }
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            if let Expr::CompoundIdentifier(parts) = expr {
+                for part in &parts[..parts.len().saturating_sub(1)] {
+                    self.0.insert(part.value.to_lowercase());
+                }
+            }
+            ControlFlow::Continue(())
+        }
     }
     let mut names = Names(HashSet::new());
-    for table in from {
-        let _ = table.visit(&mut names);
-    }
+    let _ = select.visit(&mut names);
     names.0
 }
 
@@ -561,6 +569,11 @@ mod tests {
         );
         assert!(sql.contains(&format!("AS {SIDES}_1 ({SIDE})")), "{sql}");
         assert!(sql.contains(&format!("{SIDES}_1.{SIDE} = 1")), "{sql}");
+        // An outer alias the body references is not shadowed either.
+        let sql = rewritten(
+            "SELECT 1 FROM OPENJSON(__msduck_full_join.lhs) l FULL JOIN OPENJSON(__msduck_full_join.rhs) r ON l.[key] = r.[key]",
+        );
+        assert!(sql.contains(&format!("AS {SIDES}_1 ({SIDE})")), "{sql}");
         // `t.id` names the outer row, because `dbo.t AS a` hides `t`.
         let sql =
             rewritten("SELECT 1 FROM dbo.t AS a FULL JOIN dbo.u AS b ON a.k = b.k AND t.id = 1");
