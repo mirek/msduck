@@ -1164,7 +1164,7 @@
     {
       "id": "catalog-resource-collation-v1",
       "title": "Encode captured SQL Server resource catalog collation",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing SQL Server compatibility goal. Owner-captured index catalog descriptors require Latin1_General_CI_AS_KS_WS for type_desc, currently absent from the deterministic TDS mapper. No external content consumed.",
       "scope": [
         "crates/msduck-tds/src/collation.rs",
@@ -10005,6 +10005,29 @@
       ],
       "issue": 834,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkOqg"
+    },
+    {
+      "id": "temporal-guid-text-core-v1",
+      "title": "Implement deterministic temporal and GUID source formatting",
+      "state": "ready",
+      "authorization": "Continuing owner SQL Server-compatible Rust/DuckDB goal and requested parallel factory; merged first-party835 supplies exact stored temporal/GUID bytes, declared types, language contexts and separately labelled formatting roles. No external input.",
+      "scope": [
+        "crates/msduck-sql/src/temporal_guid_text.rs",
+        "crates/msduck-sql/tests/temporal_guid_text.rs",
+        "docs/temporal-guid-text-core.md"
+      ],
+      "dependencies": [
+        "temporal-guid-format-reference-v1",
+        "concat-text-conversion-rules-v1"
+      ],
+      "acceptance": [
+        "Implement an unregistered pure formatter over original Type and exact already-stored values: DATE days, scaled TIME ticks, validated DateTime2/DateTimeOffset including original local fields/offset, legacy DATETIME days plus1/300-second ticks, SMALLDATETIME days/minutes and mixed-endian GUID bytes. Reuse validated core calendar/scale helpers. Validate type/value identity, SQL ranges and stored scale alignment; do not silently re-round, collapse SMALLDATETIME into DATETIME, widen imprecise JS values, or infer local offsets from UTC.",
+        "Keep defaultCAST, explicitstyles0/121 and function-specific CONCAT_WS/TRANSLATE profiles independently grounded in835. Pass language/month rules explicitly; implement captured locale contexts and keep unestablished formats/styles/locales explicit. NULL still validates declaration/profile and remains NULL; CWS skipping belongs outside formatter. Preserve uppercase GUID and exact leading/trailing spaces/fractions/offset signs. Return bounded optional text without choosing compile metadata or acquiring backend/session/clock/environment/global state.",
+        "Replay every applicable835 SQL-source and prepared formatting observation across allfour runs using exact native storage/DATEPART or actual emitted TDS bytes, not decoded Date carriers. Preserve75 source-construction failures/run separately; they are not formatter successes or dropped cases. Keep all roles/domains/styles independent; exactstrings/UTF16 and source/type/NULL/prepared changes, allscales0..7, locale/month/noon/midnight/ties/carries/ranges/offsets/GUIDlayout, invalidcontract tests. Document actual coverage and unproved generalization/root integration; fixtureSHA2912bd9f81d269d0c0d81eac2dcfa056eb2f63305c460ff2b00fe3516357c0a6 remains unchanged.",
+        "Fresh claim/receipt in completed reused referenceworktree from owner-approved mergedmainbe7e53d; no lib.rs/root/engine edits, new agents/worktrees/localnative caches. Private deterministic Linux proof reads compatiblecached dependencies and removes own outputs; root20227 currently owns sharedbuilder, so no shared sync/build until explicit terminal handoff. Required exact-head fmt/strictClippy/workspace/client/audit gates, independent and Codex review or authorized availability fallback; worker owns PRmerge and registry/projectcompletion."
+      ],
+      "issue": 836,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkRAO"
     }
   ]
 }
