@@ -10880,6 +10880,24 @@
       "dependencies": [],
       "issue": 865,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pkgvg"
+    },
+    {
+      "id": "translate-plan-operation-v1",
+      "title": "Expose deterministic character-function plan operation identity",
+      "state": "ready",
+      "issue": 858,
+      "authorization": "Companion to owner-approved translate-matching-keys-v1, shipped in PR885 by same worker after fresh exclusive claim. Confirmed owner-initiated Codex finding requires rejecting CONCAT_WS plans from TRANSLATE matching provider.",
+      "scope": [
+        "crates/msduck-sql/src/concat_ws.rs"
+      ],
+      "dependencies": [
+        "concat-source-conversion-binding-v1"
+      ],
+      "acceptance": [
+        "Expose the actual stored character-function operation through a read-only deterministic Plan getter, enabling the matching provider to reject non-TRANSLATE plans. Do not infer operation from flags or current values; preserve existing declaration/evaluation semantics.",
+        "Ship in PR885 with task858 focused rejection regression and exact-head formatter, strict Clippy, Rust/client/audit, required CI and verified independent/Codex review or genuine availability fallback. Same worker owns review follow-up, merge and registry/project completion of both claims; no new cache/worktree/agent or engine.rs scope."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkdtQ"
     }
   ]
 }
