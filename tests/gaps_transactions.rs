@@ -1024,6 +1024,9 @@ fn snapshot_transactions_need_the_option_and_read_their_snapshot() {
     run(&mut a, "DELETE x FROM #tmp AS x").unwrap();
     assert_eq!(run(&mut a, "UPDATE x SET v = 2 FROM t AS x"), Err(3952));
     assert_eq!(run(&mut a, "SELECT v FROM t AS t"), Err(3952));
+    // msduck's internal name prefix does not exempt user tables.
+    run(&mut b, "CREATE TABLE __msduck_customer (v INT)").unwrap();
+    assert_eq!(run(&mut a, "SELECT v FROM __msduck_customer"), Err(3952));
     assert_eq!(run(&mut a, "UPDATE t SET v = 2 FROM t AS t"), Err(3952));
     run(&mut a, "WITH t AS (SELECT 1 AS v) SELECT v FROM t").unwrap();
     assert_eq!(
@@ -1138,4 +1141,22 @@ fn snapshot_transactions_need_the_option_and_read_their_snapshot() {
     run(&mut b, "INSERT t VALUES (10, 10)").unwrap();
     run(&mut a, "UPDATE t SET v = 8 WHERE id = 1; COMMIT").unwrap();
     check(&mut b, "(SELECT SUM(v) FROM t) = 18").unwrap();
+    // Writes of a trigger fired by a SNAPSHOT write keep their savepoint
+    // images, so rolling back to the savepoint undoes them too.
+    run(&mut b, "CREATE TABLE audit (v INT)").unwrap();
+    run(
+        &mut b,
+        "CREATE TRIGGER t_audit ON t AFTER UPDATE AS INSERT audit SELECT v FROM inserted",
+    )
+    .unwrap();
+    run(
+        &mut a,
+        "BEGIN TRAN; SAVE TRAN s; UPDATE t SET v = 20 WHERE id = 1; ROLLBACK TRAN s; COMMIT",
+    )
+    .unwrap();
+    check(
+        &mut b,
+        "(SELECT COUNT(*) FROM audit) = 0 AND (SELECT v FROM t WHERE id = 1) = 8",
+    )
+    .unwrap();
 }

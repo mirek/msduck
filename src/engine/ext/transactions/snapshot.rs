@@ -171,8 +171,13 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
         }
         let object = parts[parts.len() - 1];
         // Temporary tables and table variables, also once renamed to their
-        // backend tables, and msduck's own catalog tables.
-        if object.starts_with('#') || object.starts_with('@') || object.starts_with("__msduck_") {
+        // backend tables (see temp_tables/storage.rs).
+        if object.starts_with('#')
+            || object.starts_with('@')
+            || ["__msduck_temp_", "__msduck_tv_", "__msduck_global_"]
+                .iter()
+                .any(|prefix| object.starts_with(prefix))
+        {
             continue;
         }
         let schema = if parts.len() >= 2 {
@@ -312,9 +317,11 @@ pub(super) fn write(
     let Some(target) = write_target(statement) else {
         return Ok(None);
     };
-    let result = super::super::reenter(session, "transactions", |session| {
-        session.execute(statement.clone(), parameters)
-    });
+    // Not `reenter`: statements nested in this one, such as trigger bodies,
+    // still need their access checks, savepoint images and conflicts.
+    session.ext.transactions.resumed = Some(statement.clone());
+    let result = session.execute(statement.clone(), parameters);
+    session.ext.transactions.resumed = None;
     let error = match result {
         Ok(execution) => return Ok(Some(execution)),
         Err(error) => error,

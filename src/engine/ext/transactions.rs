@@ -33,6 +33,10 @@ pub(crate) struct State {
     /// (for RPCs and procedure bodies), or `None`.
     batch_isolation: Vec<Option<u8>>,
     savepoints: savepoints::Stack,
+    /// The SNAPSHOT write that `snapshot::write` is running through the
+    /// ordinary path. Its own re-entry skips this feature once; statements
+    /// nested in it (trigger bodies) are handled as usual.
+    resumed: Option<Statement>,
 }
 
 impl Default for State {
@@ -41,6 +45,7 @@ impl Default for State {
             isolation: options::READ_COMMITTED,
             batch_isolation: Vec::new(),
             savepoints: Default::default(),
+            resumed: None,
         }
     }
 }
@@ -99,6 +104,11 @@ impl Feature for Hooks {
                 savepoint: Some(name),
             } => savepoints::rollback_statement(session, &name.value),
             _ => {
+                if let Some(resumed) = session.ext.transactions.resumed.take()
+                    && resumed == *statement
+                {
+                    return Ok(None);
+                }
                 let snapshot = snapshot::active(session);
                 if snapshot {
                     snapshot::check_access(session, statement)?;
