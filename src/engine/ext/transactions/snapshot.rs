@@ -330,6 +330,32 @@ pub(super) fn track_write(session: &mut Session, statement: &Statement) -> Resul
     Ok(())
 }
 
+/// Note a CREATE or ALTER of a procedure, function or trigger, which later
+/// features run from the whole batch and store in the database.
+pub(super) fn track_module_definition(session: &Session, sql: &str) {
+    let mut end = sql.len().min(4096);
+    while !sql.is_char_boundary(end) {
+        end -= 1;
+    }
+    let head = sql[..end].to_ascii_uppercase();
+    if !["PROC", "FUNCTION", "TRIGGER"]
+        .iter()
+        .any(|word| head.contains(word))
+    {
+        return;
+    }
+    let words = msduck_sql::dialect::ext::leading_words(&sql[..end], 4);
+    let words: Vec<&str> = words.iter().map(String::as_str).collect();
+    let module = |word: &str| matches!(word, "PROC" | "PROCEDURE" | "FUNCTION" | "TRIGGER");
+    if matches!(
+        words.as_slice(),
+        ["CREATE" | "ALTER", kind, ..] | ["CREATE", "OR", "ALTER", kind] if module(kind)
+    ) {
+        let alias = session.database.alias().to_owned();
+        usage(session, &alias, |usage| usage.wrote = true);
+    }
+}
+
 /// A temporary table or table variable, also once renamed to its backend
 /// table (see temp_tables/storage.rs). A delimited `[@name]` is an ordinary
 /// table.

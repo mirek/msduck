@@ -76,6 +76,7 @@ impl Feature for Hooks {
         _parameters: &HashMap<String, Parameter>,
         rpc: bool,
     ) -> Option<(Vec<u8>, bool)> {
+        snapshot::track_module_definition(session, sql);
         compile_error(session, sql, rpc)
     }
 
