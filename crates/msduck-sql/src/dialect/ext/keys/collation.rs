@@ -298,8 +298,12 @@ pub fn resolve(name: &str) -> Result<Option<Rule>, Invalid> {
     // over Latin1_General).
     let mut matched: Option<(&str, Option<&str>)> = None;
     for (designator, locale) in DESIGNATORS {
+        // `get` declines a prefix that splits a character of a non-ASCII
+        // name; designators are ASCII.
         if name.len() > designator.len() + 1
-            && name[..designator.len()].eq_ignore_ascii_case(designator)
+            && name
+                .get(..designator.len())
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case(designator))
             && name.as_bytes()[designator.len()] == b'_'
             && flags(&name[designator.len() + 1..]).is_some()
             && matched.is_none_or(|(current, _)| current.len() < designator.len())
@@ -481,6 +485,11 @@ mod tests {
             "Latin1_General_CI_AS_Bogus",
             "SQL_Latin1_General_CP2_CI_AS",
             "",
+            "Latinéé_General_CI_AS",
+            "Arabicé_CI_AS",
+            "ébcdé_CI_AS_KS",
+            "Thaé_CI_AS",
+            "Greeé_CI_AS_KS_WS",
         ] {
             assert_eq!(resolve(invalid), Err(Invalid), "{invalid}");
         }
