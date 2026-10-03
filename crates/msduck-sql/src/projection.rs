@@ -11,6 +11,7 @@ use std::collections::HashMap;
 pub mod ansi_padding;
 pub mod character_extrema;
 mod collation_validation;
+pub mod concat_functions;
 mod constant_case;
 pub mod order;
 pub use collation_validation::{
