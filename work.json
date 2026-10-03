@@ -11638,7 +11638,7 @@
       "id": "ansi-native-projection-adapter-v1",
       "title": "Bridge native ANSI carrier projections with explicit plans",
       "issue": 932,
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner full-server goal and explicit owner-directed bounded projection-adapter follow-up; approved parent message authorizes publish, fresh claim, implementation and worker-owned merge/completion.",
       "scope": [
         "src/ansi_carrier.rs",
