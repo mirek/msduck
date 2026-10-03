@@ -376,6 +376,9 @@ pub struct Session {
     catalog_homes: std::cell::Cell<u32>,
     /// Set by `execute_routed` for the `execute` call it makes.
     routed: std::cell::Cell<bool>,
+    /// Databases that running statements use besides the current one
+    /// (`use_other`, `enter_home`); they count as the session's own uses.
+    other_uses: OtherUses,
     /// Set when such a statement could not restore the session database
     /// as the connection's DuckDB default catalog.
     catalog_displaced: std::cell::Cell<bool>,
@@ -457,6 +460,7 @@ impl Session {
             backend_datefirst: std::cell::Cell::new(7),
             catalog_homes: std::cell::Cell::new(0),
             routed: std::cell::Cell::new(false),
+            other_uses: Default::default(),
             catalog_displaced: std::cell::Cell::new(false),
             transaction_doomed: false,
             caught_error: None,
@@ -497,7 +501,9 @@ impl Session {
 
     /// How many of this session's uses and holds are on a catalog alias.
     fn own_uses(&self, alias: &str) -> usize {
-        usize::from(self.database.alias() == alias) + self.held(alias)
+        usize::from(self.database.alias() == alias)
+            + self.held(alias)
+            + self.other_uses.count(alias)
     }
 
     fn held(&self, alias: &str) -> usize {
@@ -1046,9 +1052,16 @@ impl Session {
                 .query_row("SELECT current_database(),current_schema()", [], |row| {
                     Ok((row.get(0)?, row.get(1)?))
                 })?;
-        let guard = self.use_other(home)?;
+        // While the statement runs, `execute_in_home` makes the other
+        // database the session's and the session's database a use of the
+        // statement, as `own_uses` counts them.
+        let OtherUse { guard, .. } = self.use_other(home)?;
         self.catalog_homes.set(self.catalog_homes.get() + 1);
-        Ok(Home { previous, guard })
+        Ok(Home {
+            previous,
+            guard,
+            _counted: self.other_uses.add(self.database.alias()),
+        })
     }
 
     fn leave_home(&self, home: Home) {
@@ -1060,7 +1073,7 @@ impl Session {
 
     /// Hold the other databases a statement reads, with the checks USE
     /// makes, while it runs in the current database.
-    fn use_others(&self, aliases: &[String]) -> Result<Vec<crate::database_catalog::Use>> {
+    fn use_others(&self, aliases: &[String]) -> Result<Vec<OtherUse>> {
         let previous =
             self.db
                 .query_row("SELECT current_database(),current_schema()", [], |row| {
@@ -1076,10 +1089,14 @@ impl Session {
         guards
     }
 
-    fn use_other(&self, alias: &str) -> Result<crate::database_catalog::Use> {
+    fn use_other(&self, alias: &str) -> Result<OtherUse> {
         let catalog = self.database.catalog();
-        catalog.enter_as(&self.db, &catalog.display_name(alias), &|alias| {
+        let guard = catalog.enter_as(&self.db, &catalog.display_name(alias), &|alias| {
             self.own_uses(alias)
+        })?;
+        Ok(OtherUse {
+            _counted: self.other_uses.add(alias),
+            guard,
         })
     }
 
@@ -7833,9 +7850,10 @@ fn resolve_alias(name: &ObjectName, tables: &[&TableWithJoins]) -> Option<Object
     })
 }
 
-/// The lower-case one-part UPDATE or DELETE targets that name a FROM alias
-/// (`UPDATE i ... FROM t AS i`) rather than a table.
-fn alias_targets(statement: &Statement) -> Vec<String> {
+/// The one-part UPDATE or DELETE target nodes that name a FROM alias
+/// (`UPDATE i ... FROM t AS i`) rather than a table. They are identified by
+/// address, so other relations spelled like the alias stay tables.
+fn alias_targets(statement: &Statement) -> Vec<*const ObjectName> {
     let statement = match statement {
         Statement::Query(query) => match query.body.as_ref() {
             SetExpr::Update(statement) | SetExpr::Delete(statement) => statement,
@@ -7866,7 +7884,7 @@ fn alias_targets(statement: &Statement) -> Vec<String> {
     written
         .into_iter()
         .filter(|name| resolve_alias(name, &tables).is_some())
-        .filter_map(|name| name.0[0].as_ident().map(|ident| ident.value.to_lowercase()))
+        .map(|name| name as *const ObjectName)
         .collect()
 }
 
@@ -7917,18 +7935,19 @@ struct Relations {
     local: usize,
     ctes: std::collections::HashSet<String>,
     functions: std::collections::HashSet<String>,
-    /// UPDATE and DELETE targets that name a FROM alias (`alias_targets`).
-    targets: std::collections::HashSet<String>,
+    /// UPDATE and DELETE target nodes that name a FROM alias
+    /// (`alias_targets`).
+    targets: Vec<*const ObjectName>,
     /// The second pass, once the names above are known.
     counting: bool,
     /// Whether a temporary table or table variable is among the relations.
     temporary: bool,
 }
 impl Relations {
-    fn collect<T: Visit>(node: &T, current: String, targets: &[String]) -> Self {
+    fn collect<T: Visit>(node: &T, current: String, targets: &[*const ObjectName]) -> Self {
         let mut relations = Relations {
             current,
-            targets: targets.iter().cloned().collect(),
+            targets: targets.to_vec(),
             ..Default::default()
         };
         let _ = node.visit(&mut relations);
@@ -7937,15 +7956,24 @@ impl Relations {
         relations
     }
 
-    /// A one-part name that is no table: a CTE, table function or the alias
-    /// an UPDATE or DELETE target names.
+    /// Whether `name` is an UPDATE or DELETE target naming a FROM alias.
+    fn target(&self, name: &ObjectName) -> bool {
+        self.targets
+            .iter()
+            .any(|target| std::ptr::eq(*target, name))
+    }
+
+    /// A one-part name that is no table: a CTE or table function.
     fn named(&self, single: &Ident) -> bool {
-        [&self.ctes, &self.functions, &self.targets]
+        [&self.ctes, &self.functions]
             .iter()
             .any(|names| names.contains(&single.value.to_lowercase()))
     }
 
     fn add(&mut self, name: &ObjectName) {
+        if self.target(name) {
+            return;
+        }
         match name.0.as_slice() {
             [ObjectNamePart::Identifier(database), _, _]
                 if !database.value.eq_ignore_ascii_case(&self.current) =>
@@ -8010,6 +8038,63 @@ struct Home {
     previous: (String, String),
     /// The other database, in use while the statement runs.
     guard: crate::database_catalog::Use,
+    /// The session's database, swapped out for `guard`, stays its own use.
+    _counted: Counted,
+}
+
+/// Another database that a running statement uses (`Session::use_other`).
+struct OtherUse {
+    guard: crate::database_catalog::Use,
+    _counted: Counted,
+}
+
+/// Databases running statements use, by catalog alias.
+#[derive(Default)]
+struct OtherUses(std::sync::Arc<std::sync::Mutex<HashMap<String, usize>>>);
+
+impl OtherUses {
+    fn add(&self, alias: &str) -> Counted {
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .entry(alias.to_string())
+            .or_default() += 1;
+        Counted {
+            alias: alias.to_string(),
+            uses: self.0.clone(),
+        }
+    }
+
+    fn count(&self, alias: &str) -> usize {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(alias)
+            .copied()
+            .unwrap_or(0)
+    }
+}
+
+/// One entry of `OtherUses`, removed when dropped.
+struct Counted {
+    alias: String,
+    uses: std::sync::Arc<std::sync::Mutex<HashMap<String, usize>>>,
+}
+
+impl Drop for Counted {
+    fn drop(&mut self) {
+        let mut uses = self
+            .uses
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(count) = uses.get_mut(&self.alias) {
+            *count -= 1;
+            if *count == 0 {
+                uses.remove(&self.alias);
+            }
+        }
+    }
 }
 
 /// Whether `Session::execute` routes a statement (`execute_routed`): a query
@@ -8051,7 +8136,12 @@ enum CrossDatabase {
 /// Name relations as seen from `home`, the database a statement runs in:
 /// drop `home`'s catalog and give relations of `current`, the session's
 /// database, its catalog.
-fn rehome<T: Visit + VisitMut>(node: &mut T, home: &str, current: &str, targets: &[String]) {
+fn rehome<T: Visit + VisitMut>(
+    node: &mut T,
+    home: &str,
+    current: &str,
+    targets: &[*const ObjectName],
+) {
     let relations = Relations::collect(&*node, current.to_string(), targets);
     let _ = visit_relations_mut(node, |relation| {
         match relation.0.as_slice() {
@@ -8063,7 +8153,9 @@ fn rehome<T: Visit + VisitMut>(node: &mut T, home: &str, current: &str, targets:
                 0,
                 ObjectNamePart::Identifier(Ident::with_quote('"', current)),
             ),
-            [ObjectNamePart::Identifier(single)] if !relations.named(single) => {
+            [ObjectNamePart::Identifier(single)]
+                if !relations.named(single) && !relations.target(relation) =>
+            {
                 relation
                     .0
                     .insert(0, ObjectNamePart::Identifier(Ident::new("dbo")));

@@ -315,6 +315,24 @@ fn aliases_exempt_only_the_update_or_delete_target_they_name() {
         native(&session, "SELECT v FROM foo.dbo.items WHERE id = 1"),
         "a"
     );
+    // Only the target node is the alias; an inner `i` is master's table.
+    ok(
+        &mut session,
+        "CREATE TABLE dbo.i (id INT); INSERT dbo.i VALUES (1)",
+    );
+    ok(
+        &mut session,
+        "UPDATE i SET v = 'b' FROM foo.dbo.items AS i WHERE EXISTS (SELECT 1 FROM i AS inner_i WHERE inner_i.id = i.id)",
+    );
+    assert_eq!(
+        native(&session, "SELECT v FROM foo.dbo.items WHERE id = 1"),
+        "b"
+    );
+    ok(
+        &mut session,
+        "INSERT foo.dbo.items (name) VALUES (N'gone'); DELETE i FROM foo.dbo.items AS i WHERE NOT EXISTS (SELECT 1 FROM i AS inner_i WHERE inner_i.id = i.id)",
+    );
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.items"), 1);
     assert_eq!(catalog(&session), "memory.dbo");
 }
 
@@ -353,4 +371,42 @@ fn preparing_expressions_checks_access_to_other_databases() {
         );
     }
     assert_eq!(catalog(&other), "memory.dbo");
+}
+
+#[test]
+fn nested_statements_reuse_the_session_s_own_uses_of_other_databases() {
+    let server = Server::open(":memory:").unwrap();
+    let mut owner = session(&server);
+    ok(&mut owner, "CREATE DATABASE solo");
+    ok(
+        &mut owner,
+        "USE solo; CREATE TABLE dbo.t (id INT); INSERT dbo.t VALUES (1); USE master",
+    );
+    // A trigger in master reads solo while the triggering statement, which
+    // also reads solo, holds it.
+    ok(
+        &mut owner,
+        "CREATE TABLE dbo.copy (id INT); CREATE TABLE dbo.log (n INT)",
+    );
+    ok(
+        &mut owner,
+        "CREATE TRIGGER copy_log ON dbo.copy AFTER INSERT AS INSERT dbo.log SELECT COUNT(*) FROM solo.dbo.t",
+    );
+    ok(&mut owner, "ALTER DATABASE solo SET SINGLE_USER");
+    ok(&mut owner, "INSERT dbo.copy SELECT id FROM solo.dbo.t");
+    assert_eq!(count(&owner, "SELECT count(*) FROM memory.dbo.log"), 1);
+    // A statement in solo whose trigger reads master and solo again.
+    ok(
+        &mut owner,
+        "USE solo; CREATE TABLE dbo.u (id INT); CREATE TABLE dbo.ulog (n INT)",
+    );
+    ok(
+        &mut owner,
+        "CREATE TRIGGER u_log ON dbo.u AFTER INSERT AS INSERT dbo.ulog SELECT COUNT(*) FROM master.dbo.copy CROSS JOIN dbo.t",
+    );
+    ok(&mut owner, "USE master; INSERT solo.dbo.u VALUES (1)");
+    assert_eq!(count(&owner, "SELECT count(*) FROM solo.dbo.ulog"), 1);
+    let mut other = session(&server);
+    assert_eq!(fails(&mut other, "SELECT id FROM solo.dbo.t").0, 924);
+    assert_eq!(catalog(&owner), "memory.dbo");
 }
