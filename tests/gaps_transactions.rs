@@ -1027,6 +1027,15 @@ fn snapshot_transactions_need_the_option_and_read_their_snapshot() {
         "SELECT 1; INSERT #tmp VALUES (1); SELECT v FROM #tmp; DECLARE @x TABLE (v INT); INSERT @x VALUES (1); SELECT COUNT(*) FROM sys.objects",
     )
     .unwrap();
+    // Subqueries of variable assignments access data too.
+    assert_eq!(
+        run(&mut a, "DECLARE @x INT = (SELECT MAX(v) FROM t)"),
+        Err(3952)
+    );
+    assert_eq!(
+        run(&mut a, "DECLARE @x INT; SET @x = (SELECT MAX(v) FROM t)"),
+        Err(3952)
+    );
     // A common table expression or a table alias shadows the table of the
     // same name.
     run(&mut a, "CREATE TABLE x (v INT)").unwrap();

@@ -487,6 +487,10 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
             | Statement::Update(_)
             | Statement::Delete(_)
             | Statement::Merge(_)
+            // Subqueries in variable assignments and RETURN.
+            | Statement::Set(_)
+            | Statement::Declare { .. }
+            | Statement::Return(_)
     ) {
         return Ok(());
     }
