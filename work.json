@@ -9845,7 +9845,7 @@
       "id": "concat-binary-binding-v1",
       "title": "Compose captured binary conversion contracts with CONCAT_WS and TRANSLATE",
       "issue": 821,
-      "state": "backlog",
+      "state": "blocked",
       "authorization": "Continuing owner compatibility goal; complete captured binary semantics from reference815 through explicit deterministic conversion/core inputs after812/816/819 complete.",
       "scope": [
         "crates/msduck-sql/src/lib.rs",
@@ -10072,6 +10072,34 @@
       ],
       "issue": 841,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkTFK"
+    },
+    {
+      "id": "concat-source-conversion-binding-v1",
+      "title": "Compose typed source conversion with CONCAT_WS and TRANSLATE",
+      "state": "backlog",
+      "authorization": "Owner continuing full SQL Server-compatible Rust/DuckDB goal and faster PR cycle. Supersedes unclaimed backlog821 with one bounded conversion-composition task covering its entire binary acceptance plus newly implemented numeric/temporal/GUID formatters. Old821 has no claim and no dependent tasks; no live scope or receipt is taken over. No external input, no engine reservation.",
+      "scope": [
+        "crates/msduck-sql/src/lib.rs",
+        "crates/msduck-sql/src/concat_ws.rs",
+        "crates/msduck-sql/src/concat_conversion.rs",
+        "crates/msduck-sql/tests/concat_ws_translate.rs",
+        "crates/msduck-sql/tests/concat_source_conversion.rs",
+        "docs/concat-source-conversion.md"
+      ],
+      "dependencies": [
+        "concat-ws-translate-export-v1",
+        "concat-text-conversion-rules-v1",
+        "concat-numeric-text-v1",
+        "temporal-guid-text-core-v1"
+      ],
+      "acceptance": [
+        "Register reviewed pure concat_text_conversion/numeric_text/temporal_guid_text helpers and a bounded typed conversion/composition API after all dependencies merge. Plan from original source Types, conversion declarations and explicit collation/domain/diagnostic context, without reading current values. Evaluate already acquired exact stored payloads and compose formatter output into reviewed function core. Preserve original BIT/integer/Decimal coefficient/MONEY/REALu32/FLOATu64, temporal ticks/scales/local offsets/GUID layout/binary byte identity, character/legacy text encoding and NULL. No fabricated character declarations, hidden effects or second source-expression evaluation. Explicit unsupported styles/languages/widths/weights/encodings and range/payload barriers must remain explicit.",
+        "Retain all old821 binary obligations: compose captured815 bounded/MAX/fixed-padding/odd-byte/UTF16LE contracts; lift TRANSLATE noncharacter-MAX barrier only for established binary declarations, never generalized unknown formatters. Preserve9001-byteMAX/odd-byte and NULL outputs, source storage bounds, binary-to-Unicode promotion and source/result domain distinctions. Keep resource bounds before allocation and preserve isolated units/truncation distinctions from818.",
+        "Replay every applicable retained four-observation815/827/831/833/835 source/function/prepared result through composition; compare exact strings/UTF16, declaration shape/full available descriptor properties and complete core diagnostics, preserving original source construction failures separately. Cover typedNULL/literalNULL, separator/source positions, prepared binding changes, coefficient/IEEE bits/exact temporal/native bytes, firstmapping/nochain/mismatch diagnostics and independently grounded profiles. Reuse finite captured keys only where established; no general collation/runtime claim. Fixture hashes/raw errors remain immutable; missing support is documented, never normalized or silently skipped.",
+        "Activate only after dependencies aredone and ready scopes disjoint. Fresh exclusive claim/own receipt in completed existing worktree, no new agents/worktrees/native caches. Private pure proofs read compatiblecached deps and remove outputs; canonical full exact-head fmt/strictClippy/workspace/alltargets/client/audit follows explicit Linuxbuilder handoff. Independent/Codexreview or authorized availability fallback, requiredCI, workerowned merge and registry/project/issue completion. Root AST/catalog/native/diagnostic adapters are subsequent tasks; lib/core changes remain within this exact scope and engine.rs remains owner-controlled."
+      ],
+      "issue": 842,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkTgR"
     }
   ]
 }
