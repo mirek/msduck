@@ -84,5 +84,12 @@ The tedious test lists them exactly:
 - ISNULL with a VARCHAR first argument and a carrier replacement holding
   characters outside Windows-1252 fails on the wire instead of returning
   `?`; the same happens for VARCHAR and NVARCHAR variables.
+- Bounded NVARCHAR/NCHAR ISNULL results are text, so an isolated
+  surrogate in a carrier first argument becomes U+FFFD. Stored columns
+  already behaved this way through the predicate pins before this change
+  (verified against the previous lowering with a TDS-parameter value); the
+  aggregate-subquery form previously failed to bind. Keeping exact units
+  needs carrier-aware comparison of these results, which belongs to the
+  predicate lowering.
 - The OPENJSON `type` column is `int`; SQL Server reports `tinyint`, so
   `ISNULL(j.[type], 0)` is `int` too.
