@@ -250,6 +250,37 @@ test('referential actions cascade through several levels', { timeout: 60000 }, a
   await fails(c, 'ALTER TABLE e ADD CONSTRAINT fk_e FOREIGN KEY (parent) REFERENCES e(id) ON UPDATE CASCADE', [1785, 1750])
 })
 
+test('ON DELETE SET NULL continues only through ON UPDATE actions when checking cascade paths', { timeout: 60000 }, async t => {
+  const c = await open(t)
+  await query(c, 'CREATE TABLE parent(id int PRIMARY KEY); CREATE TABLE middle(id int PRIMARY KEY, parent_id int); CREATE TABLE child(id int PRIMARY KEY, middle_id int); CREATE TABLE leaf(id int PRIMARY KEY, child_id int, parent_id int)')
+  await query(c, 'ALTER TABLE middle ADD CONSTRAINT fk_mp FOREIGN KEY (parent_id) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE')
+  await query(c, 'ALTER TABLE leaf ADD CONSTRAINT fk_lp FOREIGN KEY (parent_id) REFERENCES parent(id) ON UPDATE CASCADE ON DELETE CASCADE')
+  await query(c, 'ALTER TABLE leaf ADD CONSTRAINT fk_lc FOREIGN KEY (child_id) REFERENCES child(id) ON UPDATE NO ACTION ON DELETE CASCADE')
+  // The SET NULL updates child; child's delete edge to leaf is not followed.
+  await query(c, 'ALTER TABLE child ADD CONSTRAINT fk_cm FOREIGN KEY (middle_id) REFERENCES middle(id) ON UPDATE CASCADE ON DELETE SET NULL')
+  await query(c, 'INSERT parent VALUES (1),(2); INSERT middle VALUES (1,1); INSERT child VALUES (1,1); INSERT leaf VALUES (1,1,2),(2,1,1)')
+  await query(c, 'DELETE parent WHERE id = 1')
+  assert.deepEqual(await rows(c, 'SELECT * FROM middle'), [])
+  assert.deepEqual(await rows(c, 'SELECT * FROM child'), [[1, null]])
+  assert.deepEqual(await rows(c, 'SELECT * FROM leaf ORDER BY id'), [[1, 1, 2]])
+  // The updated rows continue through ON UPDATE actions, so a second path
+  // to a table that the delete also reaches is refused.
+  await query(c, 'CREATE TABLE p(id int PRIMARY KEY); CREATE TABLE sn(id int PRIMARY KEY, pid int CONSTRAINT uq_sn UNIQUE CONSTRAINT fsn REFERENCES p(id) ON DELETE SET NULL)')
+  const refused = await fails(c, 'CREATE TABLE g2(id int PRIMARY KEY, spid int CONSTRAINT fg2s REFERENCES sn(pid) ON UPDATE CASCADE, pid int CONSTRAINT fg2p REFERENCES p(id) ON DELETE CASCADE)', [1785, 1750])
+  assert.deepEqual(refused.errors.map(e => [e.number, e.state, e.class]), [[1785, 0, 16], [1750, 1, 16]])
+  assert.equal(refused.errors[0].message, "Introducing FOREIGN KEY constraint 'fg2p' on table 'g2' may cause cycles or multiple cascade paths. Specify ON DELETE NO ACTION or ON UPDATE NO ACTION, or modify other FOREIGN KEY constraints.")
+  await fails(c, 'CREATE TABLE two(id int, x int CONSTRAINT fx REFERENCES p(id) ON DELETE SET NULL, y int CONSTRAINT fy REFERENCES p(id) ON DELETE SET NULL)', [1785, 1750])
+  await fails(c, 'CREATE TABLE self(id int PRIMARY KEY, parent int CONSTRAINT fself REFERENCES self(id) ON DELETE SET NULL)', [1785, 1750])
+  // The ON UPDATE CASCADE copies the NULL; ON UPDATE SET DEFAULT applies.
+  await query(c, 'CREATE TABLE g(id int PRIMARY KEY, spid int CONSTRAINT fgs REFERENCES sn(pid) ON UPDATE CASCADE)')
+  await query(c, 'CREATE TABLE gd(id int PRIMARY KEY, spid int DEFAULT 2 CONSTRAINT fgds REFERENCES sn(pid) ON UPDATE SET DEFAULT)')
+  await query(c, 'INSERT p VALUES (1),(2); INSERT sn VALUES (10,1),(20,2); INSERT g VALUES (100,1),(200,2); INSERT gd VALUES (100,1),(200,2)')
+  await query(c, 'DELETE p WHERE id = 1')
+  assert.deepEqual(await rows(c, 'SELECT * FROM sn ORDER BY id'), [[10, null], [20, 2]])
+  assert.deepEqual(await rows(c, 'SELECT * FROM g ORDER BY id'), [[100, null], [200, 2]])
+  assert.deepEqual(await rows(c, 'SELECT * FROM gd ORDER BY id'), [[100, 2], [200, 2]])
+})
+
 test('SET NULL and SET DEFAULT actions, composite keys and ALTER TABLE actions', { timeout: 60000 }, async t => {
   const c = await open(t)
   await query(c, 'CREATE TABLE p2(id int PRIMARY KEY); INSERT p2 VALUES (1),(5)')

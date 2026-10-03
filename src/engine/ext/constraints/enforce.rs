@@ -1041,15 +1041,6 @@ fn execute(
     }
 }
 
-fn set_list(constraint: &Constraint, values: impl Fn(&str) -> String) -> String {
-    constraint
-        .columns
-        .iter()
-        .map(|c| format!("{} = {}", quote(c), values(c)))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
 fn matches_removed(constraint: &Constraint, removed: &str) -> String {
     let matched = conjunction(
         constraint
@@ -1078,6 +1069,123 @@ fn mapped_pairs(constraint: &Constraint, mapping: &Mapping) -> Vec<(String, (Str
             )
         })
         .collect()
+}
+
+/// A SET NULL or SET DEFAULT action: set `values` (column, native
+/// expression) in the rows of `child` matching `condition`.
+///
+/// When foreign keys with ON UPDATE actions reference reset columns, the
+/// old and new values of their keys are materialized first, each value
+/// evaluated once, and the rows are updated from that relation, which is
+/// recorded so those actions follow the reset keys: an ON UPDATE CASCADE
+/// copies the NULL or the default.
+fn reset(
+    session: &Session,
+    run: &mut Run<'_>,
+    child: &Table,
+    values: &[(String, String)],
+    condition: &str,
+) -> Result<()> {
+    let mut columns: Vec<String> = Vec::new();
+    for constraint in run.constraints {
+        if constraint.kind == Type::Foreign
+            && constraint.enabled()
+            && constraint.on_update != Referential::NoAction
+            && constraint.referenced.as_ref().map(|r| r.id) == Some(child.id)
+        {
+            for column in &constraint.referenced_columns {
+                if !columns.iter().any(|c| c.eq_ignore_ascii_case(column)) {
+                    columns.push(column.clone());
+                }
+            }
+        }
+    }
+    let value = |column: &str| {
+        values
+            .iter()
+            .find(|(c, _)| c.eq_ignore_ascii_case(column))
+            .map(|(_, v)| v)
+    };
+    let set = |values: &mut dyn Iterator<Item = (String, String)>| {
+        values
+            .map(|(column, value)| format!("{} = {value}", quote(&column)))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    if !columns.iter().any(|c| value(c).is_some()) {
+        session.db.execute_batch(&format!(
+            "UPDATE {} SET {} WHERE {condition}",
+            child.sql(),
+            set(&mut values.iter().cloned())
+        ))?;
+        return Ok(());
+    }
+    for (column, _) in values {
+        if !columns.iter().any(|c| c.eq_ignore_ascii_case(column)) {
+            columns.push(column.clone());
+        }
+    }
+    // Without the native row id, the update evaluates the values again,
+    // which is only safe for NULL: a default may be nondeterministic.
+    let row = !hides_rowid(session, child)?;
+    if !row && values.iter().any(|(_, value)| value != "NULL") {
+        bail!(
+            "unsupported SET DEFAULT of keys referenced with ON UPDATE actions on {}: a column named rowid hides the row identity",
+            child.display()
+        );
+    }
+    let mut projection = Vec::new();
+    if row {
+        projection.push(format!("{}.rowid AS __msduck_row", child.sql()));
+    }
+    let mut pairs = HashMap::new();
+    for (index, column) in columns.iter().enumerate() {
+        let old = format!("{}.{}", child.sql(), quote(column));
+        // The CASE keeps the column's type for a NULL.
+        let new = match value(column) {
+            Some(value) => format!("CASE WHEN true THEN {value} ELSE {old} END"),
+            None => old.clone(),
+        };
+        projection.push(format!("{old} AS o{index}, {new} AS n{index}"));
+        pairs.insert(
+            column.to_lowercase(),
+            (format!("o{index}"), format!("n{index}")),
+        );
+    }
+    let name = run.scratch.create(
+        session,
+        &format!(
+            "SELECT {} FROM {} WHERE {condition}",
+            projection.join(", "),
+            child.sql()
+        ),
+    )?;
+    let relation = format!("temp.main.{}", quote(&name));
+    if row {
+        let assignments = set(&mut values.iter().map(|(column, _)| {
+            (
+                column.clone(),
+                format!("m.{}", pairs[&column.to_lowercase()].1),
+            )
+        }));
+        session.db.execute_batch(&format!(
+            "UPDATE {} SET {assignments} FROM {relation} m WHERE {}.rowid = m.__msduck_row",
+            child.sql(),
+            child.sql()
+        ))?;
+    } else {
+        session.db.execute_batch(&format!(
+            "UPDATE {} SET {} WHERE {condition}",
+            child.sql(),
+            set(&mut values.iter().cloned())
+        ))?;
+    }
+    run.mappings.push(Mapping {
+        table: child.id,
+        relation,
+        columns: pairs,
+    });
+    Ok(())
 }
 
 /// Referential actions, breadth first from the tables the statement wrote.
@@ -1138,7 +1246,7 @@ fn actions(
                 } else {
                     HashMap::new()
                 };
-                let assignments = pairs
+                let values: Vec<(String, String)> = pairs
                     .iter()
                     .map(|(column, (_, new))| {
                         let value = match action {
@@ -1149,16 +1257,33 @@ fn actions(
                                 .unwrap_or_else(|| "NULL".into()),
                             _ => "NULL".into(),
                         };
-                        format!("{} = {value}", quote(column))
+                        (column.clone(), value)
                     })
-                    .collect::<Vec<_>>()
-                    .join(", ");
+                    .collect();
                 run.snapshot_keys(session, &child, true)?;
-                session.db.execute_batch(&format!(
-                    "UPDATE {} SET {assignments} FROM {} m WHERE {matched} AND ({changed})",
-                    child.sql(),
-                    mapping.relation
-                ))?;
+                if action == Referential::Cascade {
+                    let assignments = values
+                        .iter()
+                        .map(|(column, value)| format!("{} = {value}", quote(column)))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    session.db.execute_batch(&format!(
+                        "UPDATE {} SET {assignments} FROM {} m WHERE {matched} AND ({changed})",
+                        child.sql(),
+                        mapping.relation
+                    ))?;
+                } else {
+                    reset(
+                        session,
+                        run,
+                        &child,
+                        &values,
+                        &format!(
+                            "EXISTS (SELECT 1 FROM {} m WHERE {matched} AND ({changed}))",
+                            mapping.relation
+                        ),
+                    )?;
+                }
                 if action == Referential::Cascade {
                     // Referencing columns copied from the key move the same way.
                     run.mappings.push(Mapping {
@@ -1202,18 +1327,22 @@ fn actions(
                 }
                 Referential::SetNull | Referential::SetDefault => {
                     let defaults = catalog::native_defaults(&session.db, &child)?;
-                    session.db.execute_batch(&format!(
-                        "UPDATE {} SET {} WHERE {condition}",
-                        child.sql(),
-                        set_list(constraint, |c| if action == Referential::SetDefault {
+                    let value = |c: &str| {
+                        if action == Referential::SetDefault {
                             defaults
                                 .get(&c.to_lowercase())
                                 .cloned()
                                 .unwrap_or_else(|| "NULL".into())
                         } else {
                             "NULL".into()
-                        })
-                    ))?;
+                        }
+                    };
+                    let values: Vec<(String, String)> = constraint
+                        .columns
+                        .iter()
+                        .map(|c| (c.clone(), value(c)))
+                        .collect();
+                    reset(session, run, &child, &values, &condition)?;
                     run.acted.insert(constraint.id);
                     run.action_tables.insert(child.id);
                     run.written(child.id, Event::Update);

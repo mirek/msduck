@@ -7,8 +7,10 @@ actions. PRIMARY KEY and UNIQUE belong to the keys feature
 ([gaps-keys.md](gaps-keys.md)), which records them in `main.__msduck_keys`;
 this feature adds and drops them by name with ALTER TABLE.
 
-The expected behavior comes from SQL Server 2022 (16.0.4236.2), captured by
-`scripts/capture-gaps-constraints.mjs` into `reference/gaps-constraints.json`.
+The expected behavior comes from SQL Server 2025 (17.0.4065.4, the pinned
+reference image), captured by `scripts/capture-gaps-constraints.mjs` into
+`reference/gaps-constraints.json`. The earlier SQL Server 2022 (16.0.4236.2)
+capture differed only in one generated primary key name.
 `tests/compat/constraints.test.mjs` replays every captured step against msduck
 and compares error numbers, states, classes, messages, informational messages
 and rows. The same file also runs against a SQL Server instance when
@@ -85,8 +87,26 @@ without those words (`column_keys.rs`).
   changed, even when another row takes that value (a key swap). Only the
   UPDATE's target table is mapped, including `UPDATE alias ... FROM table
   alias` and `UPDATE t ... FROM t JOIN u`. SET DEFAULT uses the column's
-  current default, or NULL; a default that is not a key fails with 547. Definitions that could reach a table along two cascade
-  paths, or cascade into their own table, fail with 1785, like SQL Server.
+  current default, or NULL; a default that is not a key fails with 547.
+  Keys that a SET NULL or SET DEFAULT action resets carry the reset value to
+  their own ON UPDATE actions, so an ON UPDATE CASCADE copies the NULL or
+  default (each value is evaluated once, so a NEWID() default is copied
+  as stored) and ON UPDATE SET DEFAULT applies.
+- **Cascade paths.** Definitions that could reach a table along two cascade
+  paths, or reach a table already on the path (including their own), fail
+  with 1785 and 1750, like SQL Server. As SQL Server does, the check walks
+  from every table for a DELETE and for an UPDATE: ON DELETE CASCADE
+  continues with the referencing table's ON DELETE actions, while ON DELETE
+  SET NULL or SET DEFAULT updates the referencing rows and continues only
+  with that table's ON UPDATE actions, whichever columns they reference.
+  Every arrival counts, whether it deletes or updates, and disabled foreign
+  keys take part. So `child.middle_id REFERENCES middle ON DELETE SET NULL`
+  is accepted beside `leaf.child_id REFERENCES child ON DELETE CASCADE` and
+  `leaf.parent_id REFERENCES parent ON DELETE CASCADE` with `middle`
+  cascading from `parent`, while two SET NULL keys from one table to the same
+  parent, or a SET NULL whose updated table cascades on update into a table
+  the delete also reaches, are refused (reference groups "cascade paths" and
+  "cascade paths in one batch").
 - **Definition errors.** 1767 (referenced table missing), 1769 and 1770
   (unknown columns), 8139 (column count), 1773 (implicit reference without a
   primary key), 1776 (no matching key), 1778 and 1753 (type, length or scale
@@ -218,8 +238,12 @@ The feature uses the extension hooks (docs/extension-hooks.md):
   assignments, nondeterministic new key values (NEWID(), RAND(), current
   time functions, NEXT VALUE FOR), MERGE that changes a key referenced with
   cascading or differing actions, or a cascade through columns that are not
-  a copy of the updated key; these fail with an explicit error instead of
-  guessing old and new keys.
+  a copy of the updated key or reset by SET NULL or SET DEFAULT; these fail
+  with an explicit error instead of guessing old and new keys. A SET DEFAULT
+  reset of a key that ON UPDATE actions reference fails with an explicit
+  error in a table whose user column named `rowid` hides the native row id,
+  since the default could not be evaluated once for both the row and the
+  cascade.
 - Rows changed by referential actions do not fire triggers.
 - Bulk loads (INSERT BULK) do not check CHECK and FOREIGN KEY constraints,
   like SQL Server's default without CHECK_CONSTRAINTS, but they do not mark
