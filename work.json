@@ -11496,6 +11496,34 @@
         "Fresh exclusive receipt after genuine dependenciesDone. Reuse existing isolated worker/private reference resources only; no newagents/worktrees/nativecaches or canonicalLinux source/build/cache writes. Worker owns checkpoints/draftPR, focused meaningful tests bothhosts, full finalsource-pinned four-run reproduction with independently recomputed complete sidecar, independent/Codex review or genuine fallback, exactrequiredCI/merge and promptregistry/issue/projectcompletion. No Rust/engine/catalog/output/BulkLoad edits; finite evidence leaves general Unicode/codepage and runtime integration gaps explicit."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PlspM"
+    },
+    {
+      "id": "ansi-cp1251-capacity-v1",
+      "title": "Implement measured native CP1251 BulkLoad target capacity",
+      "issue": 921,
+      "state": "ready",
+      "authorization": "Continuing owner full-server goal; native CP1251 target capacity is an explicit remaining gap after approved914. Use SQL Server native-byte evidence rather than universalizing CP1252-target policy.",
+      "scope": [
+        "crates/msduck-core/src/ansi_conversion/capacity.rs",
+        "crates/msduck-core/tests/ansi_capacity.rs",
+        "crates/msduck-core/tests/ansi_capacity_cp1251.rs",
+        "docs/ansi-capacity.md"
+      ],
+      "dependencies": [
+        "ansi-bulk-capacity-v1",
+        "ansi-cp1252-projection-v1",
+        "bulk-character-conversion-reference-v1",
+        "bulk-character-capacity-reference-v1",
+        "bulk-character-cp1252-reference-v1",
+        "bulk-character-trailing-space-reference-v1",
+        "bulk-character-adapter-plan-v1"
+      ],
+      "acceptance": [
+        "Admit nativeCP1251 target plans for sourceCP1251/CP1252 only after retained private four-run SQLServer17.0.4065.4 probes resolve same-CP1251 versus cross-CP1252 bounded/MAX source overflow. Cover variable/fixed widths, ASCIIspace/NUL/NBSP/embedded/later non-space cutoff counterexamples and native edges up to8000. All raw requests/native outputs/errors/info/callback/original counters and complete unnormalized sidecars survive. Do not infer missing policy from targetCP1252; finite collation/BulkLoad evidence is not CAST/assignment/wire admission/runtime support.",
+        "Preserve existing CP1252/UTF8/Unicode capacity behavior and parent mapping tables/API. CP1251 identity copies originalbytes; crossCP1252 uses reviewed observed CP1252-to-CP1251 table without client/platform codec. Explicit SourceForm, NULL/empty, mismatch/unsupported-plan-beforeNULL, checked active input/final output payload limits and fallible final allocation remain intact. Public tests independently replay actual four-run native outcomes, padding/completeMAX, row failures, source immutability and exact/one-over budgets; update former unsupported-target negative accurately.",
+        "Fresh exclusive receipt after genuine Done predecessors. Reuse existing447 isolated tree/private capture resources and canonical Linux native cache under runner.lock; no newagents/worktrees/nativecaches. Root919 private capture is disjoint; canonical builder currently released. Worker owns full exact-head fmt/workspaceRust/strictalltargetClippy/allclients/rawaudit with actual source/binary provenance, independent/Codex review or genuine fallback, requiredCI/merge and registry/issue/projectcompletion. No engine/Value/catalog/TDS/lib export/root consumer changes."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PluRq"
     }
   ]
 }
