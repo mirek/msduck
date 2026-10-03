@@ -10756,7 +10756,7 @@
     {
       "id": "bulk-staging-interactions-reference-v1",
       "title": "Capture BulkLoad staging, defaults, identity and trigger interactions",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server compatibility objective; first-party source investigation at56f80e28 identifies unverified combined large-load behavior documented in docs/gaps-bulk.md. Publish bounded SQL Server reference before runtime changes, without engine.rs reservation or additional factory agents/native caches.",
       "issue": 878,
       "scope": [
