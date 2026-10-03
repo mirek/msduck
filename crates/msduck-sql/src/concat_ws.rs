@@ -69,6 +69,8 @@ pub enum Error {
     UnknownConversion,
     UnknownComparison,
     ComparisonLimit,
+    OutputLimit,
+    InputLimit,
     UnknownEncoding,
     UnknownDiagnosticContext,
     InvalidDeclaration,
@@ -314,6 +316,12 @@ pub fn plan_with_context(
 /// with established collation keys can use the indexed evaluator instead.
 pub const MAX_MATCH_COMPARISONS: usize = 1_000_000;
 
+/// Allocation policy, not SQL Server MAX capacity or a SQL diagnostic.
+/// The default evaluator produces at most 16 MiB of UTF-16 payload.
+pub const MAX_OUTPUT_UNITS: usize = 8 * 1024 * 1024;
+/// Bound each input before temporary text/code-page validation allocations.
+pub const MAX_INPUT_UNITS: usize = 8 * 1024 * 1024;
+
 /// Already formatted and converted into the result's text domain by adapters.
 /// NULL is None; UTF-16 units preserve isolated surrogates. For ANSI results the
 /// adapter must have applied the chosen code page before supplying these units.
@@ -352,7 +360,7 @@ pub fn evaluate(
                     resolved.insert(unit, replacement);
                     replacement
                 };
-                append(output, replacement, plan.declaration.length());
+                append(output, replacement, plan)?;
             }
             Ok(())
         },
@@ -387,7 +395,7 @@ pub fn evaluate_with_keys<K: Ord>(
                     .get(&key(unit).ok_or(Error::UnknownComparison)?)
                     .copied()
                     .unwrap_or(unit);
-                append(output, resolved, plan.declaration.length());
+                append(output, resolved, plan)?;
             }
             Ok(())
         },
@@ -422,6 +430,9 @@ fn evaluate_with_translator(
         let Some(value) = value else {
             continue;
         };
+        if value.len() > MAX_INPUT_UNITS {
+            return Err(Error::InputLimit);
+        }
         let source_unicode = matches!(argument.kind, Some(Type::Character(kind)) if unicode(kind));
         let size = if source_unicode {
             value.len()
@@ -457,12 +468,33 @@ fn evaluate_with_translator(
     match plan.function {
         Function::ConcatWs => {
             let separator = values[0].as_deref().unwrap_or(&[]);
+            if plan.declaration.length() == Length::Max {
+                // Reject repeated-separator amplification before allocating output.
+                let mut size = 0usize;
+                let mut count = 0usize;
+                for value in values[1..].iter().flatten() {
+                    size = size.checked_add(value.len()).ok_or(Error::OutputLimit)?;
+                    count += 1;
+                }
+                let gaps = count.saturating_sub(1);
+                size = size
+                    .checked_add(
+                        separator
+                            .len()
+                            .checked_mul(gaps)
+                            .ok_or(Error::OutputLimit)?,
+                    )
+                    .ok_or(Error::OutputLimit)?;
+                if size > MAX_OUTPUT_UNITS {
+                    return Err(Error::OutputLimit);
+                }
+            }
             let mut first = true;
             for value in values[1..].iter().flatten() {
                 if !first {
-                    append(&mut output, separator, plan.declaration.length());
+                    append(&mut output, separator, plan)?;
                 }
-                append(&mut output, value, plan.declaration.length());
+                append(&mut output, value, plan)?;
                 first = false;
             }
         }
@@ -478,20 +510,45 @@ fn evaluate_with_translator(
                 return Err(sql(9828, if unicode(plan.declaration) { 3 } else { 1 }, "The second and third arguments of the TRANSLATE built-in function must contain an equal number of characters.".into()));
             }
             if from.is_empty() {
-                append(&mut output, input, plan.declaration.length());
+                append(&mut output, input, plan)?;
             } else {
                 translate(plan, input, from, to, &mut output)?;
             }
         }
     }
+    if let Length::Bounded(width) = plan.declaration.length() {
+        let width = usize::from(width);
+        if output.len() > width {
+            // Retain one lookahead unit across argument/replacement boundaries.
+            // Function output truncation drops a pair crossing the cap; CAST's
+            // truncation rule differs. Do not refill the freed final unit.
+            let next = output[width];
+            output.truncate(width);
+            if unicode(plan.declaration)
+                && output
+                    .last()
+                    .is_some_and(|unit| (0xd800..=0xdbff).contains(unit))
+                && (0xdc00..=0xdfff).contains(&next)
+            {
+                output.pop();
+            }
+        }
+    }
     Ok(Some(output))
 }
-fn append(output: &mut Vec<u16>, value: &[u16], length: Length) {
-    let available = match length {
+fn append(output: &mut Vec<u16>, value: &[u16], plan: &Plan) -> Result<(), Error> {
+    let available = match plan.declaration.length() {
         Length::Max => value.len(),
-        Length::Bounded(n) => usize::from(n).saturating_sub(output.len()),
+        // One sentinel establishes whether the final bounded unit is the high
+        // half of a pair, including pairs crossing append boundaries.
+        Length::Bounded(n) => (usize::from(n) + 1).saturating_sub(output.len()),
     };
-    output.extend_from_slice(&value[..available.min(value.len())]);
+    let count = available.min(value.len());
+    if count > MAX_OUTPUT_UNITS.saturating_sub(output.len()) {
+        return Err(Error::OutputLimit);
+    }
+    output.extend_from_slice(&value[..count]);
+    Ok(())
 }
 fn characters(units: &[u16], supplementary: bool) -> impl Iterator<Item = &[u16]> {
     let mut offset = 0;

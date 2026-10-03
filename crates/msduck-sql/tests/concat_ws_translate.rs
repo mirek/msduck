@@ -1798,3 +1798,121 @@ fn max_mappings_stream_duplicates_and_preserve_mismatch() {
     assert_eq!(error.number, 9828);
     assert_eq!(error.state, 3);
 }
+
+#[test]
+fn max_output_limits_reject_separator_amplification_and_translation_growth() {
+    let p = rules::plan(
+        Function::ConcatWs,
+        &vec![arg(Family::Nvarchar, Length::Max); 254],
+        DEFAULT,
+        &catalog(),
+    )
+    .unwrap();
+    let mut values = vec![Some(Vec::new()); 254];
+    values[0] = Some(vec![97; 5 * 1024 * 1024]);
+    assert_eq!(
+        rules::evaluate(&p, &values, &default_match),
+        Err(Error::OutputLimit)
+    );
+    // NULL values contribute no separator gaps; their presence alone cannot
+    // cause the allocation limit to reject the empty result.
+    values[1..].fill(None);
+    assert_eq!(
+        rules::evaluate(&p, &values, &default_match).unwrap(),
+        text("")
+    );
+
+    let p = rules::plan(
+        Function::Translate,
+        &vec![arg(Family::Nvarchar, Length::Max); 3],
+        DEFAULT,
+        &catalog(),
+    )
+    .unwrap();
+    let values = [
+        Some(vec![97; rules::MAX_OUTPUT_UNITS + 1]),
+        text(""),
+        text(""),
+    ];
+    assert_eq!(
+        rules::evaluate(&p, &values, &default_match),
+        Err(Error::InputLimit)
+    );
+    assert_eq!(
+        rules::evaluate_with_keys(&p, &values, &|unit| Some(unit[0])),
+        Err(Error::InputLimit)
+    );
+}
+
+#[test]
+fn translate_replacement_growth_stops_at_output_allocation_limit() {
+    let mut arguments = vec![arg(Family::Nvarchar, Length::Max); 3];
+    arguments[0].collation = Some(Label::Explicit(SC.into()));
+    let p = rules::plan(Function::Translate, &arguments, DEFAULT, &catalog()).unwrap();
+    let values = [
+        Some(vec![97; rules::MAX_OUTPUT_UNITS / 2 + 1]),
+        text("a"),
+        text("🦆"),
+    ];
+    assert_eq!(
+        rules::evaluate(&p, &values, &default_match),
+        Err(Error::OutputLimit)
+    );
+    assert_eq!(
+        rules::evaluate_with_keys(&p, &values, &|unit| Some(unit.to_vec())),
+        Err(Error::OutputLimit)
+    );
+}
+
+#[test]
+fn captured_function_width_boundary_drops_crossing_pairs() {
+    let mut arguments = vec![
+        Argument::null_literal(),
+        arg(Family::Nvarchar, Length::Bounded(4000)),
+        arg(Family::Nvarchar, Length::Bounded(2)),
+    ];
+    arguments[1].collation = Some(Label::Explicit(SC.into()));
+    let p = rules::plan(Function::ConcatWs, &arguments, DEFAULT, &catalog()).unwrap();
+    assert!(p.supplementary);
+    assert_eq!(p.declaration.length(), Length::Bounded(4000));
+    assert_eq!(
+        rules::evaluate(
+            &p,
+            &[None, text(&"a".repeat(3999)), text("🦆")],
+            &default_match
+        )
+        .unwrap(),
+        text(&"a".repeat(3999))
+    );
+    // A complete pair ending exactly at the cap remains valid.
+    let result = rules::evaluate(
+        &p,
+        &[None, text(&"a".repeat(3998)), text("🦆")],
+        &default_match,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(result.len(), 4000);
+    assert_eq!(&result[3998..], &[0xd83e, 0xdd86]);
+
+    arguments = vec![
+        arg(Family::Nvarchar, Length::Bounded(4000)),
+        arg(Family::Nvarchar, Length::Bounded(1)),
+        arg(Family::Nvarchar, Length::Bounded(2)),
+    ];
+    arguments[0].collation = Some(Label::Explicit(SC.into()));
+    let p = rules::plan(Function::Translate, &arguments, DEFAULT, &catalog()).unwrap();
+    let values = [
+        text(&format!("{}b", "a".repeat(3999))),
+        text("b"),
+        text("🦆"),
+    ];
+    assert_eq!(
+        rules::evaluate(&p, &values, &default_match).unwrap(),
+        text(&"a".repeat(3999))
+    );
+    assert_eq!(
+        rules::evaluate_with_keys(&p, &values, &|unit| Some(unit.to_vec())).unwrap(),
+        text(&"a".repeat(3999))
+    );
+}

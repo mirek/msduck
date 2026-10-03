@@ -36,7 +36,7 @@ and ANSI UTF-8 evaluation do not acquire invented behavior. Character payloads
 must respect their declared widths and fixed-width padding. Core CP1252 encoding
 validates ANSI payloads; Unicode payloads retain isolated surrogate units.
 
-Twenty-one private Rust tests pass using cached, compiler-compatible Linux
+Twenty-five private Rust tests pass using cached, compiler-compatible Linux
 dependencies and isolated temporary binaries, with strict Clippy and formatting.
 They compare 21 ordinary character cases across all four captures (84 comparisons),
 26 declaration/collation cases (104 comparisons), 10 supplementary/UTF-8/mismatch
@@ -109,3 +109,20 @@ then streams borrowed UTF-16 character slices in both evaluators. A million-entr
 duplicate MAX mapping produces the first replacement with one opaque comparison;
 the keyed evaluator keeps one distinct key. Large unequal mappings still return
 the captured 9828 diagnostic before consulting unavailable comparison weights.
+
+Evaluation has explicit resource policies: each UTF-16 input and output payload
+is limited to 16 MiB. Inputs are checked before temporary encoding validation;
+MAX CONCAT_WS checks the complete value/separator size before output allocation.
+TRANSLATE also checks incremental replacement growth. `InputLimit` and
+`OutputLimit` are resource barriers, not SQL Server diagnostics or claims about
+SQL Server MAX capacity. NULL values contribute no separator gaps.
+
+A private four-observation SQL Server boundary capture (SHA-256
+`49208568faacbb583ba24ec3ec6fc45841e773625f0ff53ce6b872939d441e29`)
+shows bounded CONCAT_WS drops a valid surrogate pair crossing the 4000-unit cap
+under both ordinary and SC collations; SC TRANSLATE does the same on replacement
+growth. Native CAST retains the high surrogate and therefore is not a substitute
+for these function rules. Evaluation retains one lookahead unit across append
+boundaries, then trims once, preventing a later value from filling space freed by
+pair truncation. The capture worker is retaining expanded boundary/lone-surrogate
+controls as a separate reference task before final merge.
