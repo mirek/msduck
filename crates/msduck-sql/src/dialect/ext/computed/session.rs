@@ -468,6 +468,7 @@ pub fn value_operands(expr: &mut Expr) -> Vec<&mut Expr> {
         }
         | Expr::IsDistinctFrom(left, right)
         | Expr::IsNotDistinctFrom(left, right) => vec![left.as_mut(), right.as_mut()],
+        Expr::IsNull(operand) | Expr::IsNotNull(operand) => vec![operand.as_mut()],
         Expr::Between {
             expr, low, high, ..
         } => vec![expr.as_mut(), low.as_mut(), high.as_mut()],
@@ -981,6 +982,11 @@ mod tests {
             sql.contains(" AS NVARCHAR(128)) = N'nvarchar' THEN CASE getvariable("),
             "{sql}"
         );
+        let sql = rewritten(
+            "CREATE TABLE t (b bit DEFAULT (CASE WHEN SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'BaseType') IS NULL THEN 1 ELSE 0 END))",
+        )
+        .unwrap();
+        assert!(sql.contains("AS NVARCHAR(128)) IS NULL THEN 1"), "{sql}");
         let sql = rewritten(
             "CREATE TABLE t (m int DEFAULT (CONVERT(int, SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'MaxLength'))), b bit DEFAULT (CASE WHEN SESSION_CONTEXT(N'foo') IS NOT NULL THEN 1 ELSE 0 END), n nvarchar(10) DEFAULT (CONVERT(nvarchar(10), SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), NULL))))",
         )

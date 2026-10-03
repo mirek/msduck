@@ -162,8 +162,8 @@ After RESETCONNECTION, the session context is empty, so the defaults are NULL.
   | bit, tinyint, smallint, int, bigint | the type | 1, 1, 2, 4, 8 | 1, 3, 5, 10, 19 | 0 | MaxLength + 2 | NULL |
 
   The variables also hold an nvarchar value's declared and total byte
-  lengths. Where a comparison (`=`, `<>`, `<`, `BETWEEN`, `IN`, simple
-  `CASE`) or an explicit `CAST`/`CONVERT` consumes the property, it is
+  lengths. Where a comparison (`=`, `<>`, `<`, `BETWEEN`, `IN`, `IS NULL`,
+  simple `CASE`) or an explicit `CAST`/`CONVERT` consumes the property, it is
   evaluated in its base type (`nvarchar(128)` for BaseType and Collation,
   `int` otherwise), which is what SQL Server converts the sql_variant to. In
   other positions, and with a non-constant property name, the default is

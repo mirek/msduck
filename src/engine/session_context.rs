@@ -364,6 +364,12 @@ fn select_items(set: &mut SetExpr, each: &mut dyn FnMut(&mut Expr) -> Result<()>
     match set {
         SetExpr::Select(select) => {
             for item in &mut select.projection {
+                // `SELECT @v = ...` assigns rather than returns.
+                if let SelectItem::ExprWithAlias { alias, .. } = item
+                    && alias.value.starts_with('@')
+                {
+                    continue;
+                }
                 if let SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } = item
                 {
                     // Parentheses are transparent.
