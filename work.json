@@ -11348,6 +11348,31 @@
         "Fresh claim only after true completed deps and latest scope audit; existing rootworktree/canonicalLinuxcache/runner.lock, no newagents/worktrees/nativecaches. Fastcore/TDS plus fullAGENTS formatter/workspaceRust/strictalltargetClippy/fullclient/rawaudit gates at exacthead/source/binary; independent/Codex review or genuine fallback, exactrequiredCI, merge and promptregistry/project completion. No corelib export/Value/runtime/catalog/storage/BulkLoad/output or operationalcollation gate changes; runtime adoption remains required."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PlcqJ"
+    },
+    {
+      "id": "bulk-character-trailing-space-reference-v1",
+      "title": "Capture BulkLoad trailing spaces and fixed CHAR capacity precedence",
+      "issue": 909,
+      "state": "ready",
+      "authorization": "Owner continuing full-server goal and parallel-worker instruction; approved first-party plan890 and reviewed captures895/899/906. Fill actual space/padding capacity evidence before deterministic/runtime capacity rules.",
+      "scope": [
+        "scripts/capture-bulk-character-trailing-space.mjs",
+        "reference/bulk-character-trailing-space.json",
+        "tests/bulk_character_trailing_space_capture.test.mjs",
+        "docs/bulk-character-trailing-space-reference.md"
+      ],
+      "dependencies": [
+        "bulk-character-conversion-reference-v1",
+        "bulk-character-capacity-reference-v1",
+        "bulk-character-cp1252-reference-v1",
+        "bulk-character-adapter-plan-v1"
+      ],
+      "acceptance": [
+        "At most96 probes, each<=3rows, NULL plus isolated challenge so an earlier distractor cannot hide the intended capacity outcome. Primary72: nativeCp1251/Cp1252/UTF8 × VARCHAR(MAX)/CHAR(8) with matching declared/wire widths × Cp1252VARCHAR/CHAR,UTF8VARCHAR/CHAR,UnicodeNVARCHAR/NCHAR × widths1/2; nativeASCII A plus two trailing spaces. Additional18: three source encodings × Cp1252VARCHAR,UTF8VARCHAR/CHAR × widths1/2 with VARCHAR(MAX) copyright-plus-two-spaces. Final6: three CHAR(8) source encodings × same-nativeVARCHAR(MAX)/UnicodeNVARCHAR(MAX) copyright-plus-spaces, proving actual source padding separately from bounded target cropping. Preserve suppliedbytes/actual source and targetfacts; NUL/NBSP/arbitrarywidth/codepage profiles remain explicit gaps, not inferred rules.",
+        "Four fresh DBs/two pinnedSQLServer17.0.4065.4 containers with source-pinned collector and reviewed895/899/906 guard reuse. Preserve all original postlogin request/reply frames excludingcredentials, exact nativebytes/SQLUTF16 units/display, typeddescriptors, diagnostics/DONE/callback/original-session counters including unexpected2628/4815/4816/otheroutcomes. Retain bounded raw/complete differences before goldvalidation; no replacing lone-surrogate diagnostics or normalizing outcomes. Independently pinned whole semantic/payload/framing/source provenance must reject uniform corruption/packet repartition even with recomputed comparisons; no SQL CAST/general assignment/runtime-support claims.",
+        "Fresh exclusiveclaim after genuine completed deps; reuse existing isolated worker/private reference resources only, no newagents/trees/nativecaches or canonicalLinux source/build/cache writes. Claiming worker owns source checkpoints/draftPR, finalsource-pinned full four-run reproduction/complete raw sidecar, focusedtests bothhosts, independent/Codex review or genuinefallback, exactrequiredCI, merge and promptissue/registry/projectcompletion. NoRust/engine/runtime/collationgate edits; root907fullverifier sharedlock respected."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Plgb8"
     }
   ]
 }
