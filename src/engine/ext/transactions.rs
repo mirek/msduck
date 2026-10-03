@@ -37,6 +37,9 @@ pub(crate) struct State {
     /// ordinary path. Its own re-entry skips this feature once; statements
     /// nested in it (trigger bodies) are handled as usual.
     resumed: Option<Statement>,
+    /// SNAPSHOT writes running through `snapshot::write`, whose nested
+    /// statements belong to the same autocommit transaction.
+    writing: u32,
 }
 
 impl Default for State {
@@ -46,6 +49,7 @@ impl Default for State {
             batch_isolation: Vec::new(),
             savepoints: Default::default(),
             resumed: None,
+            writing: 0,
         }
     }
 }
@@ -110,6 +114,7 @@ impl Feature for Hooks {
                 {
                     return Ok(None);
                 }
+                snapshot::statement_begins(session);
                 let snapshot = snapshot::active(session);
                 if snapshot {
                     snapshot::check_access(session, statement)?;

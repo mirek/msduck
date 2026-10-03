@@ -249,6 +249,20 @@ pub(super) fn end(session: &Session) {
     active_transactions().remove(&session.ext.token);
 }
 
+/// A statement starts. Outside a transaction each top-level statement is
+/// its own autocommit transaction, so earlier SNAPSHOT reads no longer
+/// count (writes stay registered until the batch ends).
+pub(super) fn statement_begins(session: &Session) {
+    if session.transactions == 0
+        && session.ext.transactions.writing == 0
+        && let Some(active) = active_transactions().get_mut(&session.ext.token)
+    {
+        for usage in active.databases.values_mut() {
+            usage.read = false;
+        }
+    }
+}
+
 /// Update how the session's transaction uses a database. Outside a
 /// transaction this starts an entry for its autocommit transactions.
 fn usage(session: &Session, alias: &str, update: impl FnOnce(&mut Usage)) {
@@ -710,7 +724,9 @@ pub(super) fn write(
     // Not `reenter`: statements nested in this one, such as trigger bodies,
     // still need their access checks, savepoint images and conflicts.
     session.ext.transactions.resumed = Some(statement.clone());
+    session.ext.transactions.writing += 1;
     let result = session.execute(statement.clone(), parameters);
+    session.ext.transactions.writing -= 1;
     session.ext.transactions.resumed = None;
     let error = match result {
         Ok(execution) => return Ok(Some(execution)),
