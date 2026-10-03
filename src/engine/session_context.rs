@@ -5,6 +5,7 @@
 use super::{Parameter, ParameterValue, Session, SqlType};
 use anyhow::{Result, bail};
 use msduck_core::character::{CharacterType, Family, Length};
+use msduck_sql::dialect::ext::computed::session as stored;
 use msduck_sql::session_function::{
     self as rules, ContextValue, NameArgument, SessionContext, SessionOptions, VariantFunction,
 };
@@ -36,6 +37,8 @@ impl Session {
             context: &self.session_context,
             parameters,
             next: 0,
+            returning: false,
+            depth: 0,
         };
         match node.visit(&mut lower) {
             ControlFlow::Continue(()) => Ok(()),
@@ -99,6 +102,11 @@ struct Lower<'a> {
     context: &'a SessionContext,
     parameters: &'a mut HashMap<String, Parameter>,
     next: usize,
+    /// The statement being lowered is a SELECT, whose outermost select items
+    /// are returned to the client.
+    returning: bool,
+    /// Query nesting depth; 1 is the statement's own query.
+    depth: usize,
 }
 impl Lower<'_> {
     fn bind(&mut self, data_type: SqlType, value: ParameterValue) -> Expr {
@@ -232,11 +240,185 @@ impl Lower<'_> {
         Ok(())
     }
 }
+/// `SQL_VARIANT_PROPERTY(session function, property)`: the session function
+/// call and the property argument.
+fn property_call(expr: &Expr) -> Option<(&Function, &Expr)> {
+    let Expr::Function(function) = expr else {
+        return None;
+    };
+    let [ObjectNamePart::Identifier(name)] = function.name.0.as_slice() else {
+        return None;
+    };
+    if name.quote_style.is_some()
+        || !name.value.eq_ignore_ascii_case("SQL_VARIANT_PROPERTY")
+        || function.over.is_some()
+        || function.filter.is_some()
+    {
+        return None;
+    }
+    let FunctionArguments::List(list) = &function.args else {
+        return None;
+    };
+    let [
+        FunctionArg::Unnamed(FunctionArgExpr::Expr(value)),
+        FunctionArg::Unnamed(FunctionArgExpr::Expr(property)),
+    ] = list.args.as_slice()
+    else {
+        return None;
+    };
+    let mut value = value;
+    while let Expr::Nested(inner) = value {
+        value = inner;
+    }
+    match value {
+        Expr::Function(inner)
+            if list.clauses.is_empty() && rules::variant_function(inner).is_some() =>
+        {
+            Some((inner, property))
+        }
+        _ => None,
+    }
+}
+
+impl Lower<'_> {
+    /// `SQL_VARIANT_PROPERTY` of the session value with a constant property
+    /// name. `None` leaves a non-constant property to the built-in.
+    fn property(&self, expr: &Expr) -> Result<Option<(bool, Option<stored::Property>)>> {
+        let Some((function, property)) = property_call(expr) else {
+            return Ok(None);
+        };
+        let property = match rules::name_argument(property, self.parameters) {
+            Ok(NameArgument::Text { text, .. }) => text,
+            Ok(NameArgument::Null) => None,
+            _ => return Ok(None),
+        };
+        let text = property
+            .as_deref()
+            .map(|p| p.trim_end().to_ascii_lowercase())
+            .is_some_and(|p| p == "basetype" || p == "collation");
+        let value = match (self.current(function)?, property) {
+            (Some(value), Some(property)) => stored::context_property(&value, &property),
+            _ => None,
+        };
+        Ok(Some((text, value)))
+    }
+    /// The property as its base type (`nvarchar(128)` or `int`), where a
+    /// comparison or explicit conversion consumes it.
+    fn lower_property(&mut self, expr: &mut Expr) -> Result<()> {
+        let Some((text, value)) = self.property(expr)? else {
+            return Ok(());
+        };
+        let name_type = || {
+            CharacterType::new(Family::Nvarchar, Length::Bounded(128))
+                .map(SqlType::Character)
+                .map_err(|error| anyhow::anyhow!(error.to_string()))
+        };
+        *expr = match value {
+            Some(stored::Property::Text(value)) => {
+                self.bind(name_type()?, ParameterValue::Text(value.into()))
+            }
+            Some(stored::Property::Int(value)) => {
+                self.bind(SqlType::Int, ParameterValue::Int(i32::try_from(value)?))
+            }
+            None if text => self.bind(name_type()?, ParameterValue::Null),
+            None => self.bind(SqlType::Int, ParameterValue::Null),
+        };
+        Ok(())
+    }
+    /// A select item's property is a sql_variant: a sysname for BaseType and
+    /// Collation, an int otherwise.
+    fn select_property(&mut self, expr: &mut Expr) -> Result<()> {
+        let Some((_, value)) = self.property(expr)? else {
+            return Ok(());
+        };
+        let null = || Expr::Value(sqlparser::ast::Value::Null.into());
+        let (tag, integer, text) = match value {
+            None => (null(), null(), null()),
+            Some(stored::Property::Text(value)) => (
+                msduck_sql::expr::number(231),
+                null(),
+                Expr::Value(sqlparser::ast::Value::SingleQuotedString(value.into()).into()),
+            ),
+            Some(stored::Property::Int(value)) => (
+                msduck_sql::expr::number(56),
+                msduck_sql::expr::number(value),
+                null(),
+            ),
+        };
+        // The conversion feature's sql_variant constructor (tag, integer,
+        // sysname text).
+        let mut variant =
+            msduck_sql::expr::binary_function("__msduck_conversion_variant", tag, integer);
+        if let Expr::Function(function) = &mut variant
+            && let FunctionArguments::List(list) = &mut function.args
+        {
+            list.args
+                .push(FunctionArg::Unnamed(FunctionArgExpr::Expr(text)));
+        }
+        *expr = variant;
+        Ok(())
+    }
+}
+
+fn select_items(set: &mut SetExpr, each: &mut dyn FnMut(&mut Expr) -> Result<()>) -> Result<()> {
+    match set {
+        SetExpr::Select(select) => {
+            for item in &mut select.projection {
+                // `SELECT @v = ...` assigns rather than returns.
+                if let SelectItem::ExprWithAlias { alias, .. } = item
+                    && alias.quote_style.is_none()
+                    && alias.value.starts_with('@')
+                {
+                    continue;
+                }
+                if let SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } = item
+                {
+                    // Parentheses are transparent.
+                    let mut expr = expr;
+                    while let Expr::Nested(inner) = expr {
+                        expr = inner;
+                    }
+                    each(expr)?;
+                }
+            }
+        }
+        SetExpr::SetOperation { left, right, .. } => {
+            select_items(left, each)?;
+            select_items(right, each)?;
+        }
+        SetExpr::Query(query) => select_items(&mut query.body, each)?,
+        _ => {}
+    }
+    Ok(())
+}
+
 impl VisitorMut for Lower<'_> {
     type Break = anyhow::Error;
+    /// A selected `SQL_VARIANT_PROPERTY` of a session value is a sql_variant.
+    /// Only the outermost select items of a SELECT are returned as
+    /// sql_variant. Elsewhere (derived tables, CTEs, subqueries, INSERT
+    /// sources) the value would flow into conversions msduck's sysname
+    /// carrier does not support, so it is refused like other implicit uses.
+    fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<anyhow::Error> {
+        self.depth += 1;
+        if self.depth != 1 || !self.returning || matches!(query.body.as_ref(), SetExpr::Insert(_)) {
+            return ControlFlow::Continue(());
+        }
+        match select_items(&mut query.body, &mut |expr| self.select_property(expr)) {
+            Ok(()) => ControlFlow::Continue(()),
+            Err(error) => ControlFlow::Break(error),
+        }
+    }
+    fn post_visit_query(&mut self, _query: &mut Query) -> ControlFlow<anyhow::Error> {
+        self.depth -= 1;
+        ControlFlow::Continue(())
+    }
     /// Session values are read when a statement runs; a persisted definition
     /// (view, default, routine, trigger) would freeze today's value instead.
     fn pre_visit_statement(&mut self, statement: &mut Statement) -> ControlFlow<anyhow::Error> {
+        if self.depth == 0 {
+            self.returning = matches!(statement, Statement::Query(_));
+        }
         let persisted = matches!(
             statement,
             Statement::CreateView { .. }
@@ -255,7 +437,22 @@ impl VisitorMut for Lower<'_> {
         ControlFlow::Continue(())
     }
     fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<anyhow::Error> {
-        match self.lower(expr) {
+        // Comparisons and explicit conversions use a property's base type.
+        // SQL Server keeps the sql_variant elsewhere, and refuses its
+        // implicit conversion in writes and assignments with 257; msduck's
+        // sql_variant carrier does not reproduce that, so those positions
+        // are refused.
+        let lowered = stored::value_operands(expr)
+            .into_iter()
+            .try_for_each(|operand| self.lower_property(operand))
+            .and_then(|()| match self.property(expr)? {
+                Some(_) => bail!(
+                    "unsupported SQL_VARIANT_PROPERTY of a session value outside a select item, comparison or explicit conversion"
+                ),
+                None => Ok(()),
+            })
+            .and_then(|()| self.lower(expr));
+        match lowered {
             Ok(()) => ControlFlow::Continue(()),
             Err(error) => ControlFlow::Break(error),
         }

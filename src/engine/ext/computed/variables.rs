@@ -7,7 +7,7 @@
 //! batch and statement; only changed variables are written.
 use crate::engine::Session;
 use msduck_sql::dialect::ext::computed::session::{
-    APP, HOST, LOGIN, context_value, context_variables,
+    APP, HOST, LOGIN, context_length_variables, context_lengths, context_value, context_variables,
 };
 use std::collections::BTreeMap;
 
@@ -47,9 +47,15 @@ fn wanted(session: &Session, host: Option<&str>, app: Option<&str>) -> BTreeMap<
     }
     for (key, value) in session.session_context.entries() {
         if let Some((kind, text)) = context_value(value) {
-            let (value, kind_variable) = context_variables(key);
-            wanted.insert(value, text);
+            let (value_variable, kind_variable) = context_variables(key);
+            wanted.insert(value_variable, text);
             wanted.insert(kind_variable, kind.to_owned());
+            // SQL_VARIANT_PROPERTY's MaxLength and TotalBytes of nvarchar.
+            if let Some((max, total)) = context_lengths(value) {
+                let (max_variable, total_variable) = context_length_variables(key);
+                wanted.insert(max_variable, max.to_string());
+                wanted.insert(total_variable, total.to_string());
+            }
         }
     }
     wanted

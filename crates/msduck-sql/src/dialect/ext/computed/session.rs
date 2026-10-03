@@ -14,7 +14,12 @@
 //!   `CAST`/`CONVERT` it converts from its base type, so the conversion is
 //!   applied to each supported base type in turn and the stored kind selects
 //!   one. A bare value converts implicitly to the column type, which SQL
-//!   Server refuses with 257 when the table is created.
+//!   Server refuses with 257 when the table is created; so do ISNULL,
+//!   COALESCE, NULLIF, IIF, CHOOSE and CASE results built from it.
+//! - `SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'key'), 'property')` with a
+//!   constant property reads the stored kind (and, for nvarchar, the declared
+//!   and total byte lengths) in its base type, so DEFAULT conditions compare
+//!   and convert it. `SESSION_CONTEXT(...) IS [NOT] NULL` tests the kind.
 use anyhow::{Result, bail};
 use msduck_core::diagnostic::SqlError;
 use sqlparser::ast::*;
@@ -41,6 +46,68 @@ pub fn context_variables(key: &str) -> (String, String) {
     }
     let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
     (format!("{CONTEXT}{hex}"), format!("{CONTEXT}{hex}_kind"))
+}
+
+/// The variables holding one `SESSION_CONTEXT` key's nvarchar declared
+/// byte length and its `SQL_VARIANT_PROPERTY(..., 'TotalBytes')`. Only
+/// nvarchar values set them; integer base types have fixed lengths.
+pub fn context_length_variables(key: &str) -> (String, String) {
+    let (value, _) = context_variables(key);
+    (format!("{value}_max"), format!("{value}_total"))
+}
+
+/// The collation SQL Server reports for an nvarchar context value: the
+/// server collation, which msduck reports everywhere.
+pub const COLLATION: &str = "SQL_Latin1_General_CP1_CI_AS";
+
+/// A `SQL_VARIANT_PROPERTY` result of a context value, in its base type:
+/// `nvarchar(128)` text or `int`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Property {
+    Text(&'static str),
+    Int(i64),
+}
+
+/// `SQL_VARIANT_PROPERTY` of a value of base type `kind`, given its nvarchar
+/// declared byte length and total bytes. `None` is NULL, including unknown
+/// property names. Matches reference/gaps-computed.json.
+pub fn property_of(kind: &'static str, property: &str, lengths: (i64, i64)) -> Option<Property> {
+    let (max_length, precision, total) = match kind {
+        "nvarchar" => (lengths.0, 0, lengths.1),
+        "bit" => (1, 1, 3),
+        "tinyint" => (1, 3, 3),
+        "smallint" => (2, 5, 4),
+        "int" => (4, 10, 6),
+        "bigint" => (8, 19, 10),
+        _ => return None,
+    };
+    Some(match property.trim_end().to_ascii_lowercase().as_str() {
+        "basetype" => Property::Text(kind),
+        "precision" => Property::Int(precision),
+        "scale" => Property::Int(0),
+        "maxlength" => Property::Int(max_length),
+        "totalbytes" => Property::Int(total),
+        "collation" if kind == "nvarchar" => Property::Text(COLLATION),
+        _ => return None,
+    })
+}
+
+/// `SQL_VARIANT_PROPERTY` of a stored context value.
+pub fn context_property(value: &ContextValue, property: &str) -> Option<Property> {
+    let (kind, _) = context_value(value)?;
+    property_of(kind, property, context_lengths(value).unwrap_or((0, 0)))
+}
+
+/// An nvarchar value's declared byte length and its total bytes as a
+/// sql_variant (eight bytes of header and collation, then UTF-16 data).
+pub fn context_lengths(value: &ContextValue) -> Option<(i64, i64)> {
+    match value {
+        ContextValue::NVarChar { text, max_bytes } => Some((
+            i64::from(*max_bytes),
+            8 + 2 * text.encode_utf16().count() as i64,
+        )),
+        _ => None,
+    }
 }
 
 /// A stored value as the variables hold it: its base type name and its
@@ -279,6 +346,390 @@ fn lower_conversion(expr: &mut Expr) -> Result<bool> {
     Ok(true)
 }
 
+/// `SQL_VARIANT_PROPERTY(SESSION_CONTEXT(key), property)`: the context call
+/// and the property argument.
+fn variant_property(expr: &Expr) -> Option<(&Function, &Expr)> {
+    let Expr::Function(function) = expr else {
+        return None;
+    };
+    if !function_name(function)?.eq_ignore_ascii_case("SQL_VARIANT_PROPERTY")
+        || function.over.is_some()
+        || function.filter.is_some()
+    {
+        return None;
+    }
+    let FunctionArguments::List(list) = &function.args else {
+        return None;
+    };
+    let [
+        FunctionArg::Unnamed(FunctionArgExpr::Expr(value)),
+        FunctionArg::Unnamed(FunctionArgExpr::Expr(property)),
+    ] = list.args.as_slice()
+    else {
+        return None;
+    };
+    if !list.clauses.is_empty() {
+        return None;
+    }
+    Some((session_context(value)?, property))
+}
+
+/// Whether a DEFAULT expression's result is a sql_variant read from session
+/// state: SESSION_CONTEXT, SQL_VARIANT_PROPERTY of it, or ISNULL, COALESCE,
+/// NULLIF, IIF, CHOOSE or CASE results built from those. SQL Server refuses those for
+/// a column of another type with 257 when the table is created.
+fn variant_result(expr: &Expr) -> bool {
+    match expr {
+        Expr::Nested(inner) => variant_result(inner),
+        // CAST(<session value> AS sql_variant).
+        Expr::Cast {
+            expr: operand,
+            data_type,
+            ..
+        }
+        | Expr::Convert {
+            expr: operand,
+            data_type: Some(data_type),
+            ..
+        } if crate::variant_pack::is_variant(data_type) => reads_session_context(operand),
+        Expr::Case {
+            conditions,
+            else_result,
+            ..
+        } => {
+            conditions.iter().any(|when| variant_result(&when.result))
+                || else_result.as_deref().is_some_and(variant_result)
+        }
+        Expr::Function(function) => {
+            if session_context(expr).is_some() || variant_property(expr).is_some() {
+                return true;
+            }
+            let Some(name) = function_name(function) else {
+                return false;
+            };
+            let FunctionArguments::List(list) = &function.args else {
+                return false;
+            };
+            let arguments: Vec<&Expr> = list
+                .args
+                .iter()
+                .filter_map(|argument| match argument {
+                    FunctionArg::Unnamed(FunctionArgExpr::Expr(expr)) => Some(expr),
+                    _ => None,
+                })
+                .collect();
+            let untyped_null = |expr: &&Expr| matches!(unnested(expr), Expr::Value(value) if matches!(value.value, Value::Null));
+            let candidates: &[&Expr] = match name.to_ascii_uppercase().as_str() {
+                // ISNULL(NULL, x) has the replacement's type.
+                "ISNULL" if arguments.first().is_some_and(untyped_null) => &arguments,
+                // ISNULL(CAST(... AS sql_variant), x) is a sql_variant; only
+                // counted when x reads session state, so other defaults are
+                // unaffected.
+                "ISNULL"
+                    if arguments
+                        .first()
+                        .is_some_and(|check| explicit_variant(check))
+                        && arguments
+                            .get(1)
+                            .is_some_and(|replacement| variant_result(replacement)) =>
+                {
+                    return true;
+                }
+                "ISNULL" | "NULLIF" => arguments.get(..1).unwrap_or_default(),
+                "COALESCE" => &arguments,
+                // The value arms after the condition or index.
+                "IIF" | "CHOOSE" => arguments.get(1..).unwrap_or_default(),
+                _ => &[],
+            };
+            candidates.iter().any(|candidate| variant_result(candidate))
+        }
+        _ => false,
+    }
+}
+
+fn int_type() -> DataType {
+    DataType::Int(None)
+}
+
+fn integer_variable(name: &str) -> Expr {
+    Expr::Cast {
+        kind: CastKind::Cast,
+        expr: Box::new(variable(name)),
+        data_type: int_type(),
+        format: None,
+    }
+}
+
+/// The operands of `expr` that a comparison or an explicit conversion
+/// consumes by value, looking through parentheses and the parser's explicit
+/// integer conversion marker. A sql_variant there converts from its base
+/// type, so its base-type value can stand in for it; anywhere else (a write,
+/// an assignment, a function argument) SQL Server keeps the sql_variant.
+pub fn value_operands(expr: &mut Expr) -> Vec<&mut Expr> {
+    let operands: Vec<&mut Expr> = match expr {
+        Expr::BinaryOp {
+            left,
+            op:
+                BinaryOperator::Eq
+                | BinaryOperator::NotEq
+                | BinaryOperator::Lt
+                | BinaryOperator::LtEq
+                | BinaryOperator::Gt
+                | BinaryOperator::GtEq,
+            right,
+        }
+        | Expr::IsDistinctFrom(left, right)
+        | Expr::IsNotDistinctFrom(left, right) => vec![left.as_mut(), right.as_mut()],
+        Expr::IsNull(operand) | Expr::IsNotNull(operand) => vec![operand.as_mut()],
+        Expr::Between {
+            expr, low, high, ..
+        } => vec![expr.as_mut(), low.as_mut(), high.as_mut()],
+        Expr::InList { expr, list, .. } => std::iter::once(expr.as_mut())
+            .chain(list.iter_mut())
+            .collect(),
+        Expr::Case {
+            operand: Some(operand),
+            conditions,
+            ..
+        } => std::iter::once(operand.as_mut())
+            .chain(conditions.iter_mut().map(|when| &mut when.condition))
+            .collect(),
+        Expr::Cast {
+            expr: operand,
+            data_type,
+            ..
+        }
+        | Expr::Convert {
+            expr: operand,
+            data_type: Some(data_type),
+            ..
+        } if !crate::variant_pack::is_variant(data_type) => {
+            if crate::variant_cast::source(operand).is_some() {
+                let Expr::Function(marker) = operand.as_mut() else {
+                    unreachable!("the marker is a function")
+                };
+                let FunctionArguments::List(list) = &mut marker.args else {
+                    unreachable!("the marker has one argument")
+                };
+                let [FunctionArg::Unnamed(FunctionArgExpr::Expr(inner))] = list.args.as_mut_slice()
+                else {
+                    unreachable!("the marker has one argument")
+                };
+                vec![inner]
+            } else {
+                vec![operand.as_mut()]
+            }
+        }
+        _ => vec![],
+    };
+    operands
+        .into_iter()
+        .map(|mut operand| {
+            while let Expr::Nested(inner) = operand {
+                operand = inner;
+            }
+            operand
+        })
+        .collect()
+}
+
+/// The declared type name of a constant or explicitly converted expression,
+/// as conversion errors print it; `None` when it is not evident.
+/// Whether `expr` calls SESSION_CONTEXT anywhere.
+fn reads_session_context(expr: &Expr) -> bool {
+    struct Find;
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            if session_context(expr).is_some() {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        }
+    }
+    expr.visit(&mut Find).is_break()
+}
+
+fn unnested(mut expr: &Expr) -> &Expr {
+    while let Expr::Nested(inner) = expr {
+        expr = inner;
+    }
+    expr
+}
+
+/// An explicit conversion to sql_variant.
+fn explicit_variant(expr: &Expr) -> bool {
+    match unnested(expr) {
+        Expr::Cast { data_type, .. }
+        | Expr::Convert {
+            data_type: Some(data_type),
+            ..
+        } => crate::variant_pack::is_variant(data_type),
+        _ => false,
+    }
+}
+
+fn static_type_name(expr: &Expr) -> Option<String> {
+    if explicit_variant(expr) {
+        return None;
+    }
+    match expr {
+        Expr::Nested(inner) => static_type_name(inner),
+        Expr::Cast { data_type, .. }
+        | Expr::Convert {
+            data_type: Some(data_type),
+            ..
+        } => Some(type_name(data_type)),
+        Expr::Value(value) => match &value.value {
+            Value::NationalStringLiteral(_) => Some("nvarchar".into()),
+            Value::HexStringLiteral(_) => Some("varbinary".into()),
+            Value::SingleQuotedString(_) => Some("varchar".into()),
+            // Integer constants are int when they fit, otherwise numeric, as
+            // are decimal constants (captured from SQL Server).
+            // Scientific constants are float.
+            Value::Number(text, _) if text.contains(['e', 'E']) => Some("float".into()),
+            Value::Number(text, _) if text.bytes().all(|b| b.is_ascii_digit() || b == b'.') => {
+                Some(
+                    if text.parse::<i32>().is_ok() {
+                        "int"
+                    } else {
+                        "numeric"
+                    }
+                    .into(),
+                )
+            }
+            _ => None,
+        },
+        Expr::UnaryOp {
+            op: UnaryOperator::Minus | UnaryOperator::Plus,
+            expr,
+        } if matches!(unnested(expr), Expr::Value(value) if matches!(value.value, Value::Number(..))) => {
+            static_type_name(unnested(expr))
+        }
+        _ => None,
+    }
+}
+
+fn implicit_variant_conversion(target: &str) -> anyhow::Error {
+    SqlError::new(
+        257,
+        3,
+        format!(
+            "Implicit conversion from data type sql_variant to {target} is not allowed. Use the CONVERT function to run this query."
+        ),
+    )
+    .into()
+}
+
+/// `ISNULL(check, replacement)` converts a sql_variant replacement to the
+/// type of `check`, which SQL Server refuses with 257 when the table is
+/// created. Only an evident `check` type is reported; others stay
+/// unsupported.
+fn check_isnull_replacement(expr: &Expr) -> Result<()> {
+    let Expr::Function(function) = expr else {
+        return Ok(());
+    };
+    if !function_name(function).is_some_and(|name| name.eq_ignore_ascii_case("ISNULL")) {
+        return Ok(());
+    }
+    let FunctionArguments::List(list) = &function.args else {
+        return Ok(());
+    };
+    if let [
+        FunctionArg::Unnamed(FunctionArgExpr::Expr(check)),
+        FunctionArg::Unnamed(FunctionArgExpr::Expr(replacement)),
+    ] = list.args.as_slice()
+        && variant_result(replacement)
+        && !variant_result(check)
+        && let Some(target) = static_type_name(check)
+    {
+        return Err(implicit_variant_conversion(&target));
+    }
+    Ok(())
+}
+
+/// `SQL_VARIANT_PROPERTY(SESSION_CONTEXT(key), property)` with a constant
+/// property: the property of the stored kind, in its base type
+/// (`nvarchar(128)` for BaseType and Collation, `int` otherwise). Applied
+/// only to `value_operands`, where the base type is what SQL Server uses.
+fn lower_property(expr: &mut Expr) -> Result<bool> {
+    let Some((function, property)) = variant_property(expr) else {
+        return Ok(false);
+    };
+    let key = context_key(function)?;
+    let property = match rules::name_argument(property, &HashMap::new()) {
+        Ok(rules::NameArgument::Text { text, .. }) => text,
+        Ok(rules::NameArgument::Null) => None,
+        _ => bail!("unsupported non-constant SQL_VARIANT_PROPERTY property in a DEFAULT"),
+    };
+    let data_type = match property
+        .as_deref()
+        .map(|p| p.trim_end().to_ascii_lowercase())
+    {
+        Some(name) if name == "basetype" || name == "collation" => login_name_type(),
+        _ => int_type(),
+    };
+    let null = || Expr::Value(Value::Null.into());
+    let value = match (key, property) {
+        (Some(key), Some(property)) => {
+            let (_, kind) = context_variables(&key);
+            let (max, total) = context_length_variables(&key);
+            let lowered = property.trim_end().to_ascii_lowercase();
+            let conditions = base_types()
+                .into_iter()
+                .map(|(name, _)| {
+                    let result = match (name, lowered.as_str()) {
+                        ("nvarchar", "maxlength") => integer_variable(&max),
+                        ("nvarchar", "totalbytes") => integer_variable(&total),
+                        _ => match property_of(name, &property, (0, 0)) {
+                            Some(Property::Text(text)) => {
+                                Expr::Value(Value::SingleQuotedString(text.into()).into())
+                            }
+                            Some(Property::Int(value)) => crate::expr::number(value),
+                            None => null(),
+                        },
+                    };
+                    CaseWhen {
+                        condition: Expr::Value(Value::SingleQuotedString(name.into()).into()),
+                        result,
+                    }
+                })
+                .collect();
+            Expr::Case {
+                case_token: sqlparser::ast::helpers::attached_token::AttachedToken::empty(),
+                end_token: sqlparser::ast::helpers::attached_token::AttachedToken::empty(),
+                operand: Some(Box::new(variable(&kind))),
+                conditions,
+                else_result: None,
+            }
+        }
+        _ => null(),
+    };
+    *expr = Expr::Cast {
+        kind: CastKind::Cast,
+        expr: Box::new(value),
+        data_type,
+        format: None,
+    };
+    Ok(true)
+}
+
+/// `SESSION_CONTEXT(key) IS [NOT] NULL`: whether the key has a value.
+fn lower_null_test(expr: &mut Expr) -> Result<bool> {
+    let (Expr::IsNull(operand) | Expr::IsNotNull(operand)) = expr else {
+        return Ok(false);
+    };
+    let Some(function) = session_context(operand) else {
+        return Ok(false);
+    };
+    **operand = match context_key(function)? {
+        Some(key) => variable(&context_variables(&key).1),
+        None => Expr::Value(Value::Null.into()),
+    };
+    Ok(true)
+}
+
 /// SQL Server's lower-case name of a declared type, as conversion errors
 /// print it.
 fn type_name(kind: &DataType) -> String {
@@ -297,15 +748,12 @@ pub fn rewrite_default(default: &mut Expr, target: &DataType) -> Result<bool> {
     while let Expr::Nested(inner) = bare {
         bare = inner;
     }
-    if session_context(bare).is_some() && !crate::variant_pack::is_variant(target) {
-        bail!(SqlError::new(
-            257,
-            3,
-            format!(
-                "Implicit conversion from data type sql_variant to {} is not allowed. Use the CONVERT function to run this query.",
-                type_name(target)
-            )
-        ));
+    let variant_target = crate::variant_pack::is_variant(target);
+    if variant_target && session_context(bare).is_none() && variant_result(bare) {
+        bail!("unsupported sql_variant DEFAULT expression over SESSION_CONTEXT");
+    }
+    if variant_result(bare) && !variant_target {
+        return Err(implicit_variant_conversion(&type_name(target)));
     }
     struct Rewrite {
         changed: bool,
@@ -313,13 +761,24 @@ pub fn rewrite_default(default: &mut Expr, target: &DataType) -> Result<bool> {
     impl VisitorMut for Rewrite {
         type Break = anyhow::Error;
         fn pre_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<anyhow::Error> {
-            match lower_conversion(expr) {
-                Ok(true) => {
-                    self.changed = true;
-                    return ControlFlow::Continue(());
+            if let Err(error) = check_isnull_replacement(expr) {
+                return ControlFlow::Break(error);
+            }
+            for lower in [lower_conversion, lower_null_test] {
+                match lower(expr) {
+                    Ok(true) => {
+                        self.changed = true;
+                        return ControlFlow::Continue(());
+                    }
+                    Ok(false) => {}
+                    Err(error) => return ControlFlow::Break(error),
                 }
-                Ok(false) => {}
-                Err(error) => return ControlFlow::Break(error),
+            }
+            for operand in value_operands(expr) {
+                match lower_property(operand) {
+                    Ok(changed) => self.changed |= changed,
+                    Err(error) => return ControlFlow::Break(error),
+                }
             }
             if let Some(variable) = name_function(expr) {
                 *expr = name_value(variable);
@@ -462,20 +921,168 @@ mod tests {
                 "Implicit conversion from data type sql_variant to nvarchar is not allowed. Use the CONVERT function to run this query."
             )
         );
+        // sql_variant results of ISNULL, COALESCE, CASE, IIF and
+        // SQL_VARIANT_PROPERTY fail with the same 257 (reference case
+        // session-default-positions).
         for sql in [
-            "CREATE TABLE t (v sql_variant DEFAULT (SESSION_CONTEXT(N'foo')))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(SESSION_CONTEXT(N'foo'), N'x')))",
+            "CREATE TABLE t (v nvarchar(10) DEFAULT (COALESCE(N'x', SESSION_CONTEXT(N'foo'))))",
+            "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(NULL, SESSION_CONTEXT(N'foo'))))",
+            "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL((NULL), SESSION_CONTEXT(N'foo'))))",
+            "CREATE TABLE t (v nvarchar(10) DEFAULT CAST(SESSION_CONTEXT(N'foo') AS sql_variant))",
+            "CREATE TABLE t (v nvarchar(10) DEFAULT CHOOSE(1, SESSION_CONTEXT(N'foo'), N'x'))",
+            "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(CAST(NULL AS sql_variant), SESSION_CONTEXT(N'foo'))))",
+            "CREATE TABLE t (v nvarchar(10) DEFAULT (CASE WHEN 1 = 1 THEN SESSION_CONTEXT(N'foo') END))",
+            "CREATE TABLE t (v nvarchar(10) DEFAULT IIF(1 = 1, N'x', SESSION_CONTEXT(N'foo')))",
+            "CREATE TABLE t (v nvarchar(128) DEFAULT (SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'BaseType')))",
         ] {
             let error = rewritten(sql).unwrap_err();
-            assert!(
-                error.to_string().starts_with("unsupported SESSION_CONTEXT"),
+            assert_eq!(
+                error.downcast_ref::<SqlError>().unwrap().number,
+                257,
                 "{sql}"
             );
+        }
+        // ISNULL converts a sql_variant replacement to the check's type.
+        for (sql, target) in [
+            (
+                "CREATE TABLE t (v int DEFAULT (ISNULL(CAST(NULL AS int), SESSION_CONTEXT(N'k'))))",
+                "int",
+            ),
+            (
+                "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(N'x', SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'))))",
+                "nvarchar",
+            ),
+            (
+                "CREATE TABLE t (v int DEFAULT (ISNULL(-1, SESSION_CONTEXT(N'k'))))",
+                "int",
+            ),
+            (
+                "CREATE TABLE t (v varbinary(1) DEFAULT (ISNULL(0x01, SESSION_CONTEXT(N'k'))))",
+                "varbinary",
+            ),
+            (
+                "CREATE TABLE t (v int DEFAULT (ISNULL(-((1)), SESSION_CONTEXT(N'k'))))",
+                "int",
+            ),
+            (
+                "CREATE TABLE t (v int DEFAULT (ISNULL(1.0, SESSION_CONTEXT(N'k'))))",
+                "numeric",
+            ),
+            (
+                "CREATE TABLE t (v bigint DEFAULT (ISNULL(3000000000, SESSION_CONTEXT(N'k'))))",
+                "numeric",
+            ),
+            (
+                "CREATE TABLE t (v float DEFAULT (ISNULL(1e0, SESSION_CONTEXT(N'k'))))",
+                "float",
+            ),
+        ] {
+            let error = rewritten(sql).unwrap_err();
+            let error = error.downcast_ref::<SqlError>().unwrap();
+            assert_eq!(error.number, 257, "{sql}");
+            assert!(error.message.contains(&format!("to {target} is")), "{sql}");
+        }
+        for (sql, message) in [
+            (
+                "CREATE TABLE t (v sql_variant DEFAULT (SESSION_CONTEXT(N'foo')))",
+                "unsupported SESSION_CONTEXT outside an explicit CAST or CONVERT in a DEFAULT",
+            ),
+            (
+                "CREATE TABLE t (v sql_variant DEFAULT (ISNULL(SESSION_CONTEXT(N'foo'), N'x')))",
+                "unsupported sql_variant DEFAULT expression over SESSION_CONTEXT",
+            ),
+            (
+                "CREATE TABLE t (v int DEFAULT (CASE WHEN SESSION_CONTEXT(N'foo') = 1 THEN 1 END))",
+                "unsupported SESSION_CONTEXT outside an explicit CAST or CONVERT in a DEFAULT",
+            ),
+            (
+                "CREATE TABLE t (v nvarchar(20) DEFAULT (UPPER(SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'BaseType'))))",
+                "unsupported SESSION_CONTEXT outside an explicit CAST or CONVERT in a DEFAULT",
+            ),
+            (
+                "CREATE TABLE t (v int DEFAULT (CONVERT(int, SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), name))))",
+                "unsupported non-constant SQL_VARIANT_PROPERTY property in a DEFAULT",
+            ),
+        ] {
+            assert_eq!(rewritten(sql).unwrap_err().to_string(), message, "{sql}");
         }
         let error =
             rewritten("CREATE TABLE t (v int DEFAULT (CONVERT(int, SESSION_CONTEXT('foo'))))")
                 .unwrap_err();
         assert_eq!(error.downcast_ref::<SqlError>().unwrap().number, 8116);
+    }
+
+    #[test]
+    fn variant_properties_and_null_tests_read_the_stored_kind() {
+        let sql = rewritten(
+            "CREATE TABLE items (id int, value nvarchar(100) DEFAULT CASE WHEN SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'BaseType') = N'nvarchar' THEN CONVERT(nvarchar(100), SESSION_CONTEXT(N'foo')) ELSE NULL END)",
+        )
+        .unwrap();
+        assert!(
+            sql.contains("CASE WHEN CAST(CASE getvariable('__msduck_session_context_666f6f006f_kind') WHEN 'nvarchar' THEN 'nvarchar' WHEN 'bit' THEN 'bit'"),
+            "{sql}"
+        );
+        assert!(
+            sql.contains(" AS NVARCHAR(128)) = N'nvarchar' THEN CASE getvariable("),
+            "{sql}"
+        );
+        let sql = rewritten(
+            "CREATE TABLE t (b bit DEFAULT (CASE WHEN SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'BaseType') IS NULL THEN 1 ELSE 0 END))",
+        )
+        .unwrap();
+        assert!(sql.contains("AS NVARCHAR(128)) IS NULL THEN 1"), "{sql}");
+        let sql = rewritten(
+            "CREATE TABLE t (m int DEFAULT (CONVERT(int, SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'MaxLength'))), b bit DEFAULT (CASE WHEN SESSION_CONTEXT(N'foo') IS NOT NULL THEN 1 ELSE 0 END), n nvarchar(10) DEFAULT (CONVERT(nvarchar(10), SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), NULL))))",
+        )
+        .unwrap();
+        assert!(
+            sql.contains("WHEN 'nvarchar' THEN CAST(getvariable('__msduck_session_context_666f6f006f_max') AS INT) WHEN 'bit' THEN 1 WHEN 'tinyint' THEN 1 WHEN 'smallint' THEN 2 WHEN 'int' THEN 4 WHEN 'bigint' THEN 8 END AS INT)"),
+            "{sql}"
+        );
+        assert!(
+            sql.contains("CASE WHEN getvariable('__msduck_session_context_666f6f006f_kind') IS NOT NULL THEN 1"),
+            "{sql}"
+        );
+        assert!(
+            sql.contains("CONVERT(NVARCHAR(10), CAST(NULL AS INT))"),
+            "{sql}"
+        );
+    }
+
+    #[test]
+    fn properties_follow_the_reference_capture() {
+        let text = ContextValue::NVarChar {
+            text: "bar".into(),
+            max_bytes: 6,
+        };
+        assert_eq!(
+            context_property(&text, "BaseType"),
+            Some(Property::Text("nvarchar"))
+        );
+        assert_eq!(context_property(&text, "MaxLength"), Some(Property::Int(6)));
+        assert_eq!(
+            context_property(&text, "totalbytes"),
+            Some(Property::Int(14))
+        );
+        assert_eq!(
+            context_property(&text, "Collation"),
+            Some(Property::Text(COLLATION))
+        );
+        assert_eq!(
+            context_property(&ContextValue::BigInt(5), "Precision"),
+            Some(Property::Int(19))
+        );
+        assert_eq!(
+            context_property(&ContextValue::Bit(true), "TotalBytes"),
+            Some(Property::Int(3))
+        );
+        assert_eq!(context_property(&ContextValue::Int(5), "Collation"), None);
+        assert_eq!(context_property(&ContextValue::Int(5), "Bogus"), None);
+        assert_eq!(context_property(&ContextValue::Null, "BaseType"), None);
+        let (max, total) = context_length_variables("foo");
+        assert_eq!(max, "__msduck_session_context_666f6f006f_max");
+        assert_eq!(total, "__msduck_session_context_666f6f006f_total");
     }
 
     #[test]

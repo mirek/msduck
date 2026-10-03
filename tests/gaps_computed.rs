@@ -383,6 +383,163 @@ fn session_defaults_are_evaluated_in_the_inserting_session() {
 }
 
 #[test]
+fn conditional_session_context_defaults_follow_the_stored_base_type() {
+    let server = Server::open(":memory:").unwrap();
+    let mut a = session(&server);
+    let mut b = session(&server);
+    run(
+        &mut a,
+        "CREATE TABLE items (id int NOT NULL, value nvarchar(100) NULL DEFAULT CASE WHEN SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'BaseType') = N'nvarchar' THEN CONVERT(nvarchar(100), SESSION_CONTEXT(N'foo')) ELSE NULL END, base nvarchar(128) NULL DEFAULT (CONVERT(nvarchar(128), SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'BaseType'))), max_length int NULL DEFAULT (CONVERT(int, SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'MaxLength'))), total int NULL DEFAULT (CONVERT(int, SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'TotalBytes'))), present int NULL DEFAULT (CASE WHEN SESSION_CONTEXT(N'foo') IS NULL THEN 0 ELSE 1 END), fallback nvarchar(10) NULL DEFAULT (ISNULL(CONVERT(nvarchar(10), SESSION_CONTEXT(N'foo')), N'none')))",
+    );
+    run(&mut a, "INSERT items (id) VALUES (1)");
+    run(&mut a, "EXEC sp_set_session_context N'foo', N'bar'");
+    run(&mut a, "INSERT items (id) VALUES (2)");
+    // Each session's own value, row by row in multirow inserts and MERGE.
+    run(
+        &mut b,
+        "DECLARE @v nvarchar(50) = N'\u{fc}\u{1F986}'; EXEC sp_set_session_context N'foo', @v; INSERT items (id) SELECT 3 UNION ALL SELECT 4",
+    );
+    run(&mut a, "EXEC sp_set_session_context N'foo', 42");
+    run(
+        &mut a,
+        "MERGE items AS t USING (SELECT 5 AS id) AS s ON t.id = s.id WHEN NOT MATCHED THEN INSERT (id) VALUES (s.id);",
+    );
+    run(&mut b, "INSERT items (id, value) VALUES (6, DEFAULT)");
+    assert_eq!(
+        rows(
+            &a,
+            "SELECT CAST(id AS VARCHAR), __msduck_carrier_utf8(value), __msduck_carrier_utf8(base), CAST(max_length AS VARCHAR), CAST(total AS VARCHAR), CAST(present AS VARCHAR), __msduck_carrier_utf8(fallback) FROM items ORDER BY id"
+        ),
+        vec![
+            text(&[Some("1"), None, None, None, None, Some("0"), Some("none")]),
+            text(&[
+                Some("2"),
+                Some("bar"),
+                Some("nvarchar"),
+                Some("6"),
+                Some("14"),
+                Some("1"),
+                Some("bar")
+            ]),
+            text(&[
+                Some("3"),
+                Some("\u{fc}\u{1F986}"),
+                Some("nvarchar"),
+                Some("100"),
+                Some("14"),
+                Some("1"),
+                Some("\u{fc}\u{1F986}")
+            ]),
+            text(&[
+                Some("4"),
+                Some("\u{fc}\u{1F986}"),
+                Some("nvarchar"),
+                Some("100"),
+                Some("14"),
+                Some("1"),
+                Some("\u{fc}\u{1F986}")
+            ]),
+            text(&[
+                Some("5"),
+                None,
+                Some("int"),
+                Some("4"),
+                Some("6"),
+                Some("1"),
+                Some("42")
+            ]),
+            text(&[
+                Some("6"),
+                Some("\u{fc}\u{1F986}"),
+                Some("nvarchar"),
+                Some("100"),
+                Some("14"),
+                Some("1"),
+                Some("\u{fc}\u{1F986}")
+            ]),
+        ]
+    );
+    // A sql_variant result into another type fails as in SQL Server.
+    for sql in [
+        "CREATE TABLE a (v nvarchar(10) NULL DEFAULT (ISNULL(SESSION_CONTEXT(N'foo'), N'x')))",
+        "CREATE TABLE b (v nvarchar(10) NULL DEFAULT (COALESCE(SESSION_CONTEXT(N'foo'), N'x')))",
+        "CREATE TABLE c (v nvarchar(10) NULL DEFAULT (CASE WHEN 1 = 1 THEN SESSION_CONTEXT(N'foo') END))",
+        "CREATE TABLE d (v nvarchar(128) NULL DEFAULT (SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'BaseType')))",
+    ] {
+        assert_eq!(
+            fails(&mut a, sql),
+            (
+                257,
+                3,
+                "Implicit conversion from data type sql_variant to nvarchar is not allowed. Use the CONVERT function to run this query.".into()
+            ),
+            "{sql}"
+        );
+    }
+    // Comparing the sql_variant itself stays unsupported.
+    let (number, _, message) = fails(
+        &mut a,
+        "CREATE TABLE e (v int NULL DEFAULT (CASE WHEN SESSION_CONTEXT(N'foo') = 1 THEN 1 END))",
+    );
+    assert_eq!(
+        (number, message.as_str()),
+        (
+            40515,
+            "unsupported SESSION_CONTEXT outside an explicit CAST or CONVERT in a DEFAULT"
+        )
+    );
+}
+
+#[test]
+fn session_context_properties_in_queries() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    run(&mut s, "EXEC sp_set_session_context N'k', N'bar'");
+    run(
+        &mut s,
+        "CREATE TABLE t (base nvarchar(128), max_length int, value nvarchar(100)); INSERT t SELECT CONVERT(nvarchar(128), SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType')), CONVERT(int, SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'MaxLength')), CASE WHEN SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType') = N'nvarchar' THEN CONVERT(nvarchar(100), SESSION_CONTEXT(N'k')) END",
+    );
+    run(&mut s, "EXEC sp_set_session_context N'k', 7");
+    run(
+        &mut s,
+        "INSERT t SELECT CONVERT(nvarchar(128), SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType')), CONVERT(int, SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'Precision')), CASE WHEN SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType') = N'nvarchar' THEN CONVERT(nvarchar(100), SESSION_CONTEXT(N'k')) END",
+    );
+    assert_eq!(
+        rows(
+            &s,
+            "SELECT __msduck_carrier_utf8(base), CAST(max_length AS VARCHAR), __msduck_carrier_utf8(value) FROM t"
+        ),
+        vec![
+            text(&[Some("nvarchar"), Some("6"), Some("bar")]),
+            text(&[Some("int"), Some("10"), None]),
+        ]
+    );
+    // Selected properties are sql_variant values.
+    run(
+        &mut s,
+        "SELECT SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType') AS [@base], (SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'missing'), 'MaxLength'))",
+    );
+    // SQL Server refuses implicit sql_variant writes and assignments with
+    // 257; msduck refuses them explicitly instead of storing the base type.
+    for sql in [
+        "INSERT t (base) VALUES (SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'))",
+        "UPDATE t SET max_length = SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'MaxLength')",
+        "INSERT t (base) SELECT (SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'))",
+        "INSERT t (base) SELECT v FROM (SELECT SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType') AS v) s",
+        "WITH s AS (SELECT SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType') AS v) INSERT t (base) SELECT v FROM s",
+        // SQL Server converts these; msduck's sysname carrier would convert
+        // to its struct text, so nested selected properties are refused.
+        "SELECT CONVERT(nvarchar(128), p) FROM (SELECT SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType') AS p) s",
+        "INSERT t (base) SELECT CONVERT(nvarchar(128), p) FROM (SELECT SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType') AS p) s",
+        "SELECT (SELECT SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'))",
+        "DECLARE @v nvarchar(128); SET @v = SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType')",
+        "DECLARE @v nvarchar(128); SELECT @v = SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType')",
+    ] {
+        assert_eq!(fails(&mut s, sql).0, 40515, "{sql}");
+    }
+}
+
+#[test]
 fn session_default_errors_and_alter_table() {
     let server = Server::open(":memory:").unwrap();
     let mut s = session(&server);

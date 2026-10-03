@@ -21,14 +21,15 @@ Its refusal of carrier-typed expressions is lifted for the cases below.
 
 ## Evidence
 
-`scripts/capture-gaps-computed.mjs` defines 10 cases. Each case runs in a
+`scripts/capture-gaps-computed.mjs` defines 15 cases. Each case runs in a
 fresh database, through a connection that reports the workstation
 `computed-host` and the application `computed-app`.
 
 `reference/gaps-computed.json` holds the SQL Server results of those cases.
-They were captured twice, with identical results, from the locally available
-`mcr.microsoft.com/mssql/server:2022-latest` image (16.0.4236.2, RTM-CU23),
-with `MSSQL_REFERENCE_IMAGE` set.
+They were captured twice, with identical results, from the pinned reference
+image `mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144…`
+(17.0.4065.4, RTM-CU7). The first 10 cases were originally captured from
+`2022-latest` (16.0.4236.2); the 2025 capture of those cases is identical.
 
 Three test files cover this work:
 
@@ -116,6 +117,8 @@ the session that inserts.
 | `SUSER_SNAME()`, `SUSER_NAME()`, `SYSTEM_USER`, `ORIGINAL_LOGIN()` | the login |
 | `HOST_NAME()`, `APP_NAME()` | the LOGIN7 workstation and application names |
 | `CAST`/`CONVERT(type, SESSION_CONTEXT(N'key'))` | the stored value, converted from its base type |
+| `SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'key'), 'property')` | a property of the stored value (issue #869) |
+| `SESSION_CONTEXT(N'key') IS [NOT] NULL` | whether the key has a value |
 
 **Mechanism.** DuckDB evaluates the stored default when it binds the
 `INSERT`. DuckDB variables belong to a connection, and every msduck session
@@ -146,6 +149,43 @@ After RESETCONNECTION, the session context is empty, so the defaults are NULL.
 - **Bare use.** A bare `SESSION_CONTEXT(...)` default on a non-`sql_variant`
   column fails when the table is created, with SQL Server's 257 (state 3).
 - **Key type.** A `varchar` key fails with 8116, as in queries.
+- **Properties.** `SQL_VARIANT_PROPERTY(SESSION_CONTEXT(...), 'property')`
+  with a constant property name reads the stored kind, so a conditional
+  default such as
+  `CASE WHEN SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'BaseType') = N'nvarchar' THEN CONVERT(nvarchar(100), SESSION_CONTEXT(N'foo')) ELSE NULL END`
+  stores the nvarchar value and NULL for an `int` value or no value. The
+  captured values are:
+
+  | Base type | BaseType | MaxLength | Precision | Scale | TotalBytes | Collation |
+  |---|---|---|---|---|---|---|
+  | nvarchar | `nvarchar` | declared bytes (6 for `N'bar'`, 100 for `nvarchar(50)`) | 0 | 0 | 8 + data bytes | `SQL_Latin1_General_CP1_CI_AS` |
+  | bit, tinyint, smallint, int, bigint | the type | 1, 1, 2, 4, 8 | 1, 3, 5, 10, 19 | 0 | MaxLength + 2 | NULL |
+
+  The variables also hold an nvarchar value's declared and total byte
+  lengths. Where a comparison (`=`, `<>`, `<`, `BETWEEN`, `IN`, `IS NULL`,
+  simple `CASE`) or an explicit `CAST`/`CONVERT` consumes the property, it is
+  evaluated in its base type (`nvarchar(128)` for BaseType and Collation,
+  `int` otherwise), which is what SQL Server converts the sql_variant to. In
+  other positions, and with a non-constant property name, the default is
+  refused with 40515.
+- **sql_variant results.** ISNULL, COALESCE, NULLIF, IIF, CHOOSE and CASE results built
+  from `SESSION_CONTEXT` or its `SQL_VARIANT_PROPERTY` are `sql_variant`, so a
+  default of another column type fails with 257 (state 3) when the table is
+  created, as captured. `ISNULL(NULL, SESSION_CONTEXT(...))` has the
+  replacement's type and fails the same way. So does an `ISNULL` whose replacement is such a
+  sql_variant when the first argument's type is evident (a literal or an
+  explicit conversion); the message names that type. Converting first, as in
+  `ISNULL(CONVERT(nvarchar(10), SESSION_CONTEXT(N'foo')), N'none')`, works.
+- **Insert paths.** The conditional defaults are evaluated per inserted row
+  in the inserting session for `INSERT ... VALUES`, `INSERT ... SELECT`,
+  `DEFAULT` and `MERGE ... WHEN NOT MATCHED THEN INSERT`.
+
+**SQL_VARIANT_PROPERTY of SESSION_CONTEXT in queries.** With a constant
+property name, the property is computed from the session's stored value. A
+property selected directly is a `sql_variant` (a sysname for BaseType and
+Collation, an `int` otherwise), as captured. In comparisons and explicit
+conversions it is evaluated in its base type. This also applies to
+`SESSIONPROPERTY`.
 
 **HOST_NAME() and APP_NAME() in queries.** Both are now supported anywhere, as
 nullable `nvarchar(128)`. They read the same variables, so a view or default
@@ -166,7 +206,43 @@ that uses them sees the session that queries or inserts.
   SQL Server fails with 8114.
 - **sql_variant defaults.** A bare `SESSION_CONTEXT` default on a `sql_variant`
   column is refused with 40515. msduck's `sql_variant` carrier cannot hold
-  `nvarchar` values.
+  `nvarchar` values. ISNULL, COALESCE, CASE and similar `sql_variant` results
+  over `SESSION_CONTEXT` on a `sql_variant` column are refused the same way.
+
+- **Implicit sql_variant writes.** Writing or assigning the property without
+  a conversion (`INSERT ... VALUES`, `UPDATE ... SET`, `SET @v =`) fails in
+  SQL Server with 257 when the batch is compiled, so earlier statements of
+  the batch do not run. msduck refuses it with 40515 when the statement runs,
+  including the select items of `INSERT ... SELECT`, so earlier statements of
+  the batch have already run. Moving the refusal into whole-batch preflight
+  is outside this task's files.
+- **NULLIF over SESSION_CONTEXT.** SQL Server accepts
+  `DEFAULT (NULLIF(1, SESSION_CONTEXT(N'k')))`; msduck refuses it with 40515.
+
+**Not asserted by the capture:**
+
+- **Converting compound sql_variant results.** An explicit conversion is
+  applied to `SESSION_CONTEXT` itself, or to `SQL_VARIANT_PROPERTY` of it. A
+  conversion of a compound sql_variant result, such as
+  `CONVERT(nvarchar(10), CASE WHEN ... THEN SESSION_CONTEXT(N'k') END)` or
+  `CONVERT(int, ISNULL(SESSION_CONTEXT(N'k'), 0))`, is refused with 40515;
+  SQL Server accepts it. Convert each `SESSION_CONTEXT` operand instead.
+
+- **Comparing SESSION_CONTEXT itself.** A DEFAULT that compares the
+  `sql_variant`, such as `CASE WHEN SESSION_CONTEXT(N'foo') = 1 THEN ...`, is
+  refused with 40515; convert it or test `SQL_VARIANT_PROPERTY` first.
+- **Property comparisons are binary.** BaseType is compared in its lower-case
+  base type text; SQL Server compares it under the case-insensitive server
+  collation, so `= N'NVARCHAR'` matches there and not in msduck.
+- **Other positions in queries.** A `SQL_VARIANT_PROPERTY` of a session value
+  is returned as a `sql_variant` only from the outermost select list of a
+  SELECT. Nested in another expression that is not a comparison or explicit
+  conversion (for example `ISNULL(SQL_VARIANT_PROPERTY(...), N'x')`), or
+  selected by a derived table, CTE or subquery, it is refused with 40515.
+  SQL Server accepts, for example,
+  `SELECT CONVERT(nvarchar(128), p) FROM (SELECT SQL_VARIANT_PROPERTY(...) AS p) s`.
+  msduck's sysname `sql_variant` carrier would convert to its internal struct
+  text there, so it is refused instead.
 
 **Not covered by this work:**
 

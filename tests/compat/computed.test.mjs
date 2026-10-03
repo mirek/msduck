@@ -40,6 +40,24 @@ const known = {
   },
   'session-default-variant#5': local => assert.equal(local.errors[0].number, 207),
   'session-default-variant#6': local => assert.equal(local.errors[0].number, 208),
+  // A session value's SQL_VARIANT_PROPERTY written or assigned without an
+  // explicit conversion: SQL Server refuses the implicit sql_variant
+  // conversion with 257 when it compiles the batch. msduck refuses it with
+  // 40515 when the statement runs.
+  ...Object.fromEntries([2, 3, 4, 5, 6].map(step => [`session-variant-writes#${step}`, local => {
+    assert.deepEqual(errors(local), [[40515, 1, 16, 'unsupported SQL_VARIANT_PROPERTY of a session value outside a select item, comparison or explicit conversion']])
+  }])),
+  // The batch's INSERT before the refused UPDATE ran in msduck; SQL Server
+  // compiled and refused the whole batch.
+  'session-variant-writes#7': (local, remote) => {
+    assert.deepEqual(rows(remote), [[]])
+    assert.deepEqual(rows(local), [[['x', null]]])
+  },
+  // SQL Server accepts NULLIF(1, SESSION_CONTEXT(...)); comparing the
+  // sql_variant itself is unsupported in msduck DEFAULTs.
+  'session-variant-writes#11': local => {
+    assert.deepEqual(errors(local), [[40515, 1, 16, 'unsupported SESSION_CONTEXT outside an explicit CAST or CONVERT in a DEFAULT']])
+  },
 }
 
 let databases = 0
