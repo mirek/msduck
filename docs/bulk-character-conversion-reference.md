@@ -161,8 +161,9 @@ header split across TCP chunks. If the combined input exceeds the buffer bound,
 the hash and bounded prefix are assembled across existing segments without
 allocating their oversized concatenation.
 Derived cross-run comparisons can exceed the capture envelope even when the
-original runs fit. In that case the original runs are saved with an explicit
-failure before validation. If the retained-fixture comparison also exceeds its
+original runs fit. In that case the original runs are saved unchanged before
+validation, with `captureFailure` in the sidecar so failure metadata cannot
+overflow a near-limit raw artifact. If the retained-fixture comparison also exceeds its
 bound, its sidecar records `differencesOmitted: true` and the failure instead of
 claiming to contain complete differences; the command still fails.
 Each exchange reserves a 4 KiB diagnostic allowance before installing listeners,

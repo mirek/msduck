@@ -466,7 +466,7 @@ export async function readCaptureFile(path) {
     return bytes.subarray(0, used)
   } finally {await handle.close()}
 }
-async function saveCapture(actual, output) {
+async function saveCapture(actual, output, captureError) {
   await guardOutput(output); await guardOutput(`${output}.comparison.json`)
   await mkdir(dirname(output), {recursive: true})
   jsonSize(actual)
@@ -476,11 +476,13 @@ async function saveCapture(actual, output) {
   try {retainedBytes = await readCaptureFile(fixture); expected = JSON.parse(retainedBytes.toString())} catch (error) {if (error.code !== 'ENOENT') throw error}
   let comparison, comparisonError
   try {
-    comparison = {retained: Boolean(expected), differences: expected ? compare(actual, expected) : []}
+    comparison = {retained: Boolean(expected), differences: expected ? compare(actual, expected) : [],
+      ...(captureError ? {captureFailure: failure(captureError)} : {})}
     jsonSize(comparison)
   } catch (error) {
     comparisonError = error
-    comparison = {retained: Boolean(expected), differencesOmitted: true, failure: failure(error)}
+    comparison = {retained: Boolean(expected), differencesOmitted: true, failure: failure(error),
+      ...(captureError ? {captureFailure: failure(captureError)} : {})}
     jsonSize(comparison)
   }
   await writeFile(`${output}.comparison.json`, JSON.stringify(comparison) + '\n', {flag: 'wx'})
@@ -502,7 +504,9 @@ export async function finalizeCapture(raw, output) {
   } catch (error) {
     // Cross-run differences can multiply retained values. Preserve the bounded
     // original runs even when their derived comparisons exceed the envelope.
-    await saveCapture({...raw, failure: failure(error)}, output)
+    // Failure metadata lives in the sidecar: adding it to near-limit raw data
+    // must not make the original evidence exceed its previously checked bound.
+    await saveCapture(raw, output, error)
     throw error
   }
   return persistCapture(actual, output)
