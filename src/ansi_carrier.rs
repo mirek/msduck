@@ -1,4 +1,5 @@
 //! Explicitly planned native ANSI storage, independent of SQL decoding/capacity.
+pub mod projection;
 use duckdb::{
     Connection,
     arrow::{
