@@ -9983,6 +9983,28 @@
       ],
       "issue": 832,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkNJJ"
+    },
+    {
+      "id": "temporal-guid-format-reference-v1",
+      "title": "Capture exact temporal and GUID implicit text contexts",
+      "state": "ready",
+      "authorization": "Continuing owner SQL Server compatibility goal; owner-run read-only investigation of merged815 identifies absent exact temporal storage, locale/prepared/boundary evidence before deterministic source-format integration. No external input.",
+      "scope": [
+        "scripts/capture-temporal-guid-format.mjs",
+        "reference/temporal-guid-format.json",
+        "docs/temporal-guid-format-reference.md"
+      ],
+      "dependencies": [
+        "concat-text-conversion-reference-v1"
+      ],
+      "acceptance": [
+        "Capture original DATE/TIME/DATETIME2/DATETIMEOFFSET/DATETIME/SMALLDATETIME/GUID declarations and exact stored values, covering modern scales0..7, legacy1/300-second/minute rounding, allmonths/noon/midnight/leapday/date extrema, offset signs/bounds and asymmetricGUID layout/case. Retain sourceSQL plus nativebinary/TDS or exactDATEPART evidence instead of reconstructing source from decodedJSdates/floatingnanoseconds or UTC-normalized offsets.",
+        "Keep defaultCAST, explicitstyle0/121, TRANSLATE and CONCAT_WS roles independently labelled with ANSI/Unicode/source/separator/last/typedNULL contexts. Capture explicit language/session context and English/French/German controls for legacy month text; include actual prepared single-control bindings/replays and unchanged declarations/descriptors with exact generated inputbytes. Use a fixed bounded orthogonal matrix, retain admitted failures and document unmeasured crossproducts rather than filter passing cases.",
+        "Reuse approved full bounded observer/lifecycle and pinnedSQL2025 image: twofreshDBs in each of twoownedcontainers plus fullsecondreproduction, raw complete rows/descriptors/diagnostics/info/ordered tokens/DONE and connectionreuse, exact source/fixture hashes, overwrite/alias guards and meaningful coherent-corruption/CLI/fragment/lifecycle checks. No candidate formatter expectations or output normalization.",
+        "Fresh own claim in completed existingreferenceworktree; no new agents/worktrees/localnativecache or sharedbuilder sync. PrivateLinux/read-only cachedNode/randomownedports/boundedcontainers and cleanup; source/negativechecks, exactrequiredCI and independent/Codexreview orauthorizedfallback. Worker owns PRmerge and registry/projectcompletion. No Rust/lib/engine edits; preserve previousclaimbranches/receipts/raws."
+      ],
+      "issue": 834,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkOqg"
     }
   ]
 }
