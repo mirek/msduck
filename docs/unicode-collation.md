@@ -353,6 +353,11 @@ Remaining limits:
   captured units) compare them. COUNT(DISTINCT) over NVARCHAR columns reads
   them as text and so still counts values that differ only in ignorable
   units separately.
+- Column references resolve against every relation of the statement, not
+  per query block (the predicate catalog's existing design): an unqualified
+  name that another block's relation also has (with another type or
+  collation) is treated as unknown, so it falls back to the default
+  comparison. Qualified references are not affected.
 - A column collation applies to direct column references. Expressions over
   a case-sensitive column (`UPPER(cs) = 'X'`), GROUP BY of expressions, and
   GROUP BY or DISTINCT of carriers under a non-default collation keep
