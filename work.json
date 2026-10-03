@@ -10968,6 +10968,52 @@
         "Fresh own receipt in completed existing root worktree, source/link/diff review and exact-head requiredCI/independent/Codex review or genuine availability fallback; documentation-only no cold native rebuild. Worker owns focused PR, merge, protectedregistry/project completion and publication of concrete follow-on work under standing goal authorization."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pk0fb"
+    },
+    {
+      "state": "backlog",
+      "authorization": "Continuing owner full SQL Server compatible Rust/DuckDB objective; first-party merged884 byte evidence and claimed890 architecture plan. Bounded deterministic implementation, not runtime compatibility completion. No third-party input or reserved export/engine scope.",
+      "dependencies": [
+        "bulk-character-adapter-plan-v1",
+        "bulk-character-encoding-reference-v1"
+      ],
+      "id": "ansi-byte-carrier-v1",
+      "title": "Preserve native ANSI bytes with explicit encoding identity",
+      "issue": 892,
+      "scope": [
+        "crates/msduck-core/src/ansi_bytes.rs",
+        "crates/msduck-core/tests/ansi_bytes.rs",
+        "docs/ansi-bytes.md"
+      ],
+      "acceptance": [
+        "Implement immutable owned native ANSI bytes and borrowed view with explicit semantic encoding identity and NULL/empty separation. Preserve every original byte, including malformed UTF8, without decoding/normalizing or certifying SQL acceptance. No parser/TDS/backend/catalog/I/O/environment/global-state dependency. Keep logical declarations and actual wire descriptor separate.",
+        "Constructor/adapters use explicit caller-provided resource bounds, checked lengths and bounds before copy/allocation; ownership/borrowing preserve identity and input immutability. Unknown encoding behavior remains explicit rather than inferred by suffix/profile name. Meaningful tests cover all256bytes, malformed capturedcontrols, NULL/empty, owned/borrowed views and zero/exact/oversized limits/checked accounting.",
+        "Use standalone integration path import while existing legacy-datetime-export-v1 owns corelib.rs; module uses std/external dependencies, no crate-private assumptions. Registration is a separately claimed successor after resolving that reservation under contribution protocol. Do not touch commonValue/Parameter, root, exports or retainedfixtures, and do not claim conversion/runtime compatibility.",
+        "Fresh own receipt in existing worktree/cache, no additional agent/nativecache; focused core tests/formatter/strictalltargetClippy plus appropriate requiredAGENTS gates with shared builder handoff. Exacthead requiredCI, independent/Codex review or genuine fallback, worker-owned merge and registry/project completion. Documentation records prototype/public-export/runtime limits honestly."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pk1rA"
+    },
+    {
+      "state": "backlog",
+      "authorization": "Continuing owner full SQL Server compatible Rust/DuckDB objective; first-party merged884 byte evidence and claimed890 architecture plan. Bounded deterministic implementation, not runtime compatibility completion. No third-party input or reserved export/engine scope.",
+      "dependencies": [
+        "bulk-character-adapter-plan-v1",
+        "bulk-character-encoding-reference-v1"
+      ],
+      "id": "ansi-native-wire-writer-v1",
+      "title": "Write native ANSI result bytes with exact bounded and PLP framing",
+      "issue": 893,
+      "scope": [
+        "crates/msduck-tds/src/ansi_value.rs",
+        "crates/msduck-tds/tests/ansi_value.rs",
+        "docs/ansi-wire-value.md"
+      ],
+      "acceptance": [
+        "Implement pure raw-byte result writer for CHAR/VARCHAR bounded and VARCHAR(MAX) using explicit validated character family/byte capacity and alreadySQL-converted native targetbytes. Preserve NULL/empty, exactbytes and malformed nativeUTF8 without decoding, bestfit, descriptor changes or collation-support guesses. Do not add legacyTEXT/otherfamily behavior without reference evidence.",
+        "Check fixedCHAR exactwidth, boundedcapacity, MAX/PLP chunklength/resource limits and checked growth before modifying calleroutput. Errors leave output unchanged. Frame exact NULL/empty/short/MAX bytes from TDS conventions and independently grounded capturedvalues; test bytecapacity overflow, unsupportedfamilies, fixedpadding responsibility, allbyteidentity and malformedcontrols. Writer must not pad/truncate/convert bytes implicitly.",
+        "Standalone path-imported module tests while owner853 reserves TDSlibrary export andengine.rs. Consult TDS skill and raw884 reference; distinguish BulkLoad sourcevalue framing from independently verified result-value framing. Newwriter requires separate registration/rootoutput companions before runtime use. Do not change commoncodec/root/retainedfixtures or enable operationalcollation gates.",
+        "Fresh own receipt/existing worktree/cache, no extra agent/nativecache. Focused TDS tests/formatter/strictalltargetClippy and appropriate AGENTS gates/shared builderhandoff. Exacthead requiredCI, independent/Codex review or genuinefallback, claimingworker owns PRmerge/completion; retain exactbyte/revision proof and remaining unsupported/publicexport/runtime gaps."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pk1rP"
     }
   ]
 }
