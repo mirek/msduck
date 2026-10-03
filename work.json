@@ -3279,7 +3279,7 @@
     {
       "id": "bulk-load-wire-reference-v1",
       "title": "Capture first-party SQL Server BulkLoad wire requests and responses",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner instruction of 2026-09-26 to continue full SQL Server compatibility work and explicitly publish this first-party BulkLoad wire capture task; no external submission is input.",
       "scope": [
         "scripts/capture-bulk-load-wire.mjs",
@@ -10717,6 +10717,26 @@
       "dependencies": [],
       "issue": 870,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pkgwi"
+    },
+    {
+      "id": "bulk-load-reference-recovery-v1",
+      "title": "Recover BulkLoad wire reference with exhaustive raw drift validation",
+      "state": "ready",
+      "authorization": "Owner standing immediate unresponsive-worker takeover and continuing full SQL Server compatibility goal; old341/PR343 owner8561 at6834683, contact5967270419, no live factory worker, clean old worktree/no attributable local or accessible Linux capture jobs, no new response/checkpoint. Preserve old claim/branch/receipt/raw captures. Confirmed owner-initiated Codex4112892305 raw drift finding.",
+      "issue": 872,
+      "scope": [
+        "scripts/capture-bulk-load-wire.mjs",
+        "reference/bulk-load-wire.json",
+        "tests/bulk_load_capture.test.mjs",
+        "docs/bulk-load-wire.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Preserve old6834683 capture/fixture/branch/receipt/claim evidence. Reuse original four independent database/two pinned-container reference and exact raw packets. Fix confirmed drift validation: only explicitly parsed Docker server-name bytes in zero-row ERROR may vary; retain all raw bytes and explicit permitted differences; reject every other packet/descriptor/error/DONE/readback/callback drift. No normalization of expected SQL behavior.",
+        "Add meaningful independent offline mutation and exact fixture replay tests, bounded token validation and prelaunch overwrite/alias guards. Capture fresh four database/two container evidence; verify retained fixture unchanged and record all raw differences. No native/shared builder jobs or extra cache/worktree/agent.",
+        "Fresh own claim in completed root isolated worktree based approved610eeea3. Node syntax/focused tests/source links/diff checks, owner exact-head CI/independent/Codex review, focused PR, worker-owned merge and registry/project completion. Only mark old341 done after all original acceptance is proved; otherwise old remains blocked. Decoder task344 depends on original341 and remains unavailable until truthful completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkjA_"
     }
   ]
 }
