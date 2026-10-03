@@ -1,6 +1,7 @@
 //! SQL Server-compatible server and DuckDB adapters.
 //! Deterministic values, syntax and codecs live in the three workspace libraries.
 pub use msduck_core::{datetime2, datetimeoffset};
+pub mod ansi_carrier;
 pub mod engine;
 pub mod index_catalog;
 pub use msduck_sql::parameter;
