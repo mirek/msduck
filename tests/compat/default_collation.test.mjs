@@ -113,8 +113,9 @@ test('duplicates show each key column as written, and ORDER BY resolves qualifie
   await query(connection, "CREATE TABLE dbo.cs_added (v varchar(10) COLLATE Latin1_General_CS_AS NOT NULL); INSERT dbo.cs_added VALUES ('b'); ALTER TABLE dbo.cs_added ADD CONSTRAINT uq_cs_added UNIQUE (v)")
   await assert.rejects(query(connection, "INSERT dbo.cs_added VALUES ('b ')"), error => error.number === 2627 && /'uq_cs_added'.*\(b \)/.test(error.message))
   await query(connection, "INSERT dbo.cs_added VALUES ('B')")
-  // IN (subquery) keeps a column's own collation.
+  // IN (subquery) keeps a column's own collation, on either side.
   assert.deepEqual((await query(connection, "SELECT count(*) FROM dbo.cs_keys WHERE v IN (SELECT 'a')")).rows, [[1]])
+  assert.deepEqual((await query(connection, "SELECT CASE WHEN 'A' IN (SELECT k.v FROM dbo.cs_keys k WHERE k.v = 'a') THEN 1 ELSE 0 END")).rows, [[0]])
   // Conflicting column collations in DML predicates, LIKE included.
   await query(connection, "CREATE TABLE dbo.two (ci nvarchar(10) COLLATE Latin1_General_CI_AS, d nvarchar(10)); INSERT dbo.two VALUES (N'a', N'A')")
   for (const sql of ["UPDATE dbo.two SET ci = N'b' WHERE ci = d", "DELETE FROM dbo.two WHERE d LIKE ci"]) {

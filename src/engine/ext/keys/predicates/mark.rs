@@ -576,6 +576,49 @@ pub(super) fn rewrite<T: VisitMut>(
                     subquery,
                     ..
                 } => {
+                    let member =
+                        matches!(value.as_ref(), Expr::Function(f) if f.name.to_string() == MEMBER);
+                    // A column with a collation of its own, on either side,
+                    // compares through the explicit COLLATE lowering; columns
+                    // of different collations conflict.
+                    if !member && !collated(value) {
+                        let projected = match subquery.body.as_mut() {
+                            SetExpr::Select(select) => match select.projection.as_mut_slice() {
+                                [
+                                    SelectItem::UnnamedExpr(p)
+                                    | SelectItem::ExprWithAlias { expr: p, .. },
+                                ] => Some(p),
+                                _ => None,
+                            },
+                            _ => None,
+                        };
+                        let mut operands: Vec<&Expr> = vec![value.as_ref()];
+                        operands.extend(projected.as_deref());
+                        if let Err((left, right)) = columns_collation(self.0, operands.into_iter())
+                        {
+                            return ControlFlow::Break(conflict("equal to", &left, &right));
+                        }
+                        let name = own_collation(self.0, value)
+                            .or_else(|| projected.as_deref().and_then(|p| own_collation(self.0, p)))
+                            .map(str::to_owned);
+                        if let Some(name) = name {
+                            let wrap = |operand: &mut Expr| {
+                                if !collated(operand) {
+                                    let inner =
+                                        std::mem::replace(operand, Expr::Value(Value::Null.into()));
+                                    *operand = Expr::Collate {
+                                        expr: Box::new(inner),
+                                        collation: ObjectName::from(vec![Ident::new(name.clone())]),
+                                    };
+                                }
+                            };
+                            wrap(value.as_mut());
+                            if let Some(projected) = projected {
+                                wrap(projected);
+                            }
+                            return ControlFlow::Continue(());
+                        }
+                    }
                     let projected = match subquery.body.as_ref() {
                         SetExpr::Select(select) => match select.projection.as_slice() {
                             [
@@ -586,22 +629,6 @@ pub(super) fn rewrite<T: VisitMut>(
                         },
                         _ => None,
                     };
-                    let member =
-                        matches!(value.as_ref(), Expr::Function(f) if f.name.to_string() == MEMBER);
-                    // A column with a collation of its own compares through
-                    // the explicit COLLATE lowering instead.
-                    if !member
-                        && !collated(value)
-                        && let Some(name) = own_collation(self.0, value).map(str::to_owned)
-                    {
-                        let inner =
-                            std::mem::replace(value.as_mut(), Expr::Value(Value::Null.into()));
-                        **value = Expr::Collate {
-                            expr: Box::new(inner),
-                            collation: ObjectName::from(vec![Ident::new(name)]),
-                        };
-                        return ControlFlow::Continue(());
-                    }
                     if !member
                         && !collated(value)
                         && (unicode(self.0, value) || projected.is_some_and(|p| unicode(self.0, p)))
