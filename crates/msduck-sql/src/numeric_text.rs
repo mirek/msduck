@@ -133,7 +133,7 @@ fn float(value: f64) -> Result<String, Error> {
         if point <= 0 {
             result.push_str("0.");
             result.push_str(&"0".repeat((-point) as usize));
-            result.push_str(&digits);
+            result.push_str(digits);
         } else {
             let point = point as usize;
             result.push_str(&digits[..point]);
