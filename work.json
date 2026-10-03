@@ -9784,7 +9784,7 @@
       "id": "concat-ws-translate-export-v1",
       "title": "Register deterministic CONCAT_WS and TRANSLATE core API",
       "issue": 816,
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner compatibility goal; expose reviewed pure core after812 merge to prepare binding/runtime integration.",
       "scope": [
         "crates/msduck-sql/src/lib.rs",
