@@ -129,6 +129,17 @@ impl Feature for Hooks {
         }
     }
 
+    fn exec(
+        &self,
+        session: &mut Session,
+        _statement: &Statement,
+        _variables: &mut HashMap<String, Parameter>,
+    ) -> Option<Result<super::Exec>> {
+        // An EXEC is a statement boundary too; the procedure runs it.
+        snapshot::statement_begins(session);
+        None
+    }
+
     fn isolation(&self, isolation: u8) -> Option<Result<()>> {
         // 0 keeps the session's level; 1-5 are SQL Server's levels. DuckDB
         // runs every one of them as snapshot isolation (see options.rs).

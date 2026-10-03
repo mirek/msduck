@@ -1406,7 +1406,9 @@ fn allow_snapshot_isolation_changes_wait_for_open_transactions() {
         Some(Arc::new(|| {})),
     );
     caller.use_database("probe_db").unwrap();
-    let procedure = thread::spawn(move || run(&mut caller, "EXEC slow").map(|_| ()));
+    // The UPDATE before the EXEC has committed too.
+    let procedure =
+        thread::spawn(move || run(&mut caller, "UPDATE t SET v = v; EXEC slow").map(|_| ()));
     thread::sleep(Duration::from_millis(500));
     let (result, elapsed) = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON")
         .join()
