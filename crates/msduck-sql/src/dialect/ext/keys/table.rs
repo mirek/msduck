@@ -7,7 +7,10 @@
 //! columns also gets a keys-managed unique index (see [`super::value`]); the
 //! native constraint stays so that foreign keys can reference it. A key over
 //! STRUCT storage (Unicode carriers, DATETIME2, DATETIMEOFFSET) is only
-//! managed, and is removed from the statement DuckDB sees.
+//! managed, and is removed from the statement DuckDB sees. DuckDB's native
+//! constraints compare VARCHAR values exactly, so a key over CHAR or VARCHAR
+//! columns under a case-insensitive collation (the database default) also
+//! gets a managed index that enforces case-insensitive uniqueness.
 use sqlparser::ast::*;
 
 /// Where a constraint is declared.
@@ -39,6 +42,25 @@ fn struct_stored(kind: &DataType) -> bool {
     crate::character_storage::unicode_storage_type(kind).is_some()
         || matches!(crate::temporal_scale::datetime2(kind), Ok(Some(_)))
         || matches!(crate::temporal_scale::datetimeoffset(kind), Ok(Some(_)))
+}
+
+/// A CHAR or VARCHAR column whose values compare case-insensitively.
+fn folded_ansi(column: &ColumnDef) -> bool {
+    let ansi = matches!(
+        crate::sql_type::declaration(&column.data_type),
+        Ok(msduck_core::types::Type::Character(character)) if matches!(
+            character.family(),
+            msduck_core::character::Family::Char | msduck_core::character::Family::Varchar
+        )
+    );
+    let collation = column
+        .options
+        .iter()
+        .find_map(|option| match &option.option {
+            ColumnOption::Collation(name) => Some(name.to_string()),
+            _ => None,
+        });
+    ansi && super::collation::case_insensitive(collation.as_deref())
 }
 
 fn variant(kind: &DataType) -> bool {
@@ -184,6 +206,7 @@ fn find(table: &CreateTable) -> Result<Vec<Constraint>, Diagnostic> {
     for constraint in &mut found {
         let mut stored = false;
         let mut nullable = false;
+        let mut folded = false;
         let mut seen: Vec<&str> = vec![];
         for name in &constraint.columns {
             if seen.iter().any(|s| s.eq_ignore_ascii_case(name)) {
@@ -233,10 +256,11 @@ fn find(table: &CreateTable) -> Result<Vec<Constraint>, Diagnostic> {
                 ));
             }
             stored |= struct_stored(&column.data_type);
+            folded |= folded_ansi(column);
             nullable |= !constraint.primary && !not_null(column) && !primary_column(&primary, name);
         }
         constraint.native = !stored;
-        constraint.managed = stored || nullable;
+        constraint.managed = stored || nullable || folded;
     }
     Ok(found)
 }
@@ -366,6 +390,18 @@ mod tests {
         // A unique key over primary key columns cannot hold NULL.
         let t = table("CREATE TABLE k (a int, b int, PRIMARY KEY (a, b), UNIQUE (b, a))");
         assert!(constraints(&t).unwrap().iter().all(|c| !c.managed));
+        // Case-insensitive CHAR/VARCHAR keys also get a managed index.
+        let t = table(
+            "CREATE TABLE c (a varchar(10) NOT NULL PRIMARY KEY, b char(4) COLLATE Latin1_General_CS_AS NOT NULL UNIQUE, c varchar(4) COLLATE Latin1_General_CI_AI NOT NULL UNIQUE)",
+        );
+        assert_eq!(
+            constraints(&t)
+                .unwrap()
+                .iter()
+                .map(|c| (c.native, c.managed))
+                .collect::<Vec<_>>(),
+            [(true, true), (true, false), (true, true)]
+        );
         let t = table("CREATE TABLE m (a int NOT NULL PRIMARY KEY (a))");
         let mut stripped = t.clone();
         strip(&mut stripped, &constraints(&t).unwrap());

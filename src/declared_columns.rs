@@ -9,15 +9,27 @@ pub fn register(db: &duckdb::Connection) -> duckdb::Result<()> {
 }
 
 /// SQL Server collation names belong to the logical declaration catalog, never
-/// DuckDB's physical column type (which may be a UTF-16 carrier STRUCT).
+/// DuckDB's physical column type (which may be a UTF-16 carrier STRUCT). A
+/// CHAR or VARCHAR column stored as VARCHAR gets the DuckDB collation of its
+/// SQL Server collation (`nocase` for the database default), so DuckDB
+/// compares, sorts and groups its values accordingly; DuckDB carries a
+/// column's collation through expressions over it.
 pub fn lower_collation(column: &mut ColumnDef) -> Result<(), String> {
+    let declaration = msduck_sql::sql_type::declaration(&column.data_type);
+    let ansi = matches!(
+        &declaration,
+        Ok(msduck_core::types::Type::Character(character)) if matches!(
+            character.family(),
+            msduck_core::character::Family::Char | msduck_core::character::Family::Varchar
+        )
+    );
     let Some(collation) = column_collation(column) else {
+        if ansi {
+            column.options.insert(0, backend("nocase"));
+        }
         return Ok(());
     };
-    if !matches!(
-        msduck_sql::sql_type::declaration(&column.data_type),
-        Ok(msduck_core::types::Type::Character(_))
-    ) {
+    if !matches!(declaration, Ok(msduck_core::types::Type::Character(_))) {
         return Err("COLLATE requires a character column declaration".into());
     }
     if column
@@ -30,13 +42,25 @@ pub fn lower_collation(column: &mut ColumnDef) -> Result<(), String> {
         return Err("multiple column collation declarations".into());
     }
     let name = collation_name(collation)?;
-    if crate::tds::collation::Collation::for_name(&name).is_none() {
+    if crate::tds::collation::Collation::descriptor_for_name(&name).is_none() {
         return Err(format!("unsupported column collation {name}"));
     }
     column
         .options
         .retain(|option| !matches!(option.option, ColumnOption::Collation(_)));
+    if ansi {
+        let collation = msduck_sql::dialect::ext::keys::collation::backend(&name)
+            .unwrap_or_else(|| "nocase".into());
+        column.options.insert(0, backend(&collation));
+    }
     Ok(())
+}
+
+fn backend(collation: &str) -> ColumnOptionDef {
+    ColumnOptionDef {
+        name: None,
+        option: ColumnOption::Collation(ObjectName::from(vec![Ident::with_quote('"', collation)])),
+    }
 }
 
 fn collation_name(name: &ObjectName) -> Result<String, String> {

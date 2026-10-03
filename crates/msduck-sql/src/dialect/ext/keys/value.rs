@@ -7,9 +7,10 @@
 //! - a tag, `CASE WHEN filter THEN tag END`, that names the index in DuckDB's
 //!   duplicate-key messages and leaves rows outside a filter unchecked (DuckDB
 //!   does not compare keys containing NULL);
-//! - per column, the comparable value: the BIN2 equality key of a Unicode
-//!   carrier (trailing spaces ignored), right-trimmed ANSI text, UTC ticks of
-//!   a temporal struct, or the value itself;
+//! - per column, the comparable value: the equality key of a Unicode
+//!   carrier (trailing spaces ignored, case-folded under a case-insensitive
+//!   collation such as the database default), right-trimmed (and lowercased)
+//!   ANSI text, UTC ticks of a temporal struct, or the value itself;
 //! - per nullable column, an `IS NULL` discriminator and the value with NULL
 //!   replaced by a typed zero, so that NULL compares equal to NULL (SQL
 //!   Server's single-NULL rule) and stays distinct from the zero value.
@@ -29,6 +30,8 @@ pub struct Column {
     pub nullable: bool,
     /// DuckDB's storage type, as `duckdb_columns().data_type` prints it.
     pub storage: String,
+    /// sys.columns.collation_name of a character column.
+    pub collation: Option<String>,
 }
 
 /// How a column's values are compared in a DuckDB index.
@@ -132,12 +135,54 @@ impl Column {
         Ident::with_quote('"', &self.name).to_string()
     }
 
+    /// Whether the column's values compare without regard to case: the
+    /// database default and other case-insensitive collations.
+    pub fn case_insensitive(&self) -> bool {
+        super::collation::case_insensitive(self.collation.as_deref())
+    }
+
+    /// The equality key expression of a Unicode carrier column.
+    pub fn unicode_key(&self) -> String {
+        let q = self.quoted();
+        if self.case_insensitive() {
+            folded_unicode_key(&q)
+        } else {
+            unicode_key(&q)
+        }
+    }
+
+    /// The key of a constant compared with this Unicode column.
+    pub fn unicode_key_of(&self, text: &str) -> String {
+        if self.case_insensitive() {
+            let folded: String = String::from_utf16_lossy(
+                &text
+                    .encode_utf16()
+                    .filter(|unit| !ignorable(*unit))
+                    .map(key_fold)
+                    .collect::<Vec<_>>(),
+            );
+            unicode_key_of(&folded)
+        } else {
+            unicode_key_of(text)
+        }
+    }
+
+    /// The equality key expression of an ANSI column.
+    pub fn ansi_key(&self) -> String {
+        let q = self.quoted();
+        if self.case_insensitive() {
+            format!("hex(rtrim(lower({q}), ' '))")
+        } else {
+            format!("hex(rtrim({q}, ' '))")
+        }
+    }
+
     /// The comparable value expression and its typed zero.
     fn value(&self) -> Result<(String, String), String> {
         let q = self.quoted();
         Ok(match self.kind()? {
-            Storage::Unicode => (unicode_key(&q), "''".into()),
-            Storage::Ansi => (format!("hex(rtrim({q}, ' '))"), "''".into()),
+            Storage::Unicode => (self.unicode_key(), "''".into()),
+            Storage::Ansi => (self.ansi_key(), "''".into()),
             Storage::Binary => (format!("hex({q})"), "''".into()),
             Storage::Ticks { field, .. } => (format!("struct_extract({q}, '{field}')"), "0".into()),
             Storage::Boolean => (q, "false".into()),
@@ -313,6 +358,131 @@ pub fn unicode_key(carrier: &str) -> String {
     format!("regexp_replace(hex(struct_extract({carrier}, '__msduck_utf16le')), '(2000)+$', '')")
 }
 
+/// The UTF-16 blocks whose case pairs keys fold: Basic Latin, Latin-1,
+/// Latin Extended-A, basic Greek and basic Cyrillic capitals. Comparisons
+/// fold every simple case mapping; outside these blocks a unique key still
+/// distinguishes case.
+const FOLDED: &[(u16, u16)] = &[
+    (0x41, 0x5A),
+    (0xC0, 0xDE),
+    (0x100, 0x17F),
+    (0x391, 0x3AB),
+    (0x400, 0x42F),
+];
+
+/// The lowercase unit a key folds `unit` to: its simple lowercase mapping
+/// within [`FOLDED`] when that keeps the high byte, otherwise `unit`.
+pub fn key_fold(unit: u16) -> u16 {
+    if !FOLDED
+        .iter()
+        .any(|(low, high)| (*low..=*high).contains(&unit))
+    {
+        return unit;
+    }
+    let Some(character) = char::from_u32(u32::from(unit)) else {
+        return unit;
+    };
+    let mut lower = character.to_lowercase();
+    match (lower.next(), lower.next()) {
+        (Some(single), None) if (single as u32) >> 8 == u32::from(unit >> 8) => single as u16,
+        _ => unit,
+    }
+}
+
+fn nibble(value: u16) -> char {
+    char::from_digit(u32::from(value & 0xF), 16)
+        .unwrap()
+        .to_ascii_uppercase()
+}
+
+/// Whether SQL_Latin1_General_CP1_CI_AS ignores a UTF-16 unit in Unicode
+/// comparisons: U+0000, the zero-width joiner, the left-to-right mark,
+/// U+FEFF, the noncharacters U+FFFE and U+FFFF, and every surrogate (so a
+/// supplementary character equals the empty string). Captured in
+/// reference/default-collation.json; other format and control characters
+/// are not ignored.
+pub fn ignorable(unit: u16) -> bool {
+    matches!(unit, 0 | 0x200D | 0x200E | 0xFEFF | 0xFFFE | 0xFFFF)
+        || (0xD800..=0xDFFF).contains(&unit)
+}
+
+/// The `regexp_replace` rule that deletes [`ignorable`] units from
+/// `|`-delimited UTF-16LE hexadecimal units.
+pub const IGNORABLE_RULE: (&str, &str) = (
+    "\\|(0000|0D20|0E20|FFFE|FEFF|FFFF|[0-9A-F]{2}D[89A-F])\\|",
+    "",
+);
+
+/// `regexp_replace` rules over `|`-delimited UTF-16LE hexadecimal units
+/// (`|XXXX|` each) that apply [`key_fold`]: each rule matches one whole
+/// unit, and no rule's output is another rule's input.
+pub fn fold_rules() -> Vec<(String, String)> {
+    use std::collections::BTreeMap;
+    // (high byte, changed nibble) -> unit nibbles that share the change.
+    let mut low_nibble: BTreeMap<(u16, u16, u16), Vec<u16>> = BTreeMap::new();
+    let mut high_nibble: BTreeMap<(u16, u16, u16), Vec<u16>> = BTreeMap::new();
+    let mut whole: Vec<(u16, u16)> = vec![];
+    for &(low, high) in FOLDED {
+        for unit in low..=high {
+            let lower = key_fold(unit);
+            if lower == unit {
+                continue;
+            }
+            let (a, b, c) = ((unit >> 4) & 0xF, unit & 0xF, unit >> 8);
+            let (a2, b2) = ((lower >> 4) & 0xF, lower & 0xF);
+            if b == b2 {
+                high_nibble.entry((c, a, a2)).or_default().push(b);
+            } else if a == a2 {
+                low_nibble.entry((c, b, b2)).or_default().push(a);
+            } else {
+                whole.push((unit, lower));
+            }
+        }
+    }
+    let class = |digits: &[u16]| -> String {
+        format!(
+            "([{}])",
+            digits.iter().map(|d| nibble(*d)).collect::<String>()
+        )
+    };
+    let mut rules = vec![];
+    for ((c, a, a2), digits) in high_nibble {
+        rules.push((
+            format!("\\|{}{}{:02X}", nibble(a), class(&digits), c),
+            format!("|{}\\1{:02X}", nibble(a2), c),
+        ));
+    }
+    for ((c, b, b2), digits) in low_nibble {
+        rules.push((
+            format!("\\|{}{}{:02X}", class(&digits), nibble(b), c),
+            format!("|\\1{}{:02X}", nibble(b2), c),
+        ));
+    }
+    for (unit, lower) in whole {
+        rules.push((
+            format!("\\|{:02X}{:02X}", unit & 0xFF, unit >> 8),
+            format!("|{:02X}{:02X}", lower & 0xFF, lower >> 8),
+        ));
+    }
+    rules
+}
+
+/// The case-insensitive equality key of a Unicode carrier: its UTF-16LE
+/// units in hexadecimal without [`ignorable`] units, with [`key_fold`]
+/// applied to each unit and without trailing spaces, using only built-in
+/// functions.
+pub fn folded_unicode_key(carrier: &str) -> String {
+    let mut units = format!(
+        "regexp_replace(hex(struct_extract({carrier}, '__msduck_utf16le')), '(....)', '|\\1|', 'g')"
+    );
+    let (pattern, replacement) = IGNORABLE_RULE;
+    units = format!("regexp_replace({units}, '{pattern}', '{replacement}', 'g')");
+    for (pattern, replacement) in fold_rules() {
+        units = format!("regexp_replace({units}, '{pattern}', '{replacement}', 'g')");
+    }
+    format!("regexp_replace(replace({units}, '|', ''), '(2000)+$', '')")
+}
+
 /// The [`unicode_key`] of a constant.
 pub fn unicode_key_of(text: &str) -> String {
     let units: Vec<u16> = text.encode_utf16().collect();
@@ -383,12 +553,14 @@ mod tests {
             scale,
             nullable,
             storage: storage.into(),
+            collation: None,
         }
     }
 
     #[test]
     fn expressions_follow_storage() {
-        let unicode = column("n", 231, 20, 0, true, "STRUCT(__msduck_utf16le BLOB)");
+        let mut unicode = column("n", 231, 20, 0, true, "STRUCT(__msduck_utf16le BLOB)");
+        unicode.collation = Some("Latin1_General_100_BIN2".into());
         assert_eq!(
             unicode.components().unwrap(),
             [
@@ -427,6 +599,25 @@ mod tests {
             .components()
             .is_err()
         );
+        // The database default folds case in keys.
+        unicode.collation = None;
+        let folded = &unicode.components().unwrap()[1];
+        assert!(
+            folded.starts_with("coalesce(regexp_replace(replace(regexp_replace("),
+            "{folded}"
+        );
+        assert!(
+            !folded.contains("__msduck_")
+                || !folded.replace("__msduck_utf16le", "").contains("__msduck")
+        );
+        let ansi = column("v", 167, 10, 0, false, "VARCHAR");
+        assert_eq!(
+            ansi.components().unwrap(),
+            ["hex(rtrim(lower(\"v\"), ' '))"]
+        );
+        let mut sensitive = ansi.clone();
+        sensitive.collation = Some("SQL_Latin1_General_CP1_CS_AS".into());
+        assert_eq!(sensitive.components().unwrap(), ["hex(rtrim(\"v\", ' '))"]);
         assert!(!column("m", 231, -1, 0, false, "STRUCT(__msduck_utf16le BLOB)").keyable());
         assert!(column("m", 231, 900, 0, false, "STRUCT(__msduck_utf16le BLOB)").keyable());
         assert_eq!(
@@ -489,6 +680,72 @@ mod tests {
             offset.display(&stamp.to_string(), true),
             "2024-01-02 03:04:05.68 +00:00"
         );
+    }
+
+    #[test]
+    fn key_folding_rules_match_whole_units() {
+        // Simulate the regexp rules over every unit of the folded blocks.
+        let rules = fold_rules();
+        assert!(!rules.is_empty() && rules.len() < 40, "{}", rules.len());
+        for unit in 0u16..0x500 {
+            let mut hex = format!("{:02X}{:02X}", unit & 0xFF, unit >> 8);
+            for (pattern, replacement) in &rules {
+                // `\|`, then four unit characters, one of which may be a
+                // captured `([...])` class of nibbles.
+                let body = pattern.strip_prefix("\\|").expect(pattern);
+                let mut chars = hex.chars();
+                let mut matched = true;
+                let mut captured = None;
+                let mut rest = body.chars();
+                while let Some(p) = rest.next() {
+                    let c = chars.next().unwrap();
+                    if p == '(' {
+                        assert_eq!(rest.next(), Some('['), "{pattern}");
+                        let class: String = rest.by_ref().take_while(|ch| *ch != ']').collect();
+                        assert_eq!(rest.next(), Some(')'), "{pattern}");
+                        if class.contains(c) {
+                            captured = Some(c);
+                        } else {
+                            matched = false;
+                        }
+                    } else if p != c {
+                        matched = false;
+                    }
+                }
+                if matched {
+                    hex = replacement
+                        .strip_prefix('|')
+                        .expect(replacement)
+                        .replace("\\1", &captured.map(String::from).unwrap_or_default());
+                }
+            }
+            let expected = key_fold(unit);
+            assert_eq!(
+                hex,
+                format!("{:02X}{:02X}", expected & 0xFF, expected >> 8),
+                "{unit:04X}"
+            );
+        }
+        assert_eq!(key_fold(u16::from(b'A')), u16::from(b'a'));
+        assert_eq!(key_fold(0xC9), 0xE9);
+        assert_eq!(key_fold(0x100), 0x101);
+        assert_eq!(key_fold(0x410), 0x430);
+        assert_eq!(key_fold(0xD7), 0xD7);
+        assert_eq!(key_fold(0x178), 0x178);
+        assert!(ignorable(0) && ignorable(0xD83E) && ignorable(0xFEFF));
+        assert!(!ignorable(0x1) && !ignorable(0xAD) && !ignorable(0x200B) && !ignorable(0xE000));
+        let mut default = Column {
+            name: "n".into(),
+            system_type_id: 231,
+            max_length: 20,
+            scale: 0,
+            nullable: false,
+            storage: "STRUCT(__msduck_utf16le BLOB)".into(),
+            collation: None,
+        };
+        assert_eq!(default.unicode_key_of("A\u{0}\u{1F986}B  "), "61006200");
+        default.collation = Some("Latin1_General_100_BIN2".into());
+        assert_eq!(default.unicode_key_of("A\u{0}B  "), "410000004200");
     }
 
     #[test]

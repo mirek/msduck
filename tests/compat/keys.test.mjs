@@ -50,8 +50,10 @@ test('Unicode primary keys, composite keys and unique constraints enforce SQL Se
   await ok(c, 'CREATE TABLE items (id nvarchar(450) NOT NULL CONSTRAINT pk_items PRIMARY KEY NONCLUSTERED, n int NULL)')
   await ok(c, "INSERT items VALUES (N'abc', 1), (N'\u{1F986}', 2)")
   await fails(c, "INSERT items VALUES (N'abc', 3)", pk('pk_items', 'dbo.items', 'abc'))
-  // Trailing spaces do not distinguish keys.
-  await fails(c, "INSERT items VALUES (N'abc  ', 3)", pk('pk_items', 'dbo.items', 'abc'))
+  // Trailing spaces do not distinguish keys; the duplicate shows as written.
+  await fails(c, "INSERT items VALUES (N'abc  ', 3)", pk('pk_items', 'dbo.items', 'abc  '))
+  // Nor does case, under the database's case-insensitive default.
+  await fails(c, "INSERT items VALUES (N'ABC', 3)", pk('pk_items', 'dbo.items', 'ABC'))
   await fails(c, "INSERT items VALUES (N'abd', 3), (N'abd', 4)", pk('pk_items', 'dbo.items', 'abd'))
   await fails(c, "INSERT items VALUES (N'\u{1F986}', 3)", pk('pk_items', 'dbo.items', '\u{1F986}'))
   assert.equal((await run(c, 'INSERT items VALUES (NULL, 3)')).errors[0][0], 515)
@@ -151,7 +153,7 @@ test('UNIQUE allows one NULL; filtered unique indexes allow many', async t => {
   await ok(c, 'CREATE TABLE named(value varchar(10) NULL CONSTRAINT uq_named UNIQUE)')
   await ok(c, "INSERT named VALUES(NULL), ('')")
   await fails(c, 'INSERT named VALUES(NULL)', uq('uq_named', 'dbo.named', '<NULL>'))
-  await fails(c, "INSERT named VALUES('  ')", uq('uq_named', 'dbo.named', ''))
+  await fails(c, "INSERT named VALUES('  ')", uq('uq_named', 'dbo.named', '  '))
 
   await ok(c, 'CREATE TABLE indexed(id int, value varchar(20) NULL)')
   await ok(c, 'CREATE UNIQUE INDEX ux_indexed_value ON indexed(value)')
@@ -406,18 +408,10 @@ test('filters with any text, 1505 key order and existing tables', async t => {
 // constraint names, which are random in SQL Server.
 const differences = {
   'nvarchar-primary-key': {
-    3: 'keys compare with BIN2 equality, not the case-insensitive default collation',
-    4: 'the message shows the stored key, without trailing spaces',
-    6: 'nvarchar comparison with a literal in WHERE is unsupported (comparison lowering)',
-    7: 'the case-insensitive duplicate was accepted in step 3',
     8: 'NOT NULL violations keep the backend message (engine)',
   },
   'datetimeoffset-keys': {
     2: 'the message shows the UTC instant, not the inserted offset',
-  },
-  'unique-index-null': {
-    5: 'keys compare with BIN2 equality, not the case-insensitive default collation',
-    6: 'follows step 5',
   },
   'clustered-include-options': {
     7: 'sys.indexes does not yet model clustered, included or filtered indexes (index catalog)',

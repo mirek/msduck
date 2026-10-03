@@ -17,14 +17,19 @@
 //!   instead of its STRUCT text.
 //!
 //! ORDER BY items naming carrier columns sort by the same keys ([`order`]),
+//! GROUP BY and SELECT DISTINCT over character columns group by them
+//! ([`group`]),
 //! and carrier columns mixed with text in ISNULL, COALESCE, IIF, CASE and
 //! set operations convert to their declared type first ([`pin`]).
 //! See docs/gaps-unicode-predicates.md.
+use crate::engine::Parameter;
 use anyhow::Result;
 use sqlparser::ast::{Expr, Query, SetExpr, Statement, Value, Visit, VisitMut, Visitor};
+use std::collections::HashMap;
 use std::ops::ControlFlow;
 
 mod catalog;
+mod group;
 mod key;
 mod like;
 mod lower;
@@ -42,13 +47,17 @@ pub(super) fn register(db: &duckdb::Connection) -> Result<()> {
     db.register_scalar_function::<native::Like>(lower::LIKE)?;
     // Markers are consumed by the lowering; one that some other lowering
     // moved out of reach stays the plain value.
-    for marker in [lower::MARK, lower::MAYBE, lower::MEMBER] {
+    for marker in [lower::MARK, lower::MAYBE, lower::MEMBER, lower::GROUP] {
         db.execute_batch(&format!("CREATE OR REPLACE MACRO {marker}(v) AS v"))?;
     }
     Ok(())
 }
 
-pub(super) fn rewrite_statement(db: &duckdb::Connection, statement: &mut Statement) -> Result<()> {
+pub(super) fn rewrite_statement(
+    db: &duckdb::Connection,
+    statement: &mut Statement,
+    parameters: &HashMap<String, Parameter>,
+) -> Result<()> {
     if matches!(
         statement,
         Statement::Query(_)
@@ -58,21 +67,27 @@ pub(super) fn rewrite_statement(db: &duckdb::Connection, statement: &mut Stateme
             | Statement::Merge(_)
             | Statement::CreateView(_)
     ) {
-        let ordered = order::sites(statement);
-        rewrite(db, statement, ordered)?;
+        let ordered = order::sites(statement) || group::sites(statement);
+        rewrite(db, statement, ordered, parameters)?;
     }
     Ok(())
 }
 
 /// Subqueries of scalar evaluations (IF, WHILE, SET, RETURN), which have no
 /// statement pass; inside statements this repeats that pass, idempotently.
-pub(super) fn rewrite_expr(db: &duckdb::Connection, expr: &mut Expr) -> Result<()> {
+/// Every node also gets [`mark::literals`].
+pub(super) fn rewrite_expr(
+    db: &duckdb::Connection,
+    expr: &mut Expr,
+    parameters: &HashMap<String, Parameter>,
+) -> Result<()> {
     if matches!(
         expr,
         Expr::Subquery(_) | Expr::Exists { .. } | Expr::InSubquery { .. }
     ) {
-        rewrite(db, expr, false)?;
+        rewrite(db, expr, false, parameters)?;
     }
+    mark::literals(parameters, expr);
     Ok(())
 }
 
@@ -80,24 +95,47 @@ fn rewrite<T: Visit + VisitMut + 'static>(
     db: &duckdb::Connection,
     node: &mut T,
     ordered: bool,
+    parameters: &HashMap<String, Parameter>,
 ) -> Result<()> {
     if !ordered && !predicates(node) {
         return Ok(());
     }
     let mut catalog = catalog::Catalog::load(db, node)?;
-    if !catalog.has_carriers() {
+    let grouped = ordered
+        && (node as &dyn std::any::Any)
+            .downcast_ref::<Statement>()
+            .is_some_and(group::sites);
+    if !catalog.has_carriers() && !catalog.has_collations() && !likes(node) && !grouped {
         return Ok(());
     }
-    mark::rewrite(&catalog, node);
+    mark::rewrite(&catalog, parameters, node);
     if pin::sites(node) && pin::rewrite(&catalog, node, false) {
         catalog.declare(db, node)?;
         pin::rewrite(&catalog, node, true);
     }
     if ordered && let Some(statement) = (node as &mut dyn std::any::Any).downcast_mut::<Statement>()
     {
+        group::rewrite(&catalog, statement);
         order::rewrite(&catalog, statement);
     }
     Ok(())
+}
+
+/// Whether `node` has a LIKE, which matches case-insensitively over known
+/// character data even without carrier columns.
+fn likes<T: Visit>(node: &T) -> bool {
+    struct Find;
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            if matches!(expr, Expr::Like { .. }) {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        }
+    }
+    node.visit(&mut Find).is_break()
 }
 
 /// Whether `node` has an operation the passes before translation may change.
@@ -116,7 +154,14 @@ fn predicates<T: Visit>(node: &T) -> bool {
                 Expr::Function(f)
                     if matches!(
                         f.name.to_string().to_ascii_uppercase().as_str(),
-                        "ISNULL" | "COALESCE" | "IIF" | "NULLIF"
+                        "ISNULL"
+                            | "COALESCE"
+                            | "IIF"
+                            | "NULLIF"
+                            | "COUNT"
+                            | "COUNT_BIG"
+                            | "MIN"
+                            | "MAX"
                     ) =>
                 {
                     ControlFlow::Break(())

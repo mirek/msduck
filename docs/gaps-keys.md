@@ -73,8 +73,16 @@ A managed index has these key expressions:
    filter get a NULL tag, and DuckDB does not compare keys containing NULL.
 2. For each key column, its comparable value:
    - NVARCHAR/NCHAR: the UTF-16 code units in hexadecimal, without trailing
-     spaces. This is BIN2 equality.
-   - VARCHAR/CHAR: the text without trailing spaces, in hexadecimal.
+     spaces. Under a case-insensitive collation (the database default) the
+     units the collation ignores (NUL, surrogates, U+200D, U+200E, U+FEFF,
+     U+FFFE, U+FFFF) are dropped and each unit of Basic Latin, Latin-1,
+     Latin Extended-A, basic Greek and basic Cyrillic is folded to lower
+     case first, by `regexp_replace` rules over whole units. Under a case-sensitive or binary column collation this is
+     BIN2 equality.
+   - VARCHAR/CHAR: the text without trailing spaces (lowercased under a
+     case-insensitive collation), in hexadecimal. A key over such columns
+     always gets a managed index under a case-insensitive collation, because
+     DuckDB's native constraint compares the stored text exactly.
    - DATETIME2 and DATETIMEOFFSET: the UTC ticks. Two DATETIMEOFFSET values
      at the same instant are equal, whatever their offsets.
    - BINARY/VARBINARY: hexadecimal.
@@ -233,16 +241,23 @@ through a separate connection.
 
 ## Remaining limits
 
-- **Collation.** Keys compare with BIN2 equality: case- and
-  accent-sensitive, trailing spaces ignored. SQL Server's default collation
-  is case-insensitive, so it rejects `N'ABC'` after `N'abc'`, while msduck
-  accepts it. This matches msduck's comparison semantics elsewhere. Native
-  VARCHAR keys also compare trailing spaces.
+- **Collation.** Keys follow the column's collation: case-insensitive and
+  accent-sensitive under the database default (`N'ABC'` after `N'abc'`
+  fails with 2627 or 2601), BIN2 equality under case-sensitive and binary
+  collations. Unicode keys fold case only in the blocks listed above, so
+  case pairs elsewhere (for example Armenian) stay distinct in a key while
+  comparisons treat them as equal. Accent-insensitive collations use the
+  case-insensitive key and so still distinguish accents. Tables created
+  before this change keep their case-sensitive key indexes.
 - **Shown values.**
   - A DATETIMEOFFSET key value is shown in UTC (`+00:00`). SQL Server shows
     the inserted offset.
-  - A Unicode or ANSI key value is shown without trailing spaces. SQL
-    Server shows the inserted text.
+  - A Unicode or ANSI key value is shown as written when the failing
+    statement's literals or parameters hold it (with its case and trailing
+    spaces). Otherwise (a value computed or read from another table, or
+    CREATE UNIQUE INDEX over existing rows) it is shown without trailing
+    spaces and, under a case-insensitive collation, in lower case. SQL
+    Server shows the stored text.
 - **Clustering of constraints.** The CLUSTERED/NONCLUSTERED keyword on
   PRIMARY KEY and UNIQUE, and DESC key columns, are recorded for the
   catalogs (`main.__msduck_key_layout`, read by `sys.indexes` and
