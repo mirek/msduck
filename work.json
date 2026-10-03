@@ -11130,7 +11130,7 @@
     {
       "id": "v025-merge-triggers-v1",
       "title": "MERGE fires target AFTER triggers (successor of limits-merge-triggers-v1)",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03) to fix the v0.2.5 workload report (umbrella #864) until it lands in a published container; the report lists MERGE refused on tables with enabled triggers. Stale-claim evidence (2026-10-03 17:58 CEST): limits-merge-triggers-v1, limits-procedure-error-context-v1 and -wire were claimed about 09:00; no remote work/<id> branch, no PR, no commits beyond 2fde4d4, last worktree file edit 09:03/09:11, no process with cwd in those worktrees (>6h, standing 2026-10-01 authorization). Old branches, worktrees, receipts and uncommitted diffs are retained; successors may use those diffs as a starting point.",
       "scope": [
         "src/engine/ext/merge.rs",
