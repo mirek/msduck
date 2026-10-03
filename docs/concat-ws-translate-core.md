@@ -4,8 +4,9 @@ The new `crates/msduck-sql/src/concat_ws.rs` module plans character declarations
 from explicit argument declarations and catalog properties, then evaluates
 already SQL-converted UTF-16 text. It does not acquire catalogs, execute source
 expressions or consult a session/backend. Planning takes no parameter values.
-The module is deliberately unregistered while the GREATEST/LEAST worker owns
-`msduck-sql/src/lib.rs`; its integration test includes it by path.
+The module remains unregistered under this task's three-file scope; its
+integration test includes it by path. GREATEST/LEAST has since merged, so a
+separately claimed export task can register the module.
 
 The authority is the complete, independently reproduced SQL Server capture in
 [concat-ws-translate.md](concat-ws-translate.md), merged through PR807. The
@@ -32,11 +33,16 @@ and ANSI UTF-8 evaluation do not acquire invented behavior. Character payloads
 must respect their declared widths and fixed-width padding. Core CP1252 encoding
 validates ANSI payloads; Unicode payloads retain isolated surrogate units.
 
-Seven private Rust tests currently pass using cached, compiler-compatible Linux
+Ten private Rust tests currently pass using cached, compiler-compatible Linux
 dependencies and isolated temporary binaries. They cover21 ordinary character
-cases across all four captures (84 comparisons), prepared CONCAT_WS rebindings,
-isolated surrogate fidelity, captured bounded truncation/MAX behavior and ten
-compile diagnostic cases in every capture. The test reader converts only the
+cases across all four captures (84 comparisons), another26 declaration and
+collation cases (104 comparisons), prepared CONCAT_WS rebindings and32 prepared
+TRANSLATE executions, the254-argument CONCAT_WS boundary, isolated surrogate
+fidelity, captured bounded truncation/MAX behavior and ten compile diagnostic
+cases in every capture. The new declaration cases retain typed NULL widths,
+fixed-width padding, mixed families, MAX-first versus MAX-mapping distinctions,
+and raw collation descriptors. Prepared TRANSLATE checks preserve descriptors
+through NULL bindings, exact9828 errors and subsequent successful reuse. The test reader converts only the
 four raw `"\ud83d-a"` strings into an exact UTF-16 unit carrier because serde_json
 cannot represent an isolated surrogate in a Rust String. It retains the original
 fixture unchanged and checks those exact units rather than replacing them.
