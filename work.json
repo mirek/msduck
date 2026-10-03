@@ -10452,7 +10452,7 @@
     {
       "id": "translate-matching-keys-v1",
       "title": "Provide proven finite TRANSLATE matching keys",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server compatibility goal; reviewed complete owner-run ASCII reference854/PR855 mergedd7eb82b with source/raw proofs and841 finite observations. Deterministic keyed evaluator and existing841/854 raw evidence establish the next matching-provider work, not generic linguistic weights. No third-party inputs or engine scope.",
       "scope": [
         "crates/msduck-sql/src/lib.rs",
@@ -10884,7 +10884,7 @@
     {
       "id": "translate-plan-operation-v1",
       "title": "Expose deterministic character-function plan operation identity",
-      "state": "ready",
+      "state": "done",
       "issue": 858,
       "authorization": "Companion to owner-approved translate-matching-keys-v1, shipped in PR885 by same worker after fresh exclusive claim. Confirmed owner-initiated Codex finding requires rejecting CONCAT_WS plans from TRANSLATE matching provider.",
       "scope": [
