@@ -10932,6 +10932,22 @@
         "Ship with compatibility-cli-output-v1 under actual delayed-consumption pipe regressions for both direct and Docker CLI paths, preserving original assertions. Same claiming worker handles exact-head tests/reviews/CI/merge and completion of both receipts. No extra agent/cache/native build."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkyP3"
+    },
+    {
+      "id": "compatibility-cli-suite-registration-v1",
+      "title": "Keep expanded CLI regression suite registered in standard clients",
+      "state": "ready",
+      "issue": 887,
+      "authorization": "Owner goal; bounded companion for own PR888 after independent confirmed integration finding. Same worker claims and ships in focused CLI fix.",
+      "scope": [
+        "tests/reference-compare.test.mjs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Update the standard-client bridge assertion to require all seven completed compatibility selection/backpressure tests, retaining child success status and original suite registration. Do not weaken test expectations or unrelated raw comparison/memory/fixture guards.",
+        "Prove actual predecessor wrapper fails with seven child successes and corrected wrapper passes on both hosts. Run complete reference-compare and CLI suites, preserve raw evidence; same exact-head CI/independent/Codex gates, worker-owned merge and all companion registry/project completion. No native/cache/agent expansion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkyP3"
     }
   ]
 }
