@@ -9798,6 +9798,27 @@
         "Fresh exclusive claim/receipt in a completed existing worktree, no new local Cargo/native caches or engine.rs reservation. Cached Linux checks under shared runner lock, formatter/workspace strict Clippy/tests/client verification appropriate to Rust export, exact required CI/review or owner-authorized fallback. Worker owns merge and prompt registry/project/issue completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pj92W"
+    },
+    {
+      "id": "concat-boundary-reference-v1",
+      "title": "Capture CONCAT_WS and TRANSLATE UTF-16 output boundaries",
+      "state": "ready",
+      "authorization": "Direct continuing owner goal and explicit root delegation to publish and claim a bounded successor after completed task814. First-party SQL2025 private boundary captures; no external submissions.",
+      "scope": [
+        "scripts/capture-concat-boundary.mjs",
+        "reference/concat-boundary.json",
+        "docs/concat-boundary.md"
+      ],
+      "dependencies": [
+        "concat-text-conversion-reference-v1"
+      ],
+      "acceptance": [
+        "Capture ordinary and SC CONCAT_WS valid-pair crossing at NVARCHAR4000, lone-high controls, pair crossing argument boundaries, and later values after overflow to detect capacity refill. Compare native bounded CAST and bounded/MAX TRANSLATE expansion, retain exact raw UTF16 bytes, rows/descriptors/diagnostics and token order without guessing uncaptured rules.",
+        "Two fresh databases in each of two independently owned pinned SQL2025 containers with explicit shared hostname configuration; preserve all four complete raw observations, ORDER/rawDONE/RETURNVALUE where applicable, full parsed scalar descriptors and diagnostics. Reproducible generator, whole-observation integrity pin, bounded fragment observer and meaningful coherent-corruption/negative CLI preservation checks. Preserve preceding private raw scratch evidence and inspect every difference.",
+        "Reuse completed existing prepared-rpc worktree with fresh atomic claim/receipt and new branch from approved owner main207e051. Exactly three new scoped files; no old-task receipt adoption, engine/runtime/native/source/cache edits, new worktrees, local Cargo or extra agents. Isolated Linux reference directory and read-only cached Node dependencies only. Worker owns focused PR, exact required CI and verified reviews/fallback, merge and prompt issue/project/registry completion. No runtime compatibility completion claim."
+      ],
+      "issue": 817,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pj-vk"
     }
   ]
 }
