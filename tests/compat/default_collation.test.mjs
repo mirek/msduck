@@ -139,6 +139,8 @@ test('duplicates show each key column as written, and ORDER BY resolves qualifie
   assert.deepEqual((await query(connection, "SELECT count(*) FROM dbo.cs_keys WHERE v BETWEEN 'a  ' AND 'a ' COLLATE Latin1_General_CS_AS")).rows, [[1]])
   await query(connection, "CREATE TABLE dbo.plain_text (v varchar(10)); INSERT dbo.plain_text VALUES ('a')")
   assert.deepEqual((await query(connection, "SELECT count(*) FROM dbo.plain_text WHERE v BETWEEN 'A ' AND 'a  ' AND v >= 'A  ' AND v <= 'a'")).rows, [[1]])
+  // NULLIF compares under its first argument's collation.
+  assert.deepEqual((await query(connection, "CREATE TABLE dbo.nullif_cs (v nvarchar(5) COLLATE Latin1_General_CS_AS); INSERT dbo.nullif_cs VALUES (N'a'); SELECT NULLIF(v, N'A'), NULLIF(v, N'a') FROM dbo.nullif_cs")).rows, [['a', null]])
   // IN (subquery) keeps a column's own collation, on either side.
   assert.deepEqual((await query(connection, "SELECT count(*) FROM dbo.cs_keys WHERE v IN (SELECT 'a')")).rows, [[1]])
   assert.deepEqual((await query(connection, "SELECT CASE WHEN 'A' IN (SELECT k.v FROM dbo.cs_keys k WHERE k.v = 'a') THEN 1 ELSE 0 END")).rows, [[0]])

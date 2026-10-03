@@ -381,6 +381,9 @@ Remaining limits:
 - ALTER TABLE ADD CONSTRAINT over NVARCHAR/NCHAR stays unsupported (the
   constraints feature), and its 1505 for existing CHAR/VARCHAR duplicates
   shows the first value it finds rather than SQL Server's.
+- A simple CASE whose input calls NEWID, RAND or another volatile function
+  keeps DuckDB's comparison, so that the input is not evaluated once per
+  arm.
 - Set operations (UNION, INTERSECT, EXCEPT) over NVARCHAR/NCHAR carriers
   remove duplicates by exact units, and ALTER TABLE ALTER COLUMN to CHAR or
   VARCHAR creates a column without the `nocase` collation (that path does

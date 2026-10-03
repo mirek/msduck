@@ -653,10 +653,20 @@ pub(super) fn rewrite<T: VisitMut>(
                         && !collated(first)
                         && !collated(second)
                         && !marked(second)
-                        && unicode(self.0, first)
                     {
-                        let inner = std::mem::replace(second, Expr::Value(Value::Null.into()));
-                        *second = msduck_sql::expr::unary_function(MARK, inner);
+                        // A first argument with a collation of its own
+                        // compares under it: the second argument takes it
+                        // explicitly, leaving the first (and the result) as is.
+                        if let Some(name) = own_collation(self.0, first).map(str::to_owned) {
+                            let inner = std::mem::replace(second, Expr::Value(Value::Null.into()));
+                            *second = Expr::Collate {
+                                expr: Box::new(inner),
+                                collation: ObjectName::from(vec![Ident::new(name)]),
+                            };
+                        } else if unicode(self.0, first) {
+                            let inner = std::mem::replace(second, Expr::Value(Value::Null.into()));
+                            *second = msduck_sql::expr::unary_function(MARK, inner);
+                        }
                     }
                     Ok(())
                 }
