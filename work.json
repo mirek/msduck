@@ -9802,7 +9802,7 @@
     {
       "id": "concat-boundary-reference-v1",
       "title": "Capture CONCAT_WS and TRANSLATE UTF-16 output boundaries",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct continuing owner goal and explicit root delegation to publish and claim a bounded successor after completed task814. First-party SQL2025 private boundary captures; no external submissions.",
       "scope": [
         "scripts/capture-concat-boundary.mjs",
