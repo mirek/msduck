@@ -11051,6 +11051,30 @@
         "Exacthead tests/fmt/strictClippy andappropriateAGENTS requiredgates, CI and independent/Codex review or genuinefallback. Retain rawevidence; owner-worker handlesmerge/completion. Never fabricate completion of old164 or conversion128."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PKD64"
+    },
+    {
+      "id": "bulk-character-conversion-reference-v1",
+      "title": "Capture BulkLoad character conversion and capacity contracts",
+      "state": "ready",
+      "issue": 895,
+      "authorization": "Continuing owner implementation goal and approved merged891 adapter plan, raw884 evidence. First-party expanded ground truth before deterministic conversion/storage implementation.",
+      "scope": [
+        "scripts/capture-bulk-character-conversion.mjs",
+        "reference/bulk-character-conversion.json",
+        "tests/bulk_character_conversion_capture.test.mjs",
+        "docs/bulk-character-conversion-reference.md"
+      ],
+      "dependencies": [
+        "bulk-character-adapter-plan-v1",
+        "bulk-character-encoding-reference-v1"
+      ],
+      "acceptance": [
+        "Capture every CP1251 source byte independently with exact same-encoding/native and Unicode projections, including undefined-byte behavior. Expand finite malformed UTF8 leads/continuations/truncations/overlong/surrogate/out-of-range and mixed controls across relevant same/CP1252/Unicode targets. Test source declaration versus supplied wire collation conflict/missing/unknown descriptors and bounded conversion-before-capacity, CHAR padding, VARCHAR/MAX and NULL/empty controls. Keep deferred legacy TEXT, general best-fit/surrogates and large staging/explicit-transaction combinations explicit; a finite table must not be claimed as a universal decoder.",
+        "Four independent fresh databases across two pinned SQL Server reference containers using existing isolated resources. Retain actual source bytes, native byte projections, SQL UTF16 units, public client display, exact five-byte descriptors, errors/state/class/messages, info, DONE/callback and transaction state. Preserve exact post-login request/reply frames excluding credentials and fixed image/version/client/source provenance. Cases <=96, rows per case <=260, each exchange <=2MiB/1024frames, whole capture <=48MiB; validate before allocations/copies. Every failed or successful capture and complete unnormalized differences are saved before gold validation.",
+        "Meaningful offline replay and independent fixed semantic expectations/hashes must reject uniform corruption even when all four runs and summaries are recomputed. Cover request/reply corruption, aliases/symlinks/hardlinks/existing outputs and bounded memory. No guessed codepage or strict/lossy Unicode semantics; actual SQL Server observations determine conversion behavior. Source/replay scope only, not runtime completion.",
+        "Fresh exclusive receipt, existing isolated worktree/reference dependencies, no extra agent/nativecache or shared builder source/executable mutation. Exact-head focused Node checks and required CI, independent/Codex review or genuine availability fallback. Worker owns review corrections, exacthead merge and protectedregistry/project completion. No core/TDS/commonhelper/runtime/export or reserved engine.rs edits. Publish separate pure conversion implementation only from independently verified observed domains."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pk5z9"
     }
   ]
 }
