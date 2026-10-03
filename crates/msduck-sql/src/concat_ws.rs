@@ -101,6 +101,24 @@ pub enum DiagnosticContext {
     SelectColumn(std::num::NonZeroUsize),
 }
 
+pub fn validate_arity(function: Function, count: usize) -> Result<(), Error> {
+    if function == Function::ConcatWs && !(3..=254).contains(&count) {
+        return Err(Error::Sql(SqlError::syntax(
+            189,
+            1,
+            "The concat_ws function requires 3 to 254 arguments.",
+        )));
+    }
+    if function == Function::Translate && count != 3 {
+        return Err(Error::Sql(SqlError::syntax(
+            174,
+            1,
+            "The translate function requires 3 argument(s).",
+        )));
+    }
+    Ok(())
+}
+
 pub fn plan(
     function: Function,
     arguments: &[Argument],
@@ -118,20 +136,7 @@ pub fn plan_with_context(
     context: Option<DiagnosticContext>,
 ) -> Result<Plan, Error> {
     let count = arguments.len();
-    if function == Function::ConcatWs && !(3..=254).contains(&count) {
-        return Err(Error::Sql(SqlError::syntax(
-            189,
-            1,
-            "The concat_ws function requires 3 to 254 arguments.",
-        )));
-    }
-    if function == Function::Translate && count != 3 {
-        return Err(Error::Sql(SqlError::syntax(
-            174,
-            1,
-            "The translate function requires 3 argument(s).",
-        )));
-    }
+    validate_arity(function, count)?;
     let lookup = |name: &str| {
         let mut matches = catalog
             .iter()
@@ -186,6 +191,25 @@ pub fn plan_with_context(
                     Some(_) => return Err(Error::InvalidDeclaration),
                     None => return Err(Error::UnknownConversion),
                 }
+            }
+            Some(kind @ (Type::Text | Type::Ntext | Type::Image | Type::Xml | Type::Variant))
+                if function == Function::Translate && index == 0 =>
+            {
+                let name = match kind {
+                    Type::Text => "text",
+                    Type::Ntext => "ntext",
+                    Type::Image => "image",
+                    Type::Xml => "xml",
+                    Type::Variant => "sql_variant",
+                    _ => unreachable!(),
+                };
+                return Err(sql(
+                    8116,
+                    1,
+                    format!(
+                        "Argument data type {name} is invalid for argument 1 of translate function."
+                    ),
+                ));
             }
             Some(Type::Text | Type::Ntext | Type::Image) => return Err(Error::UnknownConversion),
             Some(Type::Xml | Type::Variant) => return Err(Error::UnknownConversion),
@@ -319,12 +343,22 @@ pub fn plan_with_context(
             // A converted MAX width does not establish the result declaration
             // for an uncaptured noncharacter source. Do not fabricate a bounded
             // declaration and silently truncate its converted payload.
+            let binary_max = matches!(arguments[0].kind, Some(Type::Binary(kind)) if kind.length() == Length::Max);
+            if binary_max && arguments[0].converted_width != Some(Length::Max) {
+                return Err(if arguments[0].converted_width.is_none() {
+                    Error::UnknownConversionWidth
+                } else {
+                    Error::InvalidDeclaration
+                });
+            }
             if matches!(arguments[0].kind, Some(kind) if !matches!(kind, Type::Character(_)))
+                && !binary_max
                 && arguments[0].converted_width == Some(Length::Max)
             {
                 return Err(Error::UnknownConversion);
             }
             if matches!(arguments[0].kind, Some(Type::Character(kind)) if kind.length() == Length::Max)
+                || binary_max
             {
                 Length::Max
             } else {
