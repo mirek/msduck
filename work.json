@@ -11398,6 +11398,26 @@
         "Fresh exclusive receipt after genuine dependenciesDone. Reuse existing isolated worker/private reference resources only; no newagents/worktrees/nativecaches or canonicalLinux source/build/cache writes. Worker owns checkpoints/draftPR, focused meaningful tests bothhosts, full finalsource-pinned four-run reproduction with independently recomputed complete sidecar, independent/Codex review or genuine fallback, exactrequiredCI/merge and promptregistry/issue/projectcompletion. No Rust/engine/catalog/output/BulkLoad edits; finite evidence leaves general Unicode/codepage and runtime integration gaps explicit."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PliNW"
+    },
+    {
+      "id": "v025-openjson-catalog-v1",
+      "title": "Declare OPENJSON key/value/WITH columns in the Unicode predicate catalog",
+      "state": "backlog",
+      "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03) to fix the v0.2.5 workload report (umbrella #864) until it lands in a published container. First-party remainder of v025-openjson-isnull-v1 (issue #900): COALESCE/IIF/CASE/comparisons over direct OPENJSON carrier columns need the predicate catalog, whose files are held by v025-default-collation-v1. No external content.",
+      "scope": [
+        "src/engine/ext/keys/predicates/catalog.rs",
+        "tests/compat/openjson_isnull.test.mjs",
+        "docs/openjson-isnull.md"
+      ],
+      "acceptance": [
+        "After v025-default-collation-v1 merges, make src/engine/ext/keys/predicates/catalog.rs resolve OPENJSON aliases: default key NVARCHAR(4000) and value NVARCHAR(MAX) carriers, type integer, WITH columns by declaration (NVARCHAR/NCHAR carriers, VARCHAR/CHAR text), so the existing marking and pinning handle COALESCE, IIF, CASE, comparisons and ORDER BY. Prototype on branch proto/v025-openjson-isnull-v1-catalog (commit 5c15a17) made 9 more of the 21 reference/openjson-isnull.json cases match. Remove the fixed known results from tests/compat/openjson_isnull.test.mjs and update docs/openjson-isnull.md; run the AGENTS.md checks; PR linking #900; Codex review or recorded fallback; merge exact head; publish done."
+      ],
+      "dependencies": [
+        "v025-default-collation-v1",
+        "v025-openjson-isnull-v1"
+      ],
+      "issue": 900,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PlRB0"
     }
   ]
 }
