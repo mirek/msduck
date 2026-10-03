@@ -11501,7 +11501,7 @@
       "id": "ansi-cp1251-capacity-v1",
       "title": "Implement measured native CP1251 BulkLoad target capacity",
       "issue": 921,
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner full-server goal; native CP1251 target capacity is an explicit remaining gap after approved914. Use SQL Server native-byte evidence rather than universalizing CP1252-target policy.",
       "scope": [
         "crates/msduck-core/src/ansi_conversion/capacity.rs",
