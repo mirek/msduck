@@ -22,6 +22,13 @@ test('four raw runs preserve native codepages, client decoding and distinct malf
     assert.equal(find('utf-8-invalid-f09f92-same').execution.result.errors[0].number, 7339)
     assert.equal(find('utf-8-invalid-c328-same').execution.result.error, null)
     assert.ok(find('utf-8-same-max').execution.packets.filter(p => p.direction === 'out' && p.rawHex.startsWith('07')).length > 1)
+    // Actual first readback PLP boundary bisects the emoji's four UTF8 bytes.
+    // The next TDS payload begins with its 4084-byte PLP chunk length.
+    const reply = find('utf-8-same-max').readback.packets.filter(p => p.direction === 'in').map(p => Buffer.from(p.rawHex, 'hex'))
+    assert.equal(reply[0].subarray(-3).toString('hex'), 'f09fa6')
+    assert.equal(reply[1].readUInt32LE(8), 4084)
+    assert.equal(reply[1][12], 0x86)
+    assert.equal(Buffer.concat([reply[0].subarray(-3), reply[1].subarray(12, 13)]).toString('utf8'), '🦆')
   }
   const max = cases.find(c => c.name === 'utf-8-same-max')
   assert.equal(rowsFor(max).at(-1).valueHex, Buffer.from('éΩ🦆'.repeat(3000)).toString('hex'))

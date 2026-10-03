@@ -29,6 +29,13 @@ wire collations are respectively `0904d00034`, `1904002200`, `0904002600`.
 Finite captured conversion templates are validated independently of
 between-run comparisons; they are not a general best-fit conversion map.
 
+In all four runs, the first MAX readback packet ends with `f09fa6`; the
+next packet starts with PLP chunk length `f40f0000`, then `86`. Thus the
+actual SQL Server response splits the four-byte duck character across PLP
+chunks and TDS packets. Replay checks this boundary explicitly. The outgoing
+MAX load spans packets whose observed boundaries fall between characters;
+this capture does not claim an outgoing split inside a UTF8 character.
+
 Observed examples include UTF8 éΩ🦆 preserved in a same-collation target,
 converted to éO?? in a CP1252 target, and preserved as UTF16 in NVARCHAR.
 CP1251 Привет remains native `cff0e8e2e5f2`, converts to six question marks
