@@ -283,7 +283,9 @@ mod tests {
             .unwrap();
         let mut seen: Vec<&str> = ordered.split(',').collect();
         seen.dedup();
-        assert_eq!(seen, ["B", "a\0", "a ", "b", "\u{100}"]);
+        // Case-insensitive, NUL ignored and `Ā` beside `a`: equal keys tie,
+        // broken by the value.
+        assert_eq!(seen, ["a\0", "a ", "\u{100}", "B", "b"]);
         assert_eq!(
             text(
                 &db,

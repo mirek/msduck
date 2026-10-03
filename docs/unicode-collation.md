@@ -275,3 +275,114 @@ The upstream transpiler's `collation.ts::ofExpression` selects the first availab
 label for binary expressions and CASE. That rule cannot replace msduck's explicit
 coercion-label combination: the live conflict probes require preserving conflicts
 and applying precedence before either folding or lowering comparisons.
+
+## Database default and column collations
+
+Every msduck database reports SQL_Latin1_General_CP1_CI_AS, and comparisons
+now follow it: case-insensitive, accent-sensitive, trailing spaces ignored in
+equality. `reference/default-collation.json` (44 live programs captured by
+`scripts/capture-default-collation.mjs`) is the evidence;
+`tests/compat/default_collation.test.mjs` replays it and names each remaining
+difference. The rule is applied where the value is stored or compared, not
+through DuckDB's `default_collation` setting, because msduck's own catalog
+and bookkeeping SQL (for example savepoint row images) must keep comparing
+exactly:
+
+- CHAR and VARCHAR columns are created with DuckDB's `nocase` collation
+  (`declared_columns::lower_collation`). DuckDB carries a column's collation
+  through comparisons, LIKE, IN, BETWEEN, CASE, joins, ORDER BY, GROUP BY,
+  DISTINCT, MIN/MAX, set operations and most functions over it.
+- NVARCHAR and NCHAR columns are UTF-16 carriers. Their comparisons, IN,
+  BETWEEN, simple CASE, joins and ORDER BY use sort keys
+  (`keys::predicates::key`) that drop the units the collation ignores (NUL,
+  surrogates, U+200D, U+200E, U+FEFF, U+FFFE, U+FFFF: a supplementary
+  character equals `N''`), fold each unit through its simple lowercase
+  mapping, and order Latin letters with diacritics beside their base
+  letter. Their LIKE drops the same units and matches case-folded units;
+  `[...]` ranges follow the same order.
+- Comparisons, IN, BETWEEN, simple CASE and LIKE whose operands are all
+  literals, character variables or parameters, or character functions and
+  conversions of them, compare through the same keys, in statements and in
+  scalar evaluations (IF, SET, DECLARE). `N'a' = N'A  '` is therefore true.
+- LIKE over known character data uses SQL Server's LIKE (with `[...]` sets);
+  ASCII LIKE ignores trailing blanks, Unicode LIKE keeps them. Other LIKE
+  becomes DuckDB's ILIKE.
+- GROUP BY and SELECT DISTINCT over character columns group by the sort
+  keys (so `N'FOO '` groups with `N'foo'`); the grouped column's other
+  references become `MIN` of it. COUNT(DISTINCT) of character data counts
+  distinct keys, and MIN/MAX of carriers take the value with the least or
+  greatest key.
+- PRIMARY KEY, UNIQUE and unique indexes (CREATE TABLE, CREATE UNIQUE INDEX,
+  ALTER TABLE ADD CONSTRAINT) enforce the same equality through managed key
+  indexes (docs/gaps-keys.md), with 2627/2601 and the duplicate shown as
+  written; 1505 shows the least of the duplicate stored values.
+
+Column COLLATE accepts the names with captured TDS descriptors:
+SQL_Latin1_General_CP1_CI_AS and CP1_CS_AS, Latin1_General_CI_AS, CS_AS,
+CI_AI and BIN2, the Latin1_General_100 forms, Latin1_General_CI_AS_KS_WS and
+Latin1_General_100_CI_AS_SC(_UTF8). They are recorded in `sys.columns` and
+result descriptors. A name outside SQL Server's grammar fails with 448
+(state 2) and a non-character column with 447, as in SQL Server; a valid
+name without a descriptor reports "unsupported column collation". A
+case-insensitive, accent-sensitive column compares like the default. Other
+column collations apply through an explicit COLLATE of the column in
+comparisons, LIKE, IN, BETWEEN, simple CASE, ORDER BY of carriers and
+COUNT(DISTINCT), and through the DuckDB collation of CHAR and VARCHAR
+columns elsewhere. Their keys use BIN2 equality. A comparison (`=`, `<>`,
+`<`, `>`, `<=`, `>=`, IN, BETWEEN, simple CASE, LIKE) between columns of different
+collations raises 468 as in SQL Server, in queries and DML predicates alike,
+even when both collations are case-insensitive (Latin1_General_CI_AS against
+the database default).
+
+Remaining limits:
+
+- Ordering follows case-folded code points (and ICU `en_us` for explicit
+  linguistic collations), not SQL Server's sort weights, apart from Latin-1
+  and Latin Extended-A letters with diacritics, which sort beside their
+  base letter. Punctuation such as `{` sorts after letters, diacritics
+  order by code point (SQL Server puts `á` before `à`), letters such as
+  `æ`, `ø` and `ß` sort after `z`, and SQL Server's "word sort" placement
+  of `-` is not reproduced. VARCHAR columns sort by DuckDB's `nocase`
+  (folded code points), and the SQL collation order of VARCHAR is not
+  distinguished from the Windows order.
+- Case folding uses simple Unicode mappings; expansions (`ß` = `ss`),
+  width, kana and other linguistic equivalences of the Windows collations are
+  not applied. Unique keys fold only Basic Latin, Latin-1, Latin Extended-A,
+  basic Greek and basic Cyrillic. Ignorable units are dropped only from
+  Unicode values; VARCHAR values (where SQL Server ignores none of the
+  captured units) compare them. COUNT(DISTINCT) over NVARCHAR columns reads
+  them as text and so still counts values that differ only in ignorable
+  units separately.
+- Column references resolve against every relation of the statement, not
+  per query block (the predicate catalog's existing design): an unqualified
+  name that another block's relation also has (with another type or
+  collation) is treated as unknown, so it falls back to the default
+  comparison. Qualified references are not affected.
+- A column collation applies to direct column references. Expressions over
+  a case-sensitive column (`UPPER(cs) = 'X'`), GROUP BY of expressions, and
+  GROUP BY or DISTINCT of carriers under a non-default collation keep
+  DuckDB's comparison. Accent-insensitive LIKE and keys still distinguish
+  accents.
+- GROUP BY of an expression over a column (for example `upper(n)`) keeps
+  DuckDB's grouping, which separates values differing in trailing spaces;
+  a grouping rewrite also changes the nullability metadata of the grouped
+  column (it becomes MIN of it).
+- Columns under Latin1_General_100_CI_AS_SC and _SC_UTF8 are accepted and
+  recorded in `sys.columns`, but their result descriptors keep the
+  database default: the result-metadata path only emits names that it can
+  also serve operationally, and VARCHAR still stores code page 1252 text, so
+  SQL Server's UTF-8 descriptor (flags 77) would make clients decode code
+  page 1252 bytes as UTF-8. Supplementary-character (SC) semantics of string
+  functions are not implemented for them either.
+- Values that do not come from a CHAR or VARCHAR column (VALUES rows,
+  constant SELECTs, expressions over literals) carry no DuckDB collation:
+  comparisons between them go through the sort keys, but ORDER BY, GROUP BY
+  and DISTINCT over them follow code points.
+- ALTER TABLE ADD CONSTRAINT over NVARCHAR/NCHAR stays unsupported (the
+  constraints feature), and its 1505 for existing CHAR/VARCHAR duplicates
+  shows the first value it finds rather than SQL Server's.
+- Tables created before this change keep binary VARCHAR columns and
+  case-sensitive key indexes. Foreign keys still compare exactly.
+- Columns of different collations combined without a comparison (CASE or
+  COALESCE results, UNION) fail in DuckDB with "Cannot combine types with
+  different collation" where SQL Server would defer the conflict.

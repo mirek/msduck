@@ -1,5 +1,9 @@
-//! SQL Server's Unicode LIKE over UTF-16 code units, under msduck's default
-//! binary comparison (case-sensitive, code-unit ranges).
+//! SQL Server's Unicode LIKE over UTF-16 code units, under the database's
+//! case-insensitive default collation: units the collation ignores are
+//! dropped from the value and the pattern, units match when their
+//! case-folded forms agree ([`super::key::fold`]), and a set range holds the
+//! units that sort between its ends (base letter first, so `[a-c]` holds
+//! `B` and `á`). Other ranges compare code units, not linguistic weights.
 //!
 //! Behavior captured from SQL Server (reference/gaps-unicode-predicates.json):
 //!
@@ -14,6 +18,15 @@
 //! - a pattern with an unterminated set, or ending in the escape character,
 //!   matches nothing;
 //! - trailing spaces are significant in both the value and the pattern.
+
+use super::key::{base, fold, ignorable};
+
+/// The collation order of one unit: its base letter, then its case-folded
+/// form (see [`super::key`]).
+fn weight(unit: u16) -> (u16, u16) {
+    let folded = fold(unit);
+    (fold(base(folded)), folded)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Token {
@@ -33,12 +46,11 @@ impl Token {
         match self {
             Token::Any => true,
             Token::One => true,
-            Token::Unit(expected) => *expected == unit,
+            Token::Unit(expected) => fold(*expected) == fold(unit),
             Token::Set { negated, ranges } => {
-                ranges
-                    .iter()
-                    .any(|(low, high)| (*low..=*high).contains(&unit))
-                    != *negated
+                ranges.iter().any(|(low, high)| {
+                    weight(*low) <= weight(unit) && weight(unit) <= weight(*high)
+                }) != *negated
             }
         }
     }
@@ -50,13 +62,16 @@ pub(crate) struct Pattern(Option<Vec<Token>>);
 
 impl Pattern {
     pub(crate) fn parse(pattern: &[u16], escape: Option<u16>) -> Self {
-        Self(tokens(pattern, escape))
+        let pattern: Vec<u16> = pattern.iter().copied().filter(|u| !ignorable(*u)).collect();
+        Self(tokens(&pattern, escape))
     }
 
     pub(crate) fn matches(&self, value: &[u16]) -> bool {
         let Some(tokens) = &self.0 else {
             return false;
         };
+        let value: Vec<u16> = value.iter().copied().filter(|u| !ignorable(*u)).collect();
+        let value = value.as_slice();
         // Greedy matching that backtracks only to the last `%`, which is
         // complete for patterns whose other tokens match single units.
         let (mut t, mut v) = (0, 0);
@@ -172,7 +187,10 @@ mod tests {
         Pattern::parse(&pattern, escape.map(|c| c as u16)).matches(&value)
     }
 
-    /// (pattern, value, escape, SQL Server's result), from the reference capture.
+    /// (pattern, value, escape, SQL Server's result), from the reference
+    /// capture. That capture used a BIN2 database; the two case-only cases
+    /// marked below follow the case-insensitive default instead
+    /// (reference/default-collation.json).
     const CASES: &[(&str, &str, Option<char>, bool)] = &[
         ("[]]", "abc", None, false),
         ("[]]", "]", None, false),
@@ -184,9 +202,9 @@ mod tests {
         ("a!", "a!", Some('!'), false),
         ("a!b", "ab", Some('!'), true),
         ("_", "\u{1F986}", None, false),
-        ("__", "\u{1F986}", None, true),
+        ("__", "\u{1F986}", None, false), // default collation
         ("[a-c]", "b", None, true),
-        ("[a-c]", "B", None, false),
+        ("[a-c]", "B", None, true), // default collation
         ("[^a-c]", "b", None, false),
         ("[a-]", "-", None, false),
         ("[c-a]", "b", None, false),
@@ -261,7 +279,10 @@ mod tests {
         ("[a-c]", "b", Some('-'), false),
         ("[a-c]", "-", Some('-'), false),
         ("[a-c]", "c", Some('-'), true),
-        ("a", "A", None, false),
+        ("a", "A", None, true), // default collation
+        ("[A-C]", "b", None, true),
+        ("[^A-C]", "b", None, false),
+        ("F_O%", "foo bar", None, true),
     ];
 
     #[test]
@@ -276,21 +297,18 @@ mod tests {
     }
 
     #[test]
-    fn sets_and_wildcards_see_surrogate_units() {
-        let duck: Vec<u16> = "\u{1F986}".encode_utf16().collect();
-        let set = |units: &[u16]| {
-            let mut pattern = vec![b'[' as u16];
-            pattern.extend_from_slice(units);
-            pattern.push(b']' as u16);
-            pattern
-        };
-        assert!(Pattern::parse(&set(&duck), None).matches(&duck[..1]));
-        assert!(!Pattern::parse(&set(&duck), None).matches(&duck));
-        let range = set(&[0xD800, b'-' as u16, 0xDFFF]);
-        assert!(Pattern::parse(&range, None).matches(&[0xDAC0]));
-        let mut suffix = vec![b'%' as u16];
-        suffix.push(duck[1]);
-        assert!(Pattern::parse(&suffix, None).matches(&duck));
+    fn ignorable_units_vanish_and_ranges_follow_base_letters() {
+        // Surrogates, NUL and U+FEFF are ignored in values and patterns.
+        assert!(like("\u{1F986}", "", None));
+        assert!(!like("\u{1F986}", "_", None));
+        assert!(like("a\u{0}b", "ab", None));
+        assert!(like("ab", "a\u{FEFF}b", None));
+        assert!(like("x\u{1F986}", "%\u{1F986}", None));
+        // Letters with diacritics sort next to their base letter.
+        assert!(like("\u{100}", "[a-x]", None));
+        assert!(like("é", "[a-f]", None));
+        assert!(!like("é", "[f-z]", None));
+        assert!(like("\u{E000}", "[^a-x]", None));
     }
 
     #[test]

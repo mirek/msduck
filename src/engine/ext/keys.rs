@@ -17,6 +17,9 @@
 //!   2601 with SQL Server's message.
 //! - Comparisons, LIKE, ORDER BY, concatenation and character conversions
 //!   over Unicode carrier values ([`predicates`]).
+//! - The database's case-insensitive default collation: case-insensitive
+//!   comparisons of literals, variables and carriers, LIKE, grouping and
+//!   key indexes, and column collations (see docs/unicode-collation.md).
 //!
 //! The deterministic parts live in `msduck_sql::dialect::ext::keys`. See
 //! docs/gaps-keys.md.
@@ -61,19 +64,19 @@ impl Feature for Hooks {
         &self,
         session: &Session,
         statement: &mut Statement,
-        _parameters: &HashMap<String, Parameter>,
+        parameters: &HashMap<String, Parameter>,
     ) -> Result<()> {
-        predicates::rewrite_statement(&session.db, statement)
+        predicates::rewrite_statement(&session.db, statement, parameters)
     }
 
     fn rewrite_expr(
         &self,
         session: &Session,
         expr: &mut Expr,
-        _parameters: &HashMap<String, Parameter>,
+        parameters: &HashMap<String, Parameter>,
     ) -> Result<()> {
         predicates::check(expr).map_err(error)?;
-        predicates::rewrite_expr(&session.db, expr)
+        predicates::rewrite_expr(&session.db, expr, parameters)
     }
 
     fn lower_expr(&self, expr: &mut Expr) -> Result<(), String> {
@@ -101,6 +104,10 @@ impl Feature for Hooks {
         if let Some(request) = msduck_sql::drop_index_syntax::request(statement) {
             return drop_index::run(session, request).map(Some);
         }
+        column_collations(statement)?;
+        if let Some(execution) = alter_table::add_keys(session, statement, parameters)? {
+            return Ok(Some(execution));
+        }
         match statement {
             Statement::CreateTable(_) => create_table::run(session, statement, parameters),
             Statement::CreateIndex(_) => create_index::run(session, statement),
@@ -110,6 +117,28 @@ impl Feature for Hooks {
             }
             _ => Ok(None),
         }
+    }
+}
+
+/// SQL Server's errors for COLLATE clauses of new columns (447, 448).
+fn column_collations(statement: &Statement) -> Result<()> {
+    use msduck_sql::dialect::ext::keys::collation::column_error;
+    use sqlparser::ast::AlterTableOperation;
+    let columns: Vec<&sqlparser::ast::ColumnDef> = match statement {
+        Statement::CreateTable(table) => table.columns.iter().collect(),
+        Statement::AlterTable(alter) => alter
+            .operations
+            .iter()
+            .filter_map(|operation| match operation {
+                AlterTableOperation::AddColumn { column_def, .. } => Some(column_def),
+                _ => None,
+            })
+            .collect(),
+        _ => return Ok(()),
+    };
+    match columns.into_iter().find_map(column_error) {
+        Some(diagnostic) => Err(error(diagnostic)),
+        None => Ok(()),
     }
 }
 
