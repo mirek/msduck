@@ -10404,7 +10404,7 @@
     {
       "id": "limits-identifiers-reserved-v1-batch",
       "title": "Call the reserved-identifier check from batch parsing",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Companion of limits-identifiers-reserved-v1 (issue #850), published by its claiming worker because the per-statement post-parse check must run inside msduck_sql::batch::parse so a reserved keyword fails the whole batch at compile time. No external submission is input.",
       "scope": [
         "crates/msduck-sql/src/batch.rs"
@@ -10865,6 +10865,21 @@
         "Focused PR links884, fresh exclusive claim, exact-head requiredCI/independent/Codex review or genuine availability fallback. Worker owns fixes, exact-head merge and registry/project completion. Reference-only checks do not need cold DuckDB rebuild. Publish separate bounded wire-adapter runtime task from the captured evidence if needed."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkuRl"
+    },
+    {
+      "id": "v025-bracket-types-v1-batch",
+      "title": "Normalize delimited system type names in batch parsing",
+      "state": "ready",
+      "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03): \"please find the following compatibility report and work on it; definition of done is when all this functionality lands in published container; feel free to schedule multiple agents working on multiple prs\". The owner pasted a first-party workload compatibility report for the v0.2.5 image (umbrella #864); only its generic reproductions are used. No external content. Companion of v025-bracket-types-v1 (issue #865): the AST normalization of delimited system type names must run after each parse_statement in msduck_sql::batch::parse; the statement parse hook cannot re-enter parse_statement, and a second parser per statement made batch parsing quadratic. Standing authorization for stale claims and unresponsive-worker takeover (docs/agent-work.md, contribute skill). Evidence at 2026-10-03 13:20 CEST: limits-identifiers-reserved-v1-batch was claimed 09:05 (claim dbea887d); no work/limits-identifiers-reserved-v1* branch exists on origin and no PR; its worktree ../msduck-limits-identifiers-reserved-v1 has no file changes after 09:12 (sources, .tmp and target), and no process runs in it. No coordination channel to that worker is available. Only that companion is marked blocked; limits-identifiers-reserved-v1 itself is left untouched, and its post-parse batch check can be re-published as a new companion after v025-bracket-types-v1-batch completes.",
+      "scope": [
+        "crates/msduck-sql/src/batch.rs"
+      ],
+      "acceptance": [
+        "batch::parse calls dialect::ext::conversion::bracket_types::normalize on every statement right after parse_statement, so CONVERT([nvarchar](200), ...), [int] columns, computed columns, DEFAULTs, DECLARE and sp_executesql declarations with delimited system type names behave like the plain spellings (tests/compat/bracket_types.test.mjs, crates/msduck-sql/tests/bracket_types.rs). Shipped in the same PR as v025-bracket-types-v1."
+      ],
+      "dependencies": [],
+      "issue": 865,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pkgvg"
     }
   ]
 }
