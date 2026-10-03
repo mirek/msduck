@@ -14,8 +14,11 @@ cannot become a pass. Dropping the watchdog wakes and joins its receiver thread
 promptly, including during unwinding, rather than sleeping through the deadline.
 
 A second real integration probe deliberately passes its one-second target with
-a two-second DELAY. It requires cancellation after four seconds, prevents a
-later THROW from running, and verifies the session remains usable. The existing
+a two-second DELAY. It requires cancellation after four seconds, checks that a
+trailing INSERT produced no row and that the following THROW produced neither
+an error state nor its message in response tokens, then verifies the session
+remains usable. These checks precede SELECT, which would reset the error state;
+the cancellation outcome alone cannot prove later statements were skipped. The existing
 pure `waitfor_time_reaches_the_next_occurrence` clock tests preserve exact
 next-day arithmetic; no clock or engine behavior is changed, and no test is
 skipped. Existing type/diagnostic/transaction and cancellation probes remain.

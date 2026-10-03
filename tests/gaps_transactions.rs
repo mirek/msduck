@@ -604,20 +604,33 @@ fn waitfor_delay_and_time_wait_and_validate() {
 fn missed_waitfor_time_target_is_cancelled_before_the_next_day() {
     let server = Server::open(":memory:").unwrap();
     let mut s = session(&server);
+    run(&mut s, "CREATE TABLE dbo.waitfor_time_probe(n INT)").unwrap();
     let flag = Arc::new(AtomicBool::new(false));
     let started = Instant::now();
     let watchdog = RequestWatchdog::new(flag.clone(), Duration::from_secs(4));
     let outcome = s.batch_response_with_read_cancel(
         "DECLARE @t INT = DATEDIFF(SECOND, CAST(CAST(GETDATE() AS DATE) AS DATETIME), GETDATE()) + 1;
-         WAITFOR DELAY '00:00:02'; WAITFOR TIME @t; THROW 51000, 'missed target ran a later statement', 1",
+         WAITFOR DELAY '00:00:02'; WAITFOR TIME @t;
+         INSERT dbo.waitfor_time_probe VALUES (1);
+         THROW 51000, 'missed target ran a later statement', 1",
         &Default::default(),
         Mode::Batch,
         flag,
     );
     drop(watchdog);
-    assert!(matches!(outcome, Outcome::Cancelled { .. }), "{outcome:?}");
+    let Outcome::Cancelled { tokens, .. } = outcome else {
+        panic!("not cancelled: {outcome:?}");
+    };
     assert!(started.elapsed() >= Duration::from_secs(4));
     assert!(started.elapsed() < Duration::from_secs(8));
+    // Check before SELECT resets last_error: the cancellation outcome alone
+    // would not reveal a wrongly executed trailing statement.
+    assert_eq!(s.last_error, 0);
+    assert!(!contains_utf16(
+        &tokens,
+        "missed target ran a later statement"
+    ));
+    assert!(ints(&s, "SELECT n FROM dbo.waitfor_time_probe").is_empty());
     // The watchdog was specific to the completed request; the session remains usable.
     run(&mut s, "SELECT 1").unwrap();
     assert_eq!(ints(&s, "SELECT 1"), [1]);
