@@ -1017,7 +1017,12 @@ fn snapshot_transactions_need_the_option_and_read_their_snapshot() {
         "SELECT 1; INSERT #tmp VALUES (1); SELECT v FROM #tmp; DECLARE @x TABLE (v INT); INSERT @x VALUES (1); SELECT COUNT(*) FROM sys.objects",
     )
     .unwrap();
-    // A common table expression shadows the table of the same name.
+    // A common table expression or a table alias shadows the table of the
+    // same name.
+    run(&mut a, "CREATE TABLE x (v INT)").unwrap();
+    run(&mut a, "UPDATE x SET v = 2 FROM #tmp AS x").unwrap();
+    run(&mut a, "DELETE x FROM #tmp AS x").unwrap();
+    assert_eq!(run(&mut a, "UPDATE x SET v = 2 FROM t AS x"), Err(3952));
     run(&mut a, "WITH t AS (SELECT 1 AS v) SELECT v FROM t").unwrap();
     assert_eq!(
         run(
@@ -1113,6 +1118,19 @@ fn snapshot_transactions_need_the_option_and_read_their_snapshot() {
         "@@TRANCOUNT = 0 AND (SELECT v FROM t WHERE id = 1) = 6",
     )
     .unwrap();
+    // An aliased target names the table it aliases.
+    run(&mut a, "BEGIN TRAN; SELECT v FROM t").unwrap();
+    run(&mut b, "UPDATE t SET v = 4 WHERE id = 1").unwrap();
+    let tokens = a
+        .batch_response(
+            "UPDATE x SET v = 7 FROM dbo.t AS x WHERE x.id = 1",
+            &Default::default(),
+            false,
+            None,
+        )
+        .0;
+    assert_eq!(a.last_error, 3960);
+    assert!(contains_utf16(&tokens, "access table 'dbo.t' directly"));
     // Writes to other rows commit.
     run(&mut a, "BEGIN TRAN; SELECT v FROM t").unwrap();
     run(&mut b, "INSERT t VALUES (10, 10)").unwrap();

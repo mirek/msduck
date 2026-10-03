@@ -15,7 +15,8 @@ use anyhow::{Result, bail};
 use msduck_core::diagnostic::SqlError;
 use msduck_sql::dialect::alter_database::{Request, Termination};
 use sqlparser::ast::{
-    FromTable, ObjectName, Query, SetExpr, Statement, TableFactor, TableObject, Visit, Visitor,
+    FromTable, ObjectName, Query, SetExpr, Statement, TableFactor, TableObject, TableWithJoins,
+    UpdateTableFromKind, Visit, Visitor,
 };
 use std::{collections::HashMap, ops::ControlFlow};
 
@@ -220,14 +221,16 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
 }
 
 /// Every table name a statement reads or writes, excluding table-valued
-/// function calls and one-part names of the statement's common table
-/// expressions (anywhere in the statement, so a CTE also hides a table of
-/// the same name outside its own scope).
+/// function calls, and one-part names of the statement's common table
+/// expressions or table aliases, such as the target of `UPDATE x ... FROM
+/// t AS x` (anywhere in the statement, so they also hide a table of the
+/// same name outside their own scope).
 fn relations(statement: &Statement) -> Vec<ObjectName> {
     struct Relations {
         names: Vec<ObjectName>,
         functions: Vec<ObjectName>,
         ctes: Vec<String>,
+        aliases: Vec<String>,
     }
     impl Visitor for Relations {
         type Break = ();
@@ -247,12 +250,15 @@ fn relations(statement: &Statement) -> Vec<ObjectName> {
         }
         fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
             if let TableFactor::Table {
-                name,
-                args: Some(_),
-                ..
+                name, args, alias, ..
             } = factor
             {
-                self.functions.push(name.clone());
+                if args.is_some() {
+                    self.functions.push(name.clone());
+                }
+                if let Some(alias) = alias {
+                    self.aliases.push(alias.name.value.to_lowercase());
+                }
             }
             ControlFlow::Continue(())
         }
@@ -261,20 +267,23 @@ fn relations(statement: &Statement) -> Vec<ObjectName> {
         names: Vec::new(),
         functions: Vec::new(),
         ctes: Vec::new(),
+        aliases: Vec::new(),
     };
     let _ = statement.visit(&mut visitor);
     let Relations {
         names,
         functions,
         ctes,
+        aliases,
     } = visitor;
     names
         .into_iter()
         .filter(|name| !functions.contains(name))
         .filter(|name| match name.0.as_slice() {
-            [part] => part
-                .as_ident()
-                .is_none_or(|ident| !ctes.contains(&ident.value.to_lowercase())),
+            [part] => part.as_ident().is_none_or(|ident| {
+                let name = ident.value.to_lowercase();
+                !ctes.contains(&name) && !aliases.contains(&name)
+            }),
             _ => true,
         })
         .collect()
@@ -369,30 +378,24 @@ fn write_target(statement: &Statement) -> Option<ObjectName> {
                 _ => None,
             };
         }
-        Statement::Update(update) => &update.table.relation,
+        Statement::Update(update) => {
+            // UPDATE alias SET ... FROM table AS alias names the alias.
+            if let TableFactor::Table { name, .. } = &update.table.relation
+                && let Some(
+                    UpdateTableFromKind::BeforeSet(tables) | UpdateTableFromKind::AfterSet(tables),
+                ) = &update.from
+            {
+                return Some(aliased(name, tables).unwrap_or_else(|| name.clone()));
+            }
+            &update.table.relation
+        }
         Statement::Delete(delete) => {
             let tables = match &delete.from {
                 FromTable::WithFromKeyword(tables) | FromTable::WithoutKeyword(tables) => tables,
             };
             // DELETE alias FROM table AS alias names the alias first.
             if let [name] = delete.tables.as_slice() {
-                let alias = name.to_string();
-                for table in tables {
-                    for factor in std::iter::once(&table.relation)
-                        .chain(table.joins.iter().map(|join| &join.relation))
-                    {
-                        if let TableFactor::Table {
-                            name,
-                            alias: Some(a),
-                            ..
-                        } = factor
-                            && a.name.value.eq_ignore_ascii_case(&alias)
-                        {
-                            return Some(name.clone());
-                        }
-                    }
-                }
-                return Some(name.clone());
+                return Some(aliased(name, tables).unwrap_or_else(|| name.clone()));
             }
             &tables.first()?.relation
         }
@@ -403,6 +406,28 @@ fn write_target(statement: &Statement) -> Option<ObjectName> {
         TableFactor::Table { name, .. } => Some(name.clone()),
         _ => None,
     }
+}
+
+/// The table a one-part DML target names when it is the alias of a FROM
+/// relation.
+fn aliased(target: &ObjectName, tables: &[TableWithJoins]) -> Option<ObjectName> {
+    let [part] = target.0.as_slice() else {
+        return None;
+    };
+    let alias = &part.as_ident()?.value;
+    tables
+        .iter()
+        .flat_map(|table| {
+            std::iter::once(&table.relation).chain(table.joins.iter().map(|join| &join.relation))
+        })
+        .find_map(|factor| match factor {
+            TableFactor::Table {
+                name,
+                alias: Some(a),
+                ..
+            } if a.name.value.eq_ignore_ascii_case(alias) => Some(name.clone()),
+            _ => None,
+        })
 }
 
 /// DuckDB's write-write conflict between concurrent transactions.
