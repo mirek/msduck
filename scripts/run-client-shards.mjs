@@ -84,7 +84,7 @@ async function main(args) {
   let jobs = 1, output = resolve('artifacts/client-shards', randomUUID()), planOnly = false, revision, suite, serial = false
   const files = []
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--suite') { suite = args[++i]; if (!['npm', 'ci'].includes(suite)) throw Error('suite must be npm or ci') }
+    if (args[i] === '--suite') { suite = args[++i]; if (!['npm', 'ci', 'ci-replays'].includes(suite)) throw Error('suite must be npm, ci or ci-replays') }
     else if (args[i] === '--serial') serial = true
     else if (args[i] === '--jobs') jobs = Number(args[++i])
     else if (args[i] === '--output') { if (!args[i + 1]) throw Error('Missing output directory'); output = resolve(args[++i]) }
@@ -97,7 +97,7 @@ async function main(args) {
   if (process.platform === 'win32') throw Error('Process-group cancellation currently requires POSIX')
   if (suite && files.length) throw Error('A full suite cannot override its manifest')
   if (serial && jobs !== 1) throw Error('Serial mode requires one worker')
-  const full = Boolean(suite || !files.length)
+  const full = suite !== 'ci-replays' && Boolean(suite || !files.length)
   const inputs = await Promise.all((files.length ? files : await suiteFiles(suite)).map(file => realpath(resolve(file))))
   if (new Set(inputs).size !== inputs.length) throw Error('Duplicate input files')
   if (inputs.some(file => !file.endsWith('.mjs'))) throw Error('Discovery currently supports ESM .mjs tests')
@@ -122,7 +122,7 @@ async function main(args) {
     checkoutRevision = (await exec('git', ['rev-parse', 'HEAD'])).stdout.trim()
     checkoutDirty = Boolean((await exec('git', ['status', '--porcelain'])).stdout.trim())
   } catch { /* Private verified source snapshots need not contain .git. */ }
-  const provenance = {node: process.version, suite: full ? (suite ?? 'npm') : null, serial, declaredRevision: revision ?? null, checkoutRevision, checkoutDirty, inputs: hashes, binary: binaryHash ? {path: binary, sha256: binaryHash} : null}
+  const provenance = {node: process.version, suite: suite ?? (full ? 'npm' : null), strictFullSuite: full, serial, declaredRevision: revision ?? null, checkoutRevision, checkoutDirty, inputs: hashes, binary: binaryHash ? {path: binary, sha256: binaryHash} : null}
   await writeFile(resolve(output, 'plan.json'), JSON.stringify({provenance, jobs, plan}, null, 2) + '\n')
   if (planOnly) { console.log(JSON.stringify({output, tests: inventory.length, processes: plan.length, jobs})); return }
 
@@ -142,7 +142,7 @@ async function main(args) {
   const started = performance.now()
   async function run(job, index) {
     const prefix = resolve(output, `job-${index}`)
-    const argv = ['--test', ...(serial && suite === 'ci' ? ['--test-concurrency=1'] : []), ...(serial ? [] : [`--test-name-pattern=${selection(job.tests)}`]), '--test-reporter=tap', `--test-reporter=${reporter}`, `--test-reporter-destination=${prefix}.tap`, `--test-reporter-destination=${prefix}.jsonl`, ...(job.files ?? [job.file])]
+    const argv = ['--test', ...(serial && suite?.startsWith('ci') ? ['--test-concurrency=1'] : []), ...(serial ? [] : [`--test-name-pattern=${selection(job.tests)}`]), '--test-reporter=tap', `--test-reporter=${reporter}`, `--test-reporter-destination=${prefix}.tap`, `--test-reporter-destination=${prefix}.jsonl`, ...(job.files ?? [job.file])]
     const log = createWriteStream(`${prefix}.console.log`)
     const child = spawn(process.execPath, argv, {detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: childEnvironment})
     active.add(child)

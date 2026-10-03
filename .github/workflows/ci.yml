@@ -104,6 +104,11 @@ jobs:
           node scripts/run-client-shards.mjs --suite ci --jobs 1 --serial --revision "$(git rev-parse HEAD)" \
             --output artifacts/ci/client-shards \
             2>&1 | tee artifacts/ci/clients.log
+      - name: Aggregate diagnostic reference replays (intentional opt-in skips retained)
+        run: |
+          node scripts/run-client-shards.mjs --suite ci-replays --jobs 1 --serial \
+            --revision "$(git rev-parse HEAD)" --output artifacts/ci/diagnostic-replays \
+            2>&1 | tee artifacts/ci/aggregate-diagnostics.log
       - name: Diagnostic compatibility capture
         run: npm run audit:local 2>&1 | tee artifacts/ci/audit.log
       - name: Preserve logs and raw captures

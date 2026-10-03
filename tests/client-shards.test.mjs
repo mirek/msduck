@@ -128,5 +128,5 @@ test('full suite rejects manifest overrides and incompatible serial workers befo
   const {args} = await fixture(t, {'a.mjs':"test('tiny',()=>{})"})
   await assert.rejects(exec(process.execPath,[runner,'--suite','npm',...args]), /cannot override its manifest/)
   await assert.rejects(exec(process.execPath,[runner,'--serial',...args]), /requires one worker/)
-  await assert.rejects(exec(process.execPath,[runner,'--suite','unknown']), /suite must be npm or ci/)
+  await assert.rejects(exec(process.execPath,[runner,'--suite','unknown']), /suite must be npm, ci or ci-replays/)
 })

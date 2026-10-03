@@ -3,7 +3,9 @@
 The standard npm client suite has six explicitly registered entry points and
 520 top-level tests at the task847 base. `scripts/lib/client-suite.mjs` is the
 shared manifest for npm, direct full-suite runs and CI. CI retains all its
-additional session/database/compatibility and aggregate diagnostic files.
+additional session/database/compatibility files. Its separate manifest-driven
+`ci-replays` group retains aggregate/character diagnostic replays and their
+intentional opt-in skips; those are reported separately and never called passes.
 `npm test` still builds the workspace with all targets, then invokes a small
 adapter. Unset `MSDUCK_CLIENT_JOBS` or `1` retains one `node --test` invocation
 across the original six files; values 2–16 opt into partitioned workers. No
@@ -17,9 +19,9 @@ MSDUCK_CLIENT_JOBS=4 npm test
 The remote runner accepts the same validated setting from the gitignored `.env`
 and exports its quoted numeric value inside the existing builder lock. Keep
 that lock through builds and all client processes using its executable.
-Full CI uses the shared superset manifest and a serial fallback; moving the
-previous independent aggregate replay into that inventory must not silently
-increase concurrency on a two-CPU runner without a separate full proof.
+Full CI uses the shared client superset manifest with a serial fallback; its
+separate diagnostic group keeps the previous one-file-at-a-time execution.
+Increasing concurrency on a two-CPU runner requires a separate full proof.
 
 Build first, then run from an immutable source/executable snapshot:
 
@@ -59,7 +61,7 @@ TAP and console logs for every process, machine-readable events and a summary.
 Every assigned top-level test must be reported exactly once. Missing, repeated
 or unexpected executed tests, process failures and incomplete/cancelled runs
 fail the command. Explicit focused runs after `--` retain intentional skips/TODOs separately,
-never as passes. Full manifest runs (including the no-file default) additionally
+never as passes. Strict full client manifest runs (npm/ci, including the no-file default) additionally
 require passed==expected and reject assigned skips, TODOs, cancellations and
 failed nested results. Unselected shard names are Node filter skips and are
 not assigned tests; their complete raw events remain retained. Source, harness,

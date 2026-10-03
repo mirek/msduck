@@ -10,11 +10,13 @@ export const ciExtras = Object.freeze([
   'tests/session_reset.test.mjs', 'tests/databases.test.mjs',
   'tests/login_database_error.test.mjs', 'tests/alter_database_sessions.test.mjs',
   'tests/tedious_compat_gaps.test.mjs',
-  'tests/aggregate_diagnostics.test.mjs', 'tests/character_extrema.test.mjs',
 ])
+// These historical diagnostic replays retain intentional opt-in skips.
+export const diagnosticFiles = Object.freeze(['tests/aggregate_diagnostics.test.mjs', 'tests/character_extrema.test.mjs'])
 export async function suiteFiles(suite = 'npm') {
   if (suite === 'npm') return [...npmFiles]
-  if (suite !== 'ci') throw Error('suite must be npm or ci')
+  if (suite === 'ci-replays') return [...diagnosticFiles]
+  if (suite !== 'ci') throw Error('suite must be npm, ci or ci-replays')
   const compat = (await readdir('tests/compat')).filter(x => x.endsWith('.test.mjs')).sort()
   return [...npmFiles, ...ciExtras, ...compat.map(x => `tests/compat/${x}`)]
 }

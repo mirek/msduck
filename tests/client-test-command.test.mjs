@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFile} from 'node:fs/promises'
 import {command} from '../scripts/run-client-tests.mjs'
-import {npmFiles, ciExtras, suiteFiles, clientJobs, strictResult} from '../scripts/lib/client-suite.mjs'
+import {npmFiles, ciExtras, diagnosticFiles, suiteFiles, clientJobs, strictResult} from '../scripts/lib/client-suite.mjs'
 
 test('npm adapter retains a single serial invocation by default and passes opt-in workers as data', () => {
   for (const value of [undefined, '1']) {
@@ -27,6 +27,8 @@ test('one manifest retains six npm entry points and every additional CI test', a
   for (const file of [...npmFiles, ...ciExtras]) assert(ci.includes(file))
   assert(ci.some(x => x.startsWith('tests/compat/')))
   assert.equal(new Set(ci).size, ci.length)
+  assert.deepEqual(await suiteFiles('ci-replays'), [...diagnosticFiles])
+  assert(diagnosticFiles.includes('tests/aggregate_diagnostics.test.mjs'))
   await assert.rejects(suiteFiles('bad'), /suite/)
   const pkg = JSON.parse(await readFile('package.json'))
   assert.equal(pkg.scripts.test, 'cargo build --workspace --all-targets && node scripts/run-client-tests.mjs')
@@ -98,4 +100,16 @@ test('actual full command rejects assigned skip TODO cancellation and changed tr
     assert.equal(report.ok,false)
     if (body.includes('mutation')) assert(report.changed.includes('source file inventory'))
   }
+})
+
+test('separately labelled CI diagnostics retain intentional skips without a full-suite pass claim', async t => {
+  const dir = await snapshot(t)
+  await writeFile(join(dir,diagnosticFiles[0]), "import {test} from 'node:test';test('opt-in boundary',{skip:true},()=>{});\n")
+  await writeFile(join(dir,diagnosticFiles[1]), "import {test} from 'node:test';test('diagnostic',()=>{});\n")
+  await exec(process.execPath,['scripts/run-client-shards.mjs','--suite','ci-replays','--serial'],{cwd:dir})
+  const [report] = await reports(dir)
+  assert.equal(report.ok,true)
+  assert.equal(report.provenance.strictFullSuite,false)
+  assert.equal(report.provenance.suite,'ci-replays')
+  assert.equal(report.expected,2); assert.equal(report.passed,1); assert.equal(report.skipped,1)
 })
