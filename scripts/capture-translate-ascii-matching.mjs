@@ -571,7 +571,7 @@ function validate(run) {
     }
   }
 }
-const retainedDigests=[]
+const retainedDigests=[{"id":"container0/database0","sha256":"a7bd99b345709a93ab0e8540c70347c5c93cef8949fbde8973e8794db817a7b3"},{"id":"container0/database1","sha256":"a7bd99b345709a93ab0e8540c70347c5c93cef8949fbde8973e8794db817a7b3"},{"id":"container1/database0","sha256":"a7bd99b345709a93ab0e8540c70347c5c93cef8949fbde8973e8794db817a7b3"},{"id":"container1/database1","sha256":"a7bd99b345709a93ab0e8540c70347c5c93cef8949fbde8973e8794db817a7b3"}]
 function digestRun(run){return createHash('sha256').update(JSON.stringify(run)).digest('hex')}
 function runDigests(actual){return actual.containers.flatMap((c,ci)=>c.runs.map((run,ri)=>({id:`container${ci}/database${ri}`,sha256:digestRun(run)})))}
 function variablePath(record,segments) {
