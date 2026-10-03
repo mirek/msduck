@@ -3299,7 +3299,7 @@
     {
       "id": "bulk-load-codec-reference-v1",
       "title": "Replay captured BulkLoad requests through deterministic decoder",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction of 2026-09-26 to publish this dependent first-party BulkLoad codec replay task under the continuing full SQL Server compatibility goal; no external submission is input.",
       "scope": [
         "crates/msduck-tds/src/bulk_load.rs",
