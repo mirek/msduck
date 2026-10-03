@@ -50,7 +50,7 @@ test('raw packet drift cannot hide changed identity mapping, trigger membership,
     const diffs = compare(actual, retained)
     assert.ok(diffs.some(d => d.category === 'raw-packet'))
     assert.ok(diffs.some(d => d.category === 'observed-field' && d.path.includes('/result/')))
-    assert.throws(() => validate(actual), /comparisons exactly reflect|complete successful bulk load|accidental metadata/)
+    assert.throws(() => validate(actual), /comparisons exactly reflect|complete successful bulk load|accidental metadata|fixed captured|fixed whole-load|fixed trigger/)
   }
 })
 
@@ -58,10 +58,48 @@ test('malformed packet frames and forged comparison summaries are rejected', asy
   const retained = await load()
   const malformed = structuredClone(retained)
   malformed.runs[0].observations[0].execution.packets[0].rawHex = '07010009'
-  assert.throws(() => validate(malformed), /exact packet frame/)
+  assert.throws(() => validate(malformed), /exact packet frame|bounded encoded packet/)
   const forged = structuredClone(retained)
   forged.comparisons[0] = []
   assert.throws(() => validate(forged), /comparisons exactly reflect/)
+})
+
+test('uniform corruption is rejected even after recomputing all four-run summaries', async () => {
+  const retained = await load()
+  const mutations = [
+    o => {o.readback.result.sets[1].rows[0][0] += 100},
+    o => {o.readback.result.sets[3].rows[0][2] = -123},
+    o => {o.readback.result.sets[1].columns[0].flags ^= 1},
+    o => {o.readback.result.done[0].rowCount += 1},
+    o => {o.execution.result.errors[0].state += 1},
+    o => {o.execution.result.errors[0].class += 1}
+  ]
+  for (const [index, mutate] of mutations.entries()) {
+    const actual = structuredClone(retained)
+    for (const run of actual.runs) mutate(run.observations.find(o => o.case.name === (index >= 4 ? 'trigger-check-check0-tran0' : 'defaults-501')))
+    actual.comparisons = actual.runs.slice(1).map(run => compare(run, actual.runs[0]))
+    assert.throws(() => validate(actual), /fixed captured|fixed trigger|fixed readback/)
+  }
+})
+
+test('oversized encoded packets and unfinished EOM are rejected before acceptance', async () => {
+  const retained = await load()
+  const oversized = structuredClone(retained)
+  oversized.runs[0].observations[0].execution.packets[0].rawHex = '00'.repeat(32768)
+  assert.throws(() => validate(oversized), /bounded encoded packet before decoding/)
+  const budget = structuredClone(retained)
+  const fullPacket = Buffer.alloc(32767)
+  fullPacket[0] = 7
+  fullPacket[1] = 1
+  fullPacket.writeUInt16BE(32767, 2)
+  budget.runs[0].observations[0].execution.packets = Array(257).fill({direction: 'out', rawHex: fullPacket.toString('hex')})
+  assert.throws(() => validate(budget), /bounded encoded packet before decoding/)
+  const incomplete = structuredClone(retained)
+  const packet = incomplete.runs[0].observations[0].execution.packets.at(-1)
+  const bytes = Buffer.from(packet.rawHex, 'hex')
+  bytes[1] &= ~1
+  packet.rawHex = bytes.toString('hex')
+  assert.throws(() => validate(incomplete), /complete EOM framing/)
 })
 
 test('existing files, hard links, dangling links and symlink parents are refused before Docker', async () => {
