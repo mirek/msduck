@@ -474,9 +474,17 @@ async function saveCapture(actual, output) {
   await writeFile(output, bytes, {flag: 'wx'})
   let expected, retainedBytes
   try {retainedBytes = await readCaptureFile(fixture); expected = JSON.parse(retainedBytes.toString())} catch (error) {if (error.code !== 'ENOENT') throw error}
-  const comparison = {retained: Boolean(expected), differences: expected ? compare(actual, expected) : []}
-  jsonSize(comparison)
+  let comparison, comparisonError
+  try {
+    comparison = {retained: Boolean(expected), differences: expected ? compare(actual, expected) : []}
+    jsonSize(comparison)
+  } catch (error) {
+    comparisonError = error
+    comparison = {retained: Boolean(expected), differencesOmitted: true, failure: failure(error)}
+    jsonSize(comparison)
+  }
   await writeFile(`${output}.comparison.json`, JSON.stringify(comparison) + '\n', {flag: 'wx'})
+  if (comparisonError) throw comparisonError
   if (retainedBytes) validateRetained(retainedBytes)
   return {cases: cases.length, runs: actual.runs.length, output, sha256: createHash('sha256').update(bytes).digest('hex')}
 }
@@ -484,6 +492,20 @@ export async function persistCapture(actual, output) {
   const result = await saveCapture(actual, output)
   validate(actual)
   return result
+}
+export async function finalizeCapture(raw, output) {
+  jsonSize(raw)
+  let actual
+  try {
+    actual = {...raw, comparisons: raw.runs.slice(1).map(run => compare(run, raw.runs[0]))}
+    jsonSize(actual)
+  } catch (error) {
+    // Cross-run differences can multiply retained values. Preserve the bounded
+    // original runs even when their derived comparisons exceed the envelope.
+    await saveCapture({...raw, failure: failure(error)}, output)
+    throw error
+  }
+  return persistCapture(actual, output)
 }
 export async function main(args = process.argv.slice(2)) {
   assert.ok(args.filter(a => a.startsWith('--')).every(a => a === '--replay-fixture'), 'known flags')
@@ -508,7 +530,6 @@ export async function main(args = process.argv.slice(2)) {
     await saveCapture(partial, output)
     throw error
   }
-  const actual = {format: 1, provenance, containers, runs, comparisons: runs.slice(1).map(run => compare(run, runs[0]))}
-  console.log(JSON.stringify(await persistCapture(actual, output)))
+  console.log(JSON.stringify(await finalizeCapture({format: 1, provenance, containers, runs}, output)))
 }
 if (process.argv[1] && resolve(process.argv[1]) === SOURCE) await main()

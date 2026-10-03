@@ -160,6 +160,11 @@ Failure length/hash/prefix cover the accumulated unretained bytes, including a
 header split across TCP chunks. If the combined input exceeds the buffer bound,
 the hash and bounded prefix are assembled across existing segments without
 allocating their oversized concatenation.
+Derived cross-run comparisons can exceed the capture envelope even when the
+original runs fit. In that case the original runs are saved with an explicit
+failure before validation. If the retained-fixture comparison also exceeds its
+bound, its sidecar records `differencesOmitted: true` and the failure instead of
+claiming to contain complete differences; the command still fails.
 Each exchange reserves a 4 KiB diagnostic allowance before installing listeners,
 from a separate 64 KiB budget inside the existing capture-envelope reserve.
 An exhausted payload budget still returns previously retained packets and an
@@ -199,7 +204,7 @@ different in raw evidence. A further SPID-hardened capture from source
 also completed with exit zero, raw SHA256
 `c7c0775f354ba2ac867b73662fd16ef37c881c1403ff1e7c5116e847005e6c4d`.
 These recorded capture sources remain explicitly admitted for offline checking.
-Both local and Linux focused suites pass sixteen tests, including duplicate-run,
+Both local and Linux focused suites pass seventeen tests, including duplicate-run,
 extra-cell, packet-status, SPID/type corruption, asynchronous trace guards and
 aborted-startup negatives.
 

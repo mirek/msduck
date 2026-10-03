@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os'
 import {spawnSync} from 'node:child_process'
 import {EventEmitter} from 'node:events'
 import {createHash} from 'node:crypto'
-import {cases, rowsFor, jsonSize, CAPTURE_LIMIT, validate, validateRetained, compare, guardOutput, persistCapture, readCaptureFile, exchange, budget} from '../scripts/capture-bulk-character-conversion.mjs'
+import {cases, rowsFor, jsonSize, CAPTURE_LIMIT, validate, validateRetained, compare, guardOutput, persistCapture, finalizeCapture, readCaptureFile, exchange, budget} from '../scripts/capture-bulk-character-conversion.mjs'
 const fixture = new URL('../reference/bulk-character-conversion.json', import.meta.url)
 const load = async () => JSON.parse(await readFile(fixture, 'utf8'))
 const find = (run, name) => run.observations.find(o => o.case.name === name)
@@ -298,6 +298,25 @@ test('invalid captures and complete comparison sidecars are preserved before sem
     assert.equal(comparison.retained,true)
     assert.ok(comparison.differences.some(d => d.path.includes('/execution/result/rowCount')))
     assert.equal(jsonSize(saved),Buffer.byteLength(JSON.stringify(saved)))
+  })
+})
+
+test('derived comparison overflow preserves all bounded raw runs and an explicit failed sidecar', async () => {
+  await scratch(async dir => {
+    const raw = {format:1, runs:Array.from({length:4}, (_, i) => ({data:String(i).repeat(11*1024*1024)}))}
+    assert.ok(jsonSize(raw) < CAPTURE_LIMIT)
+    const output = join(dir,'comparison-overflow.json')
+    await assert.rejects(finalizeCapture(raw,output), /bounded/)
+    const saved = JSON.parse(await readFile(output,'utf8'))
+    assert.deepEqual(saved.runs,raw.runs)
+    assert.ok(saved.failure.message.includes('bounded'))
+    assert.equal(saved.comparisons,undefined)
+    const sidecar = JSON.parse(await readFile(output+'.comparison.json','utf8'))
+    assert.equal(sidecar.retained,true)
+    assert.equal(sidecar.differencesOmitted,true)
+    assert.equal(sidecar.differences,undefined)
+    assert.ok(sidecar.failure.message.includes('bounded'))
+    assert.ok(jsonSize(sidecar) < 4096)
   })
 })
 
