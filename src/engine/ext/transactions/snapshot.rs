@@ -125,12 +125,14 @@ pub(super) fn alter(session: &mut Session, request: Request) -> Result<Execution
         // transition against reads that check the state and register. A
         // BEGIN racing this registers later and counts as beginning during
         // the change; DuckDB versions its writes regardless of the state.
+        // Everything that can fail before the wait happens before the
+        // transition is published.
+        let db = session.db.try_clone()?;
         let cutoff = {
             let _transactions = active_transactions();
             catalog.set_snapshot_isolation(&session.db, &alias, transition)?;
             SEQUENCE.fetch_add(1, Ordering::SeqCst)
         };
-        let db = session.db.try_clone()?;
         let publish = || catalog.set_snapshot_isolation(&db, &alias, target);
         if let Err(error) = wait_for_transactions(session, &alias, *on, cutoff, publish) {
             catalog.set_snapshot_isolation(&session.db, &alias, previous)?;
