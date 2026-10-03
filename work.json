@@ -9921,6 +9921,28 @@
         "Fresh own claim/receipt in clean existing greatest-least-core worktree from approved5f6dd8b; preserve priorbranch/receipt, no newworktree/nativecache/agent. Honor sharedbuilderlock and explicit handoff after822, run focused regression and required exact-head formatter/strictClippy/workspace/client/audit gates, CI and independent/Codexreview or fallback. Claimingworker owns focusedPRmerge and registry/project completion. Root812 can then rebase and finish final fullverification. No engine.rs reservation and no fullcompatibility claim."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkGJq"
+    },
+    {
+      "id": "concat-numeric-text-v1",
+      "title": "Implement deterministic numeric text conversion from retained SQL Server evidence",
+      "issue": 828,
+      "state": "ready",
+      "authorization": "Continuing owner SQL Server-compatible Rust/DuckDB goal and requested independent parallel factory; first-party implementation from owner-approved merged references815/827 and pure conversion820. No external submission, no engine.rs reservation.",
+      "scope": [
+        "crates/msduck-sql/src/numeric_text.rs",
+        "crates/msduck-sql/tests/concat_numeric_text.rs",
+        "docs/concat-numeric-text.md"
+      ],
+      "dependencies": [
+        "concat-numeric-format-reference-v1",
+        "concat-text-conversion-rules-v1"
+      ],
+      "acceptance": [
+        "Implement a pure bounded numeric-to-text API retaining original Type and typed value/coefficient/IEEE bits. Reuse validated core Decimal and exact money rules where grounded; no float intermediary for decimal/money/integers. Cover BIT/TINYINT/SMALLINT/INT/BIGINT, validated decimal declarations and MONEY/SMALLMONEY, REAL/FLOAT default implicit formatting with six significant digits, fixed/scientific transition, exponent width, signed zero, ties/carries/subnormal/extrema. Validate declaration/payload/NULL/ranges, keep unsupported nonfinite or styles explicit. No parser/backend/session/clock/environment/process state. Do not choose metadata from current values, copy SQL errors without source context or fabricate character declarations.",
+        "Compare formatted output against every applicable retained numeric reference827 observation and prepared rebindings across all four runs; use original scalar text/exact IEEE input bits and full raw strings/units, never decoded imprecise JS numbers for exact inputs. Keep function versus explicit CAST controls and diagnostics separate. Meaningful rounding/notation/sign-zero/source-kind/invalid payload regressions with documented before-fix failure; preserved fixture SHA313ce8e6cd3254493f17aed4bfef54a4bdeb990f887e7c8f7178d184a0b8ad1c. Document replay coverage and uncaptured generalization/runtime gaps, no normalization/hand-picked passing subset or runtime compatibility claim.",
+        "Unregistered module with path-included integration tests; no lib.rs/root/engine/helper exports edits. Fresh exclusive claim in completed existing prepared worker worktree from approved merged main55e3917, retain old branches/receipts. No new worktrees/native caches/agents; private pure Linux proof reads compatible cached dependencies and removes own outputs. Root90454 is live; never synchronize shared source or change its executable while active. Required exact-head formatter/strictClippy/workspace/client/audit gates coordinated after builder handoff, independent and verified Codex review or availability fallback. Claiming worker owns focused PR review follow-up/merge and registry/project/issue completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkINS"
     }
   ]
 }
