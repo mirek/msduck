@@ -478,3 +478,52 @@ fn only_duckdb_reports_writes_to_a_second_database() {
     ok(&mut session, "ROLLBACK");
     assert_eq!(count(&session, "SELECT count(*) FROM memory.dbo.loc"), 1);
 }
+
+#[test]
+fn output_into_stays_out_of_statements_in_other_databases() {
+    let (_server, mut session) = fixture();
+    ok(&mut session, "CREATE TABLE dbo.audit (id INT)");
+    for sql in [
+        "INSERT foo.dbo.items (name) OUTPUT inserted.id INTO dbo.audit VALUES (N'o')",
+        "UPDATE foo.dbo.items SET v = 'o' OUTPUT inserted.id INTO dbo.audit WHERE id = 1",
+        "DELETE foo.dbo.items OUTPUT deleted.id INTO dbo.audit WHERE id = 1",
+    ] {
+        assert_eq!(
+            fails(&mut session, sql),
+            (
+                40515,
+                1,
+                16,
+                "unsupported cross-database statement: OUTPUT INTO in a statement that writes database 'foo'".into()
+            ),
+            "{sql}"
+        );
+    }
+    // Plain OUTPUT returns its rows (foo's trigger makes it 334 there, as in
+    // SQL Server), and OUTPUT INTO works for a statement that writes the
+    // current database.
+    assert_eq!(
+        fails(
+            &mut session,
+            "INSERT foo.dbo.items (name) OUTPUT inserted.id VALUES (N'o')"
+        )
+        .0,
+        334
+    );
+    ok(
+        &mut session,
+        "USE foo; CREATE TABLE dbo.plain (id INT IDENTITY, name NVARCHAR(10)); USE master",
+    );
+    ok(
+        &mut session,
+        "INSERT foo.dbo.plain (name) OUTPUT inserted.id, inserted.name VALUES (N'o')",
+    );
+    ok(&mut session, "INSERT foo.dbo.items (name) VALUES (N'o')");
+    ok(
+        &mut session,
+        "INSERT dbo.loc OUTPUT inserted.id INTO dbo.audit SELECT id, name FROM foo.dbo.items WHERE name = N'o'",
+    );
+    assert_eq!(count(&session, "SELECT count(*) FROM memory.dbo.audit"), 1);
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.items"), 2);
+    assert_eq!(catalog(&session), "memory.dbo");
+}

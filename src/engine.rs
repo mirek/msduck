@@ -1007,7 +1007,19 @@ impl Session {
                 )
             }
         };
+        // OUTPUT INTO names its destination outside relation positions, in
+        // the session's database, which a statement running in another
+        // database would neither resolve nor be allowed to write.
+        let refuse_output_into = |written: &str| -> Result<()> {
+            if dml.is_some_and(output_into) {
+                bail!(
+                    "unsupported cross-database statement: OUTPUT INTO in a statement that writes database '{written}'"
+                );
+            }
+            Ok(())
+        };
         if relations.foreign.len() == 1 && relations.local.is_empty() && !relations.into {
+            refuse_output_into(&display(database))?;
             return Ok(CrossDatabase::Home(database.clone(), vec![]));
         }
         // A statement that writes another database runs there, reading the
@@ -1029,6 +1041,7 @@ impl Session {
                     display(&alias.value)
                 );
             }
+            refuse_output_into(&display(&alias.value))?;
             let home = alias.value.clone();
             let others = relations
                 .foreign
@@ -7898,6 +7911,23 @@ fn alias_targets(statement: &Statement) -> Vec<*const ObjectName> {
         .filter(|name| resolve_alias(name, &tables).is_some())
         .map(|name| name as *const ObjectName)
         .collect()
+}
+
+/// Whether an INSERT, UPDATE or DELETE has `OUTPUT ... INTO`.
+fn output_into(statement: &Statement) -> bool {
+    let output = match statement {
+        Statement::Insert(insert) => &insert.output,
+        Statement::Update(update) => &update.output,
+        Statement::Delete(delete) => &delete.output,
+        _ => return false,
+    };
+    matches!(
+        output,
+        Some(OutputClause::Output {
+            into_table: Some(_),
+            ..
+        })
+    )
 }
 
 /// The relation an INSERT, UPDATE or DELETE writes, with a FROM alias

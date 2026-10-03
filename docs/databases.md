@@ -229,6 +229,11 @@ Remaining limits, refused explicitly unless noted:
 - A statement that writes another database and also reads a temporary table
   or table variable fails with 40515 `unsupported cross-database statement`:
   temporary objects belong to the session's database.
+- A statement that writes another database and has `OUTPUT ... INTO` fails
+  with 40515 `unsupported cross-database statement: OUTPUT INTO in a statement
+  that writes database '...'`: the destination belongs to the session's
+  database, and the statement may write only one. Plain `OUTPUT` works, and
+  `OUTPUT INTO` works in statements that write the current database.
 - Functions that resolve object names, such as `OBJECT_ID`, in a statement
   that runs in another database resolve them in that database.
 - A missing table in another database fails with 208 but with DuckDB's
