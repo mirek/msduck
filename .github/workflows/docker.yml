@@ -21,7 +21,8 @@ on:
       - src/server.rs
       - src/tls.rs
       - scripts/docker-smoke.mjs
-      - package.json
+      # Smoke dependency updates change the lockfile; npm script-list edits
+      # do not change image inputs and must not rebuild both native platforms.
       - package-lock.json
       - .github/workflows/docker.yml
   workflow_dispatch:
