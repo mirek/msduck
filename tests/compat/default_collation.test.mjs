@@ -146,7 +146,7 @@ test('duplicates show each key column as written, and ORDER BY resolves qualifie
   assert.deepEqual((await query(connection, "SELECT CASE WHEN 'A' IN (SELECT k.v FROM dbo.cs_keys k WHERE k.v = 'a') THEN 1 ELSE 0 END")).rows, [[0]])
   // Conflicting column collations in DML predicates, LIKE included.
   await query(connection, "CREATE TABLE dbo.two (ci nvarchar(10) COLLATE Latin1_General_CI_AS, d nvarchar(10)); INSERT dbo.two VALUES (N'a', N'A')")
-  for (const sql of ["UPDATE dbo.two SET ci = N'b' WHERE ci = d", "DELETE FROM dbo.two WHERE d LIKE ci"]) {
+  for (const sql of ["UPDATE dbo.two SET ci = N'b' WHERE ci = d", "DELETE FROM dbo.two WHERE d LIKE ci", "DELETE FROM dbo.two WHERE NULLIF(d, ci) IS NULL"]) {
     await assert.rejects(query(connection, sql), error => error.number === 468 && error.state === 9 && /Latin1_General_CI_AS/.test(error.message), sql)
   }
   assert.deepEqual((await query(connection, 'SELECT ci FROM dbo.two')).rows, [['a']])

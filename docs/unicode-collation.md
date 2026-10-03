@@ -381,6 +381,8 @@ Remaining limits:
 - ALTER TABLE ADD CONSTRAINT over NVARCHAR/NCHAR stays unsupported (the
   constraints feature), and its 1505 for existing CHAR/VARCHAR duplicates
   shows the first value it finds rather than SQL Server's.
+- IN (subquery) resolves a projected column's collation only for a single
+  SELECT, not through UNION ALL or other set operations in the subquery.
 - A simple CASE whose input calls NEWID, RAND or another volatile function
   keeps DuckDB's comparison, so that the input is not evaluated once per
   arm.

@@ -654,6 +654,11 @@ pub(super) fn rewrite<T: VisitMut>(
                         && !collated(second)
                         && !marked(second)
                     {
+                        if let Err((left, right)) =
+                            columns_collation(self.0, [&*first, &*second].into_iter())
+                        {
+                            return ControlFlow::Break(conflict("equal to", &left, &right));
+                        }
                         // A first argument with a collation of its own
                         // compares under it: the second argument takes it
                         // explicitly, leaving the first (and the result) as is.
