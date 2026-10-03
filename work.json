@@ -10128,7 +10128,7 @@
     {
       "id": "prepared-capture-helper-recovery-v1",
       "title": "Recover bounded prepared capture helper and protect retained reference outputs",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing SQL Server compatibility goal and standing unresponsive-worker takeover authorization. Old309 claim a33ac306b84dfd602c5d10a3aa54ea5f65121b62 remains permanent. PR312 owner8561/same repository frozen b2bfc5511af995d119d3a995144e2a03cbaece5a last updated2026-09-27; no attached local worktree or attributable local/Linux capture job found2026-10-03, active Claude cwd mirek/vigil; recovery contact5966332325. Preserve checkpoint/receipts; revoke old309 before fresh acquisition. Verified Codex finding4115900930 requires output alias guard callers; no external content.",
       "scope": [
         "scripts/lib/reference.mjs",
@@ -10151,7 +10151,7 @@
     {
       "id": "client-verification-factory-v1",
       "title": "Use optional client concurrency without weakening full-suite evidence",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Owner asks for faster PR pickup/merge cycle, proper use of powerful linux.local and optional gitignored .env configuration. Current full gates spend about15minutes on507 serial client tests; task845 adds13 helper tests. Existing owner-reviewed sharding runner has historical four-worker404-test proof and a read-only d035 plan for507tests/17processes, not a current-suite performance pass. Implement optional verified concurrency after845; preserve all mandatory checks and claim boundaries.",
       "scope": [
         "package.json",
@@ -10420,7 +10420,7 @@
     {
       "id": "docker-client-script-trigger-v1",
       "title": "Avoid rebuilding native Docker images for client command list edits",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner asks for faster PR cycles and no hour-long PR CI. Verified PR846 Docker run37104221494 actor/trigger8561 exactca96 ownerhead is rebuilding bothnativeplatforms solely because package.json changes npm test list. Dockerfile copies Rust/manifests/vendor/launcher, not package.json; Docker smoke dependencies remain pinned by unchanged package-lock.json. Main required check is Deterministic crates only. This bounded companion of helper845 removes an irrelevant trigger, preserving native-image/smoke/dependency/release/manual verification.",
       "scope": [
         ".github/workflows/docker.yml"
@@ -10436,7 +10436,7 @@
     {
       "id": "prepared-regression-ci-companion-v1",
       "title": "Include prepared capture regressions in full CI client inventory",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing compatibility and autonomous factory authorization; verified Codex finding4172146063 on PR846. Bounded companion of claimed845/856, separate receipt and same existing worker/worktree.",
       "scope": [
         ".github/workflows/ci.yml"
