@@ -520,16 +520,26 @@ fn static_type_name(expr: &Expr) -> Option<String> {
         Expr::Value(value) => match &value.value {
             Value::NationalStringLiteral(_) => Some("nvarchar".into()),
             Value::SingleQuotedString(_) => Some("varchar".into()),
-            Value::Number(text, _) if text.bytes().all(|b| b.is_ascii_digit()) => Some(
-                if text.parse::<i32>().is_ok() {
-                    "int"
-                } else {
-                    "numeric"
-                }
-                .into(),
-            ),
+            // Integer constants are int when they fit, otherwise numeric, as
+            // are decimal constants (captured from SQL Server).
+            Value::Number(text, _) if text.bytes().all(|b| b.is_ascii_digit() || b == b'.') => {
+                Some(
+                    if text.parse::<i32>().is_ok() {
+                        "int"
+                    } else {
+                        "numeric"
+                    }
+                    .into(),
+                )
+            }
             _ => None,
         },
+        Expr::UnaryOp {
+            op: UnaryOperator::Minus | UnaryOperator::Plus,
+            expr,
+        } if matches!(expr.as_ref(), Expr::Value(value) if matches!(value.value, Value::Number(..))) => {
+            static_type_name(expr)
+        }
         _ => None,
     }
 }
@@ -871,6 +881,18 @@ mod tests {
             (
                 "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(N'x', SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'))))",
                 "nvarchar",
+            ),
+            (
+                "CREATE TABLE t (v int DEFAULT (ISNULL(-1, SESSION_CONTEXT(N'k'))))",
+                "int",
+            ),
+            (
+                "CREATE TABLE t (v int DEFAULT (ISNULL(1.0, SESSION_CONTEXT(N'k'))))",
+                "numeric",
+            ),
+            (
+                "CREATE TABLE t (v bigint DEFAULT (ISNULL(3000000000, SESSION_CONTEXT(N'k'))))",
+                "numeric",
             ),
         ] {
             let error = rewritten(sql).unwrap_err();
