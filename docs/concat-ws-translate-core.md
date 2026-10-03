@@ -36,7 +36,7 @@ and ANSI UTF-8 evaluation do not acquire invented behavior. Character payloads
 must respect their declared widths and fixed-width padding. Core CP1252 encoding
 validates ANSI payloads; Unicode payloads retain isolated surrogate units.
 
-Twenty-eight private Rust tests pass using cached, compiler-compatible Linux
+Twenty-nine private Rust tests pass using cached, compiler-compatible Linux
 dependencies and isolated temporary binaries, with strict Clippy and formatting.
 They compare 21 ordinary character cases across all four captures (84 comparisons),
 26 declaration/collation cases (104 comparisons), 10 supplementary/UTF-8/mismatch
@@ -73,8 +73,8 @@ root integration. ANSI UTF-8 result evaluation remains explicitly unsupported. A
 TRANSLATE first operand with an explicit MAX conversion width also returns
 `UnknownConversion` until its result shape is established; it must not advertise
 8000 and silently truncate. The new VARBINARY(MAX) regression fails on checkpoint
-2adc076 and passes with that barrier. Reference task #814 is capturing this
-missing rule alongside individual source-format declarations.
+2adc076 and passes with that barrier. Merged reference #815 records this rule alongside individual source-format declarations;
+task #819 supplies conversion contracts before a separately claimed integration.
 
 Large TRANSLATE inputs can use `evaluate_with_keys`, with caller-supplied,
 established SQL character equivalence keys. A deterministic BTreeMap preserves
@@ -152,3 +152,12 @@ representation. A supplementary mapping with 65,537 distinct pairs is rejected
 before growing the index beyond the limit; a short input can instead use the
 bounded callback path. Exactly 65,536 keys plus additional duplicates remain
 supported. Empty input avoids lookup construction after length-mismatch validation.
+
+Already-converted bounded binary operands use the result text domain during
+payload validation. For Unicode output, bytes 0x4142 become UTF-16 U+4241 and must
+not receive a CP1252 representability check based on the original binary kind.
+The actual 4c62ddb probe rejected that valid converted input with InvalidPayload;
+the regression now preserves it. ANSI output still requires CP1252 text, and
+original byte conversion/storage bounds remain the adapter/helper responsibility.
+The source kind remains binary for declaration planning and unsupported/MAX
+barriers; it is not replaced with a fabricated character declaration.

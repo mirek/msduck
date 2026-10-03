@@ -2079,3 +2079,64 @@ fn distinct_supplementary_lookup_entries_are_bounded_in_both_paths() {
     };
     assert_eq!(error.number, 9828);
 }
+
+#[test]
+fn already_converted_binary_preserves_the_established_result_text_domain() {
+    let binary = Argument {
+        kind: Some(Type::Binary(
+            msduck_core::types::BinaryType::new(false, Length::Bounded(2)).unwrap(),
+        )),
+        converted_width: Some(Length::Bounded(2)),
+        collation: None,
+    };
+    let empty = arg(Family::Nvarchar, Length::Bounded(1));
+    let p = rules::plan(
+        Function::ConcatWs,
+        &[empty.clone(), binary.clone(), empty],
+        DEFAULT,
+        &catalog(),
+    )
+    .unwrap();
+    // SQL Server reinterprets 0x4142 as UTF-16 U+4241 for Unicode output;
+    // it must not be validated as CP1252 merely because source kind is binary.
+    assert_eq!(
+        rules::evaluate(
+            &p,
+            &[text(""), Some(vec![0x4241]), text("")],
+            &default_match
+        )
+        .unwrap(),
+        Some(vec![0x4241])
+    );
+    // Binary conversion may preserve an isolated UTF-16 unit. Input conversion
+    // and original binary bounds are adapter/helper responsibilities.
+    assert_eq!(
+        rules::evaluate(
+            &p,
+            &[text(""), Some(vec![0xd83d]), text("")],
+            &default_match
+        )
+        .unwrap(),
+        Some(vec![0xd83d])
+    );
+    let empty = arg(Family::Varchar, Length::Bounded(1));
+    let p = rules::plan(
+        Function::ConcatWs,
+        &[empty.clone(), binary, empty],
+        DEFAULT,
+        &catalog(),
+    )
+    .unwrap();
+    assert_eq!(
+        rules::evaluate(&p, &[text(""), text("AB"), text("")], &default_match).unwrap(),
+        text("AB")
+    );
+    assert_eq!(
+        rules::evaluate(
+            &p,
+            &[text(""), Some(vec![0x4241]), text("")],
+            &default_match
+        ),
+        Err(Error::InvalidPayload)
+    );
+}

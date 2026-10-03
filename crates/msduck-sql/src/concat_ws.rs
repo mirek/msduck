@@ -448,7 +448,8 @@ fn evaluate_with_translator(
         if value.len() > MAX_INPUT_UNITS {
             return Err(Error::InputLimit);
         }
-        let source_unicode = matches!(argument.kind, Some(Type::Character(kind)) if unicode(kind));
+        let source_unicode = matches!(argument.kind, Some(Type::Character(kind)) if unicode(kind))
+            || (unicode(plan.declaration) && matches!(argument.kind, Some(Type::Binary(_))));
         let size = if source_unicode {
             value.len()
         } else {
