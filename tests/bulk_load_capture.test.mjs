@@ -91,6 +91,10 @@ test('invalid ERROR name, layout and retained comparison records fail closed', (
   }
   const summary = clone(); summary.comparisons[0].exactMatch = false
   assert.throws(() => compareFixture(summary, original))
+  const runIndex = clone(); runIndex.comparisons[0].run = 99
+  assert.throws(() => compareFixture(runIndex, original))
+  const summaryField = clone(); summaryField.comparisons[0].unexpected = true
+  assert.throws(() => compareFixture(summaryField, original))
   const extra = clone(); extra.runs[0].unexpected = true; refresh(extra)
   assert.throws(() => compareFixture(extra, original), /field drift/)
 })
@@ -108,6 +112,8 @@ test('output aliases, existing files, symlinks and sidecar conflicts stop before
     const parent = join(root, 'parent'); await symlink(root, parent)
     const sidecar = join(root, 'sidecar.json'); await writeFile(`${sidecar}.comparison.json`, 'preserve')
     for (const output of [new URL(fixturePath).pathname, alias, existing, dangling, join(parent, 'output.json'), sidecar, root]) {
+      const replay = spawnSync(process.execPath, [script, '--replay-fixture', output], {env:{...process.env, PATH:`${bin}:${process.env.PATH}`}, encoding:'utf8', timeout:10000})
+      assert.equal(replay.status, 0, replay.stderr)
       const result = spawnSync(process.execPath, [script, output], {env:{...process.env, PATH:`${bin}:${process.env.PATH}`}, encoding:'utf8', timeout:10000})
       assert.notEqual(result.status, 0, output)
       await assert.rejects(access(marker), {code:'ENOENT'})

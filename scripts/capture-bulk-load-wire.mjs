@@ -211,9 +211,8 @@ export function validateFixture(value) {
   assert.equal(value.comparisons.length, 3)
   for (let i = 1; i < 4; i++) {
     const equal = isDeepStrictEqual(value.runs[0], value.runs[i])
-    assert.equal(value.comparisons[i - 1].exactMatch, equal)
-    assert.equal(value.comparisons[i - 1].firstDifference,
-      equal ? null : describeFirstDifference(value.runs[i], value.runs[0]))
+    assert.deepEqual(value.comparisons[i - 1], {run: i, exactMatch: equal,
+      firstDifference: equal ? null : describeFirstDifference(value.runs[i], value.runs[0])})
   }
 }
 
@@ -277,15 +276,15 @@ export function compareFixture(actual, retained) {
 }
 
 async function main() {
-await assertSeparateOutput(output)
-await assertSeparateOutput(`${output}.comparison.json`)
-if (writeFixture) await refuseExistingFixture(fixture)
 if (replayFixture) {
   const retained = JSON.parse(await readFile(fixture, 'utf8'))
   validateFixture(retained)
   console.log('Replayed exact retained BulkLoad packet bytes and four-run comparison')
   process.exit(0)
 }
+await assertSeparateOutput(output)
+await assertSeparateOutput(`${output}.comparison.json`)
+if (writeFixture) await refuseExistingFixture(fixture)
 await mkdir(dirname(output), {recursive: true})
 const containers = []
 const runs = []

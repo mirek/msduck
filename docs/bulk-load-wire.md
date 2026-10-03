@@ -87,3 +87,6 @@ exact comparison. Fresh raw SHA-256:
 `1ada114378157739a3effa51f9e50a9cde5ad62f690794cd3c34f98d6a2692a7`.
 Retained fixture SHA-256:
 `f842d48d442697181072410b114294eb781882c3b9ead63e1a9d7b746ee0d849`.
+Offline replay ignores unused diagnostic output paths, including existing files
+and sidecars. Summary validation checks the complete shape and run index as well
+as the recomputed exact-match flag and first-difference text.
