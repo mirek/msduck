@@ -527,6 +527,23 @@ function relationReport(run) {
     return {collation,declaration,alphabetSize:128,rowAxis:'mapping ASCII code',bitAxis:'source ASCII code; least significant bit first within each byte',rowsHex,failures,classification:Object.values(failures).every(x=>x.count===0)?'observed equivalence within ASCII only':'inconsistent observed relation; unknown'}
   }))
 }
+function decodeRelation(report) {
+  assert.equal(report.alphabetSize,128,'relation alphabet size')
+  assert.equal(report.rowAxis,'mapping ASCII code','explicit relation row orientation')
+  assert.equal(report.bitAxis,'source ASCII code; least significant bit first within each byte','explicit relation bit orientation')
+  assert.equal(report.rowsHex.length,128,'complete packed relation rows')
+  return report.rowsHex.map(hex=>{assert(typeof hex==='string'&&/^[0-9a-f]{32}$/.test(hex),'exact128-bit relation row');const bytes=Buffer.from(hex,'hex');return alphabet.map(index=>Boolean(bytes[index>>3]&(1<<(index&7))))})
+}
+function validateRelationReports(reports,run) {
+  assert.equal(reports.length,16,'complete profile relation reports')
+  for(const [index,report]of reports.entries()) {
+    const collation=collations[Math.floor(index/2)],declaration=domains[index%2]
+    assert.equal(report.collation,collation);assert.equal(report.declaration,declaration)
+    const records=run.filter(r=>r.input?.kind==='ASCII grid'&&r.input.collation===collation&&r.input.declaration===declaration)
+    const decoded=decodeRelation(report)
+    for(const [mapping,record]of records.entries())assertSameCapture(decoded[mapping],gridRelation(record),'independently decoded packed bits against raw function observations')
+  }
+}
 function validate(run) {
   assert.equal(run.length,2+cases.length+preparedPrograms.length)
   assertSameCapture(run.map(x=>x.name),['server version',...cases.map(x=>x[0]),...preparedPrograms.map(x=>x[0]),'connection reusable'])
@@ -702,7 +719,7 @@ function validateFourCaptures(actual,retained=false) {
   for(const container of actual.containers) {
     assert.equal(container.image,referenceImage)
     assert.equal(container.runs.length,2,'two fresh databases')
-    for(const run of container.runs){validate(run);validateTokens(run)}
+    for(const [runIndex,run]of container.runs.entries()){validate(run);validateTokens(run);validateRelationReports(actual.relations[actual.containers.indexOf(container)][runIndex],run)}
   }
   assertSameCapture(actual.runDigests,runDigests(actual),'exact per-run integrity')
   assertSameCapture(actual.variationReport,variationReport(actual),'complete unnormalized variation report')
@@ -785,7 +802,12 @@ async function testObserver(retained) {
     actual.acquiredSha256=createHash('sha256').update(JSON.stringify({hostname:actual.hostname,exclusions:actual.exclusions,containers:actual.containers})+'\n').digest('hex')
     assert.throws(()=>validateFourCaptures(actual,false),'identical four-copy corruption must fail after refreshing integrity fields')
   }
-  console.log('All RETURNVALUE splits/bytewise fragments pass; truncation and eighteen identical four-copy corruptions rejected')
+  for(const mutate of [r=>r.rowsHex[0]='00'.repeat(16),r=>r.rowsHex[0]='00',r=>r.bitAxis='most significant bit first',r=>r.rowAxis='source ASCII code',r=>r.failures.reflexive.count=1]) {
+    const actual=structuredClone(retained)
+    for(const container of actual.relations)for(const reports of container)mutate(reports[0])
+    assert.throws(()=>validateFourCaptures(actual,false),'packed relation corruption rejected independently of raw/run digest pins')
+  }
+  console.log('All RETURNVALUE fragments pass; eighteen refreshed-integrity capture corruptions and five packed-relation corruptions rejected')
 }
 async function testCliSafety() {
   const root=resolve('.tmp')
