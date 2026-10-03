@@ -211,9 +211,10 @@ that uses them sees the session that queries or inserts.
 - **Implicit sql_variant writes.** Writing or assigning the property without
   a conversion (`INSERT ... VALUES`, `UPDATE ... SET`, `SET @v =`) fails in
   SQL Server with 257 when the batch is compiled, so earlier statements of
-  the batch do not run. msduck refuses it with 40515 when the statement runs.
-  `INSERT ... SELECT` of the selected property fails with a DuckDB binder
-  error (50000).
+  the batch do not run. msduck refuses it with 40515 when the statement runs,
+  including the select items of `INSERT ... SELECT`, so earlier statements of
+  the batch have already run. Moving the refusal into whole-batch preflight
+  is outside this task's files.
 - **NULLIF over SESSION_CONTEXT.** SQL Server accepts
   `DEFAULT (NULLIF(1, SESSION_CONTEXT(N'k')))`; msduck refuses it with 40515.
 

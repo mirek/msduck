@@ -524,6 +524,7 @@ fn session_context_properties_in_queries() {
     for sql in [
         "INSERT t (base) VALUES (SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'))",
         "UPDATE t SET max_length = SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'MaxLength')",
+        "INSERT t (base) SELECT (SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'))",
         "DECLARE @v nvarchar(128); SET @v = SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType')",
     ] {
         assert_eq!(fails(&mut s, sql).0, 40515, "{sql}");

@@ -37,6 +37,7 @@ impl Session {
             context: &self.session_context,
             parameters,
             next: 0,
+            insert_source: false,
         };
         match node.visit(&mut lower) {
             ControlFlow::Continue(()) => Ok(()),
@@ -100,6 +101,9 @@ struct Lower<'a> {
     context: &'a SessionContext,
     parameters: &'a mut HashMap<String, Parameter>,
     next: usize,
+    /// The next query is an INSERT source, whose select items are written
+    /// rather than returned.
+    insert_source: bool,
 }
 impl Lower<'_> {
     fn bind(&mut self, data_type: SqlType, value: ParameterValue) -> Expr {
@@ -381,7 +385,12 @@ fn select_items(set: &mut SetExpr, each: &mut dyn FnMut(&mut Expr) -> Result<()>
 impl VisitorMut for Lower<'_> {
     type Break = anyhow::Error;
     /// A selected `SQL_VARIANT_PROPERTY` of a session value is a sql_variant.
+    /// An INSERT source's select items are writes, refused like other
+    /// implicit sql_variant writes.
     fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<anyhow::Error> {
+        if std::mem::take(&mut self.insert_source) {
+            return ControlFlow::Continue(());
+        }
         match select_items(&mut query.body, &mut |expr| self.select_property(expr)) {
             Ok(()) => ControlFlow::Continue(()),
             Err(error) => ControlFlow::Break(error),
@@ -390,6 +399,8 @@ impl VisitorMut for Lower<'_> {
     /// Session values are read when a statement runs; a persisted definition
     /// (view, default, routine, trigger) would freeze today's value instead.
     fn pre_visit_statement(&mut self, statement: &mut Statement) -> ControlFlow<anyhow::Error> {
+        self.insert_source =
+            matches!(statement, Statement::Insert(insert) if insert.source.is_some());
         let persisted = matches!(
             statement,
             Statement::CreateView { .. }

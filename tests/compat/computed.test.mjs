@@ -43,15 +43,10 @@ const known = {
   // A session value's SQL_VARIANT_PROPERTY written or assigned without an
   // explicit conversion: SQL Server refuses the implicit sql_variant
   // conversion with 257 when it compiles the batch. msduck refuses it with
-  // 40515, or fails binding the sql_variant select item into the column.
-  ...Object.fromEntries([2, 3, 5, 6].map(step => [`session-variant-writes#${step}`, local => {
+  // 40515 when the statement runs.
+  ...Object.fromEntries([2, 3, 4, 5, 6].map(step => [`session-variant-writes#${step}`, local => {
     assert.deepEqual(errors(local), [[40515, 1, 16, 'unsupported SQL_VARIANT_PROPERTY of a session value outside a select item, comparison or explicit conversion']])
   }])),
-  'session-variant-writes#4': local => {
-    assert.equal(local.errors.length, 1)
-    assert.equal(local.errors[0].number, 50000)
-    assert.match(local.errors[0].message, /^Binder Error: STRUCT to STRUCT cast/)
-  },
   // The batch's INSERT before the refused UPDATE ran in msduck; SQL Server
   // compiled and refused the whole batch.
   'session-variant-writes#7': (local, remote) => {
