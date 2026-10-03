@@ -11276,7 +11276,7 @@
     {
       "id": "ansi-native-storage-prototype-v1",
       "title": "Preserve native ANSI bytes in an explicitly planned DuckDB carrier",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Owner continuing implementation goal; approved first-party adapter plan890, public carrier894, writer898, reviewed kernel897 and finite reference895/899. Prototype only; later storage/BulkLoad/output adoption requires separate claims.",
       "scope": [
         "src/ansi_carrier.rs",
