@@ -41,7 +41,22 @@ mod target;
 use target::Target;
 
 #[derive(Default)]
-pub(crate) struct State;
+pub(crate) struct State {
+    /// Row images the next MERGE leaves for the triggers feature.
+    pub(super) capture: Option<Capture>,
+}
+
+/// A request from the triggers feature: materialize the `inserted` and
+/// `deleted` images of the listed actions, before writing, as tables in the
+/// database's `main` schema with the target's columns. With `instead` the
+/// target is not written (INSTEAD OF triggers): the statement reports the
+/// rows it would have affected, and inserted rows take 0 for IDENTITY
+/// columns.
+pub(super) struct Capture {
+    pub instead: bool,
+    /// Action, `inserted` table and `deleted` table.
+    pub images: Vec<(Kind, String, String)>,
+}
 
 pub(super) struct Hooks;
 
@@ -84,7 +99,7 @@ enum Family {
 const FAMILIES: [Family; 3] = [Family::Matched, Family::ByTarget, Family::BySource];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Kind {
+pub(super) enum Kind {
     Insert = 1,
     Update = 2,
     Delete = 3,
@@ -135,6 +150,8 @@ fn execute(
     merge: Merge,
     parameters: &mut HashMap<String, Parameter>,
 ) -> Result<Execution> {
+    // A capture request applies to this statement only, whatever happens.
+    let capture = session.ext.merge.capture.take();
     if session.transaction_doomed {
         return Err(crate::query_error::attach_context(
             session.require_committable().unwrap_err(),
@@ -148,7 +165,7 @@ fn execute(
     if own {
         session.db.execute_batch("BEGIN TRANSACTION")?;
     }
-    let result = plan.run(session, top, parameters);
+    let result = plan.run(session, top, parameters, capture.as_ref());
     match &result {
         Ok(_) if own => {
             if let Err(error) = session.db.execute_batch("COMMIT") {
@@ -527,10 +544,11 @@ impl Plan {
         session: &mut Session,
         top: Option<Top>,
         parameters: &mut HashMap<String, Parameter>,
+        capture: Option<&Capture>,
     ) -> Result<Execution> {
         let stage = scratch("stage");
         let images = scratch("image");
-        let result = self.run_with(session, top, parameters, &stage, &images);
+        let result = self.run_with(session, top, parameters, capture, &stage, &images);
         // After a native failure the backend transaction is aborted and its
         // rollback removes these tables instead.
         for name in [stage, images] {
@@ -546,9 +564,11 @@ impl Plan {
         session: &mut Session,
         top: Option<Top>,
         parameters: &mut HashMap<String, Parameter>,
+        capture: Option<&Capture>,
         stage: &str,
         images: &str,
     ) -> Result<Execution> {
+        let instead = capture.is_some_and(|capture| capture.instead);
         let (lowered, values, scopes) = session.lower_query(
             Statement::Query(Box::new(self.candidates.clone())),
             parameters,
@@ -595,16 +615,19 @@ impl Plan {
         }
         session
             .db
-            .execute(&self.image_sql(images, stage)?, [take as i64])
+            .execute(&self.image_sql(images, stage, instead)?, [take as i64])
             .map_err(write_failure)?;
         // Report constraint violations before writing, so a failure inside the
-        // caller's transaction leaves it usable, as SQL Server does.
-        self.target.check(
-            session,
-            images,
-            session.transactions > 0,
-            &session.database().name,
-        )?;
+        // caller's transaction leaves it usable, as SQL Server does. INSTEAD
+        // OF triggers receive the rows unchecked.
+        if !instead {
+            self.target.check(
+                session,
+                images,
+                session.transactions > 0,
+                &session.database().name,
+            )?;
+        }
         let output = self
             .output
             .as_ref()
@@ -612,8 +635,19 @@ impl Plan {
                 Ok::<_, anyhow::Error>((output, output.prepare(session, images, parameters)?))
             })
             .transpose()?;
-        self.written.set(true);
-        let count = self.write(session, images)?;
+        if let Some(capture) = capture {
+            self.capture(session, images, capture)?;
+        }
+        let count = if instead {
+            session
+                .db
+                .query_row(&format!("SELECT count(*) FROM {images}"), [], |r| {
+                    r.get::<_, i64>(0)
+                })? as u64
+        } else {
+            self.written.set(true);
+            self.write(session, images)?
+        };
         match output {
             None => Ok(Execution::statement(vec![], Some(count), COMMAND)),
             Some((output, prepared)) => output.emit(session, prepared, count, COMMAND),
@@ -794,7 +828,7 @@ impl Plan {
     }
 
     /// The selected rows with their complete new images.
-    fn image_sql(&self, name: &str, stage: &str) -> Result<String> {
+    fn image_sql(&self, name: &str, stage: &str, instead: bool) -> Result<String> {
         let kind = self
             .arms
             .iter()
@@ -821,6 +855,10 @@ impl Plan {
                         Some((_, Assigned::Default)) => self.target.default(index)?,
                         None => format!("\"__msduck_d{index}\""),
                     },
+                    // Rows an INSTEAD OF trigger receives draw no IDENTITY value.
+                    Kind::Insert if instead && column.identity => {
+                        format!("CAST(0 AS {})", column.physical)
+                    }
                     Kind::Insert => match arm.values.iter().find(|(c, _)| *c == index) {
                         Some((_, Assigned::Stage(slot))) => self.staged(*slot),
                         Some((_, Assigned::Default)) | None => self.target.default(index)?,
@@ -874,6 +912,48 @@ impl Plan {
             "CREATE TEMP TABLE {name} AS SELECT __in.*{generated} FROM (SELECT {} FROM {stage} AS __s WHERE __msduck_row <= ? QUALIFY __msduck_tid IS NULL OR row_number() OVER (PARTITION BY __msduck_tid ORDER BY __msduck_row) = 1) AS __in ORDER BY __msduck_row",
             columns.join(", ")
         ))
+    }
+
+    /// Materialize the trigger images a [`Capture`] requests from the
+    /// selected rows, before any write: `deleted` holds the stored rows an
+    /// action updates or deletes, `inserted` the new images of the rows it
+    /// updates or inserts. Both have the target's columns, including
+    /// computed ones.
+    fn capture(&self, session: &Session, images: &str, capture: &Capture) -> Result<()> {
+        let db = &session.db;
+        let table = self.target.backend_name();
+        let names = self
+            .target
+            .columns
+            .iter()
+            .map(|column| quoted(&column.name))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let values = (0..self.target.columns.len())
+            .map(|index| format!("\"__msduck_n{index}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        for (kind, inserted, deleted) in &capture.images {
+            let code = *kind as u8;
+            let selected = match kind {
+                Kind::Insert => "false".to_owned(),
+                _ => format!(
+                    "rowid IN (SELECT __msduck_tid FROM {images} WHERE __msduck_kind = {code})"
+                ),
+            };
+            db.execute_batch(&format!(
+                "CREATE TABLE main.{} AS SELECT * FROM {table} WHERE {selected}; CREATE TABLE main.{} AS SELECT * FROM {table} WHERE false",
+                quoted(deleted),
+                quoted(inserted)
+            ))?;
+            if *kind != Kind::Delete {
+                db.execute_batch(&format!(
+                    "INSERT INTO main.{} ({names}) SELECT {values} FROM {images} WHERE __msduck_kind = {code} ORDER BY __msduck_row",
+                    quoted(inserted)
+                ))?;
+            }
+        }
+        Ok(())
     }
 
     /// Apply the selected actions: deletes, updates, then inserts.

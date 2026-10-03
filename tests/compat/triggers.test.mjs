@@ -27,7 +27,8 @@ function batch(connection, sql) {
 }
 
 async function setup(t) {
-  const connection = await start(t)
+  // CREATE DATABASE can take seconds on a busy host.
+  const connection = await start(t, { options: { requestTimeout: 60000 } })
   const database = `triggers_${process.pid}_${Math.floor(Math.random() * 1e9)}`
   await batch(connection, `CREATE DATABASE ${database}`)
   await batch(connection, `USE ${database}`)
@@ -150,6 +151,30 @@ test('parameterized statements fire triggers and keep their completion counts', 
   assert.deepEqual((await query(connection, 'SELECT id, v, level FROM plog ORDER BY v')).rows, [[1, 10, 1], [1, 15, 1]])
 })
 
+test('MERGE fires AFTER triggers per action: the workload report repro (#852)', async t => {
+  const connection = await setup(t)
+  await batch(connection, 'CREATE TABLE items(id int PRIMARY KEY)')
+  await batch(connection, 'CREATE TRIGGER foo_trigger ON items AFTER INSERT AS BEGIN SET NOCOUNT ON; END')
+  const merged = await query(connection, 'MERGE items AS target USING(VALUES(1)) AS source(id) ON target.id=source.id WHEN NOT MATCHED THEN INSERT(id) VALUES(source.id);')
+  assert.equal(merged.rowCount, 1)
+  assert.deepEqual((await query(connection, 'SELECT id FROM items')).rows, [[1]])
+
+  await batch(connection, 'CREATE TABLE stock(id INT PRIMARY KEY, qty INT); CREATE TABLE audit(seq INT IDENTITY, act CHAR(1), id INT, old_qty INT, new_qty INT, n INT)')
+  await batch(connection, `CREATE TRIGGER stock_audit ON stock AFTER INSERT, UPDATE AS
+    SET NOCOUNT ON;
+    INSERT audit(act, id, old_qty, new_qty, n)
+    SELECT CASE WHEN d.id IS NULL THEN 'I' ELSE 'U' END, i.id, d.qty, i.qty, (SELECT COUNT(*) FROM inserted)
+    FROM inserted i LEFT JOIN deleted d ON d.id = i.id`)
+  await batch(connection, 'INSERT stock VALUES (1, 10)')
+  const both = await query(connection, 'MERGE stock AS target USING (VALUES (1, 15), (2, 20)) AS source(id, qty) ON target.id = source.id WHEN MATCHED THEN UPDATE SET qty = source.qty WHEN NOT MATCHED THEN INSERT (id, qty) VALUES (source.id, source.qty);')
+  assert.equal(both.rowCount, 2)
+  // INSERT fires first, then UPDATE; each firing sees only its own rows.
+  assert.deepEqual((await query(connection, 'SELECT act, id, old_qty, new_qty, n FROM audit ORDER BY seq')).rows, [
+    ['I', 1, null, 10, 1], ['I', 2, null, 20, 1], ['U', 1, 10, 15, 1],
+  ])
+  assert.deepEqual((await query(connection, 'SELECT id, qty FROM stock ORDER BY id')).rows, [[1, 15], [2, 20]])
+})
+
 // Replay the SQL Server capture (scripts/capture-gaps-triggers.mjs) and
 // compare result rows and every ERROR token. Each known difference is listed
 // with its reason and compared on what does match.
@@ -180,8 +205,9 @@ function replay(connection, sql) {
 }
 
 test('trigger behavior matches the SQL Server capture', async t => {
-  const connection = await start(t)
-  assert.equal(reference.cases.length, 8)
+  // Thirteen CREATE DATABASE batches; each can take seconds on a busy host.
+  const connection = await start(t, { options: { requestTimeout: 60000 } })
+  assert.equal(reference.cases.length, 13)
   for (const [index, entry] of reference.cases.entries()) {
     await batch(connection, `CREATE DATABASE replay_${index}_${process.pid}`)
     await batch(connection, `USE replay_${index}_${process.pid}`)
