@@ -1,14 +1,31 @@
 # Opt-in client test sharding
 
-The standard client suite has 404 top-level tests, including 391 in one file.
-The opt-in runner partitions test identities across processes while keeping the
-existing test files unchanged. CI and `npm test` are unchanged.
+The standard npm client suite has six explicitly registered entry points and
+520 top-level tests at the task847 base. `scripts/lib/client-suite.mjs` is the
+shared manifest for npm, direct full-suite runs and CI. CI retains all its
+additional session/database/compatibility and aggregate diagnostic files.
+`npm test` still builds the workspace with all targets, then invokes a small
+adapter. Unset `MSDUCK_CLIENT_JOBS` or `1` retains one `node --test` invocation
+across the original six files; values 2–16 opt into partitioned workers. No
+SQL assertion, timeout, test callback or compile feature is changed.
+
+```sh
+npm test
+MSDUCK_CLIENT_JOBS=4 npm test
+```
+
+The remote runner accepts the same validated setting from the gitignored `.env`
+and exports its quoted numeric value inside the existing builder lock. Keep
+that lock through builds and all client processes using its executable.
+Full CI uses the shared superset manifest and a serial fallback; moving the
+previous independent aggregate replay into that inventory must not silently
+increase concurrency on a two-CPU runner without a separate full proof.
 
 Build first, then run from an immutable source/executable snapshot:
 
 ```sh
-node scripts/run-client-shards.mjs --plan-only --jobs 4
-node scripts/run-client-shards.mjs --jobs 4 --output artifacts/client-shards/example
+node scripts/run-client-shards.mjs --suite npm --plan-only --jobs 4
+node scripts/run-client-shards.mjs --suite npm --jobs 4 --output .tmp/client-shards/example
 ```
 
 Concurrency defaults to one and is bounded to 1–16 worker processes. Each job
@@ -41,8 +58,13 @@ The output directory contains the plan/provenance, discovery output, complete
 TAP and console logs for every process, machine-readable events and a summary.
 Every assigned top-level test must be reported exactly once. Missing, repeated
 or unexpected executed tests, process failures and incomplete/cancelled runs
-fail the command. Skips and TODOs retain Node's intentional status and are
-reported separately, never as passes. Top-level counts are distinct from nested
+fail the command. Explicit focused runs after `--` retain intentional skips/TODOs separately,
+never as passes. Full manifest runs (including the no-file default) additionally
+require passed==expected and reject assigned skips, TODOs, cancellations and
+failed nested results. Unselected shard names are Node filter skips and are
+not assigned tests; their complete raw events remain retained. Source, harness,
+reference and executable hashes are rechecked, including the source file list.
+Added/deleted or changed inputs fail the summary. Top-level counts are distinct from nested
 tests; the complete nested results remain in TAP logs.
 
 SIGINT/SIGTERM cancels work, terminates process groups and escalates to SIGKILL
@@ -92,4 +114,6 @@ passed all 408 tests in 862726 ms, with no missing/repeated identities, skips,
 cancellations or changed inputs. The assertion workload is retained, but test
 granularity and startup count changed, so this is not identical test source to
 the 404-test baseline. The observed wall-time ratio is 1.70 versus that baseline.
-CI integration remains a separate change; this runner stays opt-in.
+These historical results do not substitute for current task847 measurements; concurrency remains opt-in for npm.
+
+Task847 final-revision serial and four-worker measurements are pending; no current speedup is claimed by this implementation checkpoint.

@@ -1,4 +1,5 @@
 // Optional Linux build/test runner. Configuration is data, never sourced as shell.
+import {clientJobs} from './lib/client-suite.mjs'
 import { spawn } from 'node:child_process'
 import { existsSync, mkdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -64,6 +65,7 @@ if (process.argv.length > 3 || !Object.hasOwn(actions, action)) {
 const host = process.env.MSDUCK_BUILD_HOST
 const directory = process.env.MSDUCK_BUILD_DIR
 const jobs = process.env.MSDUCK_BUILD_JOBS ?? '16'
+const clientConcurrency = clientJobs(process.env.MSDUCK_CLIENT_JOBS)
 const toolchain = process.env.MSDUCK_BUILD_TOOLCHAIN ?? ''
 if (!host || !/^[a-zA-Z0-9][a-zA-Z0-9._@-]*$/.test(host)
     || !directory || !/^\/[a-zA-Z0-9_./-]+$/.test(directory)
@@ -81,6 +83,7 @@ const marker = '__MSDUCK_REMOTE_READY__'
 const script = `set -eu
 export PATH="$HOME/.cargo/bin:$PATH"
 export CARGO_BUILD_JOBS=${quote(jobs)}
+export MSDUCK_CLIENT_JOBS=${quote(String(clientConcurrency))}
 ${toolchain ? `export RUSTUP_TOOLCHAIN=${quote(toolchain)}` : ""}
 root=${quote(directory)}
 mkdir -p "$root"

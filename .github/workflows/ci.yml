@@ -49,7 +49,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
-      - run: node --test tests/agent-work.test.mjs tests/client-shards.test.mjs
+      - run: node --test tests/agent-work.test.mjs tests/client-shards.test.mjs tests/client-test-command.test.mjs
       - run: cargo fmt --all --check
       - run: cargo clippy -p msduck-core -p msduck-sql -p msduck-tds --all-targets --locked -- -D warnings
       - run: cargo test -p msduck-core -p msduck-sql -p msduck-tds --locked
@@ -101,16 +101,9 @@ jobs:
         run: cargo build --workspace --all-targets --locked 2>&1 | tee artifacts/ci/build.log
       - name: Independent client tests
         run: |
-          node scripts/run-client-shards.mjs --jobs 2 --revision "$(git rev-parse HEAD)" \
-            --output artifacts/ci/client-shards -- \
-            tests/tedious.test.mjs tests/compatibility.test.mjs tests/tls.test.mjs \
-            tests/datepart_numeric.test.mjs tests/reference-compare.test.mjs tests/reference-prepared.test.mjs \
-            tests/session_reset.test.mjs tests/databases.test.mjs \
-            tests/login_database_error.test.mjs tests/alter_database_sessions.test.mjs \
-            tests/tedious_compat_gaps.test.mjs tests/compat/*.test.mjs \
+          node scripts/run-client-shards.mjs --suite ci --jobs 1 --serial --revision "$(git rev-parse HEAD)" \
+            --output artifacts/ci/client-shards \
             2>&1 | tee artifacts/ci/clients.log
-      - name: Aggregate diagnostic reference replays
-        run: node --test --test-concurrency=1 tests/aggregate_diagnostics.test.mjs tests/character_extrema.test.mjs 2>&1 | tee artifacts/ci/aggregate-diagnostics.log
       - name: Diagnostic compatibility capture
         run: npm run audit:local 2>&1 | tee artifacts/ci/audit.log
       - name: Preserve logs and raw captures

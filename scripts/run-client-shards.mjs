@@ -6,6 +6,7 @@ import {registerHooks} from 'node:module'
 import {resolve} from 'node:path'
 import {fileURLToPath, pathToFileURL} from 'node:url'
 import {promisify} from 'node:util'
+import {suiteFiles, strictResult, sourceFiles} from './lib/client-suite.mjs'
 import {partition, selection, assess} from './lib/client-shards.mjs'
 const exec = promisify(execFile)
 const script = fileURLToPath(import.meta.url)
@@ -14,7 +15,7 @@ const childEnvironment = {...process.env}
 // A parent node:test runner marks its workers with this internal variable.
 // Passing it onward makes a new --test process silently skip its files.
 delete childEnvironment.NODE_TEST_CONTEXT
-const defaults = ['tests/tedious.test.mjs', 'tests/compatibility.test.mjs', 'tests/tls.test.mjs']
+
 
 async function digest(path) {
   const hash = createHash('sha256')
@@ -80,10 +81,12 @@ async function inventoryProcess(inputs, output) {
 }
 
 async function main(args) {
-  let jobs = 1, output = resolve('artifacts/client-shards', randomUUID()), planOnly = false, revision
+  let jobs = 1, output = resolve('artifacts/client-shards', randomUUID()), planOnly = false, revision, suite, serial = false
   const files = []
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--jobs') jobs = Number(args[++i])
+    if (args[i] === '--suite') { suite = args[++i]; if (!['npm', 'ci'].includes(suite)) throw Error('suite must be npm or ci') }
+    else if (args[i] === '--serial') serial = true
+    else if (args[i] === '--jobs') jobs = Number(args[++i])
     else if (args[i] === '--output') { if (!args[i + 1]) throw Error('Missing output directory'); output = resolve(args[++i]) }
     else if (args[i] === '--revision') revision = args[++i]
     else if (args[i] === '--plan-only') planOnly = true
@@ -92,28 +95,34 @@ async function main(args) {
   }
   if (revision !== undefined && !/^[a-f0-9]{40}$/.test(revision)) throw Error('revision must be a full commit SHA')
   if (process.platform === 'win32') throw Error('Process-group cancellation currently requires POSIX')
-  const inputs = await Promise.all((files.length ? files : defaults).map(file => realpath(resolve(file))))
+  if (suite && files.length) throw Error('A full suite cannot override its manifest')
+  if (serial && jobs !== 1) throw Error('Serial mode requires one worker')
+  const full = Boolean(suite || !files.length)
+  const inputs = await Promise.all((files.length ? files : await suiteFiles(suite)).map(file => realpath(resolve(file))))
   if (new Set(inputs).size !== inputs.length) throw Error('Duplicate input files')
   if (inputs.some(file => !file.endsWith('.mjs'))) throw Error('Discovery currently supports ESM .mjs tests')
   await mkdir(output, {recursive: true})
+  const hashedFiles = [...new Set([...inputs, script, reporter, ...(full ? await sourceFiles() : [])])].sort()
+  const hashes = {}
+  for (const file of hashedFiles) hashes[file] = await digest(file)
   const inventory = []
   for (const [index, file] of inputs.entries()) {
     const directory = resolve(output, `discovery-${index}`)
     await mkdir(directory, {recursive: true})
     inventory.push(...await inventoryProcess([file], directory))
   }
-  const plan = partition(inventory, jobs)
-  const hashes = Object.fromEntries(await Promise.all([...new Set([...inputs, script, reporter])].map(async file => [file, await digest(file)])))
+  const partitioned = partition(inventory, jobs)
+  const plan = serial ? [{shard: 0, tests: inventory, files: inputs}] : partitioned
   const binary = resolve('target/debug/msduck')
   let binaryHash = null
   try { binaryHash = await digest(binary) } catch (error) { if (error.code !== 'ENOENT') throw error }
-  if (!planOnly && !files.length && !binaryHash) throw Error('Build the server first; this runner does not compile')
+  if (!planOnly && full && !binaryHash) throw Error('Build the server first; this runner does not compile')
   let checkoutRevision = null, checkoutDirty = null
   try {
     checkoutRevision = (await exec('git', ['rev-parse', 'HEAD'])).stdout.trim()
     checkoutDirty = Boolean((await exec('git', ['status', '--porcelain'])).stdout.trim())
   } catch { /* Private verified source snapshots need not contain .git. */ }
-  const provenance = {node: process.version, declaredRevision: revision ?? null, checkoutRevision, checkoutDirty, inputs: hashes, binary: binaryHash ? {path: binary, sha256: binaryHash} : null}
+  const provenance = {node: process.version, suite: full ? (suite ?? 'npm') : null, serial, declaredRevision: revision ?? null, checkoutRevision, checkoutDirty, inputs: hashes, binary: binaryHash ? {path: binary, sha256: binaryHash} : null}
   await writeFile(resolve(output, 'plan.json'), JSON.stringify({provenance, jobs, plan}, null, 2) + '\n')
   if (planOnly) { console.log(JSON.stringify({output, tests: inventory.length, processes: plan.length, jobs})); return }
 
@@ -133,7 +142,7 @@ async function main(args) {
   const started = performance.now()
   async function run(job, index) {
     const prefix = resolve(output, `job-${index}`)
-    const argv = ['--test', `--test-name-pattern=${selection(job.tests)}`, '--test-reporter=tap', `--test-reporter=${reporter}`, `--test-reporter-destination=${prefix}.tap`, `--test-reporter-destination=${prefix}.jsonl`, job.file]
+    const argv = ['--test', ...(serial && suite === 'ci' ? ['--test-concurrency=1'] : []), ...(serial ? [] : [`--test-name-pattern=${selection(job.tests)}`]), '--test-reporter=tap', `--test-reporter=${reporter}`, `--test-reporter-destination=${prefix}.tap`, `--test-reporter-destination=${prefix}.jsonl`, ...(job.files ?? [job.file])]
     const log = createWriteStream(`${prefix}.console.log`)
     const child = spawn(process.execPath, argv, {detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: childEnvironment})
     active.add(child)
@@ -148,7 +157,8 @@ async function main(args) {
     let events = []
     try { events = (await readFile(`${prefix}.jsonl`, 'utf8')).trim().split('\n').filter(Boolean).map(line => JSON.parse(line)) }
     catch (error) { status.reportError = error.message }
-    const result = {...assess(job.tests, events, status.code), index, shard: job.shard, status, log: `${prefix}.tap`}
+    const accounted = assess(job.tests, events, status.code)
+    const result = {...(full ? strictResult(accounted, events.filter(e => e.nesting !== 0 || job.tests.some(t => t.file === e.file && t.name === e.name))) : accounted), index, shard: job.shard, status, log: `${prefix}.tap`}
     if (status.reportError || status.error) result.ok = false
     results.push(result)
   }
@@ -162,7 +172,11 @@ async function main(args) {
     process.off('SIGINT', stop); process.off('SIGTERM', stop)
   }
   const changed = []
-  for (const [file, hash] of Object.entries(hashes)) if (await digest(file) !== hash) changed.push(file)
+  if (full && JSON.stringify([...new Set([...inputs, script, reporter, ...await sourceFiles()])].sort()) !== JSON.stringify(hashedFiles)) changed.push('source file inventory')
+  for (const [file, hash] of Object.entries(hashes)) {
+    try { if (await digest(file) !== hash) changed.push(file) }
+    catch (error) { changed.push(`${file}: ${error.code ?? error.message}`) }
+  }
   if (binaryHash && await digest(binary) !== binaryHash) changed.push(binary)
   const summary = {ok: !aborted && !changed.length && results.length === plan.length && results.every(r => r.ok), provenance, elapsedMs: performance.now() - started, aborted, changed, expected: inventory.length, passed: results.reduce((n, r) => n + r.passed, 0), failed: results.reduce((n, r) => n + r.failed, 0), skipped: results.reduce((n, r) => n + r.skipped, 0), todo: results.reduce((n, r) => n + r.todo, 0), results: results.sort((a, b) => a.index - b.index)}
   await writeFile(resolve(output, 'summary.json'), JSON.stringify(summary, null, 2) + '\n')

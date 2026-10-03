@@ -123,3 +123,10 @@ test('late asynchronous registration fails discovery instead of omitting a test'
   await assert.rejects(exec(process.execPath, [runner, '--plan-only', ...args]), /Discovery failed/)
   assert.match(await readFile(join(dir, 'out/discovery-0/discovery.stderr'), 'utf8'), /Late test registration/)
 })
+
+test('full suite rejects manifest overrides and incompatible serial workers before discovery', async t => {
+  const {args} = await fixture(t, {'a.mjs':"test('tiny',()=>{})"})
+  await assert.rejects(exec(process.execPath,[runner,'--suite','npm',...args]), /cannot override its manifest/)
+  await assert.rejects(exec(process.execPath,[runner,'--serial',...args]), /requires one worker/)
+  await assert.rejects(exec(process.execPath,[runner,'--suite','unknown']), /suite must be npm or ci/)
+})
