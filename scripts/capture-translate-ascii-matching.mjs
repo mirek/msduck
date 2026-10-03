@@ -694,6 +694,8 @@ function validateTokens(run) {
 function validateFourCaptures(actual,retained=false) {
   assert.equal(actual.hostname,referenceHostname,'explicit reference hostname')
   assertSameCapture(actual.exclusions,exclusions,'explicit capture exclusions')
+  const acquired={hostname:actual.hostname,exclusions:actual.exclusions,containers:actual.containers}
+  assert.equal(actual.acquiredSha256,createHash('sha256').update(JSON.stringify(acquired)+'\n').digest('hex'),'complete acquired raw integrity')
   assert.equal(actual.containers.length,2,'two containers')
   for(const container of actual.containers) {
     assert.equal(container.image,referenceImage)
@@ -705,6 +707,29 @@ function validateFourCaptures(actual,retained=false) {
   assertSameCapture(actual.relations,actual.containers.map(c=>c.runs.map(relationReport)),'complete observed relation reports')
   assert(actual.variationReport.every(x=>x.classification==='measured ASCII matching/output variability; unknown'),'unexpected stable-field variability; raw capture retained')
   if(retained && retainedDigests.length)assertSameCapture(actual.runDigests,retainedDigests,'immutable retained run contracts')
+}
+
+async function persistAcquiredCapture(actual,path) {
+  const raw=JSON.stringify(actual)+'\n'
+  assert(Buffer.byteLength(raw)<=captureByteLimit,'acquired capture byte bound')
+  await writeFile(path,raw,{flag:'wx'})
+  return createHash('sha256').update(raw).digest('hex')
+}
+async function testRawRetention(retained) {
+  const root=resolve('.tmp');await mkdir(root,{recursive:true})
+  const temporary=await mkdtemp(resolve(root,'translate-ascii-invalid-'))
+  try {
+    const invalid=structuredClone(retained.containers[0].runs[0][1])
+    invalid.result.errors.push({number:529,state:1,class:16,message:'retained synthetic server failure'})
+    const acquired={containers:[{runs:[[invalid]]}]}
+    const path=resolve(temporary,'acquired.raw.json')
+    const hash=await persistAcquiredCapture(acquired,path)
+    assert.throws(()=>gridRelation(invalid),/ASCII program must succeed/)
+    assert.equal(createHash('sha256').update(await readFile(path)).digest('hex'),hash,'failed relation leaves raw bytes intact')
+    assert.equal(JSON.parse(await readFile(path,'utf8')).containers[0].runs[0][0].result.errors.at(-1).number,529,'original invalid diagnostic retained')
+    await assert.rejects(persistAcquiredCapture(acquired,path),error=>error.code==='EEXIST','raw evidence is exclusive')
+    console.log('Invalid relation retains original acquired raw observations and exclusive destination')
+  } finally {await rm(temporary,{recursive:true,force:true})}
 }
 
 async function readRetained() {
@@ -841,6 +866,7 @@ if (selfTest) {
   if (!retained) throw new Error('no retained fixture')
   validateFourCaptures(retained,true)
   await testRawRows()
+  await testRawRetention(retained)
   await testObserver(retained)
   await testCliSafety()
   await testLifecycleSafety()
@@ -848,11 +874,12 @@ if (selfTest) {
   const retained = await readRetained()
   if (!retained) throw new Error('no retained fixture')
   validateFourCaptures(retained,true)
-  console.log('Retained fixture holds ' + retained.containers[0].runs[0].length + ' complete observations per run; '+retained.variationReport.length+' exact malformed-output differences; no global equality pass')
+  console.log('Retained fixture holds ' + retained.containers[0].runs[0].length + ' complete observations per run; '+retained.variationReport.length+' exact ASCII output differences; no exhaustive collation support claim')
 } else {
   if (writeFixture && existsSync(fixture)) throw new Error('refusing to overwrite retained fixture')
   await refuseFixtureOutput(output, fileURLToPath(fixture))
   await refuseFixtureOutput(output+'.comparison.json',fileURLToPath(fixture))
+  await refuseFixtureOutput(output+'.raw.json',fileURLToPath(fixture))
   await mkdir(resolve(output, '..'), { recursive: true })
   const containers = []
   for (let containerIndex = 0; containerIndex < (oneDatabase ? 1 : 2); containerIndex++) {
@@ -868,6 +895,10 @@ if (selfTest) {
     },{docker:ownedDocker,image:referenceImage})
   }
   const actual = { hostname:referenceHostname,exclusions,containers }
+  // Preserve the complete acquired observations before any semantic relation
+  // derivation can reject errors, sentinel behavior or independent evaluations.
+  const acquiredSha256=await persistAcquiredCapture(actual,output+'.raw.json')
+  actual.acquiredSha256=acquiredSha256
   if(!oneDatabase){actual.runDigests=runDigests(actual);actual.variationReport=variationReport(actual);actual.relations=containers.map(c=>c.runs.map(relationReport))}
   // Retain the raw artifact before validation so a failing capture can be inspected.
   const serialized=JSON.stringify(actual)+'\n'
@@ -881,11 +912,11 @@ if (selfTest) {
     const differences=compareCaptures(retained,actual)
     await writeFile(output+'.comparison.json',JSON.stringify({retainedDigests:retained.runDigests,reproductionDigests:actual.runDigests,differences})+'\n',{flag:'wx'})
     assert(differences.every(x=>x.classification==='measured ASCII matching/output variability; unknown'),'unexpected stable-field reproduction difference; raw comparison retained')
-    console.log('Reproduction stable fields unchanged; '+differences.length+' exact malformed-output differences retained without normalization')
+    console.log('Reproduction stable fields unchanged; '+differences.length+' exact ASCII output differences retained without normalization')
   }
   if (writeFixture) await writeFile(fixture, JSON.stringify(actual) + '\n', { flag: 'wx' })
   console.log('Captured ' + containers[0].runs[0].length + ' TRANSLATE ASCII matching observations' +
     (oneDatabase ? ' in one diagnostic database' : ' in four fresh databases across two containers') +
-    (retained && !oneDatabase ? '; stable fields reproduced, malformed variability retained' : '') +
+    (retained && !oneDatabase ? '; complete ASCII observations compared without normalization' : '') +
     (writeFixture ? '; wrote new retained fixture' : ''))
 }
