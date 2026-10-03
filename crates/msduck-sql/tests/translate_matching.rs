@@ -43,6 +43,56 @@ fn default_context() -> Context {
     )
     .unwrap()
 }
+
+#[test]
+fn collation_identity_accepts_ascii_case_variants() {
+    let mut props = context_properties();
+    props.collation.name.make_ascii_lowercase();
+    let context = Context::new(Domain::Nvarchar, props.clone()).unwrap();
+    let canonical = core_plan(&context, &context_properties());
+    context.validate_plan(&canonical).unwrap();
+    let lowercase = core_plan(&default_context(), &props);
+    default_context().validate_plan(&lowercase).unwrap();
+    let certificate = context.certificate(&[97], &[65]).unwrap();
+    assert_eq!(certificate.key(&[97]), certificate.key(&[65]));
+}
+
+#[test]
+fn matching_context_rejects_concat_ws_operation() {
+    let props = context_properties();
+    let arg = Argument::character(
+        CharacterType::new(Family::Nvarchar, Length::Max).unwrap(),
+        Label::Explicit(props.collation.name.clone()),
+    );
+    let mut plan = concat_ws::plan(
+        Function::ConcatWs,
+        &[arg.clone(), arg.clone(), arg],
+        &props.collation.name,
+        std::slice::from_ref(&props.collation),
+    )
+    .unwrap();
+    assert_eq!(
+        default_context().validate_plan(&plan),
+        Err(Error::ContradictoryContext)
+    );
+    // Public result metadata cannot turn another operation into TRANSLATE.
+    plan.flags |= 1;
+    assert_eq!(
+        default_context().validate_plan(&plan),
+        Err(Error::ContradictoryContext)
+    );
+}
+
+#[test]
+fn matching_context_rejects_contradictory_plan_case_metadata() {
+    let mut props = context_properties();
+    props.collation.case_sensitive = true;
+    let plan = core_plan(&default_context(), &props);
+    assert_eq!(
+        default_context().validate_plan(&plan),
+        Err(Error::ContradictoryContext)
+    );
+}
 fn hex(value: &str) -> Vec<u8> {
     assert_eq!(value.len() % 2, 0);
     value

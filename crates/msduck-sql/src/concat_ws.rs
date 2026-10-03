@@ -88,6 +88,12 @@ pub struct Plan {
     source_encodings: Vec<Encoding>,
     arguments: Vec<Argument>,
 }
+impl Plan {
+    /// The compiled operation, independent of public result metadata or values.
+    pub fn function(&self) -> Function {
+        self.function
+    }
+}
 fn unicode(kind: CharacterType) -> bool {
     matches!(kind.family(), Family::Nchar | Family::Nvarchar)
 }

@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use msduck_core::character::Family;
 
-use crate::concat_ws::{Collation, Encoding, Plan};
+use crate::concat_ws::{Collation, Encoding, Function, Plan};
 
 pub const ASCII_EVIDENCE_SHA256: &str =
     "d284c6a7c4d0ff6062492db2de91f6b8bedcd8f9620395ed10c02f0f2184c579";
@@ -131,7 +131,7 @@ impl Context {
     pub fn new(domain: Domain, properties: Properties) -> Result<Self, Error> {
         let profile = PROFILES
             .iter()
-            .position(|p| p.0 == properties.collation.name)
+            .position(|p| p.0.eq_ignore_ascii_case(&properties.collation.name))
             .ok_or(Error::UnknownContext)?;
         let (_, flags, version, sort_id, supplementary, case_sensitive, encoding) =
             PROFILES[profile];
@@ -160,12 +160,18 @@ impl Context {
     /// matching context. This never mutates metadata or admits a source domain
     /// conversion; original operands remain the binder's responsibility.
     pub fn validate_plan(&self, plan: &Plan) -> Result<(), Error> {
-        if !matches!(
-            (self.domain, plan.declaration.family()),
-            (Domain::Varchar, Family::Varchar) | (Domain::Nvarchar, Family::Nvarchar)
-        ) || plan.collation.name() != Some(self.properties.collation.name.as_str())
+        if plan.function() != Function::Translate
+            || !matches!(
+                (self.domain, plan.declaration.family()),
+                (Domain::Varchar, Family::Varchar) | (Domain::Nvarchar, Family::Nvarchar)
+            )
+            || !plan
+                .collation
+                .name()
+                .is_some_and(|name| name.eq_ignore_ascii_case(&self.properties.collation.name))
             || plan.supplementary != self.properties.collation.supplementary
             || plan.encoding != self.properties.collation.encoding
+            || (plan.flags & 2 != 0) != self.properties.collation.case_sensitive
         {
             return Err(Error::ContradictoryContext);
         }

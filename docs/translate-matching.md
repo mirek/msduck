@@ -53,6 +53,10 @@ The adapter must preserve original source declarations and perform admitted
 SQL conversion/native decoding before this boundary. It must use a TRANSLATE
 plan, validate context/plan before NULL, and preserve the existing core's
 payload validation, character-length 9828 diagnostic and empty-input precedence.
+The validation checks the stored plan operation and case-sensitivity result
+flag as well as domain, encoding and SC properties. Collation record identity
+uses ASCII case-insensitive names; every supplied catalog property still must
+match its retained profile. Public result flags cannot change plan operation.
 When evaluation requires matching, the certificate's `key` can be passed to
 `concat_ws::evaluate_with_keys`. That evaluator retains first mapping wins and
 one-pass replacement without chaining. Certificates are value-dependent
@@ -86,8 +90,8 @@ checks 9,284 admitted matching results, 1,036 explicit unknowns, 21,648 complete
 rows and 624 retained diagnostics. The additional 64 #841 prepared programs
 retain all 416 bindings: 260 admitted matching results, 12 explicit unknowns and
 80 exact SQL errors; NULL outcomes and descriptor-stable repeats remain intact.
-Six complete replay/context tests and an additional native 0081/client U+FFFD
-regression passed, along with strict SQL all-targets Clippy on the reused
-Rust 1.95 target. Full workspace/client/audit gates remain pending. Further
+Six complete replay/context tests, the native 0081/client U+FFFD regression and
+three plan/context validation regressions cover the public boundary. Full
+workspace/client/audit gates remain pending. Further
 focused test/gate evidence is recorded on the implementation PR. No general linguistic matching or runtime
 compatibility completion is claimed.
