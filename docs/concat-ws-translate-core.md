@@ -36,7 +36,7 @@ and ANSI UTF-8 evaluation do not acquire invented behavior. Character payloads
 must respect their declared widths and fixed-width padding. Core CP1252 encoding
 validates ANSI payloads; Unicode payloads retain isolated surrogate units.
 
-Seventeen private Rust tests pass using cached, compiler-compatible Linux
+Eighteen private Rust tests pass using cached, compiler-compatible Linux
 dependencies and isolated temporary binaries, with strict Clippy and formatting.
 They compare 21 ordinary character cases across all four captures (84 comparisons),
 26 declaration/collation cases (104 comparisons), 10 supplementary/UTF-8/mismatch
@@ -69,7 +69,12 @@ separate conversion adapters and independently established declaration widths.
 Tests supply already-converted INT text only where its width 12 is established.
 This does not certify those other formatters. Server setup, connection reuse,
 request execution, comparison/predicate lowering and completion tokens require
-root integration. ANSI UTF-8 result evaluation remains explicitly unsupported.
+root integration. ANSI UTF-8 result evaluation remains explicitly unsupported. A noncharacter
+TRANSLATE first operand with an explicit MAX conversion width also returns
+`UnknownConversion` until its result shape is established; it must not advertise
+8000 and silently truncate. The new VARBINARY(MAX) regression fails on checkpoint
+2adc076 and passes with that barrier. Reference task #814 is capturing this
+missing rule alongside individual source-format declarations.
 
 Full final-head checks, CI and review must pass before merge. Registration and
 runtime binding/execution need separate claimed successors. This deterministic

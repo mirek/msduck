@@ -1215,8 +1215,10 @@ fn character_rpc_declarations_and_values_match_all_captured_requests() {
                     .unwrap();
                 let parameters = request["parameters"].as_array().unwrap();
                 // Bind declarations before reading execution payloads. The one
-                // inferred tedious parameter has a captured wire declaration
-                // of NVARCHAR(1); the core never infers it from a current value.
+                // inferred tedious parameter is supplied as NVARCHAR(1),
+                // consistent with the captured 52-byte result descriptor.
+                // Input RPC declaration bytes are not retained in the fixture;
+                // the core never infers a width from a current value.
                 let arguments: Vec<_> = parameters
                     .iter()
                     .map(|parameter| {
@@ -1603,5 +1605,38 @@ fn incomplete_catalogs_and_conversion_contracts_remain_explicit_barriers() {
     assert_eq!(
         rules::evaluate(&p, &[text("x"), text("b"), text("c")], &default_match),
         Err(Error::InvalidPayload)
+    );
+}
+
+#[test]
+fn translate_noncharacter_max_conversion_never_fabricates_bounded_metadata() {
+    let arguments = vec![
+        Argument {
+            kind: Some(Type::Binary(
+                msduck_core::types::BinaryType::new(false, Length::Max).unwrap(),
+            )),
+            converted_width: Some(Length::Max),
+            collation: None,
+        },
+        literal(Some("a"), false).0,
+        literal(Some("b"), false).0,
+    ];
+    assert_eq!(
+        rules::plan(Function::Translate, &arguments, DEFAULT, &catalog()),
+        Err(Error::UnknownConversion)
+    );
+    // Character MAX remains established by the retained four captures.
+    let mut character = arguments.clone();
+    character[0] = arg(Family::Varchar, Length::Max);
+    let p = rules::plan(Function::Translate, &character, DEFAULT, &catalog()).unwrap();
+    assert_eq!(p.declaration.length(), Length::Max);
+    assert_eq!(
+        rules::evaluate(
+            &p,
+            &[text(&"a".repeat(9000)), text("a"), text("b")],
+            &default_match
+        )
+        .unwrap(),
+        text(&"b".repeat(9000))
     );
 }

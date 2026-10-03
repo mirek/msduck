@@ -279,6 +279,14 @@ pub fn plan_with_context(
             }
         }
         Function::Translate => {
+            // A converted MAX width does not establish the result declaration
+            // for an uncaptured noncharacter source. Do not fabricate a bounded
+            // declaration and silently truncate its converted payload.
+            if matches!(arguments[0].kind, Some(kind) if !matches!(kind, Type::Character(_)))
+                && arguments[0].converted_width == Some(Length::Max)
+            {
+                return Err(Error::UnknownConversion);
+            }
             if matches!(arguments[0].kind, Some(Type::Character(kind)) if kind.length() == Length::Max)
             {
                 Length::Max
