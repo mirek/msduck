@@ -996,12 +996,13 @@ fn initial_discovery_bounds_deep_wide_and_late_function_asts() {
     let mut q = query("SELECT CONCAT_WS(NULL,'a','b')");
     let leaf = query("SELECT 'a'").body;
     for _ in 0..65 {
-        q.body = Box::new(SetExpr::SetOperation {
+        let left = std::mem::replace(&mut q.body, leaf.clone());
+        *q.body = SetExpr::SetOperation {
             op: sqlparser::ast::SetOperator::Union,
             set_quantifier: sqlparser::ast::SetQuantifier::All,
-            left: q.body,
+            left,
             right: leaf.clone(),
-        });
+        };
     }
     assert!(matches!(
         binding::query(&c, &q, &Scope::default(), &context),
@@ -1033,4 +1034,32 @@ fn initial_discovery_bounds_deep_wide_and_late_function_asts() {
         binding::fields(&c, &q, &Scope::default(), &context),
         Err(Error::UnsupportedSyntax)
     ));
+    // No target functions: a later unsupported-set barrier cannot mask the
+    // initial discovery budget. Alternating wrappers carry cumulative depth.
+    for layers in [4, 10] {
+        let mut q = query("SELECT 'a'");
+        let template = q.clone();
+        let leaf = q.body.clone();
+        let mut body = leaf.clone();
+        for _ in 0..layers {
+            for _ in 0..7 {
+                body = Box::new(SetExpr::SetOperation {
+                    op: sqlparser::ast::SetOperator::Union,
+                    set_quantifier: sqlparser::ast::SetQuantifier::All,
+                    left: body,
+                    right: leaf.clone(),
+                });
+            }
+            let mut wrapped = template.clone();
+            wrapped.body = body;
+            body = Box::new(SetExpr::Query(wrapped));
+        }
+        q.body = body;
+        let result = binding::query(&c, &q, &Scope::default(), &context);
+        if layers == 4 {
+            assert!(result.unwrap().is_empty());
+        } else {
+            assert!(matches!(result, Err(Error::UnsupportedSyntax)));
+        }
+    }
 }

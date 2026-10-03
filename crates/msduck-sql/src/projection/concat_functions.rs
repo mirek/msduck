@@ -487,6 +487,7 @@ fn contains_functions(query: &Query) -> Result<bool, Error> {
         found: bool,
         depth: usize,
         nodes: usize,
+        query_padding: Vec<usize>,
     }
     impl Find {
         fn enter(&mut self) -> std::ops::ControlFlow<Error> {
@@ -500,9 +501,11 @@ fn contains_functions(query: &Query) -> Result<bool, Error> {
         }
         // Set-operation nesting has no Visitor hook of its own. Check it
         // iteratively before the generic visitor recurses into query.body.
-        fn body(&mut self, body: &SetExpr) -> std::ops::ControlFlow<Error> {
+        fn body(&mut self, body: &SetExpr) -> std::ops::ControlFlow<Error, usize> {
             let mut pending = vec![(body, 1usize)];
+            let mut maximum = 0;
             while let Some((body, depth)) = pending.pop() {
+                maximum = maximum.max(depth);
                 self.nodes += 1;
                 if self.depth + depth >= MAX_SCOPE_DEPTH || self.nodes > MAX_TRAVERSAL_NODES {
                     return std::ops::ControlFlow::Break(Error::UnsupportedSyntax);
@@ -512,17 +515,23 @@ fn contains_functions(query: &Query) -> Result<bool, Error> {
                     pending.push((left, depth + 1));
                 }
             }
-            std::ops::ControlFlow::Continue(())
+            std::ops::ControlFlow::Continue(maximum)
         }
     }
     impl Visitor for Find {
         type Break = Error;
         fn pre_visit_query(&mut self, query: &Query) -> std::ops::ControlFlow<Error> {
             self.enter()?;
-            self.body(&query.body)
+            let padding = self.body(&query.body)?;
+            // Generic traversal has no set-body enter/leave hooks. Carry its
+            // maximum depth conservatively through every descendant query,
+            // operand and table factor so alternating wrappers cannot reset it.
+            self.depth += padding;
+            self.query_padding.push(padding);
+            std::ops::ControlFlow::Continue(())
         }
         fn post_visit_query(&mut self, _: &Query) -> std::ops::ControlFlow<Error> {
-            self.depth -= 1;
+            self.depth -= self.query_padding.pop().expect("entered query") + 1;
             std::ops::ControlFlow::Continue(())
         }
         fn pre_visit_table_factor(&mut self, _: &TableFactor) -> std::ops::ControlFlow<Error> {
@@ -551,6 +560,7 @@ fn contains_functions(query: &Query) -> Result<bool, Error> {
         found: false,
         depth: 0,
         nodes: 0,
+        query_padding: Vec::new(),
     };
     match query.visit(&mut find) {
         std::ops::ControlFlow::Continue(()) => Ok(find.found),
