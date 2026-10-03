@@ -9964,6 +9964,25 @@
         "Fresh claim/receipt in completed existing concat reference worktree from approved main55e3917, preserving oldbranches/receipts. Private Linux reference staging/cached immutable Node deps and resource-limited containers; no new worktree/nativecache/agent, no shared runner synchronization/executable changes while root90700 ownslock. Preserve raw captures remotely and avoid duplicate localJSON; exactsource reproduction, source/link/syntax/diff/selftests and requiredCI/independent/Codexreview or fallback. Compare candidate829 exactapprovedsource privately if useful without changing its claimedfiles; report any counterexample with exactbits/rawevidence to its worker. Worker owns focusedPRreview/merge and registry/project/issuecompletion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkJWn"
+    },
+    {
+      "id": "concat-legacy-family-reference-v1",
+      "title": "Capture CONCAT_WS XML/variant and legacy Unicode conversion precedence",
+      "state": "ready",
+      "authorization": "Owner continuing goal; verified owner-enabled review4171687249 needs exact SQL Server mixed-source ground truth before fixing813.",
+      "scope": [
+        "scripts/capture-concat-legacy-family.mjs",
+        "reference/concat-legacy-family.json",
+        "docs/concat-legacy-family.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Capture focused CONCAT_WS XML and sql_variant rejected values/typedNULL with NTEXT, TEXT and IMAGE companion declarations before/after source, ANSI/Unicode separator and no-separator controls; retain actual sourceSQL and all rows/descriptors/errors/info/orderedtokens/rawDONE and connection reuse. Cover declaration-dependent conversion target and diagnostic precedence without assuming legacy types all reject or XMLalwayswins.",
+        "Use existing approved full bounded observer/lifecycle from815 or831 and pinned SQL2025 image, two freshDBs per two independent ownedcontainers plus independent reproduction. Exact four-run equality and raw fixtureSHA; output overwrite/alias guards and meaningful corruptions/CLI/fragment/lifecycle checks. Unknown outcomes are evidence, never normalized to desired diagnostics.",
+        "Fresh own claim in completed existingreferenceworktree; no new agents/worktrees/localnativecache or shared builder sync. PrivateLinux capture with cachedreadonlyNode deps, randomownedports/container cleanup and bounded resource use. ExactrequiredCI plus independent/Codexreview orauthorizedavailability fallback, worker-ownedmerge and registry/projectcompletion. No core/lib/engine edits;831oldbranch/receipt/rawsretained."
+      ],
+      "issue": 832,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkNJJ"
     }
   ]
 }
