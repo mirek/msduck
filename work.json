@@ -11204,7 +11204,7 @@
     {
       "id": "v025-openjson-isnull-v1",
       "title": "ISNULL/COALESCE/IIF/CASE over OPENJSON key/value columns",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03) to fix the v0.2.5 workload report (umbrella #864) until it lands in a published container; first-party gap found while verifying #875 (report: multirow UPDATE trigger passing inserted/deleted JSON snapshots through an OPENJSON FULL JOIN function). No external content.",
       "scope": [
         "src/openjson.rs",
@@ -11228,7 +11228,7 @@
     {
       "id": "v025-openjson-isnull-v1-apply",
       "title": "Update the apply-full-join ratchet for carrier-aware ISNULL",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03) to fix the v0.2.5 workload report (umbrella #864) until it lands in a published container; first-party gap found while verifying #875 (report: multirow UPDATE trigger passing inserted/deleted JSON snapshots through an OPENJSON FULL JOIN function). No external content. Companion of v025-openjson-isnull-v1: its carrier-aware ISNULL fixes the 'trigger diff of json snapshots' case that tests/compat/apply_full_join.test.mjs asserts as a known 245 difference, so that ratchet and docs/apply-full-join.md must change in the same PR.",
       "scope": [
         "tests/compat/apply_full_join.test.mjs",
