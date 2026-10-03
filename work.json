@@ -10147,6 +10147,35 @@
       ],
       "issue": 845,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkWsX"
+    },
+    {
+      "id": "client-verification-factory-v1",
+      "title": "Use optional client concurrency without weakening full-suite evidence",
+      "state": "backlog",
+      "authorization": "Owner asks for faster PR pickup/merge cycle, proper use of powerful linux.local and optional gitignored .env configuration. Current full gates spend about15minutes on507 serial client tests; task845 adds13 helper tests. Existing owner-reviewed sharding runner has historical four-worker404-test proof and a read-only d035 plan for507tests/17processes, not a current-suite performance pass. Implement optional verified concurrency after845; preserve all mandatory checks and claim boundaries.",
+      "scope": [
+        "package.json",
+        "scripts/run-client-tests.mjs",
+        "scripts/lib/client-suite.mjs",
+        "scripts/run-client-shards.mjs",
+        "tests/client-test-command.test.mjs",
+        "tests/client-shards.test.mjs",
+        "scripts/remote-build.mjs",
+        "tests/remote-build.test.mjs",
+        ".github/workflows/ci.yml",
+        "docs/client-sharding.md"
+      ],
+      "dependencies": [
+        "prepared-capture-helper-recovery-v1"
+      ],
+      "acceptance": [
+        "Create one explicit authoritative manifest for every file in the full npm client suite after845, including helper/comparison tests. npm test retains cargo build --workspace --all-targets and invokes a small client-command adapter: unset/1 concurrency preserves current serial behavior, optional MSDUCK_CLIENT_JOBS integer1..16 enables existing sharding. Remote runner passes validated configuration from gitignored .env; no hidden environment changes in deterministic Rust crates and no compile-feature churn. Align direct sharding defaults and optional full CI with the same manifest so new required test files cannot silently disappear; preserve fast required CI and scheduled/tag/manual full-job conditions.",
+        "Full-suite mode requires every assigned top-level identity once, passed==expected, zero failures/skips/TODO/cancellations/missing/repeated identities, terminal subprocesses and unchanged source/harness/executable hashes. Retain all nested results/rawlogs and intentional status distinctions; explicit focused shard-runner uses retain their existing semantics. Do not call skipped tests passing, filter failures, change SQL assertions/timeouts or reduce cases. Verify strict full-suite negatives, inherited NODE_TEST_CONTEXT, invalid config/quoting, process-group cancellation, provenance/artifact paths and serial behavior with meaningful harness tests.",
+        "Measure actual complete current-suite runs on immutable compatible Linux sources/binary under explicit builder ownership or an independently preserved executable snapshot. Obtain serial baseline and opt-in four-worker full npm test proof, recording revision, exact expected count, zero omissions/skips, hashes, walltime and hostload; historical404 timing and507 plan are not a substitute. If changed granularity or varyingload prevents strict speed comparison, say so. Diagnose concurrency-only failures without weakening tests. A two-CPU CI concurrency change requires its own full proof; otherwise retain its tested setting or serial fallback.",
+        "Activate only after845done and scopes disjoint, fresh claim in completed existing worktree, no new agents/native caches. Honor lock across shared sync/build and any clients using shared executable; private immutable client snapshots must include needed source/runtime dependencies and avoid shared path/port/DB races. Preserve raw artifacts in own .tmp/remote staging, clean only attributable temporary outputs. Required exact-head meaningfulJS/remote harness checks, full npm client evidence, CI and independent/Codex review or authorized failure fallback; claiming worker owns merge/completion. This speeds verification, not a claim of full SQL Server compatibility."
+      ],
+      "issue": 847,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkYFK"
     }
   ]
 }
