@@ -71,6 +71,11 @@ const cases = [
   ['two sources through function', [sides, foo], `SELECT i.id, x.[key], x.old_value, x.new_value, ISNULL(x.old_value, N'-') AS o, COALESCE(x.new_value, N'-') AS n FROM items i OUTER APPLY dbo.foo(i.lhs, i.rhs) x WHERE ISNULL(x.old_value, N'') <> ISNULL(x.new_value, N'') ORDER BY i.id, x.[key];`],
   ['trigger diff of json snapshots', [docs, foo, trigger], `UPDATE docs SET qty = qty + 1, note = CASE id WHEN 2 THEN NULL WHEN 4 THEN N'w' ELSE N'z' END WHERE id IN (1, 2, 4);${auditRead}`],
   ['trigger with unchanged rows', [docs, foo, trigger], `UPDATE docs SET name = name;${auditRead}`],
+  // Issue #901 follow-up: ISNULL over an aggregated (carrier) subquery inside concatenation.
+  ['concat isnull string_agg nvarchar', [], "SELECT N'text' + ISNULL((SELECT STRING_AGG(v, N',') FROM (VALUES (N'a'),(N'b')) t(v)), N'') AS s;"],
+  ['concat isnull string_agg varchar', [], "SELECT 'text' + ISNULL((SELECT STRING_AGG(v, ',') FROM (VALUES ('a'),('b')) t(v)), '') AS s;"],
+  ['concat isnull aggregate subquery', [], "SELECT N'text' + ISNULL((SELECT MAX(v) FROM (VALUES (N'a'),(N'b')) t(v)), N'') AS s, ISNULL((SELECT MIN(v) FROM (VALUES (N'abc')) t(v)), N'') AS m;"],
+  ['isnull stored unicode widths', ['CREATE TABLE tn(n NVARCHAR(3) NULL, c NCHAR(3) NULL); INSERT INTO tn VALUES (NULL, NULL), (N\'ab\', N\'ab\');'], "SELECT ISNULL(n, N'xyzw') AS a, ISNULL(c, N'q') AS b, N'<' + ISNULL(n, N'') + N'>' AS d, ISNULL((SELECT STRING_AGG(n, N',') FROM tn), N'') AS e FROM tn ORDER BY n;"],
 ].map(([name, setup, query]) => ({ name, setup, query }))
 
 const keep = result => canonical({

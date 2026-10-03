@@ -16,7 +16,7 @@ const keep = result => canonical({
   errors: result.errors.map(e => ({ number: e.number, class: e.class ?? null, state: e.state ?? null, message: e.message })),
   done: result.done.filter(d => d.kind === 'done' || d.kind === 'doneInProc').map(d => d.rowCount),
 })
-const reset = 'DROP TRIGGER IF EXISTS docs_audit; DROP FUNCTION IF EXISTS dbo.foo; DROP TABLE IF EXISTS items; DROP TABLE IF EXISTS audit; DROP TABLE IF EXISTS docs;'
+const reset = 'DROP TRIGGER IF EXISTS docs_audit; DROP FUNCTION IF EXISTS dbo.foo; DROP TABLE IF EXISTS items; DROP TABLE IF EXISTS audit; DROP TABLE IF EXISTS docs; DROP TABLE IF EXISTS tn;'
 
 // Remaining differences are outside this lowering (docs/openjson-isnull.md).
 // Each known case asserts msduck's complete current result, so any further
@@ -25,7 +25,7 @@ const knownResults = {}
 
 test('ISNULL, COALESCE, IIF and CASE over OPENJSON match the SQL Server capture', async t => {
   const connection = await start(t)
-  assert.equal(reference.cases.length, 17)
+  assert.equal(reference.cases.length, 21)
   // Every case runs, so one report lists all differences.
   const differences = []
   const differingFromReference = []

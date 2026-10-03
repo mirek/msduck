@@ -150,3 +150,46 @@ fn multirow_trigger_diffs_json_snapshots_through_isnull() {
         .to_vec()
     );
 }
+
+#[test]
+fn isnull_widths_keep_carriers_of_aggregated_subqueries() {
+    let (_server, mut session) = session();
+    // A carrier from an aggregate subquery used to reach the VARCHAR-only
+    // NVARCHAR width function and fail to bind.
+    batch(
+        &mut session,
+        "CREATE TABLE tn(n NVARCHAR(3) NULL, c NCHAR(3) NULL); INSERT INTO tn VALUES (NULL, NULL), (N'ab', N'ab');
+        SELECT N'text' + ISNULL((SELECT MAX(v) FROM (VALUES (N'a'),(N'b')) t(v)), N'') AS s,
+               ISNULL(n, N'xyzw') AS a, ISNULL(c, N'q') AS b, N'<' + ISNULL(n, N'') + N'>' AS d
+        INTO width_rows FROM tn",
+    );
+    assert_eq!(
+        rows(
+            &session,
+            4,
+            "SELECT __msduck_unicode_text(__msduck_carrier_input(s)), __msduck_unicode_text(__msduck_carrier_input(a)),
+                    __msduck_unicode_text(__msduck_carrier_input(b)), __msduck_unicode_text(__msduck_carrier_input(d))
+             FROM width_rows ORDER BY 2"
+        ),
+        [["textb", "ab", "ab ", "<ab>"], ["textb", "xyz", "q  ", "<>"]]
+            .map(|row| row.map(|v| Some(v.to_string())).to_vec())
+            .to_vec()
+    );
+    // Both overloads: VARCHAR text and carriers, NULLs and NCHAR padding.
+    assert_eq!(
+        rows(
+            &session,
+            4,
+            "SELECT __msduck_isnull_nvarchar_width('a🦆bc', 3),
+                    __msduck_unicode_text(__msduck_isnull_nvarchar_width(__msduck_pack_unicode('abcd'), 2)),
+                    __msduck_isnull_nchar_width('a', 3),
+                    __msduck_unicode_text(__msduck_isnull_nchar_width(NULL::STRUCT(__msduck_utf16le BLOB), 3))"
+        ),
+        vec![vec![
+            Some("a🦆".into()),
+            Some("ab".into()),
+            Some("a  ".into()),
+            None
+        ]]
+    );
+}

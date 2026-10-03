@@ -21,9 +21,8 @@ const reset = 'DROP TRIGGER IF EXISTS docs_audit; DROP FUNCTION IF EXISTS dbo.fo
 // Remaining differences are outside the APPLY lowering (docs/apply-full-join.md):
 // COALESCE over the OPENJSON key column widens to nvarchar(max), OPENJSON's
 // type column is int, duplicate derived-table column names are not rejected
-// (8156), the ambiguous column is DuckDB's binder error rather than 209, and
-// ISNULL over an OPENJSON value with an N'' fallback fails to convert. Each
-// known case asserts msduck's complete current result, so any further change,
+// (8156), and the ambiguous column is DuckDB's binder error rather than 209.
+// Each known case asserts msduck's complete current result, so any further change,
 // fix or regression, fails here.
 const lengths = changes => reference => {
   const result = structuredClone(reference)
@@ -43,7 +42,6 @@ const knownResults = {
   'qualified star of one side': lengths([[3, 4]]),
   'top and order in body': lengths([[1, max]]),
   'ambiguous column': () => ({"sets": [], "errors": [{"number": 50000, "class": 16, "state": 1, "message": "Binder Error: Ambiguous reference to column name \"key\" (use: \"l.key\" or \"r.key\")\n\nLINE 1: ...LECT i.id, x.\"key\" FROM items i CROSS JOIN LATERAL (SELECT \"key\" FROM (SELECT 1 AS __msduck_full_join_side WHERE EXISTS...\n                                                                      ^"}], "done": [null]}),
-  'trigger diff of json snapshots': () => ({"sets": [], "errors": [{"number": 245, "class": 16, "state": 1, "message": "Conversion Error: Type VARCHAR with value '' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: ...() || '.dbo.audit', 'key') AS \"__store_col_1\", __msduck_check_store_nvarchar(__msduck_carrier_input(__value2), -1, __msdu...\n                                                                         ^"}], "done": [null]}),
 }
 
 test('correlated FULL JOIN APPLY bodies match the SQL Server capture', async t => {

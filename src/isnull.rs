@@ -41,8 +41,9 @@ pub fn lower(expr: &mut Expr) -> Result<(), String> {
     function.name = ObjectName::from(vec![Ident::new("__msduck_isnull")]);
     if let Some(kind) = text_type {
         let (name, width) = match kind {
-            crate::tds::Type::Nchar(width) => ("__msduck_nchar_width", width),
-            crate::tds::Type::Nvarchar(width) => ("__msduck_nvarchar_width", width),
+            // A carrier first argument keeps its carrier through the width.
+            crate::tds::Type::Nchar(width) => ("__msduck_isnull_nchar_width", width),
+            crate::tds::Type::Nvarchar(width) => ("__msduck_isnull_nvarchar_width", width),
             crate::tds::Type::Char(width) => ("__msduck_char_width", width),
             crate::tds::Type::Varchar(u16::MAX) => return Ok(()),
             crate::tds::Type::Varchar(width) => ("__msduck_varchar_width", width),

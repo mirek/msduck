@@ -108,6 +108,3 @@ them exactly:
 - An ambiguous unqualified column returns DuckDB's binder error as 50000;
   SQL Server raises 209. This also happens with an INNER JOIN of two
   OPENJSON calls.
-- `ISNULL(openjson_value, N'')` fails with a conversion error (245) even
-  without APPLY. Because of this, the trigger variant that filters with ISNULL
-  fails. The same trigger filtering with `IS NULL OR <>` matches SQL Server.

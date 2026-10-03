@@ -1,7 +1,7 @@
 //! Native scalar functions preserve single evaluation and work in stored defaults.
 use duckdb::{
     Connection,
-    core::{DataChunkHandle, LogicalTypeHandle, LogicalTypeId},
+    core::{DataChunkHandle, Inserter, LogicalTypeHandle, LogicalTypeId},
     vscalar::{ScalarFunctionSignature, VScalar},
     vtab::arrow::WritableVector,
 };
@@ -91,6 +91,11 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
             cast_to_type(__msduck_unicode_text(CAST(replacement AS STRUCT(__msduck_utf16le BLOB))), first_value)
         ELSE cast_to_type(replacement, first_value) END)",
     )?;
+    // Unicode widths of an ISNULL result, which is a carrier when its first
+    // argument is one. Overloads keep the input's backend type without
+    // copying the (already expanded) ISNULL into a typeof dispatch.
+    db.register_scalar_function::<IsnullWidth<false>>("__msduck_isnull_nvarchar_width")?;
+    db.register_scalar_function::<IsnullWidth<true>>("__msduck_isnull_nchar_width")?;
     db.register_scalar_function::<crate::datalength::Bytes<0>>("__msduck_datalength_ansi")?;
     db.register_scalar_function::<crate::datalength::Bytes<1>>("__msduck_datalength_unicode")?;
     db.register_scalar_function::<crate::datalength::Bytes<2>>("__msduck_datalength_binary")?;
@@ -107,6 +112,105 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
 }
 
 struct Length<const BINARY: bool>;
+
+/// `__msduck_isnull_n[var]char_width(value, width)` for VARCHAR text and
+/// Unicode carriers: the first `width` UTF-16 units, padded with spaces
+/// when FIXED.
+struct IsnullWidth<const FIXED: bool>;
+impl<const FIXED: bool> VScalar for IsnullWidth<FIXED> {
+    type State = ();
+    fn invoke(
+        _: &(),
+        input: &mut DataChunkHandle,
+        output: &mut dyn WritableVector,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use msduck_core::character::{CastInput, CharacterType, ConvertedUnicode, Family, Length};
+        let len = input.len();
+        let source = input.flat_vector(0);
+        let carrier = crate::unicode_carrier::is_logical(&source.logical_type());
+        let widths = input.flat_vector(1);
+        let mut remaining = crate::unicode_carrier::CHUNK_LIMIT;
+        for row in 0..len {
+            if source.row_is_null(row as u64) || widths.row_is_null(row as u64) {
+                if carrier {
+                    let mut result = output.struct_vector();
+                    result.set_null(row);
+                    result.child(0, len).set_null(row);
+                } else {
+                    output.flat_vector().set_null(row);
+                }
+                continue;
+            }
+            let width = unsafe { widths.as_slice_with_len::<i32>(len)[row] };
+            let bounded = Length::Bounded(width.try_into().map_err(|_| "invalid Unicode width")?);
+            if !carrier {
+                // As __msduck_n[var]char_width: NCHAR pads before the prefix.
+                let target = CharacterType::new(Family::Nvarchar, bounded)
+                    .map_err(|_| "invalid Unicode width")?;
+                let bytes = crate::unicode_carrier::bytes(&source, row, len)?;
+                let mut text = std::str::from_utf8(&bytes)?.to_owned();
+                if FIXED {
+                    text.push_str(&" ".repeat(usize::try_from(width)?));
+                }
+                let value = target.cast(&text, CastInput::Text)?;
+                if value.len() > remaining {
+                    return Err("Unicode width output exceeds configured limit".into());
+                }
+                remaining -= value.len();
+                output.flat_vector().insert(row, value.as_ref());
+                continue;
+            }
+            let target = CharacterType::new(
+                if FIXED {
+                    Family::Nchar
+                } else {
+                    Family::Nvarchar
+                },
+                bounded,
+            )
+            .map_err(|_| "invalid Unicode width")?;
+            let data = input.struct_vector(0).child(0, len);
+            if data.row_is_null(row as u64) {
+                return Err("invalid Unicode carrier: NULL payload".into());
+            }
+            let encoded = crate::unicode_carrier::bytes(&data, row, len)?;
+            if encoded.len() % 2 != 0 {
+                return Err("invalid Unicode carrier: odd byte length".into());
+            }
+            let units: Vec<u16> = encoded
+                .chunks_exact(2)
+                .map(|b| u16::from_le_bytes([b[0], b[1]]))
+                .collect();
+            let ConvertedUnicode::Unicode(units) = target.cast_utf16(&units)? else {
+                return Err("Unicode width produced code-page text".into());
+            };
+            let size = units.len() * 2;
+            if size > remaining {
+                return Err("Unicode width output exceeds configured limit".into());
+            }
+            remaining -= size;
+            let encoded: Vec<u8> = units.iter().flat_map(|u| u.to_le_bytes()).collect();
+            output
+                .struct_vector()
+                .child(0, len)
+                .insert(row, encoded.as_slice());
+        }
+        Ok(())
+    }
+    fn signatures() -> Vec<ScalarFunctionSignature> {
+        let carrier = crate::unicode_carrier::kind;
+        vec![
+            ScalarFunctionSignature::exact(
+                vec![LogicalTypeId::Varchar.into(), LogicalTypeId::Integer.into()],
+                LogicalTypeId::Varchar.into(),
+            ),
+            ScalarFunctionSignature::exact(
+                vec![carrier(), LogicalTypeId::Integer.into()],
+                carrier(),
+            ),
+        ]
+    }
+}
 struct BitwiseNot;
 impl VScalar for BitwiseNot {
     type State = ();
