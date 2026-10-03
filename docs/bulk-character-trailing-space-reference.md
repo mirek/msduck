@@ -8,7 +8,7 @@ All original post-login request/reply packets, decoded descriptors, callbacks, e
 
 The collector retains reviewed task895 exchange/output/budget primitives and task899/906 retention guards, with immutable helper hashes. Capture and sidecar creation are exclusive, raw evidence precedes validation, and failures preserve partial evidence. Each complete capture uses four fresh databases on two owned random-port SQL Server 17.0.4065.4 containers and tedious 20 with packet size 512. Credentials and login frames are excluded.
 
-NUL/NBSP, arbitrary widths, other code pages/collations, conversion capacity rules outside the actual matrix and server integration remain unverified. Capture hashes, exact outcomes and reproduction evidence will be added after the full observations are pinned.
+NUL/NBSP, arbitrary widths, other code pages/collations, conversion capacity rules outside the actual matrix and server integration remain unverified. The finite matrix does not establish source padding where SQL Server rejects the source/target shape.
 
 ## Observed outcomes
 
@@ -30,4 +30,6 @@ node scripts/capture-bulk-character-trailing-space.mjs .tmp/trailing-space-fresh
 node --test tests/bulk_character_trailing_space_capture.test.mjs
 ```
 
-The 17 focused tests cover every matrix outcome, NULL and atomic failure, source/native/SQL-unit differences, complete fixed pins, uniform corruption, packet repartition, TYPE/SPID/status changes, alias/path guards and bounded raw retention. The derived-overflow negative uses 47 MiB of bounded raw input and preserves raw observations even when the complete comparison cannot fit. macOS Node 26.5.0 passed all 17 tests with zero failures/skips/TODO/cancellations; fresh Linux tests and the complete source-pinned four-run reproduction are pending.
+The 17 focused tests cover every matrix outcome, NULL and atomic failure, source/native/SQL-unit differences, complete fixed pins, uniform corruption, packet repartition, TYPE/SPID/status changes, alias/path guards and bounded raw retention. The derived-overflow negative uses 47 MiB of bounded raw input and preserves raw observations even when the complete comparison cannot fit. macOS Node 26.5.0 passed all 17 tests with zero failures/skips/TODO/cancellations; Linux Node 24.13.0 also passed all 17 tests (15,225.539 ms); macOS completed in 20,210.589 ms. Both runs had zero failures/skips/TODO/cancellations.
+
+The frozen collector completed a second full four-run capture, SHA256 `fcb2df1ba4da0072300e8f6c33916aa45694b96c2216a8c83132cdbc04ca758a` (3,979,079 bytes), with actual source SHA matching `805bebbe2a22373e1745dc17786d1763cd295097e24aa2be83a5cfb8ce5211aa`. All complete semantic, request/response payload and packet-framing pins match the retained fixture. The complete sidecar retains 4,649 raw differences, independently recomputed and checked in full; container/database identities and connection SPIDs remain raw. No differences were filtered or normalized away. Across the eight complete runs, all 96-case/192-row inventories and their exact outcomes agree under the independently pinned checks.
