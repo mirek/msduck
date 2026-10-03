@@ -37,7 +37,8 @@ impl Session {
             context: &self.session_context,
             parameters,
             next: 0,
-            insert_source: false,
+            returning: false,
+            depth: 0,
         };
         match node.visit(&mut lower) {
             ControlFlow::Continue(()) => Ok(()),
@@ -101,9 +102,11 @@ struct Lower<'a> {
     context: &'a SessionContext,
     parameters: &'a mut HashMap<String, Parameter>,
     next: usize,
-    /// Inside an INSERT with a query source: select items there, including
-    /// those of nested queries and CTEs, are written rather than returned.
-    insert_source: bool,
+    /// The statement being lowered is a SELECT, whose outermost select items
+    /// are returned to the client.
+    returning: bool,
+    /// Query nesting depth; 1 is the statement's own query.
+    depth: usize,
 }
 impl Lower<'_> {
     fn bind(&mut self, data_type: SqlType, value: ParameterValue) -> Expr {
@@ -385,14 +388,13 @@ fn select_items(set: &mut SetExpr, each: &mut dyn FnMut(&mut Expr) -> Result<()>
 impl VisitorMut for Lower<'_> {
     type Break = anyhow::Error;
     /// A selected `SQL_VARIANT_PROPERTY` of a session value is a sql_variant.
-    /// An INSERT source's select items are writes, refused like other
-    /// implicit sql_variant writes.
+    /// Only the outermost select items of a SELECT are returned as
+    /// sql_variant. Elsewhere (derived tables, CTEs, subqueries, INSERT
+    /// sources) the value would flow into conversions msduck's sysname
+    /// carrier does not support, so it is refused like other implicit uses.
     fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<anyhow::Error> {
-        // `WITH ... INSERT`: the CTEs are visited before the INSERT itself.
-        if matches!(query.body.as_ref(), SetExpr::Insert(_)) {
-            self.insert_source = true;
-        }
-        if self.insert_source {
+        self.depth += 1;
+        if self.depth != 1 || !self.returning || matches!(query.body.as_ref(), SetExpr::Insert(_)) {
             return ControlFlow::Continue(());
         }
         match select_items(&mut query.body, &mut |expr| self.select_property(expr)) {
@@ -400,11 +402,15 @@ impl VisitorMut for Lower<'_> {
             Err(error) => ControlFlow::Break(error),
         }
     }
+    fn post_visit_query(&mut self, _query: &mut Query) -> ControlFlow<anyhow::Error> {
+        self.depth -= 1;
+        ControlFlow::Continue(())
+    }
     /// Session values are read when a statement runs; a persisted definition
     /// (view, default, routine, trigger) would freeze today's value instead.
     fn pre_visit_statement(&mut self, statement: &mut Statement) -> ControlFlow<anyhow::Error> {
-        if matches!(statement, Statement::Insert(insert) if insert.source.is_some()) {
-            self.insert_source = true;
+        if self.depth == 0 {
+            self.returning = matches!(statement, Statement::Query(_));
         }
         let persisted = matches!(
             statement,
@@ -420,12 +426,6 @@ impl VisitorMut for Lower<'_> {
             return ControlFlow::Break(anyhow::anyhow!(
                 "unsupported SESSIONPROPERTY or SESSION_CONTEXT in a persisted definition"
             ));
-        }
-        ControlFlow::Continue(())
-    }
-    fn post_visit_statement(&mut self, statement: &mut Statement) -> ControlFlow<anyhow::Error> {
-        if matches!(statement, Statement::Insert(_)) {
-            self.insert_source = false;
         }
         ControlFlow::Continue(())
     }

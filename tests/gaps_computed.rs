@@ -527,6 +527,11 @@ fn session_context_properties_in_queries() {
         "INSERT t (base) SELECT (SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'))",
         "INSERT t (base) SELECT v FROM (SELECT SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType') AS v) s",
         "WITH s AS (SELECT SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType') AS v) INSERT t (base) SELECT v FROM s",
+        // SQL Server converts these; msduck's sysname carrier would convert
+        // to its struct text, so nested selected properties are refused.
+        "SELECT CONVERT(nvarchar(128), p) FROM (SELECT SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType') AS p) s",
+        "INSERT t (base) SELECT CONVERT(nvarchar(128), p) FROM (SELECT SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType') AS p) s",
+        "SELECT (SELECT SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType'))",
         "DECLARE @v nvarchar(128); SET @v = SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'k'), 'BaseType')",
     ] {
         assert_eq!(fails(&mut s, sql).0, 40515, "{sql}");

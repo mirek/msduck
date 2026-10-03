@@ -171,7 +171,8 @@ After RESETCONNECTION, the session context is empty, so the defaults are NULL.
 - **sql_variant results.** ISNULL, COALESCE, NULLIF, IIF and CASE results built
   from `SESSION_CONTEXT` or its `SQL_VARIANT_PROPERTY` are `sql_variant`, so a
   default of another column type fails with 257 (state 3) when the table is
-  created, as captured. So does an `ISNULL` whose replacement is such a
+  created, as captured. `ISNULL(NULL, SESSION_CONTEXT(...))` has the
+  replacement's type and fails the same way. So does an `ISNULL` whose replacement is such a
   sql_variant when the first argument's type is evident (a literal or an
   explicit conversion); the message names that type. Converting first, as in
   `ISNULL(CONVERT(nvarchar(10), SESSION_CONTEXT(N'foo')), N'none')`, works.
@@ -227,9 +228,14 @@ that uses them sees the session that queries or inserts.
   base type text; SQL Server compares it under the case-insensitive server
   collation, so `= N'NVARCHAR'` matches there and not in msduck.
 - **Other positions in queries.** A `SQL_VARIANT_PROPERTY` of a session value
-  nested in another expression that is not a comparison or explicit
-  conversion (for example `ISNULL(SQL_VARIANT_PROPERTY(...), N'x')`) is
-  refused with 40515.
+  is returned as a `sql_variant` only from the outermost select list of a
+  SELECT. Nested in another expression that is not a comparison or explicit
+  conversion (for example `ISNULL(SQL_VARIANT_PROPERTY(...), N'x')`), or
+  selected by a derived table, CTE or subquery, it is refused with 40515.
+  SQL Server accepts, for example,
+  `SELECT CONVERT(nvarchar(128), p) FROM (SELECT SQL_VARIANT_PROPERTY(...) AS p) s`.
+  msduck's sysname `sql_variant` carrier would convert to its internal struct
+  text there, so it is refused instead.
 
 **Not covered by this work:**
 

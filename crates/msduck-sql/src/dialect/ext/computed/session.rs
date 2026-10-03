@@ -407,7 +407,10 @@ fn variant_result(expr: &Expr) -> bool {
                     _ => None,
                 })
                 .collect();
+            let untyped_null = |expr: &&Expr| matches!(expr, Expr::Value(value) if matches!(value.value, Value::Null));
             let candidates: &[&Expr] = match name.to_ascii_uppercase().as_str() {
+                // ISNULL(NULL, x) has the replacement's type.
+                "ISNULL" if arguments.first().is_some_and(untyped_null) => &arguments,
                 "ISNULL" | "NULLIF" => arguments.get(..1).unwrap_or_default(),
                 "COALESCE" => &arguments,
                 "IIF" => arguments.get(1..).unwrap_or_default(),
@@ -847,6 +850,7 @@ mod tests {
         for sql in [
             "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(SESSION_CONTEXT(N'foo'), N'x')))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT (COALESCE(N'x', SESSION_CONTEXT(N'foo'))))",
+            "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(NULL, SESSION_CONTEXT(N'foo'))))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT (CASE WHEN 1 = 1 THEN SESSION_CONTEXT(N'foo') END))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT IIF(1 = 1, N'x', SESSION_CONTEXT(N'foo')))",
             "CREATE TABLE t (v nvarchar(128) DEFAULT (SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'BaseType')))",
