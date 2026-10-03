@@ -9723,7 +9723,7 @@
       "id": "quoted-client-standard-entry-v1",
       "title": "Register quoted regressions with matching CI shard identities",
       "issue": 811,
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner continuing goal and verified Codex P1 on ownerPR810.",
       "scope": [
         "tests/tedious.test.mjs",
