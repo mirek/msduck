@@ -10176,6 +10176,173 @@
       ],
       "issue": 847,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkYFK"
+    },
+    {
+      "id": "limits-outer-dml-top-v1",
+      "title": "Support TOP in UPDATE and DELETE",
+      "scope": [
+        "src/engine/ext/outer_dml.rs",
+        "src/engine/ext/outer_dml/",
+        "crates/msduck-sql/src/dialect/ext/outer_dml.rs",
+        "crates/msduck-sql/src/dialect/ext/outer_dml/",
+        "tests/compat/outer_dml.test.mjs",
+        "tests/gaps_outer_dml.rs",
+        "docs/gaps-outer_dml.md",
+        "scripts/capture-gaps-outer_dml.mjs",
+        "reference/gaps-outer_dml.json"
+      ],
+      "issue": 848,
+      "acceptance": [
+        "UPDATE TOP (n) ... and DELETE TOP (n) ... (n literal, variable or parameter; also PERCENT) affect exactly n (or the SQL Server rounded percentage of) qualifying rows, with and without FROM/joins, with correct @@ROWCOUNT and OUTPUT/OUTPUT INTO rows; invalid TOP values and ORDER BY in UPDATE/DELETE give SQL Server error numbers.",
+        "Which rows are chosen is unspecified in SQL Server; tests assert counts and that the chosen rows qualify, not a specific row set.",
+        "Use the extension hooks (docs/extension-hooks.md). Capture the pinned SQL Server reference container for uncertain behavior and add the cases to the module capture script and reference file. Add tedious (tests/compat) and Rust tests asserting rows, error numbers/classes/states, update the module docs page limits, and run the AGENTS.md checks (fmt, workspace tests, clippy with toolchain 1.95, npm test). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge with the exact head, publish done. Files outside this scope need a disjoint companion task published under the same authorization."
+      ],
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Decomposed by the queue-publishing session from the remaining limits listed in docs/workload-gaps.md at main 2fde4d4. No external submission is input.",
+      "dependencies": [],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkY_J"
+    },
+    {
+      "id": "limits-json-root-v1",
+      "title": "FOR JSON ROOT without a name",
+      "scope": [
+        "src/engine/ext/json_string.rs",
+        "src/engine/ext/json_string/",
+        "crates/msduck-sql/src/dialect/ext/json_string.rs",
+        "crates/msduck-sql/src/dialect/ext/json_string/",
+        "tests/compat/json_string.test.mjs",
+        "tests/gaps_json_string.rs",
+        "docs/gaps-json_string.md",
+        "scripts/capture-gaps-json_string.mjs",
+        "reference/gaps-json_string.json"
+      ],
+      "issue": 849,
+      "acceptance": [
+        "FOR JSON PATH/AUTO with ROOT (no name) and ROOT(name) parse and produce SQL Server text, including combinations with INCLUDE_NULL_VALUES and errors for ROOT with WITHOUT_ARRAY_WRAPPER; empty results match SQL Server.",
+        "Use the extension hooks (docs/extension-hooks.md). Capture the pinned SQL Server reference container for uncertain behavior and add the cases to the module capture script and reference file. Add tedious (tests/compat) and Rust tests asserting rows, error numbers/classes/states, update the module docs page limits, and run the AGENTS.md checks (fmt, workspace tests, clippy with toolchain 1.95, npm test). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge with the exact head, publish done. Files outside this scope need a disjoint companion task published under the same authorization."
+      ],
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Decomposed by the queue-publishing session from the remaining limits listed in docs/workload-gaps.md at main 2fde4d4. No external submission is input.",
+      "dependencies": [],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkY_S"
+    },
+    {
+      "id": "limits-identifiers-reserved-v1",
+      "title": "Reject reserved T-SQL keywords as unquoted identifiers",
+      "scope": [
+        "src/engine/ext/identifiers.rs",
+        "src/engine/ext/identifiers/",
+        "crates/msduck-sql/src/dialect/ext/identifiers.rs",
+        "crates/msduck-sql/src/dialect/ext/identifiers/",
+        "tests/compat/identifiers.test.mjs",
+        "tests/gaps_identifiers.rs",
+        "docs/gaps-identifiers.md",
+        "scripts/capture-gaps-identifiers.mjs",
+        "reference/gaps-identifiers.json"
+      ],
+      "issue": 850,
+      "acceptance": [
+        "Unquoted SQL Server reserved keywords (documented reserved list) used as table, column, alias or variable-less identifiers fail with error 156 (Incorrect syntax near the keyword ...) and the SQL Server class/state; bracketed or quoted forms and contextual non-reserved words (offset, at, etc.) keep working.",
+        "Do not regress the existing contextual-identifier coverage; capture representative statements from the reference container.",
+        "Use the extension hooks (docs/extension-hooks.md). Capture the pinned SQL Server reference container for uncertain behavior and add the cases to the module capture script and reference file. Add tedious (tests/compat) and Rust tests asserting rows, error numbers/classes/states, update the module docs page limits, and run the AGENTS.md checks (fmt, workspace tests, clippy with toolchain 1.95, npm test). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge with the exact head, publish done. Files outside this scope need a disjoint companion task published under the same authorization."
+      ],
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Decomposed by the queue-publishing session from the remaining limits listed in docs/workload-gaps.md at main 2fde4d4. No external submission is input.",
+      "dependencies": [],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkY_d"
+    },
+    {
+      "id": "limits-applock-lock-timeout-v1",
+      "title": "SET LOCK_TIMEOUT and @@LOCK_TIMEOUT for application locks",
+      "scope": [
+        "src/engine/ext/applock.rs",
+        "src/engine/ext/applock/",
+        "crates/msduck-sql/src/dialect/ext/applock.rs",
+        "crates/msduck-sql/src/dialect/ext/applock/",
+        "tests/compat/applock.test.mjs",
+        "tests/gaps_applock.rs",
+        "docs/gaps-applock.md",
+        "scripts/capture-gaps-applock.mjs",
+        "reference/gaps-applock.json"
+      ],
+      "issue": 851,
+      "acceptance": [
+        "SET LOCK_TIMEOUT n (-1, 0, positive, invalid values) is accepted per session, @@LOCK_TIMEOUT reports it (default -1), and it is restored like other SET options at procedure exit where SQL Server does.",
+        "sp_getapplock without @LockTimeout honors the session lock timeout (return codes and wait behavior match SQL Server); APPLOCK_TEST unaffected. A session blocked in an applock wait observes Attention cancellation if feasible within the module, else document it.",
+        "Use the extension hooks (docs/extension-hooks.md). Capture the pinned SQL Server reference container for uncertain behavior and add the cases to the module capture script and reference file. Add tedious (tests/compat) and Rust tests asserting rows, error numbers/classes/states, update the module docs page limits, and run the AGENTS.md checks (fmt, workspace tests, clippy with toolchain 1.95, npm test). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge with the exact head, publish done. Files outside this scope need a disjoint companion task published under the same authorization."
+      ],
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Decomposed by the queue-publishing session from the remaining limits listed in docs/workload-gaps.md at main 2fde4d4. No external submission is input.",
+      "dependencies": [],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkY_y"
+    },
+    {
+      "id": "limits-merge-triggers-v1",
+      "title": "MERGE fires DML triggers",
+      "scope": [
+        "src/engine/ext/merge.rs",
+        "src/engine/ext/merge/",
+        "crates/msduck-sql/src/dialect/ext/merge.rs",
+        "crates/msduck-sql/src/dialect/ext/merge/",
+        "tests/compat/merge.test.mjs",
+        "tests/gaps_merge.rs",
+        "docs/gaps-merge.md",
+        "scripts/capture-gaps-merge.mjs",
+        "reference/gaps-merge.json",
+        "src/engine/ext/triggers.rs",
+        "src/engine/ext/triggers/",
+        "crates/msduck-sql/src/dialect/ext/triggers.rs",
+        "crates/msduck-sql/src/dialect/ext/triggers/",
+        "tests/compat/triggers.test.mjs",
+        "tests/gaps_triggers.rs",
+        "docs/gaps-triggers.md",
+        "scripts/capture-gaps-triggers.mjs",
+        "reference/gaps-triggers.json"
+      ],
+      "issue": 852,
+      "acceptance": [
+        "MERGE fires the target table AFTER INSERT/UPDATE/DELETE triggers once per action type that SQL Server fires (including when zero rows are affected by an action) with correct inserted/deleted pseudo-tables; INSTEAD OF trigger and disabled trigger behavior match SQL Server or are refused explicitly.",
+        "Trigger errors and ROLLBACK inside a trigger fired by MERGE match SQL Server diagnostics and leave the statement atomic; @@ROWCOUNT and OUTPUT of the MERGE are unaffected.",
+        "Use the extension hooks (docs/extension-hooks.md). Capture the pinned SQL Server reference container for uncertain behavior and add the cases to the module capture script and reference file. Add tedious (tests/compat) and Rust tests asserting rows, error numbers/classes/states, update the module docs page limits, and run the AGENTS.md checks (fmt, workspace tests, clippy with toolchain 1.95, npm test). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge with the exact head, publish done. Files outside this scope need a disjoint companion task published under the same authorization."
+      ],
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Decomposed by the queue-publishing session from the remaining limits listed in docs/workload-gaps.md at main 2fde4d4. No external submission is input.",
+      "dependencies": [],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkY__"
+    },
+    {
+      "id": "limits-procedure-error-context-v1",
+      "title": "Error tokens carry procedure name and line number",
+      "scope": [
+        "src/engine/ext/procedures.rs",
+        "src/engine/ext/procedures/",
+        "crates/msduck-sql/src/dialect/ext/procedures.rs",
+        "crates/msduck-sql/src/dialect/ext/procedures/",
+        "tests/compat/procedures.test.mjs",
+        "tests/gaps_procedures.rs",
+        "docs/gaps-procedures.md",
+        "scripts/capture-gaps-procedures.mjs",
+        "reference/gaps-procedures.json",
+        "src/engine/ext/functions.rs",
+        "src/engine/ext/functions/",
+        "crates/msduck-sql/src/dialect/ext/functions.rs",
+        "crates/msduck-sql/src/dialect/ext/functions/",
+        "tests/compat/functions.test.mjs",
+        "tests/gaps_functions.rs",
+        "docs/gaps-functions.md",
+        "scripts/capture-gaps-functions.mjs",
+        "reference/gaps-functions.json"
+      ],
+      "issue": 853,
+      "acceptance": [
+        "Errors raised inside stored procedures (RAISERROR, THROW, runtime errors) and user functions report the module name in the ERROR token ProcName and the SQL Server line number (relative to the module batch), and ERROR_PROCEDURE()/ERROR_LINE() in CATCH match; top-level batch errors keep empty ProcName and batch line numbers.",
+        "Verify the token fields through tedious (err.procName, err.lineNumber) against reference captures; nested procedure calls report the innermost module.",
+        "Use the extension hooks (docs/extension-hooks.md). Capture the pinned SQL Server reference container for uncertain behavior and add the cases to the module capture script and reference file. Add tedious (tests/compat) and Rust tests asserting rows, error numbers/classes/states, update the module docs page limits, and run the AGENTS.md checks (fmt, workspace tests, clippy with toolchain 1.95, npm test). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge with the exact head, publish done. Files outside this scope need a disjoint companion task published under the same authorization."
+      ],
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Decomposed by the queue-publishing session from the remaining limits listed in docs/workload-gaps.md at main 2fde4d4. No external submission is input.",
+      "dependencies": [],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkZAG"
     }
   ]
 }
