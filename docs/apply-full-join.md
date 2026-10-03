@@ -41,9 +41,13 @@ WHERE (s.side = 1 OR NOT EXISTS (SELECT 1 FROM A WHERE c)) AND (w)
   match, as in SQL Server.
 - Both operands keep their aliases. Qualified and unqualified columns,
   `alias.*`, GROUP BY, aggregates, TOP and ORDER BY keep binding as before.
-- An unqualified `*` excludes the internal side column.
-- An unaliased B joins with `ON (s.side = 1 AND (c)) OR s.side = 2` instead.
-  That form fails in DuckDB when `c` references the outer query.
+- An unqualified `*` excludes the internal side column by its qualified
+  name. The side alias avoids every relation name and qualifier in the
+  SELECT, so it never shadows an outer alias.
+- An unaliased table B uses its base name as the derived alias. When the
+  SELECT uses three-part names, or B is an unaliased parenthesized join, B
+  joins with `ON (s.side = 1 AND (c)) OR s.side = 2` instead. That form
+  fails in DuckDB when `c` references the outer query.
 
 The following FULL JOINs are left unchanged:
 
