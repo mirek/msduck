@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFile} from 'node:fs/promises'
-import {command} from '../scripts/run-client-tests.mjs'
+import {command, runCommand} from '../scripts/run-client-tests.mjs'
 import {npmFiles, ciExtras, diagnosticFiles, suiteFiles, clientJobs, strictResult} from '../scripts/lib/client-suite.mjs'
 
 test('npm adapter retains a single serial invocation by default and passes opt-in workers as data', () => {
@@ -112,4 +112,53 @@ test('separately labelled CI diagnostics retain intentional skips without a full
   assert.equal(report.provenance.strictFullSuite,false)
   assert.equal(report.provenance.suite,'ci-replays')
   assert.equal(report.expected,2); assert.equal(report.passed,1); assert.equal(report.skipped,1)
+})
+
+
+import {EventEmitter} from 'node:events'
+test('Windows default and one-job commands retain the direct six-file serial invocation', () => {
+  for (const value of [undefined, '1']) {
+    const selected = command({MSDUCK_CLIENT_JOBS:value,NODE_TEST_CONTEXT:'child-v8'}, [], 'win32')
+    assert.deepEqual(selected.args,['--test',...npmFiles])
+    assert.equal(selected.env.NODE_TEST_CONTEXT,undefined)
+  }
+  assert.throws(()=>command({MSDUCK_CLIENT_JOBS:'4'}, [], 'win32'),/requires POSIX/)
+  for (const value of [undefined,'1','4','16']) {
+    assert.deepEqual(command({MSDUCK_CLIENT_JOBS:value}, [], 'linux').args,
+      command({MSDUCK_CLIENT_JOBS:value}, [], 'darwin').args)
+  }
+})
+
+test('actual portable serial launch propagates assertion failure and removes signal handlers', async t => {
+  const dir = await snapshot(t, "test('failure',()=>{throw Error('portable retained failure')})")
+  const selected = command({...process.env,MSDUCK_CLIENT_JOBS:'1',NODE_TEST_CONTEXT:'child-v8'}, [], 'win32')
+  selected.args = selected.args.map(x=>npmFiles.includes(x)?join(dir,x):x)
+  const signals = new EventEmitter()
+  assert.notEqual(await runCommand(selected,{signals,stdio:'ignore'}),0)
+  assert.equal(signals.listenerCount('SIGINT'),0)
+  assert.equal(signals.listenerCount('SIGTERM'),0)
+})
+
+test('actual portable serial launch forwards cancellation and terminates its test worker', {timeout:10000}, async t => {
+  const dir = await snapshot(t)
+  const marker = join(dir,'ready')
+  await writeFile(join(dir,npmFiles[0]), `import {test} from 'node:test';import {writeFileSync} from 'node:fs';test('wait',async()=>{writeFileSync(${JSON.stringify(marker)},String(process.pid));setInterval(()=>{},1000);await new Promise(()=>{})});`)
+  const selected = command({...process.env,MSDUCK_CLIENT_JOBS:'1',NODE_TEST_CONTEXT:'child-v8'}, [], 'win32')
+  selected.args = selected.args.map(x=>npmFiles.includes(x)?join(dir,x):x)
+  const signals = new EventEmitter()
+  const terminal = runCommand(selected,{signals,stdio:'ignore'})
+  let pid
+  t.after(()=>{if(pid){try{process.kill(pid,'SIGKILL')}catch{}}})
+  for(let i=0;i<250&&!pid;i++) {
+    try {pid=Number(await readFile(marker,'utf8'))}catch{await new Promise(r=>setTimeout(r,20))}
+  }
+  assert(pid)
+  signals.emit('SIGTERM')
+  assert.notEqual(await terminal,0)
+  for(let i=0;i<50;i++) {
+    try{process.kill(pid,0)}catch{pid=undefined;break}
+    await new Promise(r=>setTimeout(r,20))
+  }
+  assert.equal(pid,undefined,'cancelled serial test worker is terminal')
+  assert.equal(signals.listenerCount('SIGTERM'),0)
 })

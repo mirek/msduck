@@ -70,9 +70,17 @@ reference and executable hashes are rechecked, including the source file list.
 Added/deleted or changed inputs fail the summary. Top-level counts are distinct from nested
 tests; the complete nested results remain in TAP logs.
 
-SIGINT/SIGTERM cancels work, terminates process groups and escalates to SIGKILL
+For the POSIX runner, SIGINT/SIGTERM cancels work, terminates process groups and escalates to SIGKILL
 for test workers after two seconds. Discovery cancellation kills its isolated
-process group immediately. POSIX is currently required. Each subprocess clears
+process group immediately. POSIX is required for sharding and strict full accounting. On Windows,
+`npm test` with unset/1 client jobs retains the previous direct `node --test`
+invocation over the same six manifest files and Node's ordinary exit status;
+parallel jobs are explicitly unsupported. This portable serial path clears the
+inherited worker marker and forwards cancellation, without claiming the POSIX
+runner's strict inventory/provenance guarantees on Windows. Platform-selection
+and actual portable-command failure/cancellation regressions run on the available
+Linux/macOS harnesses; they do not establish a Windows native-server pass.
+Each subprocess clears
 Node's inherited internal test-worker marker, which otherwise causes recursive
 runners to silently skip files; coverage checking also detects that failure.
 
@@ -153,8 +161,18 @@ each run. Raw evidence was copied before the shared builder handoff. An earlier
 partial run on predecessor `25eb55b` was stopped for the diagnostic-group
 correction, exited 255 and remains partial evidence; it is not a pass.
 
-All 22 command/shard/remote harness regressions pass independently. Their small
+All 25 command/shard/remote harness regressions pass after the portability
+correction. The original 22 passed at the benchmark checkpoint. Their small
 private snapshots contain explicitly inert executable markers for harness
 accounting and never substitute for the real Cargo/native benchmark above.
 The tiny offline Cargo fingerprint probe cleans its own temporary output.
 These checks establish verification behavior, not full SQL Server compatibility.
+
+
+A subsequent verified Codex finding corrected the Windows default command:
+`52578c8` still routed Windows through the POSIX-only runner. The benchmark
+checkpoint `bee9` remains the measured source above. The final portability
+adapter changes one executable input, so those captures are not relabelled as
+identical final-source proofs. A fresh complete Linux npm validation is queued
+for the corrected frozen source after the current builder owner releases it;
+this does not repeat the controlled-input serial/four-worker measurement.
