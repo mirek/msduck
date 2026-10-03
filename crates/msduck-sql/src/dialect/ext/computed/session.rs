@@ -407,10 +407,23 @@ fn variant_result(expr: &Expr) -> bool {
                     _ => None,
                 })
                 .collect();
-            let untyped_null = |expr: &&Expr| matches!(expr, Expr::Value(value) if matches!(value.value, Value::Null));
+            let untyped_null = |expr: &&Expr| matches!(unnested(expr), Expr::Value(value) if matches!(value.value, Value::Null));
             let candidates: &[&Expr] = match name.to_ascii_uppercase().as_str() {
                 // ISNULL(NULL, x) has the replacement's type.
                 "ISNULL" if arguments.first().is_some_and(untyped_null) => &arguments,
+                // ISNULL(CAST(... AS sql_variant), x) is a sql_variant; only
+                // counted when x reads session state, so other defaults are
+                // unaffected.
+                "ISNULL"
+                    if arguments
+                        .first()
+                        .is_some_and(|check| explicit_variant(check))
+                        && arguments
+                            .get(1)
+                            .is_some_and(|replacement| variant_result(replacement)) =>
+                {
+                    return true;
+                }
                 "ISNULL" | "NULLIF" => arguments.get(..1).unwrap_or_default(),
                 "COALESCE" => &arguments,
                 "IIF" => arguments.get(1..).unwrap_or_default(),
@@ -509,7 +522,29 @@ pub fn value_operands(expr: &mut Expr) -> Vec<&mut Expr> {
 
 /// The declared type name of a constant or explicitly converted expression,
 /// as conversion errors print it; `None` when it is not evident.
+fn unnested(mut expr: &Expr) -> &Expr {
+    while let Expr::Nested(inner) = expr {
+        expr = inner;
+    }
+    expr
+}
+
+/// An explicit conversion to sql_variant.
+fn explicit_variant(expr: &Expr) -> bool {
+    match unnested(expr) {
+        Expr::Cast { data_type, .. }
+        | Expr::Convert {
+            data_type: Some(data_type),
+            ..
+        } => crate::variant_pack::is_variant(data_type),
+        _ => false,
+    }
+}
+
 fn static_type_name(expr: &Expr) -> Option<String> {
+    if explicit_variant(expr) {
+        return None;
+    }
     match expr {
         Expr::Nested(inner) => static_type_name(inner),
         Expr::Cast { data_type, .. }
@@ -861,6 +896,8 @@ mod tests {
             "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(SESSION_CONTEXT(N'foo'), N'x')))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT (COALESCE(N'x', SESSION_CONTEXT(N'foo'))))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(NULL, SESSION_CONTEXT(N'foo'))))",
+            "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL((NULL), SESSION_CONTEXT(N'foo'))))",
+            "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(CAST(NULL AS sql_variant), SESSION_CONTEXT(N'foo'))))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT (CASE WHEN 1 = 1 THEN SESSION_CONTEXT(N'foo') END))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT IIF(1 = 1, N'x', SESSION_CONTEXT(N'foo')))",
             "CREATE TABLE t (v nvarchar(128) DEFAULT (SQL_VARIANT_PROPERTY(SESSION_CONTEXT(N'foo'), 'BaseType')))",
