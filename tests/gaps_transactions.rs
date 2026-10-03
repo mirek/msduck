@@ -1312,6 +1312,10 @@ fn allow_snapshot_isolation_changes_wait_for_open_transactions() {
     )
     .unwrap();
     assert_eq!(run(&mut reader, "SELECT v FROM missing"), Err(208));
+    assert_eq!(
+        run(&mut reader, "SELECT t.v FROM t CROSS JOIN missing"),
+        Err(208)
+    );
     check(&mut reader, "@@TRANCOUNT = 1").unwrap();
     let (result, elapsed) = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF")
         .join()

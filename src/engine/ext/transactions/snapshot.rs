@@ -572,6 +572,9 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
         return Ok(());
     }
     let catalog = session.database.catalog().clone();
+    // The databases whose tables or views the statement accesses. A missing
+    // object fails the statement with its own error before any access.
+    let mut accessed: Vec<String> = Vec::new();
     for name in relations(statement) {
         let parts: Vec<&str> = name
             .0
@@ -609,23 +612,27 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
         } else {
             session.database.alias().to_owned()
         };
-        // The state is read and the access registered while holding the
-        // transaction table, so a change waits for every read that saw ON.
-        let mut transactions = active_transactions();
-        let state = catalog.snapshot_isolation(&session.db, &alias)?;
-        let read = has_read(&transactions, session, &alias);
-        // A transaction that read under SNAPSHOT before OFF began continues.
-        if read && matches!(state, SnapshotIsolation::On | SnapshotIsolation::ToOff) {
-            continue;
-        }
-        // A missing object fails with its own error and reads nothing.
         if !exists(session, &alias, schema, object)? {
+            return Ok(());
+        }
+        if !accessed.contains(&alias) {
+            accessed.push(alias);
+        }
+    }
+    // The states are read and the reads registered while holding the
+    // transaction table, so a change waits for every read that saw ON.
+    let mut transactions = active_transactions();
+    let mut register = Vec::new();
+    for alias in accessed {
+        let state = catalog.snapshot_isolation(&session.db, &alias)?;
+        // A transaction that read under SNAPSHOT before OFF began continues.
+        if has_read(&transactions, session, &alias)
+            && matches!(state, SnapshotIsolation::On | SnapshotIsolation::ToOff)
+        {
             continue;
         }
         if state == SnapshotIsolation::On {
-            usage_in(&mut transactions, session, &alias, |usage| {
-                usage.read = true
-            });
+            register.push(alias);
             continue;
         }
         drop(transactions);
@@ -655,6 +662,11 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
                     "Snapshot isolation transaction failed accessing database '{database}' because snapshot isolation is not allowed in this database. Use ALTER DATABASE to allow snapshot isolation."
                 ),
             ),
+        });
+    }
+    for alias in register {
+        usage_in(&mut transactions, session, &alias, |usage| {
+            usage.read = true
         });
     }
     Ok(())
