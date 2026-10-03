@@ -143,6 +143,9 @@ impl Feature for Hooks {
 
     fn batch_end(&self, session: &mut Session) {
         options::batch_end(session);
+        if session.transactions == 0 {
+            snapshot::end(session);
+        }
     }
 
     fn transaction_begin(&self, session: &mut Session, isolation: u8) {

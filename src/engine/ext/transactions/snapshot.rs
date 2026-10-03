@@ -20,13 +20,16 @@ use anyhow::{Result, bail};
 use msduck_core::diagnostic::SqlError;
 use msduck_sql::dialect::alter_database::{Request, Termination};
 use sqlparser::ast::{
-    Delete, FromTable, ObjectName, Query, SetExpr, Statement, TableFactor, TableObject,
+    Delete, FromTable, Ident, ObjectName, Query, SetExpr, Statement, TableFactor, TableObject,
     TableWithJoins, UpdateTableFromKind, Visit, Visitor,
 };
 use std::{
     collections::HashMap,
     ops::ControlFlow,
-    sync::{LazyLock, Mutex},
+    sync::{
+        LazyLock, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     time::Duration,
 };
 
@@ -113,10 +116,14 @@ pub(super) fn alter(session: &mut Session, request: Request) -> Result<Execution
     } else {
         (SnapshotIsolation::Off, SnapshotIsolation::ToOff)
     };
+    // Changes of one database run one at a time.
+    let _reservation = reserve(session, &alias)?;
     let previous = catalog.snapshot_isolation(&session.db, &alias)?;
     if previous != target {
+        // Only transactions that began before the transition are waited for.
+        let cutoff = SEQUENCE.fetch_add(1, Ordering::SeqCst);
         catalog.set_snapshot_isolation(&session.db, &alias, transition)?;
-        if let Err(error) = wait_for_transactions(session, &alias, *on) {
+        if let Err(error) = wait_for_transactions(session, &alias, *on, cutoff) {
             catalog.set_snapshot_isolation(&session.db, &alias, previous)?;
             return Err(error);
         }
@@ -125,9 +132,62 @@ pub(super) fn alter(session: &mut Session, request: Request) -> Result<Execution
     Ok(Execution::statement(tokens, None, 215))
 }
 
+/// Databases (server catalog address and alias) whose
+/// ALLOW_SNAPSHOT_ISOLATION is being changed.
+static CHANGING: LazyLock<Mutex<std::collections::HashSet<(usize, String)>>> =
+    LazyLock::new(Default::default);
+
+struct Reservation(usize, String);
+
+impl Drop for Reservation {
+    fn drop(&mut self) {
+        CHANGING
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&(self.0, std::mem::take(&mut self.1)));
+    }
+}
+
+/// Wait until no other ALLOW_SNAPSHOT_ISOLATION change of the database
+/// runs, then hold it until the returned reservation is dropped.
+fn reserve(session: &mut Session, alias: &str) -> Result<Reservation> {
+    let key = (catalog_id(session), alias.to_owned());
+    while !CHANGING
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .insert(key.clone())
+    {
+        pause(session)?;
+    }
+    Ok(Reservation(key.0, key.1))
+}
+
+/// Wait briefly, failing when the request is cancelled or the session is
+/// being terminated.
+fn pause(session: &mut Session) -> Result<()> {
+    let attention = session.read_cancel.clone();
+    let poll = Duration::from_millis(10);
+    match session.process.wait(poll, poll, &|| {
+        attention
+            .as_ref()
+            .is_some_and(|flag| flag.load(std::sync::atomic::Ordering::SeqCst))
+    }) {
+        crate::sessions::Wake::Elapsed => Ok(()),
+        crate::sessions::Wake::Cancelled => Err(crate::read_cancellation::CancelledRead {
+            metadata: Vec::new(),
+        }
+        .into()),
+        crate::sessions::Wake::Terminated => {
+            bail!("ALTER DATABASE ended because the session is being terminated")
+        }
+    }
+}
+
 /// A transaction open in a session, as ALLOW_SNAPSHOT_ISOLATION changes
 /// see it.
 struct Active {
+    /// When it began, from [`SEQUENCE`].
+    sequence: u64,
     /// The server's database catalog (its address), so that servers in one
     /// process stay apart.
     catalog: usize,
@@ -144,8 +204,13 @@ struct Usage {
     read: bool,
 }
 
-/// Open transactions by session token.
+/// Open transactions by session token. A session outside a transaction
+/// has an entry from its first write until its batch ends, for its
+/// autocommit transactions.
 static ACTIVE: LazyLock<Mutex<HashMap<u64, Active>>> = LazyLock::new(Default::default);
+
+/// Orders transactions and the ALLOW_SNAPSHOT_ISOLATION changes.
+static SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 fn active_transactions() -> std::sync::MutexGuard<'static, HashMap<u64, Active>> {
     ACTIVE
@@ -157,21 +222,24 @@ fn catalog_id(session: &Session) -> usize {
     std::sync::Arc::as_ptr(session.database.catalog()) as usize
 }
 
-/// The outermost transaction of a session began.
-pub(super) fn begin(session: &Session) {
+fn new_active(session: &Session) -> Active {
     let mut databases = HashMap::new();
     databases.insert(session.database.alias().to_owned(), Usage::default());
-    active_transactions().insert(
-        session.ext.token,
-        Active {
-            catalog: catalog_id(session),
-            snapshot: active(session),
-            databases,
-        },
-    );
+    Active {
+        sequence: SEQUENCE.fetch_add(1, Ordering::SeqCst),
+        catalog: catalog_id(session),
+        snapshot: active(session),
+        databases,
+    }
 }
 
-/// The session's transaction ended, or the session ended.
+/// The outermost transaction of a session began.
+pub(super) fn begin(session: &Session) {
+    active_transactions().insert(session.ext.token, new_active(session));
+}
+
+/// The session's transaction ended, its batch ended outside a transaction,
+/// or the session ended.
 pub(super) fn end(session: &Session) {
     active_transactions().remove(&session.ext.token);
 }
@@ -182,52 +250,68 @@ fn usage(session: &Session, alias: &str, update: impl FnOnce(&mut Usage)) {
     }
 }
 
-/// Note a write of the session's open transaction.
+/// Note a write of the session's transaction, or of its autocommit
+/// statement, to a database.
 pub(super) fn track_write(session: &mut Session, statement: &Statement) -> Result<()> {
-    if session.transactions == 0 {
-        return Ok(());
-    }
-    let alias = match statement {
-        Statement::CreateTable(_)
-        | Statement::AlterTable(_)
-        | Statement::Drop { .. }
-        | Statement::Truncate(_)
-        | Statement::CreateIndex(_)
-        | Statement::CreateView(_) => Some(session.database.alias().to_owned()),
-        _ => match write_target(statement) {
-            Some(target) => {
-                let parts: Vec<&str> = target
-                    .0
-                    .iter()
-                    .filter_map(|part| part.as_ident().map(|ident| ident.value.as_str()))
-                    .collect();
-                match parts.as_slice() {
-                    [.., table] if table.starts_with('#') || table.starts_with('@') => None,
-                    [database, _, _] => {
-                        session.database.catalog().resolve(&session.db, database)?
-                    }
-                    _ => Some(session.database.alias().to_owned()),
-                }
-            }
-            None => None,
-        },
+    let targets = match statement {
+        Statement::CreateTable(table) => vec![table.name.clone()],
+        Statement::AlterTable(table) => vec![table.name.clone()],
+        Statement::Drop { names, .. } => names.clone(),
+        Statement::Truncate(truncate) => truncate
+            .table_names
+            .iter()
+            .map(|table| table.name.clone())
+            .collect(),
+        Statement::CreateIndex(index) => vec![index.table_name.clone()],
+        Statement::CreateView(view) => vec![view.name.clone()],
+        _ => write_target(statement).into_iter().collect(),
     };
-    if let Some(alias) = alias {
+    for target in targets {
+        let idents: Vec<&Ident> = target.0.iter().filter_map(|part| part.as_ident()).collect();
+        let alias = match idents.as_slice() {
+            [.., table] if temporary(table) => continue,
+            [database, _, _] => match session
+                .database
+                .catalog()
+                .resolve(&session.db, &database.value)?
+            {
+                Some(alias) => alias,
+                None => continue,
+            },
+            _ => session.database.alias().to_owned(),
+        };
+        if session.transactions == 0 {
+            active_transactions()
+                .entry(session.ext.token)
+                .or_insert_with(|| new_active(session));
+        }
         usage(session, &alias, |usage| usage.wrote = true);
     }
     Ok(())
+}
+
+/// A temporary table or table variable, also once renamed to its backend
+/// table (see temp_tables/storage.rs). A delimited `[@name]` is an ordinary
+/// table.
+fn temporary(ident: &Ident) -> bool {
+    ident.value.starts_with('#')
+        || (ident.quote_style.is_none() && ident.value.starts_with('@'))
+        || ["__msduck_temp_", "__msduck_tv_", "__msduck_global_"]
+            .iter()
+            .any(|prefix| ident.value.starts_with(prefix))
 }
 
 /// Wait until the other sessions' transactions that an
 /// ALLOW_SNAPSHOT_ISOLATION change waits for have ended: ON waits for
 /// transactions that wrote to the database, OFF also for SNAPSHOT
 /// transactions that used it.
-fn wait_for_transactions(session: &mut Session, alias: &str, on: bool) -> Result<()> {
+fn wait_for_transactions(session: &mut Session, alias: &str, on: bool, cutoff: u64) -> Result<()> {
     let catalog = catalog_id(session);
     let token = session.ext.token;
     let blocked = || {
         active_transactions().iter().any(|(other, active)| {
             *other != token
+                && active.sequence < cutoff
                 && active.catalog == catalog
                 && active
                     .databases
@@ -236,24 +320,7 @@ fn wait_for_transactions(session: &mut Session, alias: &str, on: bool) -> Result
         })
     };
     while blocked() {
-        let attention = session.read_cancel.clone();
-        let poll = Duration::from_millis(10);
-        match session.process.wait(poll, poll, &|| {
-            attention
-                .as_ref()
-                .is_some_and(|flag| flag.load(std::sync::atomic::Ordering::SeqCst))
-        }) {
-            crate::sessions::Wake::Elapsed => {}
-            crate::sessions::Wake::Cancelled => {
-                return Err(crate::read_cancellation::CancelledRead {
-                    metadata: Vec::new(),
-                }
-                .into());
-            }
-            crate::sessions::Wake::Terminated => {
-                bail!("ALTER DATABASE ended because the session is being terminated")
-            }
-        }
+        pause(session)?;
     }
     Ok(())
 }
@@ -324,13 +391,11 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
             continue;
         }
         let object = parts[parts.len() - 1];
-        // Temporary tables and table variables, also once renamed to their
-        // backend tables (see temp_tables/storage.rs).
-        if object.starts_with('#')
-            || object.starts_with('@')
-            || ["__msduck_temp_", "__msduck_tv_", "__msduck_global_"]
-                .iter()
-                .any(|prefix| object.starts_with(prefix))
+        if name
+            .0
+            .last()
+            .and_then(|part| part.as_ident())
+            .is_some_and(temporary)
         {
             continue;
         }

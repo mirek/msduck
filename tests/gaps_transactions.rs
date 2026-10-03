@@ -1222,8 +1222,27 @@ fn allow_snapshot_isolation_changes_wait_for_open_transactions() {
         Some((1, Some("ON".into())))
     );
     run(&mut reader, "COMMIT").unwrap();
+    // Temporary-table DDL is not a write to the database.
+    run(&mut writer, "BEGIN TRAN; CREATE TABLE #scratch (v INT)").unwrap();
+    let (result, elapsed) = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF")
+        .join()
+        .unwrap();
+    assert_eq!(result, Ok(()));
+    assert!(elapsed < Duration::from_secs(2), "{elapsed:?}");
+    run(&mut writer, "ROLLBACK").unwrap();
+    run(
+        &mut observer,
+        "SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
+    )
+    .unwrap();
+    run(
+        &mut observer,
+        "ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON",
+    )
+    .unwrap();
     // OFF waits for SNAPSHOT transactions too. One that already read keeps
-    // reading; one that had not yet read fails with 3954.
+    // reading; one that had not yet read fails with 3954. Transactions that
+    // begin during the change are not waited for.
     run(
         &mut reader,
         "SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT v FROM t",
@@ -1242,6 +1261,13 @@ fn allow_snapshot_isolation_changes_wait_for_open_transactions() {
         snapshot_state(&observer, "probe_db"),
         Some((2, Some("IN_TRANSITION_TO_OFF".into())))
     );
+    let mut late = session(&server);
+    late.use_database("probe_db").unwrap();
+    run(
+        &mut late,
+        "SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT 1",
+    )
+    .unwrap();
     check(&mut reader, "(SELECT v FROM t) = 2").unwrap();
     assert_eq!(run(&mut idle, "SELECT v FROM t"), Err(3954));
     check(&mut idle, "@@TRANCOUNT = 0").unwrap();
@@ -1253,4 +1279,5 @@ fn allow_snapshot_isolation_changes_wait_for_open_transactions() {
         snapshot_state(&observer, "probe_db"),
         Some((0, Some("OFF".into())))
     );
+    run(&mut late, "ROLLBACK").unwrap();
 }
