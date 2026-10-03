@@ -11476,7 +11476,7 @@
       "id": "bulk-character-utf8-bounded-target-reference-v1",
       "title": "Capture UTF8 source-form decoding into bounded targets",
       "issue": 919,
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner full-server goal and approved first-party source-form work918 reveals bounded-source to MAX target admission failure before decoder. Capture paired bounded targets without inferring platform strict/lossy decoding or normalizing counters.",
       "scope": [
         "scripts/capture-bulk-character-utf8-bounded-target.mjs",
