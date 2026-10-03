@@ -359,14 +359,24 @@ pub(super) fn track_module_definition(session: &Session, sql: &str) {
 }
 
 /// A temporary table or table variable, also once renamed to its backend
-/// table (see temp_tables/storage.rs). A delimited `[@name]` is an ordinary
-/// table.
+/// table: `__msduck_temp_<12 hex digits>_name`, `__msduck_tv_<12 hex
+/// digits>_name` or `__msduck_global_name` (see temp_tables/storage.rs). A
+/// delimited `[@name]` is an ordinary table.
 fn temporary(ident: &Ident) -> bool {
+    let generated = |prefix: &str| {
+        ident.value.strip_prefix(prefix).is_some_and(|rest| {
+            rest.len() > 13
+                && rest.as_bytes()[12] == b'_'
+                && rest.as_bytes()[..12].iter().all(u8::is_ascii_hexdigit)
+        })
+    };
     ident.value.starts_with('#')
         || (ident.quote_style.is_none() && ident.value.starts_with('@'))
-        || ["__msduck_temp_", "__msduck_tv_", "__msduck_global_"]
-            .iter()
-            .any(|prefix| ident.value.starts_with(prefix))
+        || generated("__msduck_temp_")
+        || generated("__msduck_tv_")
+        // The backend of ##name; a permanent table of this name would
+        // collide with it.
+        || ident.value.starts_with("__msduck_global_")
 }
 
 /// Wait until the other sessions' transactions that an
@@ -641,6 +651,36 @@ pub(super) fn write(
     let Some(target) = write_target(statement) else {
         return Ok(None);
     };
+    // Named before the write: after a conflict DuckDB's transaction is
+    // aborted and cannot resolve a database name.
+    let parts: Vec<&str> = target
+        .0
+        .iter()
+        .filter_map(|part| part.as_ident().map(|ident| ident.value.as_str()))
+        .collect();
+    let names = match parts.as_slice() {
+        [database, schema, table] => Some((
+            session
+                .database
+                .catalog()
+                .resolve(&session.db, database)?
+                .map(|alias| session.database.catalog().display_name(&alias))
+                .unwrap_or_else(|| (*database).to_owned()),
+            (*schema).to_owned(),
+            (*table).to_owned(),
+        )),
+        [schema, table] => Some((
+            session.database.name.clone(),
+            (*schema).to_owned(),
+            (*table).to_owned(),
+        )),
+        [table] => Some((
+            session.database.name.clone(),
+            "dbo".to_owned(),
+            (*table).to_owned(),
+        )),
+        _ => None,
+    };
     // Not `reenter`: statements nested in this one, such as trigger bodies,
     // still need their access checks, savepoint images and conflicts.
     session.ext.transactions.resumed = Some(statement.clone());
@@ -650,28 +690,8 @@ pub(super) fn write(
         Ok(execution) => return Ok(Some(execution)),
         Err(error) => error,
     };
-    if !is_conflict(&error) {
+    let Some((database, schema, table)) = names.filter(|_| is_conflict(&error)) else {
         return Err(error);
-    }
-    let parts: Vec<&str> = target
-        .0
-        .iter()
-        .filter_map(|part| part.as_ident().map(|ident| ident.value.as_str()))
-        .collect();
-    let (database, schema, table) = match parts.as_slice() {
-        [database, schema, table] => (
-            session
-                .database
-                .catalog()
-                .resolve(&session.db, database)?
-                .map(|alias| session.database.catalog().display_name(&alias))
-                .unwrap_or_else(|| (*database).to_owned()),
-            *schema,
-            *table,
-        ),
-        [schema, table] => (session.database.name.clone(), *schema, *table),
-        [table] => (session.database.name.clone(), "dbo", *table),
-        _ => return Err(error),
     };
     if session.transactions > 0 {
         // DuckDB has aborted its transaction. The SQL Server transaction

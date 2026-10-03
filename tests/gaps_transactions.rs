@@ -1037,6 +1037,8 @@ fn snapshot_transactions_need_the_option_and_read_their_snapshot() {
     // msduck's internal name prefix does not exempt user tables.
     run(&mut b, "CREATE TABLE __msduck_customer (v INT)").unwrap();
     assert_eq!(run(&mut a, "SELECT v FROM __msduck_customer"), Err(3952));
+    run(&mut b, "CREATE TABLE __msduck_temp_orders (v INT)").unwrap();
+    assert_eq!(run(&mut a, "SELECT v FROM __msduck_temp_orders"), Err(3952));
     assert_eq!(run(&mut a, "UPDATE t SET v = 2 FROM t AS t"), Err(3952));
     run(&mut a, "WITH t AS (SELECT 1 AS v) SELECT v FROM t").unwrap();
     // Only within its own query.
