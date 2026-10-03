@@ -10305,7 +10305,7 @@
         "Trigger errors and ROLLBACK inside a trigger fired by MERGE match SQL Server diagnostics and leave the statement atomic; @@ROWCOUNT and OUTPUT of the MERGE are unaffected.",
         "Use the extension hooks (docs/extension-hooks.md). Capture the pinned SQL Server reference container for uncertain behavior and add the cases to the module capture script and reference file. Add tedious (tests/compat) and Rust tests asserting rows, error numbers/classes/states, update the module docs page limits, and run the AGENTS.md checks (fmt, workspace tests, clippy with toolchain 1.95, npm test). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge with the exact head, publish done. Files outside this scope need a disjoint companion task published under the same authorization."
       ],
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Decomposed by the queue-publishing session from the remaining limits listed in docs/workload-gaps.md at main 2fde4d4. No external submission is input.",
       "dependencies": [],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkY__"
@@ -10339,7 +10339,7 @@
         "Verify the token fields through tedious (err.procName, err.lineNumber) against reference captures; nested procedure calls report the innermost module.",
         "Use the extension hooks (docs/extension-hooks.md). Capture the pinned SQL Server reference container for uncertain behavior and add the cases to the module capture script and reference file. Add tedious (tests/compat) and Rust tests asserting rows, error numbers/classes/states, update the module docs page limits, and run the AGENTS.md checks (fmt, workspace tests, clippy with toolchain 1.95, npm test). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge with the exact head, publish done. Files outside this scope need a disjoint companion task published under the same authorization."
       ],
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Decomposed by the queue-publishing session from the remaining limits listed in docs/workload-gaps.md at main 2fde4d4. No external submission is input.",
       "dependencies": [],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkZAG"
@@ -10385,7 +10385,7 @@
     {
       "id": "limits-procedure-error-context-v1-wire",
       "title": "Error token procedure name and line plumbing for module errors",
-      "state": "ready",
+      "state": "blocked",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Companion of limits-procedure-error-context-v1 (issue #853), decomposed by its claiming worker because ERROR/INFO token encoding and engine error emission live outside the procedures/functions modules. No external submission is input.",
       "scope": [
         "src/engine.rs",
@@ -11126,6 +11126,80 @@
         "Reuse worker447 existing isolatedworktree/private reference dependencies/read-onlynode_modules, no extraagents/worktrees/nativecache. Coordinate source/dependency reads againstcanonicalbuilder ifneeded; no sharedsource/cache/executable writes forreference. Consult owner-copiedTDS/tediousskills and raw895 evidence. Exacthead focused tests bothhosts, requiredCI and independent/Codexreview or genuinefallback. Workerowns ownreceipt/checkpoints/PRfollowup/exactheadmerge and registry/projectcompletion. No runtime/core/TDS/commonhelper/engine/export edits. Future generalcapacity implementation needs this groundtruth plus separate scoped task."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PlJwT"
+    },
+    {
+      "id": "v025-merge-triggers-v1",
+      "title": "MERGE fires target AFTER triggers (successor of limits-merge-triggers-v1)",
+      "state": "ready",
+      "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03) to fix the v0.2.5 workload report (umbrella #864) until it lands in a published container; the report lists MERGE refused on tables with enabled triggers. Stale-claim evidence (2026-10-03 17:58 CEST): limits-merge-triggers-v1, limits-procedure-error-context-v1 and -wire were claimed about 09:00; no remote work/<id> branch, no PR, no commits beyond 2fde4d4, last worktree file edit 09:03/09:11, no process with cwd in those worktrees (>6h, standing 2026-10-01 authorization). Old branches, worktrees, receipts and uncommitted diffs are retained; successors may use those diffs as a starting point.",
+      "scope": [
+        "src/engine/ext/merge.rs",
+        "src/engine/ext/merge/",
+        "crates/msduck-sql/src/dialect/ext/merge.rs",
+        "crates/msduck-sql/src/dialect/ext/merge/",
+        "tests/compat/merge.test.mjs",
+        "tests/gaps_merge.rs",
+        "docs/gaps-merge.md",
+        "scripts/capture-gaps-merge.mjs",
+        "reference/gaps-merge.json",
+        "src/engine/ext/triggers.rs",
+        "src/engine/ext/triggers/",
+        "crates/msduck-sql/src/dialect/ext/triggers.rs",
+        "crates/msduck-sql/src/dialect/ext/triggers/",
+        "tests/compat/triggers.test.mjs",
+        "tests/gaps_triggers.rs",
+        "docs/gaps-triggers.md",
+        "scripts/capture-gaps-triggers.mjs",
+        "reference/gaps-triggers.json"
+      ],
+      "acceptance": [
+        "Report repro: CREATE TABLE items(id int PRIMARY KEY); separately CREATE TRIGGER foo_trigger ON items AFTER INSERT AS BEGIN SET NOCOUNT ON; END; then MERGE items AS target USING(VALUES(1)) AS source(id) ON target.id=source.id WHEN NOT MATCHED THEN INSERT(id) VALUES(source.id) inserts the row (today 50000 MERGE ... not supported while its trigger is enabled). An INSERT/UPDATE audit trigger records the expected effects across insert and matched-update branches.",
+        "MERGE fires the target table AFTER INSERT/UPDATE/DELETE triggers once per action type that SQL Server fires (including when zero rows are affected by an action) with correct inserted/deleted pseudo-tables; INSTEAD OF trigger and disabled trigger behavior match SQL Server or are refused explicitly.",
+        "Trigger errors and ROLLBACK inside a trigger fired by MERGE match SQL Server diagnostics and leave the statement atomic; @@ROWCOUNT and OUTPUT of the MERGE are unaffected.",
+        "Use the extension hooks (docs/extension-hooks.md). Capture the pinned SQL Server reference container for uncertain behavior and add the cases to the module capture script and reference file. Add tedious (tests/compat) and Rust tests asserting rows, error numbers/classes/states, update the module docs page limits, and run the AGENTS.md checks (fmt, workspace tests, clippy with toolchain 1.95, npm test). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge with the exact head, publish done. Files outside this scope need a disjoint companion task published under the same authorization."
+      ],
+      "dependencies": [],
+      "issue": 852,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkY__"
+    },
+    {
+      "id": "v025-procedure-error-context-v2",
+      "title": "Module name and line in procedure/function error tokens (successor of limits-procedure-error-context-v1)",
+      "state": "backlog",
+      "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03) to fix the v0.2.5 workload report (umbrella #864) until it lands in a published container; preserved successor so the stale work is not lost; flip to ready once v025-cross-database-v1 releases src/engine.rs. Stale-claim evidence (2026-10-03 17:58 CEST): limits-merge-triggers-v1, limits-procedure-error-context-v1 and -wire were claimed about 09:00; no remote work/<id> branch, no PR, no commits beyond 2fde4d4, last worktree file edit 09:03/09:11, no process with cwd in those worktrees (>6h, standing 2026-10-01 authorization). Old branches, worktrees, receipts and uncommitted diffs are retained; successors may use those diffs as a starting point.",
+      "scope": [
+        "src/engine/ext/procedures.rs",
+        "src/engine/ext/procedures/",
+        "crates/msduck-sql/src/dialect/ext/procedures.rs",
+        "crates/msduck-sql/src/dialect/ext/procedures/",
+        "tests/compat/procedures.test.mjs",
+        "tests/gaps_procedures.rs",
+        "docs/gaps-procedures.md",
+        "scripts/capture-gaps-procedures.mjs",
+        "reference/gaps-procedures.json",
+        "src/engine/ext/functions.rs",
+        "src/engine/ext/functions/",
+        "crates/msduck-sql/src/dialect/ext/functions.rs",
+        "crates/msduck-sql/src/dialect/ext/functions/",
+        "tests/compat/functions.test.mjs",
+        "tests/gaps_functions.rs",
+        "docs/gaps-functions.md",
+        "scripts/capture-gaps-functions.mjs",
+        "reference/gaps-functions.json",
+        "src/engine.rs",
+        "src/engine/ext.rs",
+        "crates/msduck-tds/src/lib.rs"
+      ],
+      "acceptance": [
+        "Errors raised inside stored procedures (RAISERROR, THROW, runtime errors) and user functions report the module name in the ERROR token ProcName and the SQL Server line number (relative to the module batch), and ERROR_PROCEDURE()/ERROR_LINE() in CATCH match; top-level batch errors keep empty ProcName and batch line numbers.",
+        "Verify the token fields through tedious (err.procName, err.lineNumber) against reference captures; nested procedure calls report the innermost module.",
+        "Use the extension hooks (docs/extension-hooks.md). Capture the pinned SQL Server reference container for uncertain behavior and add the cases to the module capture script and reference file. Add tedious (tests/compat) and Rust tests asserting rows, error numbers/classes/states, update the module docs page limits, and run the AGENTS.md checks (fmt, workspace tests, clippy with toolchain 1.95, npm test). Open a PR linking the issue, obtain a Codex review or the recorded fallback, merge with the exact head, publish done. Files outside this scope need a disjoint companion task published under the same authorization.",
+        "The TDS codec can encode or rewrite ERROR/INFO tokens with a ProcName and LineNumber; existing encoders keep an empty ProcName and line 1.",
+        "Engine error emission honors a module location attached to an error by a feature hook (an additive type in src/engine/ext.rs), without changing error identity, classification, TRY/CATCH or messages for errors that carry no location."
+      ],
+      "dependencies": [],
+      "issue": 853,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkZAG"
     }
   ]
 }
