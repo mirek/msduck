@@ -11329,7 +11329,7 @@
       "id": "ansi-cp1252-projection-v1",
       "title": "Implement exhaustive native CP1252 SQL projection kernels",
       "issue": 907,
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Owner continuing full-server goal; approved first-party plan890 and reviewed CP1251 kernel897. Exhaustive906 evidence must be reviewed/merged/Done before fresh implementation claim.",
       "scope": [
         "crates/msduck-core/src/ansi_conversion.rs",
