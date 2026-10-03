@@ -263,3 +263,83 @@ fn kinds_ranges_null_styles_and_nonfinite_are_explicit() {
     );
     assert_eq!(text(Type::Float, None, Some(0)), Ok(None));
 }
+
+#[test]
+fn every_broad_ieee_grid_control_and_prepared_rebinding() {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../../../reference/float-default-grid.json")).unwrap();
+    let mut totals = Vec::new();
+    for container in fixture["containers"].as_array().unwrap() {
+        for run in container["runs"].as_array().unwrap() {
+            let mut comparisons = 0;
+            for record in run.as_array().unwrap() {
+                let input = &record["input"];
+                let Some(declaration) = input["declaration"].as_str() else {
+                    continue;
+                };
+                let source = kind(declaration);
+                let name = record["name"].as_str().unwrap();
+                let controls = input["controls"].as_array().unwrap();
+                let compare_control = |result: &Value, output: Option<&str>| {
+                    let mut count = 0;
+                    for control in controls {
+                        let role = control["role"].as_str().unwrap();
+                        if role == "native" {
+                            continue;
+                        }
+                        let set = control["set"].as_u64().unwrap() as usize;
+                        let row = result["sets"][set]["rows"][0].as_array().unwrap();
+                        assert_eq!(row.len(), 2, "{name} {role}: both text domains");
+                        for cell in row {
+                            let expected = if role == "concat_ws" {
+                                Some(output.unwrap_or(""))
+                            } else {
+                                output
+                            };
+                            assert_eq!(cell.as_str(), expected, "{name} {role}");
+                            if let Some(s) = expected {
+                                assert_eq!(
+                                    cell.as_str().unwrap().encode_utf16().collect::<Vec<_>>(),
+                                    s.encode_utf16().collect::<Vec<_>>(),
+                                    "{name} {role}: exact units"
+                                );
+                            }
+                            count += 1;
+                        }
+                    }
+                    count
+                };
+                if record["prepared"].is_object() {
+                    for (i, e) in record["prepared"]["executions"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .enumerate()
+                    {
+                        let output = text(
+                            source,
+                            wire(
+                                source,
+                                record["bindingWire"][i][0]["payload"].as_str().unwrap(),
+                            ),
+                            None,
+                        )
+                        .unwrap();
+                        comparisons += compare_control(&e["result"], output.as_deref());
+                    }
+                } else {
+                    let output = text(
+                        source,
+                        wire(source, input["payload"].as_str().unwrap()),
+                        None,
+                    )
+                    .unwrap();
+                    comparisons += compare_control(&record["result"], output.as_deref());
+                }
+            }
+            totals.push(comparisons);
+        }
+    }
+    assert_eq!(totals, vec![13092; 4]);
+    println!("13,092 broader IEEE exact string/unit comparisons per run, four runs");
+}

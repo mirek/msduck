@@ -45,6 +45,19 @@ are never formatting inputs. Native source requests remain source evidence,
 and all 77 source-overflow observations per run remain separate diagnostics,
 rather than being mistaken for formatter output.
 
+The second path-included replay consumes merged reference #831
+(`reference/float-default-grid.json`, SHA-256
+`1a86ed8f35876029c94b317c3520917cfce4d3f180c286e5612494cbeaeddba9`).
+All 2,170 ordinary input programs and eight prepared control programs are
+covered across four complete runs. Each run supplies 13,092 exact string and
+UTF-16 comparisons, including typed NULL and all 48 prepared executions.
+Native storage controls remain separate source evidence. Explicit style-0,
+TRANSLATE and CONCAT_WS controls remain independently labelled expectations;
+no agreement among them is assumed by the reader. The actual ec80 predecessor
+passes the original replay and fails this grid regression on the exact
+`bee671526d3d6e16` input. The corrected guarded conversion passes both complete
+replays with 61,528 comparisons overall.
+
 This module establishes no runtime compatibility pass. The fixture samples IEEE
 rounding boundaries and extremes but does not exhaust finite bit patterns.
 Uncaptured rounding boundaries, styles, source coercion, arbitrary session rules,
