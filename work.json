@@ -9663,7 +9663,7 @@
     {
       "id": "greatest-least-core-recovery-v1",
       "title": "Implement exported deterministic GREATEST and LEAST rules from recovered reference",
-      "state": "ready",
+      "state": "done",
       "issue": 805,
       "authorization": "Direct owner goal and fresh reference800 merged804 exactmatching221programs/fourSQLServercaptures; recoveredexportreservation245 understandingownerinstructions. Noexternalcontent.",
       "scope": [
