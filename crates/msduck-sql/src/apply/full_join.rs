@@ -266,7 +266,13 @@ fn alias(factor: &TableFactor) -> Option<&TableAlias> {
         | TableFactor::Function { alias, .. }
         | TableFactor::TableFunction { alias, .. }
         | TableFactor::UNNEST { alias, .. }
-        | TableFactor::NestedJoin { alias, .. } => alias.as_ref(),
+        | TableFactor::NestedJoin { alias, .. }
+        | TableFactor::JsonTable { alias, .. }
+        | TableFactor::Pivot { alias, .. }
+        | TableFactor::Unpivot { alias, .. }
+        | TableFactor::MatchRecognize { alias, .. }
+        | TableFactor::XmlTable { alias, .. }
+        | TableFactor::SemanticView { alias, .. } => alias.as_ref(),
         _ => None,
     }
 }
@@ -537,7 +543,26 @@ fn correlated(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> b
     let _ = left.visit(&mut scopes);
     let _ = right.visit(&mut scopes);
     let _ = condition.visit(&mut scopes);
-    scopes.outer
+    // Without a catalog an unqualified condition column may belong to the
+    // enclosing row; rewriting an uncorrelated join is still equivalent.
+    scopes.outer || unqualified_columns_anywhere(condition)
+}
+
+fn unqualified_columns_anywhere(condition: &Expr) -> bool {
+    struct Columns(bool);
+    impl Visitor for Columns {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            if matches!(expr, Expr::Identifier(ident) if !ident.value.starts_with('@')) {
+                self.0 = true;
+                return ControlFlow::Break(());
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let mut columns = Columns(false);
+    let _ = condition.visit(&mut columns);
+    columns.0
 }
 
 /// Names a query's own FROM clauses define, without nested queries.
@@ -706,6 +731,12 @@ mod tests {
         assert!(sql.contains(&format!(") AS {RIGHT} ON true")), "{sql}");
         let sql = "SELECT 1 FROM OPENJSON(i.lhs) l FULL JOIN t AS r TABLESAMPLE (10 PERCENT) ON l.[key] = r.k";
         assert!(rewritten(sql).contains("FULL JOIN"), "{sql}");
+    }
+
+    #[test]
+    fn unqualified_condition_columns_count_as_outer_references() {
+        let sql = rewritten("SELECT 1 FROM a FULL JOIN b ON a.k = b.k AND id = 1");
+        assert!(!sql.contains("FULL"), "{sql}");
     }
 
     #[test]

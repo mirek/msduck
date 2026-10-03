@@ -64,8 +64,10 @@ The following FULL JOINs are left unchanged:
 The unchanged cases still fail with DuckDB's error.
 
 A reference to the outer query is a qualifier that the join's operands do
-not define, or a column in a table-valued function argument such as
-`OPENJSON(lhs)`.
+not define, a column in a table-valued function argument such as
+`OPENJSON(lhs)`, or any unqualified column in the join condition. Without a
+catalog, an unqualified column may belong to the enclosing row; rewriting a
+join that is in fact uncorrelated gives the same rows.
 
 ## Evidence
 
