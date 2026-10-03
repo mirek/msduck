@@ -1,10 +1,16 @@
 //! ALTER DATABASE {name | CURRENT} SET options, preserved in a
 //! visitor-compatible node until root execution.
 //!
-//! Supported options are READ_COMMITTED_SNAPSHOT {ON | OFF} and SINGLE_USER,
-//! RESTRICTED_USER or MULTI_USER, followed by an optional WITH ROLLBACK
-//! IMMEDIATE, WITH ROLLBACK AFTER n [SECONDS] or WITH NO_WAIT. Other
-//! ALTER DATABASE forms fail explicitly.
+//! Supported options are READ_COMMITTED_SNAPSHOT {ON | OFF},
+//! ALLOW_SNAPSHOT_ISOLATION {ON | OFF} and SINGLE_USER, RESTRICTED_USER or
+//! MULTI_USER, followed by an optional WITH ROLLBACK IMMEDIATE, WITH ROLLBACK
+//! AFTER n [SECONDS] or WITH NO_WAIT. Other ALTER DATABASE forms fail
+//! explicitly.
+//!
+//! ALLOW_SNAPSHOT_ISOLATION is kept apart from [`Setting`] in
+//! [`Request::snapshot_isolation`]: SQL Server changes that versioning state
+//! on its own (combining it with another option, or a termination clause,
+//! fails), and the transactions feature executes it.
 use sqlparser::{
     ast::*,
     keywords::Keyword,
@@ -36,6 +42,9 @@ pub struct Request {
     /// None for CURRENT.
     pub database: Option<Ident>,
     pub settings: Vec<Setting>,
+    /// ALLOW_SNAPSHOT_ISOLATION values, in statement order. More than one
+    /// is SQL Server's error 5062.
+    pub snapshot_isolation: Vec<bool>,
     pub termination: Termination,
 }
 
@@ -71,12 +80,28 @@ pub fn parse_request(parser: &mut Parser<'_>) -> Result<Request, ParserError> {
     };
     if !parser.parse_keyword(Keyword::SET) {
         return Err(unsupported(
-            "unsupported ALTER DATABASE statement; only SET READ_COMMITTED_SNAPSHOT, SINGLE_USER, RESTRICTED_USER and MULTI_USER are supported",
+            "unsupported ALTER DATABASE statement; only SET READ_COMMITTED_SNAPSHOT, ALLOW_SNAPSHOT_ISOLATION, SINGLE_USER, RESTRICTED_USER and MULTI_USER are supported",
         ));
     }
     let mut settings = Vec::new();
+    let mut snapshot_isolation = Vec::new();
     loop {
         let option = word(parser).unwrap_or_default();
+        if option == "ALLOW_SNAPSHOT_ISOLATION" {
+            snapshot_isolation.push(match word(parser).as_deref() {
+                Some("ON") => true,
+                Some("OFF") => false,
+                _ => {
+                    return Err(unsupported(
+                        "Incorrect syntax near 'ALLOW_SNAPSHOT_ISOLATION'.",
+                    ));
+                }
+            });
+            if !parser.consume_token(&Token::Comma) {
+                break;
+            }
+            continue;
+        }
         settings.push(match option.as_str() {
             "READ_COMMITTED_SNAPSHOT" => match word(parser).as_deref() {
                 Some("ON") => Setting::ReadCommittedSnapshot(true),
@@ -137,6 +162,7 @@ pub fn parse_request(parser: &mut Parser<'_>) -> Result<Request, ParserError> {
     Ok(Request {
         database,
         settings,
+        snapshot_isolation,
         termination,
     })
 }
@@ -166,6 +192,13 @@ pub fn parse(parser: &mut Parser<'_>) -> Result<Statement, ParserError> {
             Setting::SingleUser => "SINGLE_USER",
             Setting::RestrictedUser => "RESTRICTED_USER",
             Setting::MultiUser => "MULTI_USER",
+        })
+    }));
+    args.extend(request.snapshot_isolation.iter().map(|on| {
+        text(if *on {
+            "ALLOW_SNAPSHOT_ISOLATION ON"
+        } else {
+            "ALLOW_SNAPSHOT_ISOLATION OFF"
         })
     }));
     let Expr::Function(mut function) = crate::expr::unary_function(MARKER, crate::expr::number(0))
@@ -219,28 +252,31 @@ pub fn request(statement: &Statement) -> Option<Request> {
         Value::Number(seconds, false) => Termination::RollbackAfterSeconds(seconds.parse().ok()?),
         _ => return None,
     };
-    let settings = expressions
-        .map(|e| {
-            let Expr::Value(value) = e? else { return None };
-            let Value::SingleQuotedString(setting) = &value.value else {
-                return None;
-            };
-            Some(match setting.as_str() {
-                "READ_COMMITTED_SNAPSHOT ON" => Setting::ReadCommittedSnapshot(true),
-                "READ_COMMITTED_SNAPSHOT OFF" => Setting::ReadCommittedSnapshot(false),
-                "SINGLE_USER" => Setting::SingleUser,
-                "RESTRICTED_USER" => Setting::RestrictedUser,
-                "MULTI_USER" => Setting::MultiUser,
-                _ => return None,
-            })
-        })
-        .collect::<Option<Vec<_>>>()?;
-    if settings.is_empty() {
+    let mut settings = Vec::new();
+    let mut snapshot_isolation = Vec::new();
+    for e in expressions {
+        let Expr::Value(value) = e? else { return None };
+        let Value::SingleQuotedString(setting) = &value.value else {
+            return None;
+        };
+        match setting.as_str() {
+            "READ_COMMITTED_SNAPSHOT ON" => settings.push(Setting::ReadCommittedSnapshot(true)),
+            "READ_COMMITTED_SNAPSHOT OFF" => settings.push(Setting::ReadCommittedSnapshot(false)),
+            "SINGLE_USER" => settings.push(Setting::SingleUser),
+            "RESTRICTED_USER" => settings.push(Setting::RestrictedUser),
+            "MULTI_USER" => settings.push(Setting::MultiUser),
+            "ALLOW_SNAPSHOT_ISOLATION ON" => snapshot_isolation.push(true),
+            "ALLOW_SNAPSHOT_ISOLATION OFF" => snapshot_isolation.push(false),
+            _ => return None,
+        }
+    }
+    if settings.is_empty() && snapshot_isolation.is_empty() {
         return None;
     }
     Some(Request {
         database,
         settings,
+        snapshot_isolation,
         termination,
     })
 }
@@ -289,6 +325,26 @@ mod tests {
     }
 
     #[test]
+    fn parses_allow_snapshot_isolation_apart_from_other_settings() {
+        let request = parse_one("ALTER DATABASE CURRENT SET allow_snapshot_isolation ON").unwrap();
+        assert_eq!(request.database, None);
+        assert!(request.settings.is_empty());
+        assert_eq!(request.snapshot_isolation, [true]);
+        assert_eq!(request.termination, Termination::Wait);
+        let request = parse_one(
+            "ALTER DATABASE [p] SET READ_COMMITTED_SNAPSHOT ON, ALLOW_SNAPSHOT_ISOLATION OFF, ALLOW_SNAPSHOT_ISOLATION ON WITH NO_WAIT",
+        )
+        .unwrap();
+        assert_eq!(request.settings, [Setting::ReadCommittedSnapshot(true)]);
+        assert_eq!(request.snapshot_isolation, [false, true]);
+        assert_eq!(request.termination, Termination::NoWait);
+        let request = parse_one("ALTER DATABASE p SET SINGLE_USER").unwrap();
+        assert!(request.snapshot_isolation.is_empty());
+        let error = parse_one("ALTER DATABASE p SET ALLOW_SNAPSHOT_ISOLATION").unwrap_err();
+        assert!(error.contains("ALLOW_SNAPSHOT_ISOLATION"), "{error}");
+    }
+
+    #[test]
     fn statements_after_alter_database_still_parse() {
         let statements = crate::batch::parse(
             "ALTER DATABASE [p] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [p]; SELECT 1",
@@ -301,7 +357,8 @@ mod tests {
     #[test]
     fn unsupported_forms_fail_explicitly() {
         for sql in [
-            "ALTER DATABASE p SET ALLOW_SNAPSHOT_ISOLATION ON",
+            "ALTER DATABASE p SET ALLOW_SNAPSHOT_ISOLATION",
+            "ALTER DATABASE p SET ALLOW_SNAPSHOT_ISOLATION ON, CHANGE_TRACKING = ON",
             "ALTER DATABASE p MODIFY NAME = q",
             "ALTER DATABASE p SET READ_COMMITTED_SNAPSHOT",
             "ALTER DATABASE p SET SINGLE_USER WITH ROLLBACK",

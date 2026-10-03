@@ -8,6 +8,8 @@
 //!   savepoint, emulated with before-images because DuckDB has no
 //!   savepoints.
 //! - [`waitfor`]: WAITFOR DELAY and WAITFOR TIME.
+//! - [`snapshot`]: ALTER DATABASE ... SET ALLOW_SNAPSHOT_ISOLATION, and the
+//!   3952 and 3960 errors of SNAPSHOT transactions.
 use super::{
     super::{Execution, Parameter, Session},
     Feature,
@@ -20,6 +22,7 @@ use std::collections::HashMap;
 
 mod options;
 mod savepoints;
+mod snapshot;
 mod waitfor;
 
 pub(crate) struct State {
@@ -80,6 +83,11 @@ impl Feature for Hooks {
         if let Some(request) = syntax::request(statement) {
             return execute(session, request, parameters).map(Some);
         }
+        if let Some(request) = msduck_sql::dialect::alter_database::request(statement)
+            && !request.snapshot_isolation.is_empty()
+        {
+            return snapshot::alter(session, request).map(Some);
+        }
         match statement {
             Statement::Set(Set::SetTransaction {
                 modes,
@@ -91,7 +99,14 @@ impl Feature for Hooks {
                 savepoint: Some(name),
             } => savepoints::rollback_statement(session, &name.value),
             _ => {
+                let snapshot = snapshot::active(session);
+                if snapshot {
+                    snapshot::check_access(session, statement)?;
+                }
                 savepoints::before_statement(session, statement)?;
+                if snapshot {
+                    return snapshot::write(session, statement, parameters);
+                }
                 Ok(None)
             }
         }
@@ -134,17 +149,19 @@ impl Feature for Hooks {
 }
 
 /// Report a compile-time diagnostic of this feature (148, 103, or 102 with
-/// SQL Server's wording) before any statement of the batch runs, as SQL
-/// Server does. Batches that cannot
-/// contain such a statement are not parsed twice.
+/// SQL Server's wording, or 5062 for conflicting ALLOW_SNAPSHOT_ISOLATION
+/// values) before any statement of the batch runs, as SQL Server does.
+/// Batches that cannot contain such a statement are not parsed twice.
 fn compile_error(session: &mut Session, sql: &str, rpc: bool) -> Option<(Vec<u8>, bool)> {
     let upper = sql.to_ascii_uppercase();
-    if !upper.contains("WAITFOR") && !upper.contains("TRAN") {
+    let snapshot = upper.contains("ALLOW_SNAPSHOT_ISOLATION");
+    if !upper.contains("WAITFOR") && !upper.contains("TRAN") && !snapshot {
         return None;
     }
     // A batch that does not parse fails through the engine's own path.
     let statements = msduck_sql::batch::parse(sql).ok()?;
-    let error = syntax::compile_error(&statements)?;
+    let error = syntax::compile_error(&statements)
+        .or_else(|| snapshot.then(|| snapshot::conflicting_values(&statements))?)?;
     let mut out = Vec::new();
     crate::tds::sql_error(&mut out, &error);
     crate::tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);

@@ -1,13 +1,17 @@
 # Isolation levels, savepoints and WAITFOR
 
-Issue #727 (task `gaps-transactions-v1`). The feature lives in the
+Issue #727 (task `gaps-transactions-v1`), with `ALLOW_SNAPSHOT_ISOLATION`
+from issue #870 (task `v025-snapshot-isolation-v1`). The feature lives in the
 `transactions` extension modules (see [extension-hooks.md](extension-hooks.md)):
 
 - `crates/msduck-sql/src/dialect/ext/transactions.rs` parses `SAVE
   TRAN[SACTION]`, named `BEGIN`/`COMMIT`/`ROLLBACK TRAN[SACTION]`, `WAITFOR
   DELAY|TIME` and `DBCC USEROPTIONS`, and validates WAITFOR time strings.
-- `src/engine/ext/transactions.rs` and its `options`, `savepoints` and
-  `waitfor` submodules run them.
+- `src/engine/ext/transactions.rs` and its `options`, `savepoints`,
+  `snapshot` and `waitfor` submodules run them.
+- `crates/msduck-sql/src/dialect/alter_database.rs` parses `ALTER DATABASE
+  ... SET ALLOW_SNAPSHOT_ISOLATION {ON | OFF}`, and `src/database_catalog.rs`
+  stores the option and publishes it in `sys.databases`.
 - `src/sessions.rs` reports `transaction_isolation_level` in
   `sys.dm_exec_sessions` and lets a session's waits be cancelled or ended.
 
@@ -31,8 +35,19 @@ Issue #727 (task `gaps-transactions-v1`). The feature lives in the
   booleans. Differences owned by other features are listed there exactly:
   the engine's wording of 137 for an undeclared variable, and `SQL_VARIANT`
   variables.
+- The fixture's separate `snapshot` section was captured by
+  `scripts/capture-gaps-transactions.mjs --snapshot` from the pinned
+  `mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144…` image (two
+  fresh databases, identical results). Its 80 observations use three
+  connections (`a` and `b` in the fresh database, `m` in master): the
+  `ALLOW_SNAPSHOT_ISOLATION` forms and errors, `sys.databases` states, 3952
+  for data access while the option is OFF, and SNAPSHOT reads and 3960 write
+  conflicts against a concurrent writer. `tests/compat/snapshot_isolation.test.mjs`
+  replays it (rows, column descriptors, errors and messages) and lists the
+  remaining differences exactly.
 - `tests/gaps_transactions.rs` covers the same rules in process, plus
-  savepoint restores, cancellation and termination.
+  savepoint restores, cancellation and termination, and the option's
+  persistence across a restart.
 
 ## Isolation levels
 
@@ -75,7 +90,71 @@ have no effect.
 | READ COMMITTED (2) | Each statement sees data committed before it; with `READ_COMMITTED_SNAPSHOT` a statement-level snapshot | Inside an explicit transaction, every statement sees the transaction's snapshot, not commits made after it started. Outside one, each statement is its own transaction |
 | REPEATABLE READ (3) | Shared locks held until commit; phantoms possible | Repeatable reads and no phantoms from the snapshot; no locks |
 | SERIALIZABLE (4) | Range locks; serializable | Snapshot isolation only: **not serializable**. Write skew is possible, and nothing blocks |
-| SNAPSHOT (5) | Transaction snapshot; update conflicts fail with 3960 | Transaction snapshot; conflicts fail with DuckDB's conflict error, not 3960. msduck does not require `ALLOW_SNAPSHOT_ISOLATION` (no 3952) |
+| SNAPSHOT (5) | Transaction snapshot from the first data access; update conflicts fail with 3960; requires `ALLOW_SNAPSHOT_ISOLATION` (3952) | Transaction snapshot from `BEGIN TRANSACTION`; the conflicts DuckDB detects fail with 3960; requires `ALLOW_SNAPSHOT_ISOLATION` (3952). See below |
+
+## ALLOW_SNAPSHOT_ISOLATION and SNAPSHOT transactions
+
+`ALTER DATABASE {name | CURRENT} SET ALLOW_SNAPSHOT_ISOLATION {ON | OFF}`
+stores the option per database; it persists across restarts and appears as
+`sys.databases.snapshot_isolation_state` (`tinyint`, 0 or 1) and
+`snapshot_isolation_state_desc` (`nvarchar(60)`, `OFF` or `ON`) in SQL
+Server's column order, before `is_read_committed_snapshot_on`. As captured:
+
+- New databases start OFF. `master` is always ON: setting the option there
+  succeeds with informational message 3987 ("SNAPSHOT ISOLATION is always
+  enabled in this database.") and changes nothing.
+- Other sessions may stay connected; no termination clause is needed. The
+  statement completes with no row count and leaves `@@ROWCOUNT` 0. It works
+  inside `sp_executesql`.
+- Errors, in SQL Server's order: 226 inside a transaction; 12104 for
+  `CURRENT` in master; 5011 for a missing database; 5082 ("Cannot change the
+  versioning state on database "…" together with another database state.")
+  when combined with another option such as `READ_COMMITTED_SNAPSHOT` or
+  `MULTI_USER`; 5083 for any `WITH ROLLBACK …` or `WITH NO_WAIT` clause.
+  5011, 5082 and 5083 are followed by 5069 ("ALTER DATABASE statement
+  failed."), which `ERROR_NUMBER()` reports in CATCH. `ON` together with
+  `OFF` in one statement is 5062, raised for the whole batch before any
+  statement runs; repeating the same value is accepted. A missing `ON`/`OFF`
+  is 102.
+- With the session at SNAPSHOT, reading or writing (SELECT, INSERT, UPDATE,
+  DELETE, MERGE) a table or view of a database whose option is OFF fails
+  with 3952 ("Snapshot isolation transaction failed accessing database '…'
+  because snapshot isolation is not allowed in this database. Use ALTER
+  DATABASE to allow snapshot isolation."), naming the accessed database,
+  also through a three-part name. It ends the batch and rolls back an open
+  transaction; inside TRY it dooms the transaction (`XACT_STATE()` -1, then
+  3998 at the end of the batch). Statements without table access, catalog
+  views, temporary tables, table variables, common table expressions and
+  DDL are allowed. A missing table still fails with 208.
+- With the option ON, a SNAPSHOT transaction keeps reading the rows of its
+  snapshot after another connection commits an update, and sees them after
+  it commits. Updating or deleting a row that a transaction committed after
+  the snapshot began fails with 3960 (state 2, naming `schema.table` and the
+  database), which ends the batch and rolls the transaction back, or dooms
+  it inside TRY. Writes to other rows commit normally.
+
+Remaining differences, retained exactly in the replay:
+
+- SQL Server takes the snapshot at the transaction's first data access;
+  DuckDB takes it at `BEGIN TRANSACTION`, so a commit made between the two
+  is not visible to msduck.
+- DuckDB detects a conflict when both transactions update, or both delete,
+  the same row. A DELETE of a row another transaction updated (or an UPDATE
+  of a row it deleted) succeeds in msduck instead of failing with 3960.
+- SQL Server sends a failing SELECT's column metadata before 3952; msduck
+  checks access first and sends no empty result set.
+- 3952 is checked before name resolution for tables and views that exist;
+  data access hidden in a scalar function call or a module that runs
+  through another path is not checked.
+- 226 ends the batch in msduck, as it does for the engine's other ALTER
+  DATABASE options; SQL Server continues with the next statement. A missing
+  `ON`/`OFF` reports state 1 instead of 6, and a missing table reports
+  DuckDB's 208 message.
+- After a write conflict DuckDB aborts its transaction, so msduck restarts
+  an empty one for the doomed transaction's remaining reads until it is
+  rolled back.
+- `sys.databases` lists only `master` and user databases; SQL Server's
+  `msdb` (ON), `tempdb` and `model` (OFF) are not published.
 
 ## Savepoints
 

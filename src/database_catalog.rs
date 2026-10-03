@@ -294,6 +294,7 @@ impl Catalog {
              CREATE SEQUENCE IF NOT EXISTS {ids} START {FIRST_USER_ID} MAXVALUE 32767 NO CYCLE;
              ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS user_access UTINYINT DEFAULT 0;
              ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS read_committed_snapshot BOOLEAN DEFAULT false;
+             ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS snapshot_isolation BOOLEAN DEFAULT false;
              ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS family_guid VARCHAR;
              ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS database_guid VARCHAR;
              ALTER TABLE {registry} ADD COLUMN IF NOT EXISTS data_name VARCHAR;
@@ -616,17 +617,7 @@ impl Catalog {
         name: &str,
         settings: &[Setting],
     ) -> Result<(String, String)> {
-        let Some(alias) = self.resolve_published(db, name)? else {
-            let mut error = SqlError::new(
-                5011,
-                5,
-                format!(
-                    "User does not have permission to alter database '{name}', the database does not exist, or the database is not in a state that allows access checks."
-                ),
-            );
-            error.severity = 14;
-            bail!(error);
-        };
+        let alias = self.alterable_name(db, name)?;
         let display = self.display(&alias);
         if alias == self.primary {
             let (option, state) = match settings.first() {
@@ -680,6 +671,76 @@ impl Catalog {
             terminated,
             hold,
         })
+    }
+
+    /// ALTER DATABASE ... SET ALLOW_SNAPSHOT_ISOLATION. SQL Server changes
+    /// this versioning state without exclusive access, so other sessions
+    /// stay connected. Returns false for `master`, where snapshot isolation
+    /// is always enabled and the option changes nothing
+    /// (reference/gaps-transactions.json). A missing database is error 5011;
+    /// the caller adds the final 5069.
+    pub fn set_snapshot_isolation(&self, db: &Connection, name: &str, on: bool) -> Result<bool> {
+        let _change = self.lock();
+        let alias = self.alterable_name(db, name)?;
+        if alias == self.primary {
+            return Ok(false);
+        }
+        db.execute(
+            &format!(
+                "UPDATE {} SET snapshot_isolation=? WHERE name=?",
+                self.registry()
+            ),
+            duckdb::params![on, alias],
+        )?;
+        Ok(true)
+    }
+
+    /// The SQL Server name of an ALTER DATABASE target, or error 5011.
+    pub fn alter_target(&self, db: &Connection, name: &str) -> Result<String> {
+        let _change = self.lock();
+        let alias = self.alterable_name(db, name)?;
+        Ok(self.display(&alias))
+    }
+
+    fn alterable_name(&self, db: &Connection, name: &str) -> Result<String> {
+        self.resolve_published(db, name)?.ok_or_else(|| {
+            let mut error = SqlError::new(
+                5011,
+                5,
+                format!(
+                    "User does not have permission to alter database '{name}', the database does not exist, or the database is not in a state that allows access checks."
+                ),
+            );
+            error.severity = 14;
+            error.into()
+        })
+    }
+
+    /// Whether SNAPSHOT transactions may access the database with this
+    /// DuckDB catalog alias (`sys.databases.snapshot_isolation_state`).
+    /// Always true for `master`; false for an unknown alias.
+    pub fn snapshot_isolation(&self, db: &Connection, alias: &str) -> Result<bool> {
+        if alias == self.primary {
+            return Ok(true);
+        }
+        Ok(db
+            .query_row(
+                &format!(
+                    "SELECT coalesce(snapshot_isolation,false) FROM {} WHERE name=?",
+                    self.registry()
+                ),
+                [alias],
+                |row| row.get(0),
+            )
+            .or_else(|error| match error {
+                duckdb::Error::QueryReturnedNoRows => Ok(false),
+                error => Err(error),
+            })?)
+    }
+
+    /// The SQL Server name of an attached DuckDB catalog alias.
+    pub fn display_name(&self, alias: &str) -> String {
+        self.display(alias)
     }
 
     fn alias(&self, db: &Connection) -> Result<String> {
@@ -1079,16 +1140,20 @@ impl Catalog {
                     false AS is_read_only,
                     CAST(0 AS UTINYINT) AS state,
                     CAST('ONLINE' AS VARCHAR) AS state_desc,
+                    CAST(CASE WHEN snapshot_isolation THEN 1 ELSE 0 END AS UTINYINT) AS snapshot_isolation_state,
+                    CAST(CASE WHEN snapshot_isolation THEN 'ON' ELSE 'OFF' END AS VARCHAR) AS snapshot_isolation_state_desc,
                     CAST(read_committed_snapshot AS BOOLEAN) AS is_read_committed_snapshot_on,
                     CAST(3 AS UTINYINT) AS recovery_model,
                     CAST('SIMPLE' AS VARCHAR) AS recovery_model_desc
              FROM (
                  SELECT '{MASTER}' AS name,{MASTER_ID} AS database_id,
                         CAST(TIMESTAMP '2003-04-08 09:13:36.39' AS TIMESTAMP) AS create_date,
-                        0 AS user_access,false AS read_committed_snapshot
+                        0 AS user_access,false AS read_committed_snapshot,
+                        true AS snapshot_isolation
                  UNION ALL
                  SELECT r.name,r.database_id,r.create_date,
-                        coalesce(r.user_access,0),coalesce(r.read_committed_snapshot,false)
+                        coalesce(r.user_access,0),coalesce(r.read_committed_snapshot,false),
+                        coalesce(r.snapshot_isolation,false)
                  FROM {registry} r JOIN duckdb_databases() d ON d.database_name=r.name
                  WHERE r.published
              );
