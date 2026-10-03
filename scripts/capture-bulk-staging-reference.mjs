@@ -5,6 +5,7 @@ import {lstat, mkdir, readFile, realpath, writeFile} from 'node:fs/promises'
 import {dirname, resolve} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {isDeepStrictEqual} from 'node:util'
+import {createHash} from 'node:crypto'
 import {TYPES} from 'tedious'
 import {capture, canonical, differences} from './lib/compatibility.mjs'
 import {isolatedReference} from './lib/reference.mjs'
@@ -14,10 +15,10 @@ const fixture = fileURLToPath(new URL('../reference/bulk-staging-reference.json'
 const LIMIT = 8 * 1024 * 1024
 const MAX_PACKETS = 8192
 export const cases = [
-  ...[1, 499, 500, 501, 999, 1000, 1001, 1501].map(count => ({name: `defaults-${count}`, count, fireTriggers: true})),
+  ...[1, 332, 333, 334, 499, 500, 501, 999, 1000, 1001, 1501].map(count => ({name: `defaults-${count}`, count, fireTriggers: true})),
   {name: 'keep-nulls-staged', count: 1001, fireTriggers: true, keepNulls: true},
   {name: 'no-triggers-staged', count: 1001, fireTriggers: false},
-  ...[399, 400, 401, 1001].map(count => ({name: `listed-identity-${count}`, count, fireTriggers: true, listedIdentity: true})),
+  ...[284, 285, 286, 399, 400, 401, 1001].map(count => ({name: `listed-identity-${count}`, count, fireTriggers: true, listedIdentity: true})),
   {name: 'all-default-staged', count: 1001, fireTriggers: true, allDefault: true},
   ...['check', 'foreign-key'].flatMap(constraintKind => [false, true].flatMap(checkConstraints => [false, true].map(transaction => ({
     name: `trigger-${constraintKind}-check${Number(checkConstraints)}-tran${Number(transaction)}`,
@@ -169,15 +170,87 @@ export function compare(actual, expected) {
     category: /\/packets\/\d+\/rawHex$/.test(item.path) ? 'raw-packet' : 'observed-field'}))
 }
 
+function exact(actual, expected, label) {
+  if (!isDeepStrictEqual(actual, expected)) throw Error(label)
+}
+
+function packetBytes(packet, remaining = LIMIT) {
+  assert.ok(typeof packet.rawHex === 'string' && packet.rawHex.length >= 16
+    && packet.rawHex.length <= 32767 * 2 && packet.rawHex.length % 2 === 0
+    && packet.rawHex.length / 2 <= remaining, 'bounded encoded packet before decoding')
+  assert.match(packet.rawHex, /^(?:[0-9a-f]{2})+$/)
+  return Buffer.from(packet.rawHex, 'hex')
+}
+
+// Fixed gold observations from the independently inspected four 29-case runs.
+// These are fixture checks, not promises about unprobed SQL Server workloads.
+const READBACK_COLUMNS_SHA = '488a820956ff22530072a249001c6b42fb4c60f7845a452cb6a63f4a20cbeb5c'
+function validateReadback(observation, database) {
+  const entry = observation.case, result = observation.readback.result
+  assert.equal(result.errors.length, 0, 'readback succeeds')
+  assert.equal(result.sets.length, 8, 'all readback sets retained')
+  const descriptorHash = createHash('sha256').update(JSON.stringify(result.sets.map(set => set.columns))).digest('hex')
+  assert.equal(descriptorHash, READBACK_COLUMNS_SHA, 'fixed captured readback descriptors')
+  const sets = result.sets.map(set => set.rows)
+  const last = entry.listedIdentity ? 10000 + (entry.count - 1) * 2 : entry.count
+  if (entry.constraintKind) {
+    exact(sets[0], [[547, 0, 1, 3, 3, 1, 0]], 'fixed failed-load identity and transaction observation')
+    for (let index = 1; index <= 5; index++) exact(sets[index], [], 'failed trigger load is atomic')
+    const kind = entry.constraintKind === 'check' ? 'CHECK' : 'FOREIGN KEY'
+    const constraint = entry.constraintKind === 'check' ? 'ck_sink' : 'fk_child'
+    const table = entry.constraintKind === 'check' ? 'sink' : 'parent'
+    const column = entry.constraintKind === 'check' ? 'n' : 'id'
+    const message = `The INSERT statement conflicted with the ${kind} constraint "${constraint}". The conflict occurred in database "${database}", table "dbo.${table}", column '${column}'.`
+    const serverName = observation.execution.result.errors[0]?.serverName
+    assert.match(serverName, /^[0-9a-f]{12}$/)
+    exact(observation.execution.result.errors, [{number: 547, state: 0, class: 16, lineNumber: entry.constraintKind === 'check' ? 6 : 7,
+      message, serverName, procName: 'tr_items'}], 'fixed trigger constraint diagnostic')
+    exact(observation.execution.result.info, [{number: 3621, state: 0, class: 0, lineNumber: 1,
+      message: 'The statement has been terminated.', serverName, procName: ''}], 'fixed termination informational token')
+    exact(observation.execution.result.error, {number: 547, code: 'EREQUEST', message}, 'fixed callback error')
+    assert.equal(observation.execution.result.rowCount, 0, 'failed load callback count')
+  } else {
+    const expectedRows = observation.input.map((row, index) => [
+      entry.listedIdentity ? 10000 + index * 2 : index + 1, entry.allDefault ? 0 : index + 1,
+      ...[['a', 11], ['b', 'β'], ['c', 22]].map(([name, fallback]) => row[name] === null && !entry.keepNulls ? fallback : row[name])
+    ])
+    exact(sets[0], [[0, entry.count, entry.fireTriggers ? 1 : last, last, last, 1, 0]], 'fixed successful-load identity and transaction observation')
+    exact(sets[1], expectedRows, 'fixed captured identity mapping and defaults')
+    exact(sets[2], entry.fireTriggers ? [[1, entry.count]] : [], 'fixed whole-load trigger invocation')
+    exact(sets[3], entry.fireTriggers ? expectedRows.map(row => [1, row[0], row[1]]) : [], 'fixed trigger inserted membership')
+    exact(sets[4], [], 'no unrelated sink rows')
+    exact(sets[5], [], 'no unrelated child rows')
+    exact(observation.execution.result.info, [], 'successful load has no informational diagnostics')
+  }
+  exact(sets[6], [['ck_items', !entry.checkConstraints, false], ['ck_sink', false, false]], 'fixed table-specific CHECK trust')
+  exact(sets[7], [['fk_child', false, false]], 'fixed other-table FK trust')
+  exact(result.done, sets.map((rows, index) => ({kind: 'done', rowCount: rows.length, more: index < 7})), 'fixed readback completion events')
+  assert.equal(result.rowCount, sets.reduce((sum, rows) => sum + rows.length, 0), 'fixed readback callback count')
+}
+
 export function validate(value) {
   assert.equal(value.format, 1)
   assert.equal(value.containers.length, 2)
   assert.equal(value.runs.length, 4)
+  for (const container of value.containers) assert.match(container.image, /@sha256:[0-9a-f]{64}$/)
+  assert.equal(value.containers[0].image, value.containers[1].image, 'one pinned image for both independent containers')
   for (const run of value.runs) {
+    const database = run.version.result.sets[0].rows[0][1]
+    assert.match(database, /^msduck_audit_[0-9a-f]{32}$/)
     assert.equal(run.observations.length, cases.length)
     for (const [index, observation] of run.observations.entries()) {
       assert.ok(isDeepStrictEqual(observation.case, cases[index]), 'exact case manifest')
       assert.ok(isDeepStrictEqual(observation.input, rowsFor(cases[index])), 'exact original input')
+      if (observation.case.transaction) {
+        assert.equal(observation.begin.result.errors.length, 0, 'BEGIN TRAN succeeds')
+        const first = observation.execution.packets.find(packet => packet.direction === 'out')
+        const raw = packetBytes(first)
+        assert.equal(raw[0], 1, 'bulk statement is SQL Batch')
+        assert.equal(raw.readUInt32LE(8), 22, 'known ALL_HEADERS length')
+        assert.equal(raw.readUInt32LE(12), 18, 'transaction header length')
+        assert.equal(raw.readUInt16LE(16), 2, 'transaction descriptor header')
+        assert.notEqual(raw.readBigUInt64LE(18), 0n, 'bulk request carries the active explicit transaction')
+      }
       if (!observation.case.constraintKind) {
         assert.equal(observation.execution.result.error, null, 'successful interaction reaches row insertion')
         assert.equal(observation.execution.result.errors.length, 0, 'no accidental metadata/setup diagnostic')
@@ -185,13 +258,13 @@ export function validate(value) {
       } else {
         assert.ok(observation.execution.result.errors.some(error => error.number === 547), 'other-table constraint probe reaches trigger violation')
       }
+      validateReadback(observation, database)
       for (const step of [run.version, observation.setup, observation.trigger, observation.begin,
         observation.execution, observation.readback, observation.rollback, observation.cleanup].filter(Boolean)) {
         assert.ok(Array.isArray(step.packets) && step.packets.length > 0 && step.packets.length <= MAX_PACKETS, 'bounded complete exchange')
         let bytes = 0, message = null
         for (const packet of step.packets) {
-          assert.match(packet.rawHex, /^(?:[0-9a-f]{2})+$/)
-          const raw = Buffer.from(packet.rawHex, 'hex')
+          const raw = packetBytes(packet, LIMIT - bytes)
           bytes += raw.length
           assert.ok(raw.length >= 8 && raw.length <= 32767 && raw.readUInt16BE(2) === raw.length, 'exact packet frame')
           assert.ok(packet.direction === 'out' ? [1, 7].includes(raw[0]) : packet.direction === 'in' && raw[0] === 4, 'post-login packet direction/type')

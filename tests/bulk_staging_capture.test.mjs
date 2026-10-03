@@ -9,8 +9,8 @@ const fixture = new URL('../reference/bulk-staging-reference.json', import.meta.
 const load = async () => JSON.parse(await readFile(fixture, 'utf8'))
 
 test('captured cases preserve threshold inputs and three independent default patterns', () => {
-  assert.deepEqual(cases.filter(c => c.name.startsWith('defaults-')).map(c => c.count), [1, 499, 500, 501, 999, 1000, 1001, 1501])
-  assert.deepEqual(cases.filter(c => c.listedIdentity).map(c => c.count), [399, 400, 401, 1001])
+  assert.deepEqual(cases.filter(c => c.name.startsWith('defaults-')).map(c => c.count), [1, 332, 333, 334, 499, 500, 501, 999, 1000, 1001, 1501])
+  assert.deepEqual(cases.filter(c => c.listedIdentity).map(c => c.count), [284, 285, 286, 399, 400, 401, 1001])
   assert.deepEqual(rowsFor(cases.find(c => c.name === 'defaults-501')).slice(0, 3), [
     {marker: 1, a: null, b: 'row0', c: 200},
     {marker: 2, a: 101, b: null, c: 201},
