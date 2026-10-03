@@ -194,13 +194,29 @@ fn pause(session: &mut Session) -> Result<()> {
 /// A transaction open in a session, as ALLOW_SNAPSHOT_ISOLATION changes
 /// see it.
 struct Active {
-    /// When it began, from [`SEQUENCE`].
-    sequence: u64,
     /// The server's database catalog (its address), so that servers in one
     /// process stay apart.
     catalog: usize,
-    /// The databases (DuckDB catalog aliases) the transaction used.
+    /// An explicit transaction has one frame. Outside a transaction each
+    /// running autocommit statement has one, per nested body: a trigger or
+    /// procedure body's statement runs inside its caller's.
+    frames: Vec<Frame>,
+}
+
+struct Frame {
+    /// When it began, from [`SEQUENCE`].
+    sequence: u64,
+    /// The databases (DuckDB catalog aliases) it used.
     databases: HashMap<String, Usage>,
+}
+
+impl Frame {
+    fn new() -> Self {
+        Self {
+            sequence: SEQUENCE.fetch_add(1, Ordering::SeqCst),
+            databases: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -210,8 +226,7 @@ struct Usage {
     read: bool,
 }
 
-/// Open transactions by session token. A session outside a transaction
-/// has an entry for its running autocommit statement.
+/// Open transactions, and running autocommit statements, by session token.
 static ACTIVE: LazyLock<Mutex<HashMap<u64, Active>>> = LazyLock::new(Default::default);
 
 /// Orders transactions and the ALLOW_SNAPSHOT_ISOLATION changes.
@@ -227,42 +242,63 @@ fn catalog_id(session: &Session) -> usize {
     std::sync::Arc::as_ptr(session.database.catalog()) as usize
 }
 
-fn new_active(session: &Session) -> Active {
-    let mut databases = HashMap::new();
-    databases.insert(session.database.alias().to_owned(), Usage::default());
-    Active {
-        sequence: SEQUENCE.fetch_add(1, Ordering::SeqCst),
-        catalog: catalog_id(session),
-        databases,
-    }
+/// The batch nesting depth: 1 for a top-level batch.
+fn depth(session: &Session) -> usize {
+    session.ext.transactions.batch_isolation.len().max(1)
 }
 
 /// The outermost transaction of a session began.
 pub(super) fn begin(session: &Session) {
-    active_transactions().insert(session.ext.token, new_active(session));
+    let mut frame = Frame::new();
+    frame
+        .databases
+        .insert(session.database.alias().to_owned(), Usage::default());
+    active_transactions().insert(
+        session.ext.token,
+        Active {
+            catalog: catalog_id(session),
+            frames: vec![frame],
+        },
+    );
 }
 
-/// The session's transaction ended, its batch ended outside a transaction,
-/// or the session ended.
+/// The session's transaction ended, or the session ended.
 pub(super) fn end(session: &Session) {
     active_transactions().remove(&session.ext.token);
 }
 
-/// A statement starts. Outside a transaction each statement of the
-/// top-level batch is its own autocommit transaction, so what earlier ones
-/// read or wrote no longer counts. Statements nested in a running one
-/// (trigger and procedure bodies) keep its registration.
-pub(super) fn statement_begins(session: &Session) {
-    if session.transactions == 0
-        && session.ext.transactions.writing == 0
-        && session.ext.transactions.batch_isolation.len() <= 1
-    {
-        end(session);
+/// Outside a transaction, keep only the autocommit frames of the enclosing
+/// statements: `keep` of them.
+fn keep_frames(session: &Session, keep: usize) {
+    if session.transactions > 0 {
+        return;
+    }
+    let mut transactions = active_transactions();
+    if let Some(active) = transactions.get_mut(&session.ext.token) {
+        active.frames.truncate(keep);
+        if active.frames.is_empty() {
+            transactions.remove(&session.ext.token);
+        }
     }
 }
 
-/// Update how the session's transaction uses a database. Outside a
-/// transaction this starts an entry for its autocommit transactions.
+/// A statement starts. Outside a transaction it is its own autocommit
+/// transaction, so the previous statement of its body (and anything that
+/// statement nested) no longer counts. A SNAPSHOT write re-entering for
+/// itself keeps its registration.
+pub(super) fn statement_begins(session: &Session) {
+    if session.ext.transactions.writing == 0 {
+        keep_frames(session, depth(session) - 1);
+    }
+}
+
+/// A batch or nested body ends.
+pub(super) fn batch_ends(session: &Session) {
+    keep_frames(session, depth(session) - 1);
+}
+
+/// Update how the session's transaction (or running autocommit statement)
+/// uses a database.
 fn usage(session: &Session, alias: &str, update: impl FnOnce(&mut Usage)) {
     usage_in(&mut active_transactions(), session, alias, update);
 }
@@ -273,17 +309,44 @@ fn usage_in(
     alias: &str,
     update: impl FnOnce(&mut Usage),
 ) {
-    let active = if session.transactions == 0 {
-        transactions
+    let frame = if session.transactions == 0 {
+        let active = transactions
             .entry(session.ext.token)
-            .or_insert_with(|| new_active(session))
+            .or_insert_with(|| Active {
+                catalog: catalog_id(session),
+                frames: Vec::new(),
+            });
+        let depth = depth(session);
+        while active.frames.len() < depth {
+            active.frames.push(Frame::new());
+        }
+        &mut active.frames[depth - 1]
     } else {
-        match transactions.get_mut(&session.ext.token) {
-            Some(active) => active,
+        match transactions
+            .get_mut(&session.ext.token)
+            .and_then(|active| active.frames.first_mut())
+        {
+            Some(frame) => frame,
             None => return,
         }
     };
-    update(active.databases.entry(alias.to_owned()).or_default());
+    update(frame.databases.entry(alias.to_owned()).or_default());
+}
+
+/// Whether the session's transaction (or running autocommit statement)
+/// already read the database as a SNAPSHOT transaction.
+fn has_read(transactions: &HashMap<u64, Active>, session: &Session, alias: &str) -> bool {
+    let Some(active) = transactions.get(&session.ext.token) else {
+        return false;
+    };
+    let frame = if session.transactions == 0 {
+        active.frames.get(depth(session) - 1)
+    } else {
+        active.frames.first()
+    };
+    frame
+        .and_then(|frame| frame.databases.get(alias))
+        .is_some_and(|usage| usage.read)
 }
 
 /// Note a write of the session's transaction, or of its autocommit
@@ -433,12 +496,14 @@ fn wait_for_transactions(
         let transactions = active_transactions();
         let blocked = transactions.iter().any(|(other, active)| {
             *other != token
-                && active.sequence < cutoff
                 && active.catalog == catalog
-                && active
-                    .databases
-                    .get(alias)
-                    .is_some_and(|usage| usage.wrote || (!on && usage.read))
+                && active.frames.iter().any(|frame| {
+                    frame.sequence < cutoff
+                        && frame
+                            .databases
+                            .get(alias)
+                            .is_some_and(|usage| usage.wrote || (!on && usage.read))
+                })
         });
         if !blocked {
             return publish();
@@ -548,10 +613,7 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
         // transaction table, so a change waits for every read that saw ON.
         let mut transactions = active_transactions();
         let state = catalog.snapshot_isolation(&session.db, &alias)?;
-        let read = transactions
-            .get(&session.ext.token)
-            .and_then(|active| active.databases.get(&alias))
-            .is_some_and(|usage| usage.read);
+        let read = has_read(&transactions, session, &alias);
         // A transaction that read under SNAPSHOT before OFF began continues.
         if read && matches!(state, SnapshotIsolation::On | SnapshotIsolation::ToOff) {
             continue;

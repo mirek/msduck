@@ -1391,4 +1391,27 @@ fn allow_snapshot_isolation_changes_wait_for_open_transactions() {
         Some((0, Some("OFF".into())))
     );
     run(&mut late, "ROLLBACK").unwrap();
+    // Each statement of a procedure outside a transaction is its own
+    // autocommit transaction: a completed UPDATE does not delay ON while
+    // the procedure goes on waiting.
+    run(
+        &mut writer,
+        "CREATE PROCEDURE slow AS BEGIN UPDATE t SET v = v; WAITFOR DELAY '00:00:03' END",
+    )
+    .unwrap();
+    let mut caller = session(&server);
+    caller.process().set_login(
+        msduck::sessions::Client::default(),
+        "sa",
+        Some(Arc::new(|| {})),
+    );
+    caller.use_database("probe_db").unwrap();
+    let procedure = thread::spawn(move || run(&mut caller, "EXEC slow").map(|_| ()));
+    thread::sleep(Duration::from_millis(500));
+    let (result, elapsed) = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON")
+        .join()
+        .unwrap();
+    assert_eq!(result, Ok(()));
+    assert!(elapsed < Duration::from_millis(1500), "{elapsed:?}");
+    assert_eq!(procedure.join().unwrap(), Ok(()));
 }
