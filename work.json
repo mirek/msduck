@@ -11324,6 +11324,30 @@
         "Reuse existing isolated worker tree/private SQL reference resources only. No extra agents/worktrees/native caches, no canonical Linux source/build/cache writes. Fresh exclusive receipt after genuine completed dependencies. Push checkpoints/draft, focused tests both hosts, source-pinned four-run reproduction, immutable raw/sidecars retained, independent and exact-head Codex review or genuine fallback, requiredCI, claiming-worker merge/completion and board/issue verification. No Rust/engine/catalog/output/BulkLoad edits; owner853 reservation respected."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Plbp5"
+    },
+    {
+      "id": "ansi-cp1252-projection-v1",
+      "title": "Implement exhaustive native CP1252 SQL projection kernels",
+      "issue": 907,
+      "state": "backlog",
+      "authorization": "Owner continuing full-server goal; approved first-party plan890 and reviewed CP1251 kernel897. Exhaustive906 evidence must be reviewed/merged/Done before fresh implementation claim.",
+      "scope": [
+        "crates/msduck-core/src/ansi_conversion.rs",
+        "crates/msduck-core/tests/ansi_conversion.rs",
+        "docs/ansi-conversion.md"
+      ],
+      "dependencies": [
+        "bulk-character-cp1252-reference-v1",
+        "ansi-cp1251-projection-v1",
+        "ansi-byte-export-v1",
+        "bulk-character-adapter-plan-v1"
+      ],
+      "acceptance": [
+        "Extend public deterministic projection API with CP1252 native source to identityCP1252, nativeCP1251, nativeUTF8 and SQLUTF16 from all256 unchanged original/native/SQL-unit fields across all four reviewed906 runs. Audit direct nativeUTF8 against derived SQLunit encoding; mapping/width assumptions require raw proof. Preserve undefined81/8D/8F/90/9D native bytes versus actual SQLunits and client UFFFD display. Existing CP1251 and895 rules/evidence remain intact; no client/platform codec as conversion oracle or invented general Unicode-source/UTF8 decoding.",
+        "Explicit source identities and unsupported plan validation beforeNULL; mismatch errors, NULL/empty distinctions. Checked input/output sizing and payload limits before fallible reservation/copy; UTF16 countsBYTES. Complete projections only, no SQL padding/truncation/capacity/diagnostics. Actual public-API tests prove all256×fourruns×each target plus mixed/large/undefined controls, source immutability, unsupported opaque/UTF8 domains and exact/oneover resource bounds using unchanged retained fixtures.",
+        "Fresh claim only after true completed deps and latest scope audit; existing rootworktree/canonicalLinuxcache/runner.lock, no newagents/worktrees/nativecaches. Fastcore/TDS plus fullAGENTS formatter/workspaceRust/strictalltargetClippy/fullclient/rawaudit gates at exacthead/source/binary; independent/Codex review or genuine fallback, exactrequiredCI, merge and promptregistry/project completion. No corelib export/Value/runtime/catalog/storage/BulkLoad/output or operationalcollation gate changes; runtime adoption remains required."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PlcqJ"
     }
   ]
 }
