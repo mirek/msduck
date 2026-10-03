@@ -9823,7 +9823,7 @@
     {
       "id": "concat-text-conversion-rules-v1",
       "title": "Deterministic function-specific text conversion contracts",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct continuing owner compatibility goal and root delegation after completed reference task814/PR815; no external intake.",
       "scope": [
         "crates/msduck-sql/src/concat_text_conversion.rs",
