@@ -156,6 +156,13 @@ of at most 256 bytes within the remaining exchange/aggregate budget. An oversize
 or malformed input is not presented as a complete validated packet. Asynchronous
 oversized incoming and malformed outgoing tests verify promise completion,
 cleanup and preservation of this partial evidence and its comparison sidecar.
+Each exchange reserves a 4 KiB diagnostic allowance before installing listeners,
+from a separate 64 KiB budget inside the existing capture-envelope reserve.
+An exhausted payload budget still returns previously retained packets and an
+explicit omitted-result/failure record. The failed exchange is assigned to its
+observation before capture stops and saves the partial artifact; it cannot vanish
+because a final ordinary result charge failed. An exhausted-budget regression
+exercises that path through exchange completion and full sidecar persistence.
 
 Raw cross-run comparison counts are 14, 997 and 997; the differences retain
 original database/container names, diagnostics, response bytes and packet
@@ -188,7 +195,7 @@ different in raw evidence. A further SPID-hardened capture from source
 also completed with exit zero, raw SHA256
 `c7c0775f354ba2ac867b73662fd16ef37c881c1403ff1e7c5116e847005e6c4d`.
 These recorded capture sources remain explicitly admitted for offline checking.
-Both local and Linux focused suites pass fifteen tests, including duplicate-run,
+Both local and Linux focused suites pass sixteen tests, including duplicate-run,
 extra-cell, packet-status, SPID/type corruption, asynchronous trace guards and
 aborted-startup negatives.
 

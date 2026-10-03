@@ -103,11 +103,23 @@ export function jsonSize(value, maximum = CAPTURE_LIMIT) {
   visit(value, 0)
   return bytes
 }
-function budget() {
+const FAILURE_LIMIT = 4096
+export function budget(payloadLimit = CAPTURE_LIMIT - 512 * 1024) {
+  assert.ok(Number.isSafeInteger(payloadLimit) && payloadLimit >= 0 && payloadLimit <= CAPTURE_LIMIT - 512 * 1024)
   // Reserve envelope/key/escaping overhead; raw hex and returned objects are
   // charged independently before they are copied into retained observations.
-  let remaining = CAPTURE_LIMIT - 512 * 1024
-  return {take(n) {assert.ok(Number.isSafeInteger(n) && n >= 0 && n <= remaining, 'bounded aggregate capture'); remaining -= n}}
+  let remaining = payloadLimit, diagnosticRemaining = 64 * 1024
+  return {
+    take(n) {assert.ok(Number.isSafeInteger(n) && n >= 0 && n <= remaining, 'bounded aggregate capture'); remaining -= n},
+    reserveDiagnostic() {
+      // Reserve before installing listeners: exhausted ordinary payload space
+      // cannot prevent returning the already retained exchange to its caller.
+      assert.ok(diagnosticRemaining >= FAILURE_LIMIT, 'bounded diagnostic capture')
+      diagnosticRemaining -= FAILURE_LIMIT
+      let active = true
+      return {finish(used) {assert.ok(active && Number.isSafeInteger(used) && used >= 0 && used <= FAILURE_LIMIT); active = false; diagnosticRemaining += FAILURE_LIMIT - used}}
+    }
+  }
 }
 export async function guardOutput(path) {
   for (let part = resolve(path);; part = dirname(part)) {
@@ -173,13 +185,24 @@ function trace(connection, budget) {
 
 function failure(error) {return {name: error.name ?? 'Error', code: error.code ?? null, message: String(error.message).slice(0, 1024)}}
 export async function exchange(connection, action, retained) {
+  const diagnostic = retained.reserveDiagnostic()
   const recorder = trace(connection, retained)
   let result
   try {result = canonical(await Promise.race([Promise.resolve().then(action), recorder.failed]))} catch (error) {result = {transportError: failure(error)}}
   const {packets, failureRecord} = recorder.stop()
   if (failureRecord) {result.traceFailure = failureRecord; result.transportError ??= failure(failureRecord)}
-  retained.take(jsonSize(result, LIMIT))
+  let diagnosticBytes = 0
+  try {retained.take(jsonSize(result, LIMIT))} catch (error) {
+    result = {transportError: failure(error), traceFailure: failureRecord,
+      captureBudgetFailure: failure(error), resultOmitted: true}
+    diagnosticBytes = jsonSize(result, FAILURE_LIMIT)
+    if (!failureRecord) {try {connection.close()} catch {}}
+  }
+  diagnostic.finish(diagnosticBytes)
   return {result, packets}
+}
+function requireCapture(record) {
+  assert.ok(!record.result.traceFailure && !record.result.captureBudgetFailure, 'controlled capture interrupted; partial exchange retained')
 }
 async function sql(connection, text, retained) {
   return {sql: text, ...await exchange(connection, () => capture(connection, text), retained)}
@@ -216,6 +239,7 @@ SELECT id, value, CAST(value AS varbinary(max)) AS native_bytes, CAST(value AS n
 CAST(CAST(value AS nvarchar(max)) AS varbinary(max)) AS unicode_units FROM dbo.conversion_probe ORDER BY id;`
 async function observe(config, initial, run, retained) {
   run.version = await sql(initial, "SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(128)) AS version, DB_NAME() AS database_name, CAST(SERVERPROPERTY('ServerName') AS nvarchar(128)) AS server_name", retained)
+  requireCapture(run.version)
   assert.equal(run.version.result.errors.length, 0)
   const database = run.version.result.sets[0].rows[0][1]
   const caseConfig = {...config, options: {...config.options, database, packetSize: 512, requestTimeout: 10000}}
@@ -228,6 +252,7 @@ async function observe(config, initial, run, retained) {
     try {
       const wireProfile = profiles[c.wire] ?? profiles.cp1252
       o.metadata = await sql(connection, `SELECT CAST('' AS ${c.sourceFamily}(${c.sourceWidth})) COLLATE ${wireProfile} AS sample`, retained)
+      requireCapture(o.metadata)
       assert.equal(o.metadata.result.errors.length, 0)
       const descriptor = o.metadata.result.sets[0].columns[0].collation
       const collation = new Collation(descriptor.lcid, descriptor.flags, descriptor.version, descriptor.sortId)
@@ -236,16 +261,21 @@ async function observe(config, initial, run, retained) {
       const targetProfile = profiles[c.target] ?? profiles.cp1252
       const targetFamily = c.target === 'unicode' && c.targetFamily === 'varchar' ? 'nvarchar' : c.targetFamily
       o.setup = await sql(connection, `CREATE TABLE dbo.conversion_probe (id int NOT NULL, value ${targetFamily}(${c.targetWidth}) COLLATE ${targetProfile} NULL)`, retained)
+      requireCapture(o.setup)
       assert.equal(o.setup.result.errors.length, 0)
       o.execution = await exchange(connection, () => runBulk(connection, c, collation, o.input), retained)
+      requireCapture(o.execution)
       o.readback = {session: 'original', ...await sql(connection, readbackSql, retained)}
+      requireCapture(o.readback)
       if (connection.closed || o.readback.result.transportError || o.readback.result.errors?.some(e => e.number === null)) {
         connection.close()
         connection = await connect(caseConfig)
         // A replacement connection cannot establish the failed session's counters.
         o.recoveryReadback = {session: 'replacement', ...await sql(connection, readbackSql, retained)}
+        requireCapture(o.recoveryReadback)
       }
       o.cleanup = await sql(connection, 'DROP TABLE dbo.conversion_probe', retained)
+      requireCapture(o.cleanup)
       assert.equal(o.cleanup.result.errors.length, 0)
       console.log(JSON.stringify({case: c.name, errors: o.execution.result.errors?.map(e => e.number), callback: o.execution.result.error?.code ?? null, count: o.execution.result.rowCount}))
     } finally {connection.close()}

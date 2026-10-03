@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os'
 import {spawnSync} from 'node:child_process'
 import {EventEmitter} from 'node:events'
 import {createHash} from 'node:crypto'
-import {cases, rowsFor, jsonSize, CAPTURE_LIMIT, validate, validateRetained, compare, guardOutput, persistCapture, readCaptureFile, exchange} from '../scripts/capture-bulk-character-conversion.mjs'
+import {cases, rowsFor, jsonSize, CAPTURE_LIMIT, validate, validateRetained, compare, guardOutput, persistCapture, readCaptureFile, exchange, budget} from '../scripts/capture-bulk-character-conversion.mjs'
 const fixture = new URL('../reference/bulk-character-conversion.json', import.meta.url)
 const load = async () => JSON.parse(await readFile(fixture, 'utf8'))
 const find = (run, name) => run.observations.find(o => o.case.name === name)
@@ -202,7 +202,7 @@ test('asynchronous trace guards close the connection and preserve bounded failed
     const record=await exchange(connection,()=>{
       queueMicrotask(()=>{incoming.emit('data',prefix);(direction==='in'?incoming:outgoing).emit('data',invalid)})
       return new Promise(()=>{})
-    },{take(){}})
+    },budget())
     assert.equal(closed,1)
     assert.equal(incoming.listenerCount('data'),0)
     assert.equal(outgoing.listenerCount('data'),0)
@@ -220,6 +220,31 @@ test('asynchronous trace guards close the connection and preserve bounded failed
       assert.equal(JSON.parse(await readFile(output+'.comparison.json','utf8')).retained,true)
     })
   }
+})
+
+test('aggregate payload exhaustion still returns already retained packets and reserved failure evidence', {timeout:10000}, async () => {
+  const incoming=new EventEmitter(),outgoing=new EventEmitter()
+  let closed=0
+  const connection={messageIo:{outgoingMessageStream:outgoing,socket:incoming},close(){closed++}}
+  const packet=Buffer.from('040100090039010000','hex')
+  const limits=budget(packet.length*2+64)
+  const record=await exchange(connection,()=>{
+    queueMicrotask(()=>{incoming.emit('data',packet);incoming.emit('data',packet)})
+    return new Promise(()=>{})
+  },limits)
+  assert.equal(closed,1)
+  assert.equal(incoming.listenerCount('data'),0)
+  assert.deepEqual(record.packets,[{direction:'in',rawHex:packet.toString('hex')}])
+  assert.ok(record.result.captureBudgetFailure.message.includes('aggregate'))
+  assert.ok(record.result.traceFailure.message.includes('aggregate'))
+  assert.equal(record.result.resultOmitted,true)
+  assert.equal(record.result.traceFailure.sha256,createHash('sha256').update(packet).digest('hex'))
+  await scratch(async dir=>{
+    const output=join(dir,'aggregate-failed.json'),partial={format:1,containers:[],runs:[],trace:record}
+    await assert.rejects(persistCapture(partial,output))
+    assert.deepEqual(JSON.parse(await readFile(output,'utf8')),partial)
+    assert.deepEqual(JSON.parse(await readFile(output+'.comparison.json','utf8')).differences,compare(partial,await load()))
+  })
 })
 
 test('JSON preflight bounds exact UTF8 escaped size and rejects excessive or cyclic captures before serialization', () => {
