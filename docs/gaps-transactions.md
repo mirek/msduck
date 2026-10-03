@@ -160,8 +160,9 @@ Remaining differences, retained exactly in the replay:
 - SQL Server sends a failing SELECT's column metadata before 3952; msduck
   checks access first and sends no empty result set.
 - 3952 is checked before name resolution for tables and views that exist,
-  in queries, writes and the subqueries of SET, DECLARE and RETURN. Data
-  access in IF and WHILE conditions, in scalar function calls, or in a
+  in queries, writes and the subqueries of SET and DECLARE. Data access in
+  IF and WHILE conditions, in a procedure's RETURN expression (which the
+  procedures feature evaluates itself), in scalar function calls, or in a
   module that runs through another path is not checked.
 - 226 ends the batch in msduck, as it does for the engine's other ALTER
   DATABASE options; SQL Server continues with the next statement. A missing
