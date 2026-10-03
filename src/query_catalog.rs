@@ -356,6 +356,17 @@ fn object_catalog_fields(view: &str, catalog_collation: &str) -> Option<Vec<Fiel
             ("is_read_only", 104, 104, 1, 1, 0, true, true),
             ("state", 48, 48, 1, 3, 0, true, true),
             ("state_desc", 231, 231, 120, 0, 0, true, true),
+            ("snapshot_isolation_state", 48, 48, 1, 3, 0, true, true),
+            (
+                "snapshot_isolation_state_desc",
+                231,
+                231,
+                120,
+                0,
+                0,
+                true,
+                true,
+            ),
             (
                 "is_read_committed_snapshot_on",
                 104,

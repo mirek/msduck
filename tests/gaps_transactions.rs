@@ -4,6 +4,7 @@
 //! docs/gaps-transactions.md. Client-level coverage is in
 //! tests/compat/transactions.test.mjs.
 use msduck::{
+    database_catalog::SnapshotIsolation,
     engine::Session,
     read_cancellation::{Mode, Outcome},
     server::Server,
@@ -826,4 +827,597 @@ fn columns_named_like_aliases_and_cte_writes_are_restored() {
         [(1, Some("1".into()))]
     );
     assert_eq!(ints(&s, "SELECT t FROM dbo.heap ORDER BY t"), [1, 2]);
+}
+
+/// `snapshot_isolation_state` and its description for a database.
+fn snapshot_state(session: &Session, name: &str) -> Option<(i64, Option<String>)> {
+    session
+        .db
+        .query_row(
+            "SELECT snapshot_isolation_state, snapshot_isolation_state_desc FROM sys.databases WHERE name = ?",
+            [name],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .ok()
+}
+
+/// Fail with 50001 unless `condition` holds, evaluated through T-SQL.
+fn check(session: &mut Session, condition: &str) -> Result<Vec<u8>, i32> {
+    run(
+        session,
+        &format!("IF NOT ({condition}) THROW 50001, 'check failed', 1"),
+    )
+}
+
+#[test]
+fn allow_snapshot_isolation_is_published_and_persists_across_restart() {
+    let directory = std::env::temp_dir().join(format!(
+        "msduck-snapshot-isolation-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&directory).unwrap();
+    let path = directory.join("primary.duckdb");
+    let path = path.to_str().unwrap();
+    {
+        let server = Server::open(path).unwrap();
+        let mut s = session(&server);
+        run(&mut s, "CREATE DATABASE probe_db").unwrap();
+        // master always allows snapshot isolation (3987 is informational).
+        assert_eq!(snapshot_state(&s, "master"), Some((1, Some("ON".into()))));
+        assert_eq!(
+            snapshot_state(&s, "probe_db"),
+            Some((0, Some("OFF".into())))
+        );
+        let tokens = run(
+            &mut s,
+            "ALTER DATABASE master SET ALLOW_SNAPSHOT_ISOLATION OFF",
+        )
+        .unwrap();
+        assert!(contains_utf16(
+            &tokens,
+            "SNAPSHOT ISOLATION is always enabled in this database."
+        ));
+        assert_eq!(snapshot_state(&s, "master"), Some((1, Some("ON".into()))));
+        run(
+            &mut s,
+            "ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON",
+        )
+        .unwrap();
+        assert_eq!(snapshot_state(&s, "probe_db"), Some((1, Some("ON".into()))));
+        // Independent of READ_COMMITTED_SNAPSHOT.
+        run(
+            &mut s,
+            "ALTER DATABASE probe_db SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE",
+        )
+        .unwrap();
+        assert_eq!(snapshot_state(&s, "probe_db"), Some((1, Some("ON".into()))));
+    }
+    {
+        // A change that a stop interrupted returns to the state it started
+        // from.
+        let server = Server::open(path).unwrap();
+        let db = server.connection().unwrap();
+        db.databases()
+            .set_snapshot_isolation(&db, "probe_db", SnapshotIsolation::ToOff)
+            .unwrap();
+    }
+    let server = Server::open(path).unwrap();
+    let mut s = session(&server);
+    assert_eq!(snapshot_state(&s, "probe_db"), Some((1, Some("ON".into()))));
+    s.use_database("probe_db").unwrap();
+    run(
+        &mut s,
+        "ALTER DATABASE CURRENT SET ALLOW_SNAPSHOT_ISOLATION OFF",
+    )
+    .unwrap();
+    assert_eq!(
+        snapshot_state(&s, "probe_db"),
+        Some((0, Some("OFF".into())))
+    );
+    drop(s);
+    drop(server);
+    std::fs::remove_dir_all(&directory).unwrap();
+}
+
+#[test]
+fn allow_snapshot_isolation_errors_follow_sql_server() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    run(&mut s, "CREATE DATABASE probe_db").unwrap();
+    // Captured order: transaction, CURRENT in master, the database, other
+    // options, then the termination clause.
+    assert_eq!(
+        run(
+            &mut s,
+            "ALTER DATABASE CURRENT SET ALLOW_SNAPSHOT_ISOLATION ON"
+        ),
+        Err(12104)
+    );
+    assert_eq!(
+        run(
+            &mut s,
+            "BEGIN TRAN; ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON"
+        ),
+        Err(226)
+    );
+    run(&mut s, "ROLLBACK").unwrap();
+    for (sql, number) in [
+        (
+            "ALTER DATABASE missing_db SET ALLOW_SNAPSHOT_ISOLATION ON WITH NO_WAIT",
+            5069,
+        ),
+        (
+            "ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON, MULTI_USER",
+            5069,
+        ),
+        (
+            "ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON WITH ROLLBACK IMMEDIATE",
+            5069,
+        ),
+        (
+            "ALTER DATABASE master SET ALLOW_SNAPSHOT_ISOLATION ON WITH NO_WAIT",
+            5069,
+        ),
+    ] {
+        let tokens = s.batch_response(sql, &Default::default(), false, None).0;
+        assert_eq!(s.last_error, number, "{sql}");
+        let first = match sql {
+            s if s.contains("missing_db") => {
+                "User does not have permission to alter database 'missing_db'"
+            }
+            s if s.contains("MULTI_USER") => {
+                "Cannot change the versioning state on database \"probe_db\" together with another database state."
+            }
+            _ => "The termination option is not supported when making versioning state changes.",
+        };
+        assert!(contains_utf16(&tokens, first), "{sql}");
+    }
+    // Conflicting values fail before any statement of the batch runs.
+    let tokens = s
+        .batch_response(
+            "CREATE TABLE probe_db.dbo.ran (v INT); ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON, ALLOW_SNAPSHOT_ISOLATION OFF",
+            &Default::default(),
+            false,
+            None,
+        )
+        .0;
+    assert_eq!(s.last_error, 5062);
+    assert!(contains_utf16(
+        &tokens,
+        "The option \"ALLOW_SNAPSHOT_ISOLATION\" conflicts with another requested option."
+    ));
+    assert_eq!(
+        ints(
+            &s,
+            "SELECT count(*) FROM duckdb_tables() WHERE table_name = 'ran'"
+        ),
+        [0]
+    );
+    // Repeating the same value is accepted.
+    run(
+        &mut s,
+        "ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON, ALLOW_SNAPSHOT_ISOLATION ON",
+    )
+    .unwrap();
+    assert_eq!(snapshot_state(&s, "probe_db"), Some((1, Some("ON".into()))));
+}
+
+#[test]
+fn snapshot_transactions_need_the_option_and_read_their_snapshot() {
+    let server = Server::open(":memory:").unwrap();
+    let mut a = session(&server);
+    run(&mut a, "CREATE DATABASE probe_db").unwrap();
+    a.use_database("probe_db").unwrap();
+    let mut b = session(&server);
+    b.use_database("probe_db").unwrap();
+    run(
+        &mut a,
+        "CREATE TABLE t (id INT PRIMARY KEY, v INT); INSERT t VALUES (1, 1); CREATE TABLE #tmp (v INT)",
+    )
+    .unwrap();
+    run(&mut a, "SET TRANSACTION ISOLATION LEVEL SNAPSHOT").unwrap();
+    // Statements without table access, temporary tables, table variables and
+    // catalog views work while the option is OFF.
+    run(
+        &mut a,
+        "SELECT 1; INSERT #tmp VALUES (1); SELECT v FROM #tmp; DECLARE @x TABLE (v INT); INSERT @x VALUES (1); SELECT COUNT(*) FROM sys.objects",
+    )
+    .unwrap();
+    // Subqueries of variable assignments access data too.
+    assert_eq!(
+        run(&mut a, "DECLARE @x INT = (SELECT MAX(v) FROM t)"),
+        Err(3952)
+    );
+    assert_eq!(
+        run(&mut a, "DECLARE @x INT; SET @x = (SELECT MAX(v) FROM t)"),
+        Err(3952)
+    );
+    // A common table expression or a table alias shadows the table of the
+    // same name.
+    run(&mut a, "CREATE TABLE x (v INT)").unwrap();
+    run(&mut a, "UPDATE x SET v = 2 FROM #tmp AS x").unwrap();
+    run(&mut a, "DELETE x FROM #tmp AS x").unwrap();
+    assert_eq!(run(&mut a, "UPDATE x SET v = 2 FROM t AS x"), Err(3952));
+    assert_eq!(run(&mut a, "SELECT v FROM t AS t"), Err(3952));
+    // msduck's internal name prefix does not exempt user tables.
+    run(&mut b, "CREATE TABLE __msduck_customer (v INT)").unwrap();
+    assert_eq!(run(&mut a, "SELECT v FROM __msduck_customer"), Err(3952));
+    run(&mut b, "CREATE TABLE __msduck_temp_orders (v INT)").unwrap();
+    assert_eq!(run(&mut a, "SELECT v FROM __msduck_temp_orders"), Err(3952));
+    assert_eq!(run(&mut a, "UPDATE t SET v = 2 FROM t AS t"), Err(3952));
+    run(&mut a, "WITH t AS (SELECT 1 AS v) SELECT v FROM t").unwrap();
+    // Only within its own query.
+    assert_eq!(
+        run(
+            &mut a,
+            "SELECT (WITH t AS (SELECT 1 AS n) SELECT n FROM t) AS n FROM t"
+        ),
+        Err(3952)
+    );
+    assert_eq!(
+        run(
+            &mut a,
+            "WITH c AS (SELECT 1 AS v) SELECT t.v FROM t JOIN c ON 1 = 1"
+        ),
+        Err(3952)
+    );
+    let tokens = a
+        .batch_response("SELECT v FROM t", &Default::default(), false, None)
+        .0;
+    assert_eq!(a.last_error, 3952);
+    assert!(contains_utf16(
+        &tokens,
+        "Snapshot isolation transaction failed accessing database 'probe_db' because snapshot isolation is not allowed in this database. Use ALTER DATABASE to allow snapshot isolation."
+    ));
+    // 3952 ends the batch and rolls back the transaction.
+    assert_eq!(
+        run(&mut a, "BEGIN TRAN; UPDATE t SET v = 2; SELECT 1"),
+        Err(3952)
+    );
+    check(&mut a, "@@TRANCOUNT = 0").unwrap();
+    // Inside TRY it dooms the transaction instead.
+    run(
+        &mut a,
+        "BEGIN TRAN; BEGIN TRY DELETE t END TRY BEGIN CATCH IF ERROR_NUMBER() <> 3952 OR XACT_STATE() <> -1 THROW 50001, 'not doomed', 1; ROLLBACK END CATCH",
+    )
+    .unwrap();
+    // Another database's table, through a three-part name.
+    run(&mut b, "CREATE TABLE u (v INT)").unwrap();
+    let mut m = session(&server);
+    run(&mut m, "SET TRANSACTION ISOLATION LEVEL SNAPSHOT").unwrap();
+    assert_eq!(run(&mut m, "SELECT v FROM probe_db.dbo.u"), Err(3952));
+
+    run(
+        &mut b,
+        "ALTER DATABASE CURRENT SET ALLOW_SNAPSHOT_ISOLATION ON",
+    )
+    .unwrap();
+    // A SNAPSHOT transaction keeps reading the value it first saw after
+    // another connection commits an update.
+    run(&mut a, "BEGIN TRAN; SELECT v FROM t").unwrap();
+    run(&mut b, "UPDATE t SET v = 2 WHERE id = 1").unwrap();
+    check(&mut a, "(SELECT v FROM t WHERE id = 1) = 1").unwrap();
+    check(&mut b, "(SELECT v FROM t WHERE id = 1) = 2").unwrap();
+    // Updating that row is a write-write conflict: 3960 ends the batch and
+    // rolls the transaction back.
+    let tokens = a
+        .batch_response(
+            "UPDATE t SET v = 3 WHERE id = 1; SELECT 1",
+            &Default::default(),
+            false,
+            None,
+        )
+        .0;
+    assert_eq!(a.last_error, 3960);
+    assert!(contains_utf16(
+        &tokens,
+        "Snapshot isolation transaction aborted due to update conflict. You cannot use snapshot isolation to access table 'dbo.t' directly or indirectly in database 'probe_db' to update, delete, or insert the row that has been modified or deleted by another transaction."
+    ));
+    check(
+        &mut a,
+        "@@TRANCOUNT = 0 AND (SELECT v FROM t WHERE id = 1) = 2",
+    )
+    .unwrap();
+    // Caught, the conflict dooms the transaction; the batch end rolls it back.
+    run(&mut a, "BEGIN TRAN; SELECT v FROM t").unwrap();
+    run(&mut b, "UPDATE t SET v = 4 WHERE id = 1").unwrap();
+    assert_eq!(
+        run(
+            &mut a,
+            "BEGIN TRY UPDATE t SET v = 5 WHERE id = 1 END TRY BEGIN CATCH IF ERROR_NUMBER() <> 3960 OR XACT_STATE() <> -1 OR @@TRANCOUNT <> 1 THROW 50001, 'not doomed', 1 END CATCH"
+        ),
+        Err(3998)
+    );
+    check(
+        &mut a,
+        "@@TRANCOUNT = 0 AND (SELECT v FROM t WHERE id = 1) = 4",
+    )
+    .unwrap();
+    // DML after a WITH clause reports the conflict too.
+    run(&mut a, "BEGIN TRAN; SELECT v FROM t").unwrap();
+    run(&mut b, "UPDATE t SET v = 6 WHERE id = 1").unwrap();
+    assert_eq!(
+        run(
+            &mut a,
+            "WITH s AS (SELECT 1 AS id) UPDATE t SET v = 7 WHERE id IN (SELECT id FROM s)"
+        ),
+        Err(3960)
+    );
+    check(
+        &mut a,
+        "@@TRANCOUNT = 0 AND (SELECT v FROM t WHERE id = 1) = 6",
+    )
+    .unwrap();
+    // An aliased target names the table it aliases.
+    run(&mut a, "BEGIN TRAN; SELECT v FROM t").unwrap();
+    run(&mut b, "UPDATE t SET v = 4 WHERE id = 1").unwrap();
+    let tokens = a
+        .batch_response(
+            "UPDATE x SET v = 7 FROM dbo.t AS x WHERE x.id = 1",
+            &Default::default(),
+            false,
+            None,
+        )
+        .0;
+    assert_eq!(a.last_error, 3960);
+    assert!(contains_utf16(&tokens, "access table 'dbo.t' directly"));
+    // Writes to other rows commit.
+    run(&mut a, "BEGIN TRAN; SELECT v FROM t").unwrap();
+    run(&mut b, "INSERT t VALUES (10, 10)").unwrap();
+    run(&mut a, "UPDATE t SET v = 8 WHERE id = 1; COMMIT").unwrap();
+    check(&mut b, "(SELECT SUM(v) FROM t) = 18").unwrap();
+    // Writes of a trigger fired by a SNAPSHOT write keep their savepoint
+    // images, so rolling back to the savepoint undoes them too.
+    run(&mut b, "CREATE TABLE audit (v INT)").unwrap();
+    run(
+        &mut b,
+        "CREATE TRIGGER t_audit ON t AFTER UPDATE AS INSERT audit SELECT v FROM inserted",
+    )
+    .unwrap();
+    run(
+        &mut a,
+        "BEGIN TRAN; SAVE TRAN s; UPDATE t SET v = 20 WHERE id = 1; ROLLBACK TRAN s; COMMIT",
+    )
+    .unwrap();
+    check(
+        &mut b,
+        "(SELECT COUNT(*) FROM audit) = 0 AND (SELECT v FROM t WHERE id = 1) = 8",
+    )
+    .unwrap();
+}
+
+#[test]
+fn allow_snapshot_isolation_changes_wait_for_open_transactions() {
+    let server = Server::open(":memory:").unwrap();
+    let mut writer = session(&server);
+    run(&mut writer, "CREATE DATABASE probe_db").unwrap();
+    writer.use_database("probe_db").unwrap();
+    run(
+        &mut writer,
+        "CREATE TABLE t (id INT PRIMARY KEY, v INT); INSERT t VALUES (1, 1)",
+    )
+    .unwrap();
+    let mut reader = session(&server);
+    reader.use_database("probe_db").unwrap();
+    let mut observer = session(&server);
+    let alter = |sql: &'static str| {
+        let mut s = session(&server);
+        s.process().set_login(
+            msduck::sessions::Client::default(),
+            "sa",
+            Some(Arc::new(|| {})),
+        );
+        thread::spawn(move || {
+            let started = Instant::now();
+            let result = run(&mut s, sql).map(|_| ());
+            (result, started.elapsed())
+        })
+    };
+    // ON waits for a transaction that wrote, not for one that only read.
+    run(&mut reader, "BEGIN TRAN; SELECT v FROM t").unwrap();
+    run(&mut writer, "BEGIN TRAN; UPDATE t SET v = 2").unwrap();
+    let on = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON");
+    thread::sleep(Duration::from_millis(500));
+    assert_eq!(
+        snapshot_state(&observer, "probe_db"),
+        Some((3, Some("IN_TRANSITION_TO_ON".into())))
+    );
+    run(&mut observer, "SET TRANSACTION ISOLATION LEVEL SNAPSHOT").unwrap();
+    assert_eq!(
+        run(&mut observer, "BEGIN TRAN; SELECT v FROM probe_db.dbo.t"),
+        Err(3956)
+    );
+    check(&mut observer, "@@TRANCOUNT = 0").unwrap();
+    run(&mut writer, "COMMIT").unwrap();
+    let (result, elapsed) = on.join().unwrap();
+    assert_eq!(result, Ok(()));
+    assert!(elapsed >= Duration::from_millis(400), "{elapsed:?}");
+    assert_eq!(
+        snapshot_state(&observer, "probe_db"),
+        Some((1, Some("ON".into())))
+    );
+    run(&mut reader, "COMMIT").unwrap();
+    // SELECT INTO writes the database.
+    run(&mut writer, "BEGIN TRAN; SELECT v INTO copy FROM t").unwrap();
+    let off = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF");
+    thread::sleep(Duration::from_millis(500));
+    assert_eq!(
+        snapshot_state(&observer, "probe_db"),
+        Some((2, Some("IN_TRANSITION_TO_OFF".into())))
+    );
+    run(&mut writer, "ROLLBACK").unwrap();
+    assert_eq!(off.join().unwrap().0, Ok(()));
+    run(
+        &mut observer,
+        "SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
+    )
+    .unwrap();
+    run(
+        &mut observer,
+        "ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON",
+    )
+    .unwrap();
+    run(&mut observer, "SET TRANSACTION ISOLATION LEVEL SNAPSHOT").unwrap();
+    // So is DROP INDEX, which msduck parses into its own statement.
+    run(&mut writer, "CREATE INDEX ix ON t (v)").unwrap();
+    run(&mut writer, "BEGIN TRAN; DROP INDEX ix ON t").unwrap();
+    let off = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF");
+    thread::sleep(Duration::from_millis(500));
+    assert_eq!(
+        snapshot_state(&observer, "probe_db"),
+        Some((2, Some("IN_TRANSITION_TO_OFF".into())))
+    );
+    run(&mut writer, "ROLLBACK").unwrap();
+    assert_eq!(off.join().unwrap().0, Ok(()));
+    run(
+        &mut observer,
+        "SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
+    )
+    .unwrap();
+    run(
+        &mut observer,
+        "ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON",
+    )
+    .unwrap();
+    // A procedure definition is a write.
+    run(&mut writer, "BEGIN TRAN").unwrap();
+    run(&mut writer, "CREATE PROCEDURE p AS SELECT 1").unwrap();
+    let off = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF");
+    thread::sleep(Duration::from_millis(500));
+    assert_eq!(
+        snapshot_state(&observer, "probe_db"),
+        Some((2, Some("IN_TRANSITION_TO_OFF".into())))
+    );
+    run(&mut writer, "ROLLBACK").unwrap();
+    assert_eq!(off.join().unwrap().0, Ok(()));
+    run(
+        &mut observer,
+        "SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
+    )
+    .unwrap();
+    run(
+        &mut observer,
+        "ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON",
+    )
+    .unwrap();
+    // Nor is a SNAPSHOT transaction that has not accessed data, even after
+    // naming a missing table.
+    run(
+        &mut reader,
+        "SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT 1",
+    )
+    .unwrap();
+    assert_eq!(run(&mut reader, "SELECT v FROM missing"), Err(208));
+    assert_eq!(
+        run(&mut reader, "SELECT t.v FROM t CROSS JOIN missing"),
+        Err(208)
+    );
+    check(&mut reader, "@@TRANCOUNT = 1").unwrap();
+    let (result, elapsed) = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF")
+        .join()
+        .unwrap();
+    assert_eq!(result, Ok(()));
+    assert!(elapsed < Duration::from_secs(2), "{elapsed:?}");
+    run(
+        &mut reader,
+        "COMMIT; SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
+    )
+    .unwrap();
+    run(
+        &mut observer,
+        "SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
+    )
+    .unwrap();
+    run(
+        &mut observer,
+        "ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON",
+    )
+    .unwrap();
+    // Temporary-table DDL is not a write to the database.
+    run(&mut writer, "BEGIN TRAN; CREATE TABLE #scratch (v INT)").unwrap();
+    let (result, elapsed) = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF")
+        .join()
+        .unwrap();
+    assert_eq!(result, Ok(()));
+    assert!(elapsed < Duration::from_secs(2), "{elapsed:?}");
+    run(&mut writer, "ROLLBACK").unwrap();
+    run(
+        &mut observer,
+        "SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
+    )
+    .unwrap();
+    run(
+        &mut observer,
+        "ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON",
+    )
+    .unwrap();
+    // OFF waits for SNAPSHOT transactions too. One that already read keeps
+    // reading; one that had not yet read fails with 3954. Transactions that
+    // begin during the change are not waited for.
+    run(
+        &mut reader,
+        "SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT v FROM t",
+    )
+    .unwrap();
+    let mut idle = session(&server);
+    idle.use_database("probe_db").unwrap();
+    run(
+        &mut idle,
+        "SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT 1",
+    )
+    .unwrap();
+    let off = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF");
+    thread::sleep(Duration::from_millis(500));
+    assert_eq!(
+        snapshot_state(&observer, "probe_db"),
+        Some((2, Some("IN_TRANSITION_TO_OFF".into())))
+    );
+    let mut late = session(&server);
+    late.use_database("probe_db").unwrap();
+    run(
+        &mut late,
+        "SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT 1",
+    )
+    .unwrap();
+    check(&mut reader, "(SELECT v FROM t) = 2").unwrap();
+    assert_eq!(run(&mut idle, "SELECT v FROM t"), Err(3954));
+    check(&mut idle, "@@TRANCOUNT = 0").unwrap();
+    run(&mut reader, "COMMIT").unwrap();
+    let (result, elapsed) = off.join().unwrap();
+    assert_eq!(result, Ok(()));
+    assert!(elapsed >= Duration::from_millis(400), "{elapsed:?}");
+    assert_eq!(
+        snapshot_state(&observer, "probe_db"),
+        Some((0, Some("OFF".into())))
+    );
+    run(&mut late, "ROLLBACK").unwrap();
+    // Each statement of a procedure outside a transaction is its own
+    // autocommit transaction: a completed UPDATE does not delay ON while
+    // the procedure goes on waiting.
+    run(
+        &mut writer,
+        "CREATE PROCEDURE slow AS BEGIN UPDATE t SET v = v; WAITFOR DELAY '00:00:03' END",
+    )
+    .unwrap();
+    let mut caller = session(&server);
+    caller.process().set_login(
+        msduck::sessions::Client::default(),
+        "sa",
+        Some(Arc::new(|| {})),
+    );
+    caller.use_database("probe_db").unwrap();
+    // The UPDATE before the EXEC has committed too.
+    let procedure =
+        thread::spawn(move || run(&mut caller, "UPDATE t SET v = v; EXEC slow").map(|_| ()));
+    thread::sleep(Duration::from_millis(500));
+    let (result, elapsed) = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON")
+        .join()
+        .unwrap();
+    assert_eq!(result, Ok(()));
+    assert!(elapsed < Duration::from_millis(1500), "{elapsed:?}");
+    assert_eq!(procedure.join().unwrap(), Ok(()));
 }

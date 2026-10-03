@@ -6,12 +6,20 @@
 // in reference/savepoint.json. See docs/gaps-transactions.md.
 //
 //   node scripts/capture-gaps-transactions.mjs [output] [--write-fixture]
+//   node scripts/capture-gaps-transactions.mjs --snapshot [output] [--write-fixture]
 //
 // Waits are recorded as booleans (at least the requested time, and well
 // under a bound) so that two runs compare exactly.
+//
+// --snapshot captures only ALTER DATABASE ... SET ALLOW_SNAPSHOT_ISOLATION
+// and SNAPSHOT transactions (issue #870) with three connections: `a` and `b`
+// in the fresh database and `m` in master. It is retained as the fixture's
+// separate `snapshot` section ({ image, run }), so the original `run`
+// (captured from an earlier image) stays unchanged; --write-fixture adds
+// the section only when it is absent.
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { ISOLATION_LEVEL } from 'tedious'
+import { Connection, ISOLATION_LEVEL } from 'tedious'
 import { withReferenceContainer } from './lib/reference-container.mjs'
 import { isolatedReference, assertSameCapture, refuseExistingFixture, writeNewFixture } from './lib/reference.mjs'
 import { capture, canonical } from './lib/compatibility.mjs'
@@ -20,9 +28,10 @@ process.env.TZ = 'UTC'
 const fixture = new URL('../reference/gaps-transactions.json', import.meta.url)
 const args = process.argv.slice(2)
 const writeFixture = args.includes('--write-fixture')
-const positional = args.filter(arg => arg !== '--write-fixture')
+const snapshotOnly = args.includes('--snapshot')
+const positional = args.filter(arg => arg !== '--write-fixture' && arg !== '--snapshot')
 if (positional.length > 1) throw new Error('expected at most one output path')
-const output = resolve(positional[0] ?? 'artifacts/compatibility/gaps-transactions/gaps-transactions.json')
+const output = resolve(positional[0] ?? `artifacts/compatibility/gaps-transactions/gaps-transactions${snapshotOnly ? '-snapshot' : ''}.json`)
 
 const level = 'SELECT transaction_isolation_level FROM sys.dm_exec_sessions WHERE session_id = @@SPID'
 
@@ -151,6 +160,200 @@ async function observe(connection) {
     ['caught type', 'BEGIN TRY DECLARE @d BIT = 1; WAITFOR DELAY @d END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS number, ERROR_SEVERITY() AS severity, ERROR_STATE() AS state, ERROR_MESSAGE() AS message END CATCH']
   ]) await record(`waitfor ${name}`, sql)
   return run
+}
+
+// SNAPSHOT isolation and ALLOW_SNAPSHOT_ISOLATION. Each entry names the
+// connection that ran it; generated database names are bound afterwards.
+function observeSnapshot(config) {
+  return async a => {
+    const run = []
+    const [[[fresh]]] = (await capture(a, 'SELECT DB_NAME()')).sets.map(set => set.rows)
+    const connections = { a }
+    const open = async (name, database) => {
+      const connection = new Connection({ ...config, options: { ...config.options, database, requestTimeout: 60000 } })
+      connection.on('error', () => {})
+      await new Promise((resolve, reject) => connection.connect(error => error ? reject(error) : resolve()))
+      connections[name] = connection
+    }
+    const on = async (connection, name, sql) => {
+      run.push({ name, connection, sql, result: canonical(await capture(connections[connection], sql)) })
+    }
+    // An ALTER that waits for other transactions: `start` sends it without
+    // waiting, `finish` records its result and whether it was still running
+    // after `pause` (the observations in between run meanwhile).
+    const pending = {}
+    const pause = 1500
+    const start = (connection, name, sql) => {
+      const started = Date.now()
+      const entry = { name, connection, sql, start: true }
+      run.push(entry)
+      pending[connection] = capture(connections[connection], sql).then(result => ({ entry, result, elapsed: Date.now() - started }))
+      return new Promise(resolve => setTimeout(resolve, pause))
+    }
+    const finish = async (connection, name) => {
+      const { entry, result, elapsed } = await pending[connection]
+      delete pending[connection]
+      run.push({ name, connection, finish: entry.name, result: canonical(result), waited: elapsed >= pause })
+    }
+    const state = "SELECT name, snapshot_isolation_state, snapshot_isolation_state_desc, is_read_committed_snapshot_on FROM sys.databases WHERE name IN (N'master', DB_NAME()) ORDER BY database_id"
+    const alter = 'ALTER DATABASE CURRENT SET ALLOW_SNAPSHOT_ISOLATION'
+    try {
+      await open('m', 'master')
+      await on('a', 'setup', 'CREATE TABLE t (id INT PRIMARY KEY, v INT); INSERT t VALUES (1, 1)')
+      await on('a', 'initial state', state)
+
+      // Option OFF: SNAPSHOT transactions cannot access the database.
+      await on('a', 'set snapshot level', 'SET TRANSACTION ISOLATION LEVEL SNAPSHOT')
+      await on('a', 'off: no data access', 'SELECT 1 AS one; SELECT @@TRANCOUNT AS tc')
+      await on('a', 'off: autocommit read', 'SELECT v FROM t; SELECT 2 AS after_error')
+      await on('a', 'off: after autocommit read', 'SELECT @@TRANCOUNT AS tc, XACT_STATE() AS xs')
+      await on('a', 'off: read in transaction', 'BEGIN TRAN; SELECT v FROM t; SELECT 2 AS after_error')
+      await on('a', 'off: after read in transaction', 'SELECT @@TRANCOUNT AS tc, XACT_STATE() AS xs')
+      await on('a', 'off: caught read', 'BEGIN TRY SELECT v FROM t END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n, ERROR_SEVERITY() AS s, ERROR_STATE() AS st, XACT_STATE() AS xs, @@TRANCOUNT AS tc, ERROR_MESSAGE() AS m END CATCH')
+      await on('a', 'off: caught read in transaction', 'BEGIN TRAN; BEGIN TRY SELECT v FROM t END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n, XACT_STATE() AS xs, @@TRANCOUNT AS tc END CATCH; SELECT @@TRANCOUNT AS tc_after')
+      await on('a', 'off: cleanup', 'IF @@TRANCOUNT > 0 ROLLBACK; SELECT @@TRANCOUNT AS tc')
+      await on('a', 'off: insert', 'INSERT t VALUES (5, 5)')
+      await on('a', 'off: update', 'UPDATE t SET v = 1 WHERE id = 1')
+      await on('a', 'off: delete', 'DELETE t WHERE id = 99')
+      await on('a', 'off: catalog view', "SELECT COUNT(*) AS c FROM sys.objects WHERE name = N't'")
+      await on('a', 'off: temporary table', 'CREATE TABLE #tmp (v INT); INSERT #tmp VALUES (1); SELECT v FROM #tmp; DROP TABLE #tmp')
+      await on('a', 'off: table variable', 'DECLARE @x TABLE (v INT); INSERT @x VALUES (1); SELECT v FROM @x')
+      await on('a', 'off: common table expression', 'WITH c AS (SELECT 1 AS v) SELECT v FROM c')
+      await on('a', 'off: missing table', 'SELECT v FROM missing_table')
+      await on('a', 'off: create table', 'CREATE TABLE t2 (v INT)')
+      await on('a', 'off: drop table', "IF OBJECT_ID(N't2') IS NOT NULL DROP TABLE t2")
+      await on('m', 'off: three-part name from master', `SET TRANSACTION ISOLATION LEVEL SNAPSHOT; SELECT v FROM [${fresh}].dbo.t WHERE id = 1; SELECT 2 AS after_error`)
+      await on('m', 'off: master after three-part name', 'SELECT @@TRANCOUNT AS tc; SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
+      await on('a', 'reset level', 'SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
+
+      // ALTER DATABASE forms.
+      await on('a', 'alter: missing value', alter)
+      await on('a', 'alter: rollback immediate', `${alter} ON WITH ROLLBACK IMMEDIATE`)
+      await on('a', 'alter: no wait', `${alter} ON WITH NO_WAIT`)
+      await on('a', 'alter: rollback after', `${alter} ON WITH ROLLBACK AFTER 1`)
+      await on('a', 'alter: with read committed snapshot', `${alter} ON, READ_COMMITTED_SNAPSHOT ON`)
+      await on('a', 'alter: after read committed snapshot', `ALTER DATABASE CURRENT SET READ_COMMITTED_SNAPSHOT ON, ALLOW_SNAPSHOT_ISOLATION ON`)
+      await on('a', 'alter: with user access', `ALTER DATABASE CURRENT SET MULTI_USER, ALLOW_SNAPSHOT_ISOLATION ON`)
+      await on('a', 'alter: conflicting values', `${alter} ON, ALLOW_SNAPSHOT_ISOLATION OFF`)
+      await on('a', 'alter: repeated value', `${alter} ON, ALLOW_SNAPSHOT_ISOLATION ON`)
+      await on('a', 'alter: repeated value in a batch', `SELECT 1 AS before_alter; ${alter} ON, ALLOW_SNAPSHOT_ISOLATION OFF; SELECT 2 AS after_alter`)
+      await on('a', 'alter: in a transaction', `BEGIN TRAN; ${alter} ON; SELECT @@TRANCOUNT AS tc; ROLLBACK`)
+      await on('a', 'alter: missing database', 'ALTER DATABASE missing_database SET ALLOW_SNAPSHOT_ISOLATION ON')
+      await on('a', 'alter: missing database with termination', 'ALTER DATABASE missing_database SET ALLOW_SNAPSHOT_ISOLATION ON WITH NO_WAIT')
+      await on('a', 'alter: missing database with another option', 'ALTER DATABASE missing_database SET ALLOW_SNAPSHOT_ISOLATION ON, MULTI_USER')
+      await on('a', 'alter: master off', 'ALTER DATABASE master SET ALLOW_SNAPSHOT_ISOLATION OFF')
+      await on('a', 'alter: master on with termination', 'ALTER DATABASE master SET ALLOW_SNAPSHOT_ISOLATION ON WITH NO_WAIT')
+      await on('m', 'alter: current master', `${alter} ON`)
+      await on('a', 'alter: caught', `BEGIN TRY ${alter} ON WITH NO_WAIT END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n, ERROR_STATE() AS st, ERROR_MESSAGE() AS m END CATCH`)
+      await on('a', 'alter: off when off', `${alter} OFF; SELECT @@ROWCOUNT AS rc`)
+      await on('a', 'state after off', state)
+      await on('a', 'alter: on', `${alter} ON; SELECT @@ROWCOUNT AS rc`)
+      await on('a', 'state after on', state)
+      await on('a', 'alter: on when on', `ALTER DATABASE [${fresh}] SET ALLOW_SNAPSHOT_ISOLATION ON`)
+      await on('a', 'read committed snapshot on', 'ALTER DATABASE CURRENT SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE')
+      await on('a', 'state with both options', state)
+      await on('a', 'read committed snapshot off', 'ALTER DATABASE CURRENT SET READ_COMMITTED_SNAPSHOT OFF WITH ROLLBACK IMMEDIATE')
+      await on('a', 'alter: through sp_executesql', `EXEC sp_executesql N'${alter} ON'`)
+      await on('m', 'alter: by name from master', `ALTER DATABASE [${fresh}] SET ALLOW_SNAPSHOT_ISOLATION ON`)
+
+      // Option ON, with a second connection writing concurrently.
+      await open('b', fresh)
+      await on('a', 'on: begin and read', 'SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT v FROM t WHERE id = 1')
+      await on('b', 'on: concurrent update', 'UPDATE t SET v = 2 WHERE id = 1; SELECT v FROM t WHERE id = 1')
+      await on('a', 'on: reads the snapshot', 'SELECT v FROM t WHERE id = 1; SELECT @@TRANCOUNT AS tc')
+      await on('a', 'on: commit and read', 'COMMIT; SELECT v FROM t WHERE id = 1')
+      await on('a', 'on: autocommit read', 'SELECT v FROM t WHERE id = 1; SELECT @@TRANCOUNT AS tc')
+      await on('a', 'conflict: begin', 'BEGIN TRAN; SELECT v FROM t WHERE id = 1')
+      await on('b', 'conflict: concurrent update', 'UPDATE t SET v = 3 WHERE id = 1')
+      await on('a', 'conflict: update', 'UPDATE t SET v = 4 WHERE id = 1; SELECT 1 AS not_reached')
+      await on('a', 'conflict: after update', 'SELECT @@TRANCOUNT AS tc, XACT_STATE() AS xs; SELECT v FROM t WHERE id = 1')
+      await on('a', 'conflict delete: begin', 'BEGIN TRAN; SELECT v FROM t WHERE id = 1')
+      await on('b', 'conflict delete: concurrent update', 'UPDATE t SET v = 5 WHERE id = 1')
+      await on('a', 'conflict delete: delete', 'DELETE t WHERE id = 1')
+      await on('a', 'conflict delete: after', 'SELECT @@TRANCOUNT AS tc; SELECT v FROM t WHERE id = 1')
+      await on('a', 'caught conflict: begin', 'BEGIN TRAN; SELECT v FROM t WHERE id = 1')
+      await on('b', 'caught conflict: concurrent update', 'UPDATE t SET v = 6 WHERE id = 1')
+      await on('a', 'caught conflict: update', 'BEGIN TRY UPDATE t SET v = 7 WHERE id = 1 END TRY BEGIN CATCH SELECT ERROR_NUMBER() AS n, ERROR_SEVERITY() AS s, ERROR_STATE() AS st, XACT_STATE() AS xs, @@TRANCOUNT AS tc, ERROR_MESSAGE() AS m END CATCH')
+      await on('a', 'caught conflict: after', 'SELECT @@TRANCOUNT AS tc')
+      await on('a', 'disjoint writes: begin', 'BEGIN TRAN; SELECT COUNT(*) AS c FROM t')
+      await on('b', 'disjoint writes: concurrent insert', 'INSERT t VALUES (10, 10)')
+      await on('a', 'disjoint writes: update another row', 'SELECT COUNT(*) AS c FROM t; UPDATE t SET v = 8 WHERE id = 1; SELECT @@TRANCOUNT AS tc')
+      await on('a', 'disjoint writes: commit', 'COMMIT; SELECT id, v FROM t ORDER BY id')
+      await on('a', 'late access: begin', 'BEGIN TRAN; SELECT 1 AS no_data_access')
+      await on('b', 'late access: concurrent update', 'UPDATE t SET v = 9 WHERE id = 1')
+      await on('a', 'late access: first read', 'SELECT v FROM t WHERE id = 1; COMMIT')
+
+      // Turning the option off again.
+      await on('a', 'reset level again', 'SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
+      await on('m', 'alter: off by name', `ALTER DATABASE [${fresh}] SET ALLOW_SNAPSHOT_ISOLATION OFF`)
+      await on('a', 'off again: read', 'SET TRANSACTION ISOLATION LEVEL SNAPSHOT; SELECT v FROM t WHERE id = 1')
+      await on('a', 'off again: state', `SET TRANSACTION ISOLATION LEVEL READ COMMITTED; ${state}`)
+
+      // Changing the option waits for transactions that were active: ON
+      // for those that wrote, OFF for every one. Meanwhile the state is in
+      // transition and new SNAPSHOT transactions fail (3956, 3954).
+      await open('c', fresh)
+      const named = `SELECT snapshot_isolation_state, snapshot_isolation_state_desc FROM sys.databases WHERE name = N'${fresh}'`
+      await on('b', 'to on: writer begins', 'BEGIN TRAN; UPDATE t SET v = v + 1 WHERE id = 1')
+      await start('a', 'to on: alter', `${alter} ON`)
+      await on('m', 'to on: state', named)
+      await on('c', 'to on: snapshot transaction', 'SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT v FROM t WHERE id = 1; SELECT 2 AS after_error')
+      await on('c', 'to on: after snapshot transaction', 'SELECT @@TRANCOUNT AS tc; SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
+      await on('b', 'to on: writer commits', 'COMMIT')
+      await finish('a', 'to on: alter completes')
+      await on('m', 'to on: final state', named)
+      await on('b', 'to on with reader: reader begins', 'BEGIN TRAN; SELECT v FROM t WHERE id = 1')
+      await on('a', 'to on with reader: alter', `${alter} OFF`)
+      await on('b', 'to on with reader: reader commits', 'COMMIT')
+      await on('b', 'to on with reader: reader begins again', 'BEGIN TRAN; SELECT v FROM t WHERE id = 1')
+      await start('a', 'to on with reader: alter on', `${alter} ON`)
+      await finish('a', 'to on with reader: alter on completes')
+      await on('b', 'to on with reader: reader commits again', 'COMMIT')
+      await on('b', 'to off: snapshot reader begins', 'SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT v FROM t WHERE id = 1')
+      await on('c', 'to off: idle snapshot transaction begins', 'SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT 1 AS no_data_access')
+      await start('a', 'to off: alter', `${alter} OFF`)
+      await on('m', 'to off: state', named)
+      await on('m', 'to off: new snapshot transaction', `SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT v FROM [${fresh}].dbo.t WHERE id = 1; SELECT 2 AS after_error`)
+      await on('m', 'to off: after new snapshot transaction', 'SELECT @@TRANCOUNT AS tc; SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
+      await on('b', 'to off: snapshot reader continues', 'SELECT v FROM t WHERE id = 1; SELECT @@TRANCOUNT AS tc')
+      await on('c', 'to off: idle snapshot transaction reads', 'SELECT v FROM t WHERE id = 1; SELECT 2 AS after_error')
+      await on('c', 'to off: after idle snapshot transaction', 'SELECT @@TRANCOUNT AS tc; SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
+      await on('b', 'to off: snapshot reader commits', 'COMMIT; SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
+      await finish('a', 'to off: alter completes')
+      await on('m', 'to off: final state', named)
+    } finally {
+      for (const name of ['b', 'c', 'm']) {
+        const connection = connections[name]
+        if (connection && !connection.closed) await new Promise(resolve => { connection.once('end', resolve); connection.close() })
+      }
+    }
+    return run
+  }
+}
+
+if (snapshotOnly) {
+  let retained
+  try { retained = JSON.parse(await readFile(fixture, 'utf8')) }
+  catch (error) { if (error.code !== 'ENOENT') throw error }
+  if (writeFixture && retained?.snapshot) throw new Error('refusing to overwrite the retained snapshot section')
+  if (writeFixture && !retained) throw new Error('the snapshot section extends an existing fixture')
+  await mkdir(resolve(output, '..'), { recursive: true })
+  await withReferenceContainer(async (config, container) => {
+    const runs = []
+    for (let repeat = 0; repeat < 2; repeat++) {
+      runs.push(bindGeneratedDatabaseNames(await isolatedReference({ ...config, options: { ...config.options, requestTimeout: 60000 } }, observeSnapshot(config))))
+    }
+    assertSameCapture(runs[0], runs[1], 'fresh SQL Server databases differ after binding only generated database names')
+    const actual = { image: container.image, run: runs[0] }
+    if (retained?.snapshot) {
+      if (actual.image !== retained.snapshot.image) throw new Error(`image ${actual.image} differs from the retained ${retained.snapshot.image}`)
+      assertSameCapture(actual.run, retained.snapshot.run, 'fresh capture differs from the retained snapshot section')
+    }
+    await writeFile(output, JSON.stringify(actual) + '\n')
+    if (writeFixture) await writeFile(fixture, JSON.stringify({ ...retained, snapshot: actual }) + '\n')
+    console.log(`Captured ${actual.run.length} snapshot observations in two fresh databases${retained?.snapshot ? ' and matched the retained section' : ''}`)
+  })
+  process.exit(0)
 }
 
 if (writeFixture) await refuseExistingFixture(fixture)

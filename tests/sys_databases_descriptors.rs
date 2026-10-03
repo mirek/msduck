@@ -4,6 +4,7 @@ use serde_json::Value;
 
 const REFERENCE: &str = include_str!("../reference/sys-databases.json");
 const OPTIONS: &str = include_str!("../reference/alter-database-sessions.json");
+const SNAPSHOT: &str = include_str!("../reference/gaps-transactions.json");
 
 fn observation<'a>(fixture: &'a Value, name: &str) -> &'a Value {
     fixture["runs"][0]
@@ -100,11 +101,42 @@ fn published_columns_match_reference_for_star_projection_aliases_and_empty_resul
         .find(|row| row[0] == "is_read_committed_snapshot_on")
         .unwrap();
     assert_eq!(declared[1], 20);
+    // snapshot_isolation_state (18) and snapshot_isolation_state_desc (19)
+    // precede it. The first comes from the same capture; the description
+    // from the `snapshot` section of reference/gaps-transactions.json,
+    // whose projection marks every option column with the same flags, so
+    // it takes the flags is_read_committed_snapshot_on has here.
+    let state = &observation(&options, "initial state")["result"]["sets"][0]["columns"][4];
+    assert_eq!(state["name"], "snapshot_isolation_state");
+    let snapshot: Value = serde_json::from_str(SNAPSHOT).unwrap();
+    let snapshot_columns = snapshot["snapshot"]["run"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["name"] == "initial state")
+        .unwrap()["result"]["sets"][0]["columns"]
+        .as_array()
+        .unwrap();
+    assert_eq!(snapshot_columns[2]["name"], "snapshot_isolation_state_desc");
+    assert_eq!(snapshot_columns[3]["name"], "is_read_committed_snapshot_on");
+    assert_eq!(snapshot_columns[2]["flags"], snapshot_columns[3]["flags"]);
+    let mut state_desc_column = snapshot_columns[2].clone();
+    state_desc_column["flags"] = option["flags"].clone();
     let state_desc = names.iter().position(|name| *name == "state_desc").unwrap();
     let mut star_columns = columns.to_vec();
-    star_columns.insert(state_desc + 1, option.clone());
+    star_columns.splice(
+        state_desc + 1..state_desc + 1,
+        [state.clone(), state_desc_column, option.clone()],
+    );
     let mut star_names = names.clone();
-    star_names.insert(state_desc + 1, "is_read_committed_snapshot_on");
+    star_names.splice(
+        state_desc + 1..state_desc + 1,
+        [
+            "snapshot_isolation_state",
+            "snapshot_isolation_state_desc",
+            "is_read_committed_snapshot_on",
+        ],
+    );
     let star = reference_metadata(&star_columns, &star_names);
     let server = Server::open(":memory:").unwrap();
     let db = server.connection().unwrap();
@@ -143,7 +175,7 @@ fn published_columns_match_reference_for_star_projection_aliases_and_empty_resul
     let expected_aliases = reference_metadata(&[columns[0].clone(), columns[5].clone()], &aliases);
     assert_metadata(&mut session, selected, &expected_aliases);
     // The pinned image has 98 sys.databases columns; msduck currently publishes
-    // only 14. Do not synthesize declarations for the unsupported remainder.
+    // only 16. Do not synthesize declarations for the unsupported remainder.
     assert_eq!(
         observation(&fixture, "complete empty")["result"]["sets"][0]["columns"]
             .as_array()

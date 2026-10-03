@@ -8,6 +8,8 @@
 //!   savepoint, emulated with before-images because DuckDB has no
 //!   savepoints.
 //! - [`waitfor`]: WAITFOR DELAY and WAITFOR TIME.
+//! - [`snapshot`]: ALTER DATABASE ... SET ALLOW_SNAPSHOT_ISOLATION, and the
+//!   3952 and 3960 errors of SNAPSHOT transactions.
 use super::{
     super::{Execution, Parameter, Session},
     Feature,
@@ -20,6 +22,7 @@ use std::collections::HashMap;
 
 mod options;
 mod savepoints;
+mod snapshot;
 mod waitfor;
 
 pub(crate) struct State {
@@ -30,6 +33,13 @@ pub(crate) struct State {
     /// (for RPCs and procedure bodies), or `None`.
     batch_isolation: Vec<Option<u8>>,
     savepoints: savepoints::Stack,
+    /// The SNAPSHOT write that `snapshot::write` is running through the
+    /// ordinary path. Its own re-entry skips this feature once; statements
+    /// nested in it (trigger bodies) are handled as usual.
+    resumed: Option<Statement>,
+    /// SNAPSHOT writes running through `snapshot::write`, whose nested
+    /// statements belong to the same autocommit transaction.
+    writing: u32,
 }
 
 impl Default for State {
@@ -38,6 +48,8 @@ impl Default for State {
             isolation: options::READ_COMMITTED,
             batch_isolation: Vec::new(),
             savepoints: Default::default(),
+            resumed: None,
+            writing: 0,
         }
     }
 }
@@ -68,6 +80,7 @@ impl Feature for Hooks {
         _parameters: &HashMap<String, Parameter>,
         rpc: bool,
     ) -> Option<(Vec<u8>, bool)> {
+        snapshot::track_module_definition(session, sql);
         compile_error(session, sql, rpc)
     }
 
@@ -77,8 +90,14 @@ impl Feature for Hooks {
         statement: &mut Statement,
         parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Option<Execution>> {
+        snapshot::statement_begins(session);
         if let Some(request) = syntax::request(statement) {
             return execute(session, request, parameters).map(Some);
+        }
+        if let Some(request) = msduck_sql::dialect::alter_database::request(statement)
+            && !request.snapshot_isolation.is_empty()
+        {
+            return snapshot::alter(session, request).map(Some);
         }
         match statement {
             Statement::Set(Set::SetTransaction {
@@ -91,10 +110,34 @@ impl Feature for Hooks {
                 savepoint: Some(name),
             } => savepoints::rollback_statement(session, &name.value),
             _ => {
+                if let Some(resumed) = session.ext.transactions.resumed.take()
+                    && resumed == *statement
+                {
+                    return Ok(None);
+                }
+                let snapshot = snapshot::active(session);
+                if snapshot {
+                    snapshot::check_access(session, statement)?;
+                }
+                snapshot::track_write(session, statement)?;
                 savepoints::before_statement(session, statement)?;
+                if snapshot {
+                    return snapshot::write(session, statement, parameters);
+                }
                 Ok(None)
             }
         }
+    }
+
+    fn exec(
+        &self,
+        session: &mut Session,
+        _statement: &Statement,
+        _variables: &mut HashMap<String, Parameter>,
+    ) -> Option<Result<super::Exec>> {
+        // An EXEC is a statement boundary too; the procedure runs it.
+        snapshot::statement_begins(session);
+        None
     }
 
     fn isolation(&self, isolation: u8) -> Option<Result<()>> {
@@ -116,15 +159,24 @@ impl Feature for Hooks {
     }
 
     fn batch_end(&self, session: &mut Session) {
+        snapshot::batch_ends(session);
         options::batch_end(session);
     }
 
     fn transaction_begin(&self, session: &mut Session, isolation: u8) {
         options::begin_request(session, isolation);
+        if session.transactions == 1 {
+            snapshot::begin(session);
+        }
     }
 
     fn transaction_end(&self, session: &mut Session, _committed: bool) {
         savepoints::release_all(session);
+        snapshot::end(session);
+    }
+
+    fn session_end(&self, session: &mut Session) {
+        snapshot::end(session);
     }
 
     fn session_start(&self, session: &mut Session) -> Result<()> {
@@ -134,17 +186,19 @@ impl Feature for Hooks {
 }
 
 /// Report a compile-time diagnostic of this feature (148, 103, or 102 with
-/// SQL Server's wording) before any statement of the batch runs, as SQL
-/// Server does. Batches that cannot
-/// contain such a statement are not parsed twice.
+/// SQL Server's wording, or 5062 for conflicting ALLOW_SNAPSHOT_ISOLATION
+/// values) before any statement of the batch runs, as SQL Server does.
+/// Batches that cannot contain such a statement are not parsed twice.
 fn compile_error(session: &mut Session, sql: &str, rpc: bool) -> Option<(Vec<u8>, bool)> {
     let upper = sql.to_ascii_uppercase();
-    if !upper.contains("WAITFOR") && !upper.contains("TRAN") {
+    let snapshot = upper.contains("ALLOW_SNAPSHOT_ISOLATION");
+    if !upper.contains("WAITFOR") && !upper.contains("TRAN") && !snapshot {
         return None;
     }
     // A batch that does not parse fails through the engine's own path.
     let statements = msduck_sql::batch::parse(sql).ok()?;
-    let error = syntax::compile_error(&statements)?;
+    let error = syntax::compile_error(&statements)
+        .or_else(|| snapshot.then(|| snapshot::conflicting_values(&statements))?)?;
     let mut out = Vec::new();
     crate::tds::sql_error(&mut out, &error);
     crate::tds::done(&mut out, if rpc { 0xfe } else { 0xfd }, 2, 0, 0);
