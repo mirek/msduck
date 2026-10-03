@@ -21,11 +21,13 @@ const observations = run.filter(observation => !/^(server version|setup \d+|sing
   .map(observation => [observation.name, observation.sql])
 
 // What a client sees of a batch: complete descriptors (with all flags and
-// the collation), rows and errors.
+// the collation), rows, errors and completion tokens.
 const brief = result => ({
   columns: result.sets.map(set => set.columns.map(c => [c.name, c.type, c.length, c.precision, c.scale, c.flags, c.collation])),
   rows: result.sets.map(set => set.rows),
   errors: result.errors.map(e => [e.number, e.state, e.class, e.message]),
+  done: result.done.map(d => [d.kind, d.rowCount, d.more]),
+  rowCount: result.rowCount,
 })
 const same = (name, actual, patch = () => {}) => {
   const expected = brief(reference.get(name))
@@ -33,29 +35,36 @@ const same = (name, actual, patch = () => {}) => {
   assert.equal(JSON.stringify(brief(actual)), JSON.stringify(expected), name)
 }
 
-// msduck's raw differences from the reference, by observation.
+// msduck's raw differences from the reference, by observation, applied to
+// the captured result; every other field must still match.
 const known = {
   // Expression metadata outside cross-database binding: msduck reports the
   // concatenation of a NOT NULL column as nullable and the product's
   // precision as 18, as it does in the current database.
-  expressions: actual => same('expressions', actual, expected => {
-    expected.columns[0][0][5] = 33 // nullable bit; SQL Server sends 32
-    expected.columns[0][3][3] = 18 // precision; SQL Server sends 12
-  }),
+  expressions: expected => {
+    expected.columns[0][0][5] = 33 // SQL Server: 32
+    expected.columns[0][3][3] = 18 // SQL Server: 12
+  },
   // SCOPE_IDENTITY() is DecimalN on the wire, as in the current database.
-  insert: actual => same('insert', actual, expected => { expected.columns[0][0][1] = 'DecimalN' }),
-  // DuckDB writes one attached database per transaction.
-  'two databases in one transaction': actual => assert.deepEqual(brief(actual).errors, [[40515, 1, 16,
-    "unsupported cross-database transaction: database 'xdb_foo' cannot be modified in a transaction that has already modified database 'master'; a transaction may write only one database"]]),
-  // The error number matches; the message is DuckDB's, as in the current database.
-  'unknown object': actual => {
-    assert.equal(actual.errors.length, 1)
-    assert.deepEqual([actual.errors[0].number, actual.errors[0].state, actual.errors[0].class], [208, 1, 16])
-    assert.match(actual.errors[0].message, /Table with name missing does not exist/)
+  insert: expected => { expected.columns[0][0][1] = 'DecimalN' }, // SQL Server: NumericN
+  // DuckDB writes one attached database per transaction. The error ends
+  // the batch and rolls the transaction back; SQL Server runs the batch.
+  'two databases in one transaction': expected => Object.assign(expected, {
+    columns: [],
+    rows: [],
+    errors: [[40515, 1, 16, "unsupported cross-database transaction: database 'xdb_foo' cannot be modified in a transaction that has already modified database 'master'; a transaction may write only one database"]],
+    done: [['done', null, true], ['done', 1, true], ['done', null, false]],
+    rowCount: 1,
+  }),
+  // The error number matches; the message is DuckDB's, as in the current
+  // database.
+  'unknown object': expected => {
+    expected.errors[0][3] = 'Catalog Error: Table with name missing does not exist!\nDid you mean "items"?\n\nLINE 1: SELECT * FROM dbo.missing\n                      ^'
   },
   // DDL in another database is refused.
-  'create table in another database': actual => assert.deepEqual(brief(actual).errors, [[40515, 1, 16,
-    'unsupported reference to xdb_foo.dbo.made in another database; USE xdb_foo first']]),
+  'create table in another database': expected => {
+    expected.errors = [[40515, 1, 16, 'unsupported reference to xdb_foo.dbo.made in another database; USE xdb_foo first']]
+  },
 }
 
 async function another(t, first) {
@@ -80,8 +89,7 @@ test('three-part names read and write another database as SQL Server does', { ti
   const checked = []
   for (const [name, statement] of observations) {
     const actual = await capture(c, local(statement))
-    if (known[name]) known[name](actual)
-    else same(name, actual)
+    same(name, actual, known[name])
     checked.push(name)
   }
   assert.equal(checked.length, 27)
