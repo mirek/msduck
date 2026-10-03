@@ -10448,6 +10448,30 @@
         "Verify inventory/source diff and final exact-head CI/review plus prepared845 npm verification. Combine with PR846 under fresh own receipt; resolve confirmed review only after verifying fix. Worker owns merge and prompt registry/project completion for all companions."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkcdR"
+    },
+    {
+      "id": "translate-matching-keys-v1",
+      "title": "Provide proven finite TRANSLATE matching keys",
+      "state": "backlog",
+      "authorization": "Owner continuing full SQL Server compatibility goal; reviewed complete owner-run ASCII reference854/PR855 mergedd7eb82b with source/raw proofs and841 finite observations. Deterministic keyed evaluator and existing841/854 raw evidence establish the next matching-provider work, not generic linguistic weights. No third-party inputs or engine scope.",
+      "scope": [
+        "crates/msduck-sql/src/lib.rs",
+        "crates/msduck-sql/src/translate_matching.rs",
+        "crates/msduck-sql/tests/translate_matching.rs",
+        "docs/translate-matching.md"
+      ],
+      "dependencies": [
+        "concat-source-conversion-binding-v1",
+        "translate-ascii-matching-reference-v1"
+      ],
+      "acceptance": [
+        "The keyed evaluator already preserves first mapping wins, one-pass replacement and bounded lookup/output. Supply keys only for an explicitly validated original domain/profile and a proven finite operation contract. Use all 128x128 measured ASCII relationships for each of the 16 domain/profile combinations from #854, with original native decoding and provenance. Evaluate additional finite relationships from #841 only when actual function observations cover every needed input-to-mapping and mapping-to-mapping relationship and admit consistent keys; missing, multi-character, malformed-variable or contradictory observations stay unknown. Never infer a negative from missing evidence, infer matching from ordinary SQL equality or collation names, or reuse padded BIN2/case-mapping helpers as weight oracles.",
+        "Public context validation must reject unsupported or contradictory profile/domain properties before NULL shortcuts; certificates are immutable, bounded and tied to explicit observed characters. Include actual encoding/SC/version properties and source evidence hashes. Separate certificate construction from deterministic fast lookup, deduplicate repeated MAX operands within explicit allocation limits, and preserve SQL character boundaries, original case/control/NUL/space identities, first duplicate mapping and non-chaining replacements. Value-dependent matching certificates must not alter compiled result metadata.",
+        "Independently replay complete raw #854 grids and applicable stable #841 controls with source/native byte identity, original declarations, NULL/error/mismatch outcomes and prepared repeats intact. Test both matching and explicit unknown frontiers, forged context, inconsistent/missing relationships, supplementary/unpaired units, repeated MAX input/mappings and construction/lookup/resource limits. No result/error normalization or fixture edits. Register the module in this implementation PR rather than publishing a separate export-only PR.",
+        "Use a fresh exclusive claim in an existing completed worktree, no new agents or native caches. Consult T-SQL reference and reviewed upstream owner pin7f71f2081602f8e3051998f5c11f058e65fe24ec; copied SQLite/JavaScript behavior is not SQL Server ground truth. Run required formatting, strict Clippy, full Rust/client/audit and exact-head CI/independent/Codex review under shared-builder handoff. Preserve raw evidence. The claiming worker owns review follow-up, merge and registry/project completion. This enables subsequent runtime integration; it does not establish complete linguistic matching or server compatibility."
+      ],
+      "issue": 858,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkdtQ"
     }
   ]
 }
