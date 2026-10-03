@@ -323,26 +323,6 @@ impl Catalog {
             .any(|columns| columns.values().any(|c| c.collation.is_some()))
     }
 
-    /// The collation of the carrier columns of this (lowercase) name, when
-    /// every relation with such a carrier column declares the same one and
-    /// it compares differently from the default.
-    pub fn carrier_collation(&self, name: &str) -> Option<&str> {
-        let mut found: Option<Option<&str>> = None;
-        for column in self.tables.values().filter_map(|columns| columns.get(name)) {
-            if !column.carrier {
-                continue;
-            }
-            match found {
-                Some(existing) if existing != column.collation.as_deref() => return None,
-                _ => found = Some(column.collation.as_deref()),
-            }
-        }
-        found.flatten().filter(|name| {
-            use msduck_sql::dialect::ext::keys::collation::{Sensitivity, sensitivity};
-            sensitivity(name) == Some(Sensitivity::Other)
-        })
-    }
-
     /// The collation of the column `expr` refers to, when it unambiguously
     /// refers to a column with a collation of its own.
     pub fn collation(&self, expr: &Expr) -> Option<&str> {
@@ -398,6 +378,17 @@ impl Catalog {
             .filter_map(|table| self.tables.get(table).and_then(|c| c.get(&name)))
             .collect();
         (!found.is_empty()).then_some(found)
+    }
+
+    /// The collation of the character columns `expr` may name (`Some(None)`
+    /// for the database default), when they agree.
+    pub fn agreed_collation(&self, expr: &Expr) -> Option<Option<&str>> {
+        let columns = self.candidates(expr)?;
+        let first = columns.first()?.collation.as_deref();
+        columns
+            .iter()
+            .all(|c| c.text && c.collation.as_deref() == first)
+            .then_some(first)
     }
 
     /// Whether every column `expr` may name is character data.

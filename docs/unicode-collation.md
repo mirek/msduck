@@ -280,7 +280,7 @@ and applying precedence before either folding or lowering comparisons.
 
 Every msduck database reports SQL_Latin1_General_CP1_CI_AS, and comparisons
 now follow it: case-insensitive, accent-sensitive, trailing spaces ignored in
-equality. `reference/default-collation.json` (40 live programs captured by
+equality. `reference/default-collation.json` (44 live programs captured by
 `scripts/capture-default-collation.mjs`) is the evidence;
 `tests/compat/default_collation.test.mjs` replays it and names each remaining
 difference. The rule is applied where the value is stored or compared, not
@@ -329,7 +329,7 @@ column collations apply through an explicit COLLATE of the column in
 comparisons, LIKE, IN, BETWEEN, simple CASE, ORDER BY of carriers and
 COUNT(DISTINCT), and through the DuckDB collation of CHAR and VARCHAR
 columns elsewhere. Their keys use BIN2 equality. A comparison (`=`, `<>`,
-`<`, `>`, `<=`, `>=`, IN, BETWEEN, simple CASE) between columns of different
+`<`, `>`, `<=`, `>=`, IN, BETWEEN, simple CASE, LIKE) between columns of different
 collations raises 468 as in SQL Server, in queries and DML predicates alike,
 even when both collations are case-insensitive (Latin1_General_CI_AS against
 the database default).
@@ -360,8 +360,13 @@ Remaining limits:
   DuckDB's grouping, which separates values differing in trailing spaces;
   a grouping rewrite also changes the nullability metadata of the grouped
   column (it becomes MIN of it).
-- VARCHAR columns under a `_UTF8` collation are recorded but still store
-  code page 1252 text.
+- Columns under Latin1_General_100_CI_AS_SC and _SC_UTF8 are accepted and
+  recorded in `sys.columns`, but their result descriptors keep the
+  database default: the result-metadata path only emits names that it can
+  also serve operationally, and VARCHAR still stores code page 1252 text, so
+  SQL Server's UTF-8 descriptor (flags 77) would make clients decode code
+  page 1252 bytes as UTF-8. Supplementary-character (SC) semantics of string
+  functions are not implemented for them either.
 - Values that do not come from a CHAR or VARCHAR column (VALUES rows,
   constant SELECTs, expressions over literals) carry no DuckDB collation:
   comparisons between them go through the sort keys, but ORDER BY, GROUP BY

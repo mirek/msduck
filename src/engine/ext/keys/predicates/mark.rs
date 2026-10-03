@@ -11,7 +11,6 @@
 use super::catalog::{Catalog, Resolution};
 use super::lower::{MARK, MAYBE, MEMBER};
 use crate::engine::Parameter;
-use msduck_core::collation::{Conflict, Label, Operation};
 use msduck_core::diagnostic::SqlError;
 use sqlparser::ast::*;
 use std::collections::HashMap;
@@ -152,20 +151,10 @@ enum Collated {
 /// variables, and the explicit COLLATE lowering applies it. Columns of
 /// different collations (by name, even when they compare alike) conflict.
 fn collate(catalog: &Catalog, operands: &mut [&mut Expr]) -> Collated {
-    use msduck_sql::dialect::ext::keys::collation::DEFAULT;
-    let mut name: Option<String> = None;
-    for operand in operands.iter() {
-        if !catalog.textual(operand) {
-            continue;
-        }
-        let found = catalog.collation(operand).unwrap_or(DEFAULT);
-        match &name {
-            Some(existing) if !existing.eq_ignore_ascii_case(found) => {
-                return Collated::Conflict(existing.clone(), found.to_owned());
-            }
-            _ => name = Some(found.to_owned()),
-        }
-    }
+    let name = match columns_collation(catalog, operands.iter().map(|o| &**o)) {
+        Err((left, right)) => return Collated::Conflict(left, right),
+        Ok(name) => name,
+    };
     let Some(name) = name.filter(|name| own(name)) else {
         return Collated::No;
     };
@@ -181,17 +170,51 @@ fn collate(catalog: &Catalog, operands: &mut [&mut Expr]) -> Collated {
     Collated::Wrapped
 }
 
-/// The collation operation of a comparison operator.
-fn operation(op: &BinaryOperator) -> Option<Operation> {
+/// SQL Server's name for the collation operation of a comparison operator.
+fn operation(op: &BinaryOperator) -> Option<&'static str> {
     Some(match op {
-        BinaryOperator::Eq => Operation::Equal,
-        BinaryOperator::NotEq => Operation::NotEqual,
-        BinaryOperator::Lt => Operation::Less,
-        BinaryOperator::Gt => Operation::Greater,
-        BinaryOperator::LtEq => Operation::LessEqual,
-        BinaryOperator::GtEq => Operation::GreaterEqual,
+        BinaryOperator::Eq => "equal to",
+        BinaryOperator::NotEq => "not equal to",
+        BinaryOperator::Lt => "less than",
+        BinaryOperator::Gt => "greater than",
+        BinaryOperator::LtEq => "less than or equal to",
+        BinaryOperator::GtEq => "greater than or equal to",
         _ => return None,
     })
+}
+
+/// The collation of an operation's character column operands, or the first
+/// two names that differ (in operand order).
+fn columns_collation<'a>(
+    catalog: &Catalog,
+    operands: impl Iterator<Item = &'a Expr>,
+) -> Result<Option<String>, (String, String)> {
+    use msduck_sql::dialect::ext::keys::collation::DEFAULT;
+    let mut name: Option<String> = None;
+    for operand in operands {
+        let Some(found) = catalog.agreed_collation(operand) else {
+            continue;
+        };
+        let found = found.unwrap_or(DEFAULT);
+        match &name {
+            Some(existing) if !existing.eq_ignore_ascii_case(found) => {
+                return Err((existing.clone(), found.to_owned()));
+            }
+            _ => name = Some(found.to_owned()),
+        }
+    }
+    Ok(name)
+}
+
+/// SQL Server's 468 for an operation over differently collated columns.
+fn conflict(operation: &str, left: &str, right: &str) -> SqlError {
+    SqlError::new(
+        468,
+        9,
+        format!(
+            "Cannot resolve the collation conflict between \"{right}\" and \"{left}\" in the {operation} operation."
+        ),
+    )
 }
 
 /// Whether a collation compares differently from the database default.
@@ -282,11 +305,7 @@ fn ansi(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
 /// otherwise mark operands of unknown type for the backend `typeof`
 /// dispatch. Explicitly collated operations are left to the COLLATE
 /// handling.
-fn mark(
-    catalog: &Catalog,
-    operation: Option<Operation>,
-    mut operands: Vec<&mut Expr>,
-) -> Result<(), SqlError> {
+fn mark(catalog: &Catalog, operation: &str, mut operands: Vec<&mut Expr>) -> Result<(), SqlError> {
     if operands.iter().any(|o| collated(o) || marked(o)) {
         return Ok(());
     }
@@ -295,15 +314,7 @@ fn mark(
         Collated::Wrapped => return Ok(()),
         // SQL Server's 468; binding reports it for queries, but DML
         // predicates would otherwise compare the raw values.
-        Collated::Conflict(left, right) => {
-            if let Some(operation) = operation
-                && let Err(Conflict::Operation(error)) =
-                    operation.resolve(&[Label::Implicit(left), Label::Implicit(right)])
-            {
-                return Err(error);
-            }
-            return Ok(());
-        }
+        Collated::Conflict(left, right) => return Err(conflict(operation, &left, &right)),
     }
     // A subquery pass can type a column the statement pass could not.
     let unwrap = |e: &Expr| -> Expr {
@@ -426,12 +437,12 @@ pub(super) fn rewrite<T: VisitMut>(
         fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<SqlError> {
             let result = match expr {
                 Expr::BinaryOp { left, op, right } => match operation(op) {
-                    Some(operation) => mark(self.0, Some(operation), vec![left, right]),
+                    Some(operation) => mark(self.0, operation, vec![left, right]),
                     None => Ok(()),
                 },
                 Expr::Between {
                     expr, low, high, ..
-                } => mark(self.0, Some(Operation::GreaterEqual), vec![expr, low, high]),
+                } => mark(self.0, "greater than or equal to", vec![expr, low, high]),
                 // The escape stays as written: its checks look for a literal.
                 // LIKE over known character data matches with SQL Server's
                 // Unicode LIKE under the case-insensitive default.
@@ -441,6 +452,12 @@ pub(super) fn rewrite<T: VisitMut>(
                     any: false,
                     ..
                 } => {
+                    if let Err((left, right)) =
+                        columns_collation(self.0, [&**expr, &**pattern].into_iter())
+                        && ![&**expr, &**pattern].iter().any(|o| collated(o))
+                    {
+                        return ControlFlow::Break(conflict("like", &left, &right));
+                    }
                     if [&**expr, &**pattern]
                         .iter()
                         .all(|o| !collated(o) && !marked(o) && text(self.0, self.1, o))
@@ -465,13 +482,13 @@ pub(super) fn rewrite<T: VisitMut>(
                         }
                         Ok(())
                     } else {
-                        mark(self.0, None, vec![expr, pattern])
+                        mark(self.0, "like", vec![expr, pattern])
                     }
                 }
                 Expr::InList { expr, list, .. } => {
                     let mut operands = vec![expr.as_mut()];
                     operands.extend(list.iter_mut());
-                    mark(self.0, Some(Operation::Equal), operands)
+                    mark(self.0, "equal to", operands)
                 }
                 Expr::Case {
                     operand: Some(operand),
@@ -480,7 +497,7 @@ pub(super) fn rewrite<T: VisitMut>(
                 } => {
                     let mut operands = vec![operand.as_mut()];
                     operands.extend(conditions.iter_mut().map(|c| &mut c.condition));
-                    mark(self.0, Some(Operation::Equal), operands)
+                    mark(self.0, "equal to", operands)
                 }
                 // DISTINCT counts and extrema of a column with a collation
                 // of its own keep it (explicitly), instead of the default's

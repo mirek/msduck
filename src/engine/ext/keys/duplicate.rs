@@ -60,13 +60,82 @@ pub(super) fn run(
     result.map_err(|error| translate(session, target.as_ref(), command, &texts, error))
 }
 
-/// The character values a statement writes: its string literals and text
-/// parameters, in order. Character keys drop trailing spaces and, under a
+/// The character values a statement writes, by target column where the
+/// statement shows it. Character keys drop trailing spaces and, under a
 /// case-insensitive collation, fold case in the value DuckDB reports; SQL
 /// Server shows the value as written, which is recovered from these
 /// ([`written`]).
-fn texts(statement: &Statement, parameters: &HashMap<String, Parameter>) -> Vec<String> {
-    use sqlparser::ast::{Expr, Value, Visit, Visitor};
+#[derive(Default)]
+struct Texts {
+    /// INSERT ... VALUES rows.
+    rows: Option<Rows>,
+    /// UPDATE: the text values assigned to each (lowercase) column.
+    assigned: Option<HashMap<String, Vec<String>>>,
+    /// Other statements: every string literal and text parameter.
+    any: Vec<String>,
+}
+
+/// The rows of INSERT ... VALUES.
+struct Rows {
+    /// The target column names; `None`: the table's columns in order.
+    columns: Option<Vec<String>>,
+    /// Each row's text values, by position.
+    values: Vec<Vec<Option<String>>>,
+}
+
+impl Texts {
+    /// The values written to the key column `name`, the table's column
+    /// number `ordinal`.
+    fn of(&self, name: &str, ordinal: Option<usize>) -> Vec<&String> {
+        if let Some(Rows { columns, values }) = &self.rows {
+            let index = match columns {
+                Some(columns) => columns.iter().position(|c| c.eq_ignore_ascii_case(name)),
+                None => ordinal,
+            };
+            return index
+                .map(|index| {
+                    values
+                        .iter()
+                        .filter_map(|row| row.get(index).and_then(Option::as_ref))
+                        .collect()
+                })
+                .unwrap_or_default();
+        }
+        if let Some(assigned) = &self.assigned {
+            return assigned
+                .get(&name.to_lowercase())
+                .map(|values| values.iter().collect())
+                .unwrap_or_default();
+        }
+        self.any.iter().collect()
+    }
+}
+
+fn texts(statement: &Statement, parameters: &HashMap<String, Parameter>) -> Texts {
+    use sqlparser::ast::{AssignmentTarget, Expr, SetExpr, Value, Visit, Visitor};
+    let parameter = |name: &str| -> Option<String> {
+        match &parameters.get(&name.to_lowercase())?.value {
+            msduck_core::value::Value::Text(text) => Some(text.clone()),
+            msduck_core::value::Value::Unicode(units) => Some(String::from_utf16_lossy(units)),
+            _ => None,
+        }
+    };
+    let single = |expr: &Expr| -> Option<String> {
+        let mut expr = expr;
+        while let Expr::Nested(inner) = expr {
+            expr = inner;
+        }
+        match expr {
+            Expr::Value(value) => match &value.value {
+                Value::SingleQuotedString(text) | Value::NationalStringLiteral(text) => {
+                    Some(text.clone())
+                }
+                _ => None,
+            },
+            Expr::Identifier(ident) if ident.value.starts_with('@') => parameter(&ident.value),
+            _ => None,
+        }
+    };
     struct Find(Vec<String>);
     impl Visitor for Find {
         type Break = ();
@@ -80,35 +149,74 @@ fn texts(statement: &Statement, parameters: &HashMap<String, Parameter>) -> Vec<
             std::ops::ControlFlow::Continue(())
         }
     }
-    let mut find = Find(vec![]);
-    // An UPDATE writes its SET values; its other literals select rows.
+    let mut texts = Texts::default();
     match statement {
-        Statement::Update(update) => {
-            for assignment in &update.assignments {
-                let _ = assignment.value.visit(&mut find);
+        Statement::Insert(insert) => {
+            if let Some(source) = &insert.source
+                && let SetExpr::Values(values) = source.body.as_ref()
+            {
+                let columns = (!insert.columns.is_empty()).then(|| {
+                    insert
+                        .columns
+                        .iter()
+                        .map(|c| {
+                            c.0.last()
+                                .and_then(|part| part.as_ident())
+                                .map(|ident| ident.value.clone())
+                                .unwrap_or_default()
+                        })
+                        .collect()
+                });
+                let rows = values
+                    .rows
+                    .iter()
+                    .map(|row| row.iter().map(single).collect())
+                    .collect();
+                texts.rows = Some(Rows {
+                    columns,
+                    values: rows,
+                });
+                return texts;
             }
         }
-        _ => {
-            let _ = statement.visit(&mut find);
+        // An UPDATE writes its SET values; its other literals select rows.
+        Statement::Update(update) => {
+            let mut assigned: HashMap<String, Vec<String>> = HashMap::new();
+            for assignment in &update.assignments {
+                let AssignmentTarget::ColumnName(name) = &assignment.target else {
+                    continue;
+                };
+                let Some(column) = name.0.last().and_then(|part| part.as_ident()) else {
+                    continue;
+                };
+                let mut find = Find(vec![]);
+                let _ = assignment.value.visit(&mut find);
+                find.0.extend(single(&assignment.value).filter(|_| {
+                    matches!(&assignment.value, Expr::Identifier(i) if i.value.starts_with('@'))
+                }));
+                assigned
+                    .entry(column.value.to_lowercase())
+                    .or_default()
+                    .extend(find.0);
+            }
+            texts.assigned = Some(assigned);
+            return texts;
         }
+        _ => {}
     }
+    let mut find = Find(vec![]);
+    let _ = statement.visit(&mut find);
     let mut names: Vec<&String> = parameters.keys().collect();
     names.sort();
-    for name in names {
-        match &parameters[name].value {
-            msduck_core::value::Value::Text(text) => find.0.push(text.clone()),
-            msduck_core::value::Value::Unicode(units) => {
-                find.0.push(String::from_utf16_lossy(units))
-            }
-            _ => {}
-        }
-    }
     find.0
+        .extend(names.into_iter().filter_map(|name| parameter(name)));
+    texts.any = find.0;
+    texts
 }
 
 /// The display of a key value as written: the last written value with that
 /// key (keys drop trailing spaces and fold case), or `None` when none has it.
-fn written(column: &value::Column, raw: &str, texts: &[String]) -> Option<String> {
+fn written(column: &value::Column, raw: &str, texts: &[&String]) -> Option<String> {
     use value::Storage;
     let hex = |bytes: &[u8]| -> String { bytes.iter().map(|b| format!("{b:02X}")).collect() };
     let text = match column.kind().ok()? {
@@ -129,7 +237,7 @@ fn written(column: &value::Column, raw: &str, texts: &[String]) -> Option<String
                 let key = if column.case_insensitive() {
                     text.to_lowercase()
                 } else {
-                    (*text).clone()
+                    (**text).clone()
                 };
                 hex(key.trim_end_matches(' ').as_bytes()) == raw
             })
@@ -145,7 +253,7 @@ fn translate(
     session: &Session,
     target: Option<&ObjectName>,
     command: Option<u16>,
-    texts: &[String],
+    texts: &Texts,
     error: anyhow::Error,
 ) -> anyhow::Error {
     let error = match error.downcast::<ext::Partial>() {
@@ -208,7 +316,7 @@ fn describe(
     target: Option<&ObjectName>,
     text: &str,
     duplicate: &Duplicate,
-    texts: &[String],
+    texts: &Texts,
 ) -> Result<Option<Diagnostic>> {
     let table = match target {
         Some(name) => tables::resolve(db, name)?,
@@ -228,7 +336,7 @@ fn managed(
     db: &Connection,
     table: Option<&tables::Table>,
     duplicate: &Duplicate,
-    texts: &[String],
+    texts: &Texts,
 ) -> Result<Option<Diagnostic>> {
     let Some(tag) = duplicate.tag() else {
         return Ok(None);
@@ -262,8 +370,14 @@ fn managed(
         if column.nullable {
             position += 1;
         }
+        let ordinal = owner
+            .columns
+            .iter()
+            .position(|c| c.name.eq_ignore_ascii_case(&column.name));
         if shown != "<NULL>"
-            && let Some(written) = raw.get(position).and_then(|r| written(column, r, texts))
+            && let Some(written) = raw
+                .get(position)
+                .and_then(|r| written(column, r, &texts.of(&column.name, ordinal)))
         {
             *shown = written;
         }
