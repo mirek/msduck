@@ -10509,7 +10509,7 @@
     {
       "id": "unresponsive-recovery-docs-v1",
       "title": "Align stale-worker recovery guide with immediate successor authorization",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction: take over unresponsive workers without halting the factory. Canonical skill/parallel guide already authorize evidence-based recovery without another approval or mandatory six-hour wait; docs/agent-work.md still has stale thresholds and unconditional live-wait wording. First-party current source only; no third-party content.",
       "scope": [
         "docs/agent-work.md"
