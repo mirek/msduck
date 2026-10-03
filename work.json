@@ -10100,6 +10100,30 @@
       ],
       "issue": 842,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkTgR"
+    },
+    {
+      "id": "concat-function-binding-v1",
+      "title": "Bind CONCAT_WS and TRANSLATE from explicit logical query scopes",
+      "state": "backlog",
+      "authorization": "Continuing owner full SQL Server compatibility goal. Read-only current-source investigation verifies existing pure projection member_expression/expression_collation/source machinery and root bind_unicode_operations hooks. Follow typed conversion composition842 without reserving owner engine.rs. No external content or fabricated current server support.",
+      "scope": [
+        "crates/msduck-sql/src/projection.rs",
+        "crates/msduck-sql/src/projection/concat_functions.rs",
+        "crates/msduck-sql/src/result_types.rs",
+        "crates/msduck-sql/tests/concat_function_binding.rs",
+        "docs/concat-function-binding.md"
+      ],
+      "dependencies": [
+        "concat-source-conversion-binding-v1"
+      ],
+      "acceptance": [
+        "Implement deterministic scoped function declaration/operand binding using original AST, CatalogSnapshot and Scope declarations plus explicit collation properties/conversion context. Reuse member_expression/expression_collation/source machinery; resolve columns, aliases, qualified names, CTE/derived/APPLY/correlated shapes and declared parameters without bound values. Preserve delimited identifiers that resemble parameters/counters, literalNULL width0 and empty-literal width1, original noncharacter/legacy/binary source identity. Pass real nonzero SELECT position for451; preserve established arity/source/collation diagnostics and unknown barriers.",
+        "Infer result declaration, collation label and logical result properties independently of data: CWS nonnullable computed, TR nullable computed as captured. Empty/NULL/prepared rebinding changes cannot alter compile metadata; aliases must not fabricate source type identities on function results. Explicit unknown source/catalog/encoding/comparison/conversion contexts stay unknown rather than guesses. Provide a bounded validated caller-owned plan or idempotent AST annotation retaining each original operand exactly once for later physical lowering; no hidden global plan IDs, session/backend acquisition or repeated volatile evaluation.",
+        "Compare every applicable original declaration/descriptor/core diagnostic and prepared binding profile from retained four-run807/815/833 plus composed842 cases. Add meaningful bound-scope/quoted-identifier/empty/correlated/CTE/APPLY/literalNULL versus typedNULL/diagnostic-position tests and reject invalid or duplicate annotations. Preserve fixture hashes/UTF16/raw errors; compiler-only tests do not establish root runtime or wire support. Document any source shapes requiring new SQL Server reference before broadening rules.",
+        "Activate only after842 done and ready scopes disjoint; fresh own claim/receipt in reused isolated worktree, no new agents/worktrees/native caches. Exact-head fmt/strictClippy/workspace/alltargets/client/audit under explicit shared Linux lock handoff; independent/Codexreview or owneravailability fallback, requiredCI, worker-owned merge and registry/project completion. Root catalog/metadata/native/diagnostic adoption remains separately scoped and must retain ordinary expression inference. No root/engine/lib/capture edits under this task."
+      ],
+      "issue": 843,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkTp5"
     }
   ]
 }
