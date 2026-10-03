@@ -10050,6 +10050,28 @@
       ],
       "issue": 837,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkRbH"
+    },
+    {
+      "id": "translate-character-matching-reference-v1",
+      "title": "Capture function-specific TRANSLATE character matching",
+      "state": "ready",
+      "authorization": "Continuing owner SQL Server-compatible Rust/DuckDB goal and independent parallel factory. Merged core813 requires explicit established character matching keys; reference807 proves only selected cases. Ordinary SQL equality, BIN2 padded comparison and mssqlite custom function are not a general TRANSLATE oracle. No external input or engine reservation.",
+      "scope": [
+        "scripts/capture-translate-character-matching.mjs",
+        "reference/translate-character-matching.json",
+        "docs/translate-character-matching.md"
+      ],
+      "dependencies": [
+        "concat-ws-translate-reference-recovery-v1"
+      ],
+      "acceptance": [
+        "Capture actual TRANSLATE outputs and source diagnostics over explicit original VARCHAR/NVARCHAR declarations and collation contexts. Cover default SQL_Latin1_General_CP1_CI_AS, measured Latin1_General100 case/accent-sensitive/insensitive and BIN2 variants plus SC/SC_UTF8; exact ASCII case pairs, CP1252 representable accents/control bytes, representative BMP accent/combining/ligature/ignorable/space/punctuation distinctions, valid supplementary pairs and isolated units. Use a bounded justified grid and enumerate domain coverage, not a claim that a sample covers all Unicode. Preserve source creation errors, NULL, lengths and output units. Do not infer matching from ordinary equality or comparison alone.",
+        "Include separate ordinary equality controls where useful, first duplicate/equivalent mapping precedence with distinguishable replacements, no chaining, surrogate split/count/mismatch boundaries and mapping/replacement roles. Prepared original typed bindings must vary values with stable declarations/metadata; preserve raw emitted bytes where driver value carriers are lossy. Complete rows/UTF16, descriptors/errors/ORDER/DONE/RETURNVALUE and connection reuse. Inspect every discrepancy; unknown/generalization gaps explicit. No server runtime or complete collation support claim.",
+        "Use pinned first-party SQL Server image and owner-approved807/835 observer machinery conceptually, four complete observations in two independently owned containers/two fresh databases each plus full second reproduction. Retain fixtures immutable and hashes; meaningful corruption/lifecycle/CLI guard tests, bounded watchdog/observer/memory/ports and owned terminal cleanup. Store bulky raw captures on Linux and only canonical fixture locally. Cached node dependencies read-only; no shared native runner source/executable synchronization or lock bypass.",
+        "Fresh exclusive claim/receipt in an existing completed/reused worker worktree; preserve all other pending PR exactheads/receipts and own their follow-up. No new agents/worktrees/native caches. This reference task can use private limited containers while root export85684/PG4066132 owns nativebuilder, without sharing ports. Exact-head requiredCI and independent/Codexreview or authorized fallback; claiming worker owns PR merge and prompt registry/project/issue completion. No root/engine/lib/conversion implementation edits."
+      ],
+      "issue": 841,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkTFK"
     }
   ]
 }
