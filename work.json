@@ -11604,6 +11604,35 @@
         "Independently pin full semantics/request/response/framing and every original byte-grid/outcome. Meaningful corruption/omission/framing repartition/alias/async/budget failure tests and focused tests bothhosts. Retain exact previous isolated/context differences. Fresh own claim in reusedroot tree/privateLinuxSQLworkspace, no newagent/tree/nativecache/canonical mutations; worker926 may separately hold sharedbuilder. Claimingworker owns checkpoints/draftPR/reviews/exactCI/merge and registry/issue/projectcompletion. No Rust/engine/Value/catalog/TDS/lib/runtime/operationalgate edits."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pl1xP"
+    },
+    {
+      "id": "bulk-character-utf8-multibyte-reference-v1",
+      "title": "Capture deeper UTF8 continuation and mixed-sequence controls",
+      "state": "ready",
+      "authorization": "Continuing owner full SQL Server compatible Rust/DuckDB goal; first-party merged926/927 evidence leaves third/fourth-byte transitions and mixed malformed sequences ungrounded. Reuse existing resources.",
+      "scope": [
+        "scripts/capture-bulk-character-utf8-multibyte.mjs",
+        "reference/bulk-character-utf8-multibyte.json",
+        "tests/bulk_character_utf8_multibyte_capture.test.mjs",
+        "docs/bulk-character-utf8-multibyte-reference.md"
+      ],
+      "dependencies": [
+        "bulk-character-adapter-plan-v1",
+        "bulk-character-conversion-reference-v1",
+        "bulk-character-utf8-boundary-reference-v1",
+        "bulk-character-utf8-source-form-reference-v1",
+        "bulk-character-utf8-bounded-target-reference-v1",
+        "bulk-character-utf8-context-reference-v1",
+        "bulk-character-utf8-octet-reference-v1",
+        "utf8-valid-projection-v1"
+      ],
+      "acceptance": [
+        "Freeze exactly400 isolated NULL/challenge probes:72 third-byte controls (e0,ed,ef times80,9f,a0,bf times00,7f,80,bf,c0,ff),288 fourth-byte controls (f0,f4 times80,8f,90,bf times the same6 third and6 fourth bytes),40 deterministic mixed controls with seed0x6d736475 and lengths0..31. Append42 to all challenge anchors. Matching UTF8 sourceVARCHAR64/wire64 and nativeUTF8 targetVARCHAR64; max32bytes/input enforced64hex guard ONLY in new collector. Preserve native bytes, direct SQLUTF16units, client display, errors/info/DONE/callback/original counters without assuming success or general grammar/admission/capacity/runtime claims.",
+        "Four fresh databases/two pinnedSQL17.0.4065.4 containers and complete final-source reproduction. Reviewed helpers/all ancestors pinned beforeDocker. Keep unchanged48MiB/500000node/depth64/phase2MiB/1024frame/callback15s/connect2s caps; exclusive raw and complete comparison sidecars before gold validation, partial failure retention/awaited cleanup. If caps prevent full capture, partition via proper publication rather than relaxing guards or claiming partial pass.",
+        "Independently pin full semantics/request/response/framing and every original byte-grid/outcome. Meaningful corruption/omission/framing repartition/alias/async/budget failure tests and focused tests bothhosts. Retain exact previous isolated/context differences. Fresh own claim in reusedroot tree/privateLinuxSQLworkspace, no newagent/tree/nativecache/canonical mutations; worker926 may separately hold sharedbuilder. Claimingworker owns checkpoints/draftPR/reviews/exactCI/merge and registry/issue/projectcompletion. No Rust/engine/Value/catalog/TDS/lib/runtime/operationalgate edits."
+      ],
+      "issue": 930,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pl8E8"
     }
   ]
 }
