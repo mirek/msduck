@@ -7,10 +7,42 @@ import { createInterface } from 'node:readline'
 
 // A changed file must arrive with a new receiver mtime for Cargo's fingerprint
 // checks. Checksums avoid retransferring unchanged files when their mtimes differ.
-export const sourceSyncOptions = ['-azc', '--no-times', '--delete', '--exclude=/.git/',
-  '--exclude=/target/', '--exclude=/node_modules/', '--exclude=/artifacts/',
-  '--exclude=/.msduck/', '--exclude=.env', '--exclude=.env.*',
+export const sourceSyncOptions = ['-azc', '--no-times', '--delete', '--exclude=/.git',
+  '--exclude=/target', '--exclude=/node_modules', '--exclude=/artifacts',
+  '--exclude=/.msduck', '--exclude=.env', '--exclude=.env.*',
   '--exclude=*.duckdb', '--exclude=*.duckdb.wal']
+
+// Executed after the ownership guard while holding runner.lock, before rsync.
+// Exclusions protect receiver entries too, so old copied links need migration.
+export const receiverCacheMigration = `
+if [ ! -f "$root/.msduck-build-workspace" ]; then
+  echo 'Refusing cache migration in an unowned workspace.' >&2
+  exit 1
+fi
+if [ -L "$root/source" ]; then
+  echo 'Refusing cache migration through a source directory symlink.' >&2
+  exit 1
+fi
+for cache in target node_modules artifacts; do
+  if [ -L "$root/source/$cache" ]; then
+    echo "Removing stale receiver $cache symlink."
+    unlink "$root/source/$cache"
+    if [ "$cache" = node_modules ]; then
+      if [ -e "$root/npm-lock.sha256" ] || [ -L "$root/npm-lock.sha256" ]; then
+        unlink "$root/npm-lock.sha256"
+      fi
+    fi
+  fi
+done
+`
+
+export const npmCacheSetup = `
+digest=$(sha256sum package-lock.json)
+if [ ! -d node_modules ] || [ ! -f "$root/npm-lock.sha256" ] || [ "$(cat "$root/npm-lock.sha256")" != "$digest" ]; then
+  npm ci --no-audit --no-fund
+  printf '%s\\n' "$digest" > "$root/npm-lock.sha256"
+fi
+`
 
 async function main() {
 const root = fileURLToPath(new URL('../', import.meta.url))
@@ -61,6 +93,7 @@ if [ ! -f "$root/.msduck-build-workspace" ]; then
   fi
   touch "$root/.msduck-build-workspace"
 fi
+${receiverCacheMigration}
 mkdir -p "$root/source"
 printf '%s\\n' ${quote(marker)}
 IFS= read -r proceed
@@ -73,11 +106,7 @@ if [ ! -f "$root/.msduck-content-sync-v1" ]; then
   touch "$root/.msduck-content-sync-v1"
 fi
 if [ ${quote(action)} = test ] || [ ${quote(action)} = audit ] || [ ${quote(action)} = verify ]; then
-  digest=$(sha256sum package-lock.json)
-  if [ ! -d node_modules ] || [ ! -f "$root/npm-lock.sha256" ] || [ "$(cat "$root/npm-lock.sha256")" != "$digest" ]; then
-    npm ci --no-audit --no-fund
-    printf '%s\\n' "$digest" > "$root/npm-lock.sha256"
-  fi
+${npmCacheSetup}
 fi
 ${actions[action]}
 `
