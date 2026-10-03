@@ -11,17 +11,17 @@ import { start, query } from '../support/client.mjs'
 
 const fixture = JSON.parse(readFileSync(new URL('../../reference/default-collation.json', import.meta.url)))
 
-// Cases whose descriptors, rows or diagnostics differ from SQL Server, by
-// reason.
+// Cases that differ from SQL Server: the fields that differ, and why. Every
+// other field of these cases must still match exactly.
 const known = new Map([
-  ['ignorable unicode units', 'NCHAR of a surrogate code unit is unsupported'],
-  ['surrogate pair', 'NCHAR of a surrogate code unit is unsupported'],
-  ['accented letter order', 'values derived from literals (VALUES) sort by code point'],
-  ['ordering weights', 'punctuation and digits follow code points, not SQL Server sort weights'],
-  ['group by', 'grouping by an expression of a column keeps DuckDB grouping (trailing spaces)'],
-  ['alter table add unique', 'ALTER TABLE ADD UNIQUE over nvarchar is unsupported (constraints)'],
-  ['catalog', 'sys.columns names are nvarchar(max), and the _SC_UTF8 column keeps the default descriptor'],
-  ['add column', 'sys.columns.collation_name is nvarchar(max), not sysname'],
+  ['ignorable unicode units', [['rows', 'errors'], 'NCHAR of a surrogate code unit is unsupported']],
+  ['surrogate pair', [['columns', 'rows', 'errors'], 'NCHAR of a surrogate code unit is unsupported']],
+  ['accented letter order', [['rows'], 'values derived from literals (VALUES) sort by code point']],
+  ['ordering weights', [['rows'], 'punctuation and digits follow code points, not SQL Server sort weights']],
+  ['group by', [['rows'], 'grouping by an expression of a column keeps DuckDB grouping (trailing spaces)']],
+  ['alter table add unique', [['errors'], 'ALTER TABLE ADD UNIQUE over nvarchar is unsupported (constraints)']],
+  ['catalog', [['columns'], 'sys.columns names are nvarchar(max), and the _SC_UTF8 column keeps the default descriptor']],
+  ['add column', [['columns'], 'sys.columns.collation_name is nvarchar(max), not sysname']],
 ])
 
 // System-generated constraint names end in a random hexadecimal suffix.
@@ -42,7 +42,8 @@ function outcome(result) {
 
 test('comparisons, grouping, keys and column collations match the SQL Server capture', async t => {
   const connection = await start(t, { options: { requestTimeout: 60000 } })
-  const differences = []
+  const problems = []
+  const seen = new Set()
   for (const entry of fixture.cases) {
     const local = outcome(await capture(connection, entry.sql))
     const reference = {
@@ -50,13 +51,22 @@ test('comparisons, grouping, keys and column collations match the SQL Server cap
       rows: entry.sets.map(set => set.rows),
       errors: entry.errors.map(e => [e.number, e.state, e.class, message(e.message)]),
     }
-    if (JSON.stringify(local) !== JSON.stringify(reference)) differences.push(entry.name)
+    const [fields = []] = known.get(entry.name) ?? []
+    for (const field of ['columns', 'rows', 'errors']) {
+      const same = JSON.stringify(local[field]) === JSON.stringify(reference[field])
+      if (fields.includes(field)) {
+        if (same) problems.push(`${entry.name}: ${field} now matches`)
+        else seen.add(entry.name)
+      } else if (!same) {
+        problems.push(`${entry.name}: ${field} ${JSON.stringify(local[field]).slice(0, 300)}`)
+      }
+    }
     for (const [, table] of entry.sql.matchAll(/CREATE TABLE dbo\.(\w+)/g)) {
       await capture(connection, `DROP TABLE IF EXISTS dbo.${table}`)
     }
   }
-  assert.deepEqual(differences.filter(name => !known.has(name)), [])
-  assert.deepEqual([...known.keys()].filter(name => !differences.includes(name)), [])
+  assert.deepEqual(problems, [])
+  assert.deepEqual([...known.keys()].filter(name => !seen.has(name)), [])
 })
 
 test('the reported reproductions behave as in SQL Server', async t => {
@@ -102,6 +112,7 @@ test('duplicates show each key column as written, and ORDER BY resolves qualifie
   await query(connection, "CREATE TABLE dbo.pair (a nvarchar(10) NOT NULL, b varchar(10) NOT NULL, CONSTRAINT uq_pair UNIQUE (a, b)); INSERT dbo.pair VALUES (N'base', 'base')")
   await assert.rejects(query(connection, "INSERT dbo.pair VALUES (N'BASE', 'Base')"), error => error.number === 2627 && /\(BASE, Base\)/.test(error.message))
   await assert.rejects(query(connection, "INSERT dbo.pair (b, a) VALUES ('bAse', N'baSE')"), error => error.number === 2627 && /\(baSE, bAse\)/.test(error.message))
+  await assert.rejects(query(connection, "INSERT dbo.pair (a, b) SELECT N'BASE', 'Base'"), error => error.number === 2627 && /\(BASE, Base\)/.test(error.message))
   await query(connection, "INSERT dbo.pair VALUES (N'x', 'x')")
   await assert.rejects(query(connection, "UPDATE dbo.pair SET a = N'BASE', b = 'BASE' WHERE a = N'x'"), error => error.number === 2627 && /\(BASE, BASE\)/.test(error.message))
   await query(connection, "CREATE TABLE dbo.left_side (id int, v nvarchar(10) COLLATE Latin1_General_CS_AS); CREATE TABLE dbo.right_side (id int, v int); INSERT dbo.left_side VALUES (1, N'b'), (2, N'B'); INSERT dbo.right_side VALUES (1, 20), (2, 10)")

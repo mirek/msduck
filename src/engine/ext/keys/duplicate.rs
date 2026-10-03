@@ -67,7 +67,7 @@ pub(super) fn run(
 /// ([`written`]).
 #[derive(Default)]
 struct Texts {
-    /// INSERT ... VALUES rows.
+    /// INSERT ... VALUES or SELECT rows.
     rows: Option<Rows>,
     /// UPDATE: the text values assigned to each (lowercase) column.
     assigned: Option<HashMap<String, Vec<String>>>,
@@ -75,7 +75,7 @@ struct Texts {
     any: Vec<String>,
 }
 
-/// The rows of INSERT ... VALUES.
+/// The rows an INSERT writes, from VALUES or SELECT lists.
 struct Rows {
     /// The target column names; `None`: the table's columns in order.
     columns: Option<Vec<String>>,
@@ -152,8 +152,49 @@ fn texts(statement: &Statement, parameters: &HashMap<String, Parameter>) -> Text
     let mut texts = Texts::default();
     match statement {
         Statement::Insert(insert) => {
+            // The rows of VALUES, or of SELECT lists (UNION ALL arms too), by
+            // position; `None` when the source has another shape.
+            fn rows(
+                body: &SetExpr,
+                single: &dyn Fn(&Expr) -> Option<String>,
+                out: &mut Vec<Vec<Option<String>>>,
+            ) -> Option<()> {
+                match body {
+                    SetExpr::Values(values) => {
+                        out.extend(
+                            values
+                                .rows
+                                .iter()
+                                .map(|row| row.iter().map(single).collect()),
+                        );
+                        Some(())
+                    }
+                    SetExpr::Select(select) => {
+                        let row = select
+                            .projection
+                            .iter()
+                            .map(|item| match item {
+                                sqlparser::ast::SelectItem::UnnamedExpr(expr)
+                                | sqlparser::ast::SelectItem::ExprWithAlias { expr, .. } => {
+                                    Some(single(expr))
+                                }
+                                _ => None,
+                            })
+                            .collect::<Option<Vec<_>>>()?;
+                        out.push(row);
+                        Some(())
+                    }
+                    SetExpr::SetOperation { left, right, .. } => {
+                        rows(left, single, out)?;
+                        rows(right, single, out)
+                    }
+                    SetExpr::Query(query) => rows(&query.body, single, out),
+                    _ => None,
+                }
+            }
+            let mut values = vec![];
             if let Some(source) = &insert.source
-                && let SetExpr::Values(values) = source.body.as_ref()
+                && rows(source.body.as_ref(), &single, &mut values).is_some()
             {
                 let columns = (!insert.columns.is_empty()).then(|| {
                     insert
@@ -167,15 +208,7 @@ fn texts(statement: &Statement, parameters: &HashMap<String, Parameter>) -> Text
                         })
                         .collect()
                 });
-                let rows = values
-                    .rows
-                    .iter()
-                    .map(|row| row.iter().map(single).collect())
-                    .collect();
-                texts.rows = Some(Rows {
-                    columns,
-                    values: rows,
-                });
+                texts.rows = Some(Rows { columns, values });
                 return texts;
             }
         }
