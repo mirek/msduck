@@ -11577,6 +11577,33 @@
         "Fresh exclusive own receipt in reused existing worker worktree; no new agent/tree/native cache. Full exact-head fmt/workspace Rust/strict all-target Clippy/build, all client tests and raw audit with complete source/binary/client provenance. Independent/Codex exact-head reviews or genuine authorized fallback, required CI and worker-owned merge/registry/issue/project completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pl1WT"
+    },
+    {
+      "id": "bulk-character-utf8-octet-reference-v1",
+      "title": "Capture UTF8 octet and lead/next-byte boundary controls",
+      "issue": 927,
+      "state": "ready",
+      "authorization": "Continuing owner full-server compatibility goal. Approved UTF8 context924 completes neighbors but not every lead/octet or next-byte boundary. Capture actual native and SQL-unit outcomes before inferring malformed transitions.",
+      "scope": [
+        "scripts/capture-bulk-character-utf8-octet.mjs",
+        "reference/bulk-character-utf8-octet.json",
+        "tests/bulk_character_utf8_octet_capture.test.mjs",
+        "docs/bulk-character-utf8-octet-reference.md"
+      ],
+      "dependencies": [
+        "bulk-character-adapter-plan-v1",
+        "bulk-character-conversion-reference-v1",
+        "bulk-character-utf8-boundary-reference-v1",
+        "bulk-character-utf8-source-form-reference-v1",
+        "bulk-character-utf8-bounded-target-reference-v1",
+        "bulk-character-utf8-context-reference-v1"
+      ],
+      "acceptance": [
+        "Freeze256 octets as byte+42 plus16 leads c0,c1,c2,df,e0,e1,ec,ed,ee,ef,f0,f1,f3,f4,f5,ff times10 nextbytes00,7f,80,8f,90,9f,a0,bf,c0,ff as lead+next+42. Exactly416 isolated NULL/challenge probes per database, matching UTF8 sourceVARCHAR64 and nativeUTF8 targetVARCHAR64. Native bytes/SQLUTF16projection/clientdisplay and all errors/info/DONE/callback/original counters remain exact; no assumed all-success or universal decoding/admission/codepage/assignment/capacity/runtime claim.",
+        "Four fresh databases/two pinnedSQL17.0.4065.4 containers and complete final-source reproduction. Reviewed helpers/all ancestors pinned beforeDocker. Keep unchanged48MiB/500000node/depth64/phase2MiB/1024frame/callback15s/connect2s caps; exclusive raw and complete comparison sidecars before gold validation, partial failure retention/awaited cleanup. If caps prevent full capture, partition via proper publication rather than relaxing guards or claiming partial pass.",
+        "Independently pin full semantics/request/response/framing and every original byte-grid/outcome. Meaningful corruption/omission/framing repartition/alias/async/budget failure tests and focused tests bothhosts. Retain exact previous isolated/context differences. Fresh own claim in reusedroot tree/privateLinuxSQLworkspace, no newagent/tree/nativecache/canonical mutations; worker926 may separately hold sharedbuilder. Claimingworker owns checkpoints/draftPR/reviews/exactCI/merge and registry/issue/projectcompletion. No Rust/engine/Value/catalog/TDS/lib/runtime/operationalgate edits."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pl1xP"
     }
   ]
 }
