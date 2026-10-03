@@ -290,6 +290,18 @@ fn relation_names(select: &Select) -> HashSet<String> {
     }
     let mut names = Names(HashSet::new());
     let _ = select.visit(&mut names);
+    // `alias.*` is not an expression, but it references `alias` too.
+    for item in &select.projection {
+        if let SelectItem::QualifiedWildcard(SelectItemQualifiedWildcardKind::ObjectName(name), _) =
+            item
+        {
+            for part in &name.0 {
+                if let Some(ident) = part.as_ident() {
+                    names.0.insert(ident.value.to_lowercase());
+                }
+            }
+        }
+    }
     names.0
 }
 
@@ -572,6 +584,10 @@ mod tests {
         // An outer alias the body references is not shadowed either.
         let sql = rewritten(
             "SELECT 1 FROM OPENJSON(__msduck_full_join.lhs) l FULL JOIN OPENJSON(__msduck_full_join.rhs) r ON l.[key] = r.[key]",
+        );
+        assert!(sql.contains(&format!("AS {SIDES}_1 ({SIDE})")), "{sql}");
+        let sql = rewritten(
+            "SELECT __msduck_full_join.* FROM OPENJSON(lhs) l FULL JOIN OPENJSON(rhs) r ON l.[key] = r.[key]",
         );
         assert!(sql.contains(&format!("AS {SIDES}_1 ({SIDE})")), "{sql}");
         // `t.id` names the outer row, because `dbo.t AS a` hides `t`.
