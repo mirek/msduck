@@ -205,34 +205,45 @@ reassigned. Recovery, however, does not wait for the owner.
 The owner usually leaves sessions running unattended for days and checks in
 only occasionally. On 2026-10-01 the owner gave this standing authorization.
 Any session working on owner-approved work may resolve a stale claim or
-reservation that blocks that work, without asking first. Report what you did
-afterwards, in the PR, the final report or the next owner check-in. Do not
-stop and wait.
+reservation that blocks that work, without asking first or imposing a mandatory
+six-hour delay. Follow the canonical contribution skill's
+[unresponsive-worker takeover procedure](../.agents/skills/contribute/SKILL.md#unresponsive-worker-takeover).
+Report the recovery afterwards in the PR, final report or next owner check-in.
+Keep unrelated work progressing.
 
 A claimed task, or a ready task that reserves files you need, is **stale** when
 at least one of these holds:
 
 - its worker reports that it has stopped or cannot continue;
-- its branch and PR have had no pushes, commits or updates for **6 hours**,
-  and no live local worker is still using it. Check that no process runs in
-  its worktree, no files there changed recently, and no background job of
-  that worker is pending;
-- it was claimed more than 6 hours ago and has no branch or PR at all.
+- available checkpoint, worktree and local/remote job evidence establishes that
+  the worker is unresponsive after attempting contact through an available
+  owner-approved coordination channel. Record what was checked and the contact
+  attempt; do not wait indefinitely once the evidence establishes unresponsiveness.
 
-A worker that is still pushing, verifying, waiting on CI, or polling for a
-reservation is live, never stale. Check the evidence first; do not guess.
+Age, a missing branch or PR, and a pending review/check alone are insufficient.
+A responsive worker or an actively progressing build is not stale. Verify
+available worker/job status rather than assuming a pending check or reservation
+means a worker is still active. Claims never expire automatically.
 
 To resolve a stale task:
 
-1. Record the evidence: last push, PR update time, and worktree and process
-   checks.
+1. Record the latest approved checkpoint, available worker/job status and contact
+   attempt. Respect the owner's separately held work; recovery is not permission
+   to take over it.
 2. Publish `states: {OLD-ID: "blocked"}` with the helper, putting the evidence
    in the change's authorization.
 3. In the same or a later change, publish a **new task ID** with the bounded
    remaining scope, or a companion task for just the files you need.
-4. Claim the new task and continue.
+4. Acquire the new task's exclusive claim with a fresh private receipt before
+   work. Keep its scope disjoint from other ready tasks and do not mark incomplete
+   dependencies done to make it claimable.
+5. Inspect and stop only local/remote jobs attributable to the displaced task
+   where accessible. An unreachable old worker does not require another owner
+   confirmation. Isolate successor outputs and honor shared build locks; never
+   kill unrelated jobs or overwrite an executable still in use.
 
-Leave the old branch, PR, claim tag and receipt untouched. A suspended process
+Preserve the old branch, receipt, permanent claim and verification evidence;
+never adopt or delete the old receipt or claim. A suspended process
 that wakes up later must verify again, and stop when its task is no longer
 ready. Approval from the owner is still required for real product decisions
 and for external submissions. Routine unblocking does not need it.
