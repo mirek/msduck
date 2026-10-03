@@ -10737,6 +10737,21 @@
         "Fresh own claim in completed root isolated worktree based approved610eeea3. Node syntax/focused tests/source links/diff checks, owner exact-head CI/independent/Codex review, focused PR, worker-owned merge and registry/project completion. Only mark old341 done after all original acceptance is proved; otherwise old remains blocked. Decoder task344 depends on original341 and remains unavailable until truthful completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkjA_"
+    },
+    {
+      "id": "v025-bracket-types-v1-sql-type",
+      "title": "Resolve delimited system type names in scalar declarations",
+      "state": "ready",
+      "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03): \"please find the following compatibility report and work on it; definition of done is when all this functionality lands in published container; feel free to schedule multiple agents working on multiple prs\". The owner pasted a first-party workload compatibility report for the v0.2.5 image (umbrella #864); only its generic reproductions are used. No external content. Companion of v025-bracket-types-v1 (issue #865): procedure/function parameters and RETURNS types written as [int], [nvarchar](10) or sysname fail with 40515 unsupported scalar declaration because they reach sql_type::declaration without statement-level normalization.",
+      "scope": [
+        "crates/msduck-sql/src/sql_type.rs"
+      ],
+      "acceptance": [
+        "sql_type::declaration resolves a DataType::Custom that names a delimited or sys-qualified system type, or sysname, through dialect::ext::conversion::bracket_types::value_type, so CREATE PROCEDURE p @a [int], @b [nvarchar](5), @c sysname and CREATE FUNCTION f(@a [int]) RETURNS [nvarchar](10) work like the plain spellings; other Custom names keep the 40515 error. Shipped in the same PR as v025-bracket-types-v1 with its tests."
+      ],
+      "dependencies": [],
+      "issue": 865,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pkgvg"
     }
   ]
 }
