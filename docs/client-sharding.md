@@ -162,7 +162,7 @@ each run. Raw evidence was copied before the shared builder handoff. An earlier
 partial run on predecessor `25eb55b` was stopped for the diagnostic-group
 correction, exited 255 and remains partial evidence; it is not a pass.
 
-All 26 command/shard/remote harness regressions pass after the portability
+All 27 command/shard/remote harness regressions pass after the portability
 correction. The original 22 passed at the benchmark checkpoint. Their small
 private snapshots contain explicitly inert executable markers for harness
 accounting and never substitute for the real Cargo/native benchmark above.
@@ -174,12 +174,28 @@ A subsequent verified Codex finding corrected the Windows default command:
 `52578c8` still routed Windows through the POSIX-only runner. The benchmark
 checkpoint `bee9` remains the measured source above. The final portability
 adapter changes one executable input, so those captures are not relabelled as
-identical final-source proofs. A fresh complete Linux npm validation is queued
-for the corrected frozen source after the current builder owner releases it;
-this does not repeat the original serial/four-worker measurement.
+identical final-source proofs. A subsequent complete Linux npm validation on frozen cancellation correction
+`75b602a56d1e962d9b27ff646f65fddb6b1aa1c5` passed all 520 identities with
+four workers and 21 terminal subprocesses, with zero failures, assigned skips,
+TODOs, cancellations, missing/repeated identities or changed inputs. Client
+elapsed was 382180.040296 ms; cached all-targets build was 1m41s. The raw artifact
+`6a14ecc7-fb7e-484e-9caf-e895de0e531b` is preserved in
+`.tmp/client847/final-portable-75b602a`; independent recount and local comparison
+verify every passing identity and all 1,212 input hashes. Summary SHA-256 is
+`db982ecfe91b89d84563b6e29f288d94b8d00a8084ca7dbe3d9f35b0531ea183`;
+the executable SHA-256 remains `9adfd0d2fe8ea5c8bfa2ca419027589dfd4b557d9f62f7728c7da7fb02504137`.
+This validates corrected execution without repeating the original serial/four-worker
+performance measurement or claiming a controlled speedup.
 
 A further Codex finding exposed descendant leakage in `7dc045e`: cancellation
 signaled only Node’s coordinator. The actual predecessor fails the strengthened
 regression with a surviving test worker; the corrected adapter terminates both
 a SIGTERM-ignoring worker and its child. Windows tree-command construction is
 tested separately, without claiming execution on a Windows native server.
+
+A final test-only review correction recognizes Linux defunct (`Z`/`X`) workers
+as non-executing even when PID 1 has not yet reaped them. It preserves checks for
+live/sleeping/stopped workers and propagates unexpected inspection errors. The
+production launcher, six npm files, manifest, remote runner and executable are
+byte-identical to the complete `75b602a` execution above; the amended harness
+file and documentation are not relabelled as identical retained input hashes.

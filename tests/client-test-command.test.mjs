@@ -116,6 +116,20 @@ test('separately labelled CI diagnostics retain intentional skips without a full
 
 
 import {EventEmitter} from 'node:events'
+// A killed orphan can remain defunct until container PID 1 reaps it.
+// PID existence alone must not count that non-executing state as a live worker.
+async function running(pid, {platform = process.platform, probe = process.kill,
+  readStat = pid => readFile(`/proc/${pid}/stat`, 'utf8')} = {}) {
+  try { probe(pid, 0) } catch (error) { if (error.code === 'ESRCH') return false; throw error }
+  if (platform === 'linux') {
+    try {
+      const stat = await readStat(pid)
+      const state = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[0]
+      return state !== 'Z' && state !== 'X'
+    } catch (error) { if (error.code === 'ENOENT') return false; throw error }
+  }
+  return true
+}
 test('Windows default and one-job commands retain the direct six-file serial invocation', () => {
   for (const value of [undefined, '1']) {
     const selected = command({MSDUCK_CLIENT_JOBS:value,NODE_TEST_CONTEXT:'child-v8'}, [], 'win32')
@@ -161,12 +175,12 @@ test('actual portable serial launch forwards cancellation and terminates its tes
   signals.emit('SIGTERM')
   assert.notEqual(await terminal,0)
   for(let i=0;i<50;i++) {
-    try{process.kill(pid,0)}catch{pid=undefined;break}
+    if (!await running(pid)) {pid=undefined;break}
     await new Promise(r=>setTimeout(r,20))
   }
   assert.equal(pid,undefined,'cancelled serial test worker is terminal')
   for(let i=0;i<50;i++) {
-    try{process.kill(descendant,0)}catch{descendant=undefined;break}
+    if (!await running(descendant)) {descendant=undefined;break}
     await new Promise(r=>setTimeout(r,20))
   }
   assert.equal(descendant,undefined,'cancelled worker descendant is terminal')
@@ -177,4 +191,22 @@ test('actual portable serial launch forwards cancellation and terminates its tes
 test('Windows cancellation targets the full PID tree with bounded PID arguments', () => {
   assert.deepEqual(windowsTreeCommand(1234, 'C:\\Windows'), {file:'C:\\Windows\\System32\\taskkill.exe',args:['/PID','1234','/T','/F']})
   for (const pid of [undefined, 0, -1, '1234', 1.5]) assert.throws(()=>windowsTreeCommand(pid), /PID/)
+})
+
+
+test('terminal worker checks distinguish Linux zombies from executing processes', async () => {
+  const probe = () => true
+  for (const state of ['Z', 'X']) {
+    assert.equal(await running(123, {platform:'linux', probe,
+      readStat:async()=>`123 (worker name ) with spaces) ${state} 1 2 3`}), false)
+  }
+  for (const state of ['S','R','D','T']) {
+    assert.equal(await running(123, {platform:'linux', probe,
+      readStat:async()=>`123 (worker) ${state} 1 2 3`}), true)
+  }
+  assert.equal(await running(123, {platform:'linux',probe,
+    readStat:async()=>{throw Object.assign(Error('gone'),{code:'ENOENT'})}}), false)
+  assert.equal(await running(123, {probe:()=>{throw Object.assign(Error('gone'),{code:'ESRCH'})}}), false)
+  await assert.rejects(running(123, {probe:()=>{throw Object.assign(Error('denied'),{code:'EPERM'})}}), /denied/)
+  assert.equal(await running(123, {platform:'win32',probe,readStat:()=>{throw Error('not Linux')}}), true)
 })
