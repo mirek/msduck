@@ -705,122 +705,225 @@ fn snapshot_with_views<T: Visit>(
     let mut names = Tables(Default::default());
     let _ = query.visit(&mut names);
     let mut catalog = CatalogSnapshot::default();
-    let mut types = db.prepare("SELECT name,system_type_id,user_type_id,max_length,precision,scale,collation_name FROM sys.types")?;
-    catalog.types = types
-        .query_map([], |row| {
-            Ok((row.get(0)?, crate::declared_columns::read_info(row, 1)?))
-        })?
-        .collect::<duckdb::Result<_>>()?;
+    catalog.types = catalog_types(db)?;
     // The unqualified catalog uses the selected database's default.
     catalog.default_collation = catalog
         .types
         .get("nvarchar")
         .and_then(|t| t.collation_name.clone());
-    let mut columns = db.prepare("SELECT c.name,c.system_type_id,c.user_type_id,c.max_length,c.precision,c.scale,c.collation_name,c.is_nullable,c.is_identity,o.type,c.is_computed FROM sys.columns c JOIN sys.objects o ON c.object_id=o.object_id WHERE c.object_id=__msduck_object_id(?,NULL) ORDER BY c.column_id")?;
+    let current: String = db.query_row("SELECT current_database()", [], |row| row.get(0))?;
     for (name, object_name) in names.0 {
-        let system_view = match object_name.0.as_slice() {
-            [
-                ObjectNamePart::Identifier(schema),
-                ObjectNamePart::Identifier(view),
-            ] if schema.value.eq_ignore_ascii_case("sys") => Some((None, view)),
-            [
-                ObjectNamePart::Identifier(database),
-                ObjectNamePart::Identifier(schema),
-                ObjectNamePart::Identifier(view),
-            ] if schema.value.eq_ignore_ascii_case("sys") => Some((Some(database), view)),
-            _ => None,
-        };
-        if let Some((database, view)) = system_view {
-            let collation = if let Some(database) = database {
-                let current: String =
-                    db.query_row("SELECT current_database()", [], |row| row.get(0))?;
-                if database.value.eq_ignore_ascii_case(&current) {
-                    catalog.default_collation.clone()
-                } else {
-                    // Only published databases can supply a catalog-qualified
-                    // system view's logical descriptors. Hidden attachments
-                    // during CREATE/DROP must not fabricate a result shape.
-                    let mut query = db.prepare("SELECT collation_name FROM sys.databases WHERE __msduck_db_key(name)=__msduck_db_key(?)")?;
-                    let mut rows = query.query([&database.value])?;
-                    if let Some(row) = rows.next()? {
-                        row.get::<_, Option<String>>(0)?
-                    } else {
-                        None
-                    }
-                }
-            } else {
-                catalog.default_collation.clone()
-            };
-            if let Some(collation) = collation.as_deref()
-                && let Some(fields) = system_catalog_fields(&view.value, collation)
-            {
+        // The engine binds a relation in another database as
+        // `"catalog".schema.object`; its metadata belongs to that catalog.
+        if let Some((alias, local)) = foreign_relation(db, &current, &object_name)? {
+            let fields = in_catalog(db, &alias, || {
+                let collation = catalog_types(db)?
+                    .get("nvarchar")
+                    .and_then(|t| t.collation_name.clone());
+                relation_fields(
+                    db,
+                    &local,
+                    collation.as_deref(),
+                    &mut ViewBinding::default(),
+                )
+            })?;
+            if let Some(fields) = fields {
                 catalog.tables.insert(name, fields);
-                continue;
             }
+            continue;
         }
-        let mut fields = columns
-            .query_map([&name], |row| {
-                Ok(Field {
-                    collation: row
-                        .get::<_, Option<String>>(6)?
-                        .map(|name| Ok(msduck_core::collation::Label::Implicit(name))),
-                    name: row.get(0)?,
-                    properties: if row.get::<_, String>(9)?.trim() == "U" {
-                        msduck_core::result::Properties {
-                            nullable: Some(row.get(7)?),
-                            origin: if row.get::<_, bool>(8)? {
-                                msduck_core::result::Origin::Identity
-                            } else if row.get::<_, bool>(10)? {
-                                msduck_core::result::Origin::Expression
-                            } else {
-                                msduck_core::result::Origin::Stored
-                            },
-                        }
-                    } else {
-                        // A view's backend columns do not establish whether its
-                        // original projection was stored, computed or nullable.
-                        Default::default()
-                    },
-                    json_fragment: false,
-                    info: Some(crate::declared_columns::read_info(row, 1)?),
-                })
-            })?
-            .collect::<duckdb::Result<Vec<_>>>()?;
-        let definition = db.prepare("SELECT d.object_id,d.query_sql FROM main.__msduck_view_definitions d JOIN sys.objects o ON o.object_id=d.object_id WHERE o.object_id=__msduck_object_id(?,NULL) AND rtrim(o.type)='V'")?
-            .query_map([&name], |row| Ok((row.get::<_,i32>(0)?,row.get::<_,String>(1)?)))?
-            .next().transpose()?;
-        if let Some((id, sql)) = definition {
-            if !views.properties.contains_key(&id)
-                && views.active.len() < 32
-                && views.active.insert(id)
-            {
-                let statements =
-                    msduck_sql::batch::parse(&sql).map_err(|_| duckdb::Error::InvalidQuery)?;
-                let properties = if let [Statement::Query(query)] = statements.as_slice() {
-                    let inputs = snapshot_with_views(db, query.as_ref(), views)?;
-                    infer::view_fields(&inputs, query).map(|fields| {
-                        fields
-                            .into_iter()
-                            .map(|field| field.properties)
-                            .collect::<Vec<_>>()
-                    })
-                } else {
-                    None
-                };
-                views.active.remove(&id);
-                views.properties.insert(id, properties);
-            }
-            if let Some(Some(properties)) = views.properties.get(&id)
-                && properties.len() == fields.len()
-            {
-                for (field, properties) in fields.iter_mut().zip(properties) {
-                    field.properties = *properties;
-                }
-            }
+        if let Some(fields) = relation_fields(
+            db,
+            &object_name,
+            catalog.default_collation.as_deref(),
+            views,
+        )? {
+            catalog.tables.insert(name, fields);
         }
-        catalog.tables.insert(name, fields);
     }
     Ok(catalog)
+}
+
+fn catalog_types(
+    db: &Connection,
+) -> duckdb::Result<std::collections::HashMap<String, msduck_core::catalog::TypeMetadata>> {
+    let mut types = db.prepare("SELECT name,system_type_id,user_type_id,max_length,precision,scale,collation_name FROM sys.types")?;
+    types
+        .query_map([], |row| {
+            Ok((row.get(0)?, crate::declared_columns::read_info(row, 1)?))
+        })?
+        .collect()
+}
+
+/// The attached DuckDB catalog and two-part name of a relation that the
+/// engine qualified as belonging to a database other than the current one.
+pub(crate) fn foreign_relation(
+    db: &Connection,
+    current: &str,
+    name: &ObjectName,
+) -> duckdb::Result<Option<(String, ObjectName)>> {
+    let [ObjectNamePart::Identifier(database), schema, object] = name.0.as_slice() else {
+        return Ok(None);
+    };
+    if database.value.eq_ignore_ascii_case(current) {
+        return Ok(None);
+    }
+    let mut attached = db.prepare(
+        "SELECT database_name FROM duckdb_databases() WHERE database_name=? AND NOT internal",
+    )?;
+    let alias = attached
+        .query_map([&database.value], |row| row.get::<_, String>(0))?
+        .next()
+        .transpose()?;
+    Ok(alias.map(|alias| (alias, ObjectName(vec![schema.clone(), object.clone()]))))
+}
+
+/// Run `read` with `alias` as the connection's default catalog, so catalog
+/// views, helper macros and two-part names resolve in that database, then
+/// restore the previous catalog and schema even when `read` fails.
+pub(crate) fn in_catalog<R>(
+    db: &Connection,
+    alias: &str,
+    read: impl FnOnce() -> duckdb::Result<R>,
+) -> duckdb::Result<R> {
+    let previous = enter_catalog(db, alias)?;
+    let result = read();
+    let restored = leave_catalog(db, &previous);
+    let value = result?;
+    restored?;
+    Ok(value)
+}
+
+/// Make `alias` the connection's default catalog with the `dbo` schema, as
+/// `Catalog::select` does. Returns the previous catalog and schema.
+pub(crate) fn enter_catalog(db: &Connection, alias: &str) -> duckdb::Result<(String, String)> {
+    let previous = db.query_row("SELECT current_database(),current_schema()", [], |row| {
+        Ok((row.get(0)?, row.get(1)?))
+    })?;
+    db.execute_batch(&format!("USE {}.dbo", quote_identifier(alias)))?;
+    Ok(previous)
+}
+
+/// Restore a catalog and schema returned by `enter_catalog`. DuckDB's USE
+/// is not transactional and fails in an aborted transaction.
+pub(crate) fn leave_catalog(db: &Connection, previous: &(String, String)) -> duckdb::Result<()> {
+    db.execute_batch(&format!(
+        "USE {}.{}",
+        quote_identifier(&previous.0),
+        quote_identifier(&previous.1)
+    ))
+}
+
+fn quote_identifier(value: &str) -> String {
+    format!("\"{}\"", value.replace('"', "\"\""))
+}
+
+fn relation_fields(
+    db: &Connection,
+    object_name: &ObjectName,
+    default_collation: Option<&str>,
+    views: &mut ViewBinding,
+) -> duckdb::Result<Option<Vec<Field>>> {
+    let name = object_name.to_string();
+    let system_view = match object_name.0.as_slice() {
+        [
+            ObjectNamePart::Identifier(schema),
+            ObjectNamePart::Identifier(view),
+        ] if schema.value.eq_ignore_ascii_case("sys") => Some((None, view)),
+        [
+            ObjectNamePart::Identifier(database),
+            ObjectNamePart::Identifier(schema),
+            ObjectNamePart::Identifier(view),
+        ] if schema.value.eq_ignore_ascii_case("sys") => Some((Some(database), view)),
+        _ => None,
+    };
+    if let Some((database, view)) = system_view {
+        let collation = if let Some(database) = database {
+            let current: String =
+                db.query_row("SELECT current_database()", [], |row| row.get(0))?;
+            if database.value.eq_ignore_ascii_case(&current) {
+                default_collation.map(str::to_owned)
+            } else {
+                // Only published databases can supply a catalog-qualified
+                // system view's logical descriptors. Hidden attachments
+                // during CREATE/DROP must not fabricate a result shape.
+                let mut query = db.prepare("SELECT collation_name FROM sys.databases WHERE __msduck_db_key(name)=__msduck_db_key(?)")?;
+                let mut rows = query.query([&database.value])?;
+                if let Some(row) = rows.next()? {
+                    row.get::<_, Option<String>>(0)?
+                } else {
+                    None
+                }
+            }
+        } else {
+            default_collation.map(str::to_owned)
+        };
+        if let Some(collation) = collation.as_deref()
+            && let Some(fields) = system_catalog_fields(&view.value, collation)
+        {
+            return Ok(Some(fields));
+        }
+    }
+    let mut columns = db.prepare("SELECT c.name,c.system_type_id,c.user_type_id,c.max_length,c.precision,c.scale,c.collation_name,c.is_nullable,c.is_identity,o.type,c.is_computed FROM sys.columns c JOIN sys.objects o ON c.object_id=o.object_id WHERE c.object_id=__msduck_object_id(?,NULL) ORDER BY c.column_id")?;
+    let mut fields = columns
+        .query_map([&name], |row| {
+            Ok(Field {
+                collation: row
+                    .get::<_, Option<String>>(6)?
+                    .map(|name| Ok(msduck_core::collation::Label::Implicit(name))),
+                name: row.get(0)?,
+                properties: if row.get::<_, String>(9)?.trim() == "U" {
+                    msduck_core::result::Properties {
+                        nullable: Some(row.get(7)?),
+                        origin: if row.get::<_, bool>(8)? {
+                            msduck_core::result::Origin::Identity
+                        } else if row.get::<_, bool>(10)? {
+                            msduck_core::result::Origin::Expression
+                        } else {
+                            msduck_core::result::Origin::Stored
+                        },
+                    }
+                } else {
+                    // A view's backend columns do not establish whether its
+                    // original projection was stored, computed or nullable.
+                    Default::default()
+                },
+                json_fragment: false,
+                info: Some(crate::declared_columns::read_info(row, 1)?),
+            })
+        })?
+        .collect::<duckdb::Result<Vec<_>>>()?;
+    let definition = db.prepare("SELECT d.object_id,d.query_sql FROM main.__msduck_view_definitions d JOIN sys.objects o ON o.object_id=d.object_id WHERE o.object_id=__msduck_object_id(?,NULL) AND rtrim(o.type)='V'")?
+        .query_map([&name], |row| Ok((row.get::<_,i32>(0)?,row.get::<_,String>(1)?)))?
+        .next().transpose()?;
+    if let Some((id, sql)) = definition {
+        if !views.properties.contains_key(&id) && views.active.len() < 32 && views.active.insert(id)
+        {
+            let statements =
+                msduck_sql::batch::parse(&sql).map_err(|_| duckdb::Error::InvalidQuery)?;
+            let properties = if let [Statement::Query(query)] = statements.as_slice() {
+                let inputs = snapshot_with_views(db, query.as_ref(), views)?;
+                infer::view_fields(&inputs, query).map(|fields| {
+                    fields
+                        .into_iter()
+                        .map(|field| field.properties)
+                        .collect::<Vec<_>>()
+                })
+            } else {
+                None
+            };
+            views.active.remove(&id);
+            views.properties.insert(id, properties);
+        }
+        if let Some(Some(properties)) = views.properties.get(&id)
+            && properties.len() == fields.len()
+        {
+            for (field, properties) in fields.iter_mut().zip(properties) {
+                field.properties = *properties;
+            }
+        }
+    }
+    Ok(Some(fields))
 }
 
 // Unknown branches must not be treated as NULL or assigned a guessed scale.

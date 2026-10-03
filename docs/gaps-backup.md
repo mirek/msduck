@@ -243,7 +243,9 @@ columns are NULL.
   its own batch.
 - msdb objects in IF, WHILE and SET expressions, and statements that mix
   msdb objects with objects of the current database, are not routed to msdb.
-  They fail with msduck's cross-database error.
+  Once msdb exists they read it like any other database (see
+  [cross-database names](databases.md#cross-database-names)); before its
+  first use they fail with 208.
 - msdb does not exist until its first use, so `DB_ID('msdb')` is NULL on a
   fresh server.
 - Comparisons of NVARCHAR columns with literals or parameters currently fail

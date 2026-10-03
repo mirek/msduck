@@ -1,0 +1,299 @@
+//! Three-part names that reach another database from the current one
+//! (issue #871, docs/databases.md). Rows, descriptors and errors are compared
+//! with SQL Server through tedious in tests/compat/cross_database.test.mjs;
+//! these tests check the engine state around such statements: the DuckDB
+//! default catalog, features that run in the other database, transactions
+//! and preparation.
+use msduck::engine::Session;
+use msduck::server::Server;
+use msduck_core::types::Type;
+
+fn session(server: &Server) -> Session {
+    Session::new(server.connection().unwrap()).unwrap()
+}
+
+/// Run a batch; return its tokens and success.
+fn run(session: &mut Session, sql: &str) -> (Vec<u8>, bool) {
+    session.batch_response(sql, &Default::default(), false, None)
+}
+
+fn ok(session: &mut Session, sql: &str) {
+    let (out, ok) = run(session, sql);
+    assert!(ok, "{sql}: {:?}", errors(&out));
+}
+
+/// ERROR tokens (number, state, class, message), decoded only where their
+/// fields fill the token exactly.
+fn errors(out: &[u8]) -> Vec<(i32, u8, u8, String)> {
+    let mut found = Vec::new();
+    let mut i = 0;
+    while i + 3 < out.len() {
+        if out[i] == 0xAA {
+            let length = u16::from_le_bytes([out[i + 1], out[i + 2]]) as usize;
+            if let Some(body) = out.get(i + 3..i + 3 + length)
+                && body.len() >= 8
+            {
+                let number = i32::from_le_bytes(body[0..4].try_into().unwrap());
+                let characters = u16::from_le_bytes([body[6], body[7]]) as usize;
+                let mut at = 8 + characters * 2;
+                let mut valid = at <= body.len();
+                for _ in 0..2 {
+                    if valid && at < body.len() {
+                        at += 1 + body[at] as usize * 2;
+                    } else {
+                        valid = false;
+                    }
+                }
+                if valid && at + 4 == body.len() {
+                    let units: Vec<u16> = body[8..8 + characters * 2]
+                        .chunks(2)
+                        .map(|unit| u16::from_le_bytes([unit[0], unit[1]]))
+                        .collect();
+                    found.push((number, body[4], body[5], String::from_utf16_lossy(&units)));
+                    i += 3 + length;
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+    found
+}
+
+/// The single error of a failed batch.
+fn fails(session: &mut Session, sql: &str) -> (i32, u8, u8, String) {
+    let (out, ok) = run(session, sql);
+    assert!(!ok, "{sql} should fail");
+    let mut found = errors(&out);
+    assert_eq!(found.len(), 1, "{sql}: {found:?}");
+    found.remove(0)
+}
+
+/// A value read directly from DuckDB, bypassing the engine.
+fn native(session: &Session, sql: &str) -> String {
+    session
+        .db
+        .query_row(sql, [], |row| row.get::<_, String>(0))
+        .unwrap()
+}
+
+/// The connection's DuckDB default catalog, which must be the session's
+/// database again after every statement.
+fn catalog(session: &Session) -> String {
+    native(session, "SELECT current_database()||'.'||current_schema()")
+}
+
+/// A server with database `foo` (a table with a trigger that logs into
+/// foo) and a table in master, with a session in master.
+fn fixture() -> (Server, Session) {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = session(&server);
+    ok(&mut session, "CREATE DATABASE foo");
+    ok(
+        &mut session,
+        "USE foo; CREATE TABLE dbo.items (id INT IDENTITY PRIMARY KEY, name NVARCHAR(50) NOT NULL, v VARCHAR(10)); CREATE TABLE dbo.log (msg NVARCHAR(100))",
+    );
+    ok(
+        &mut session,
+        "CREATE TRIGGER items_log ON dbo.items AFTER INSERT AS INSERT dbo.log SELECT N'logged ' + name FROM inserted",
+    );
+    ok(
+        &mut session,
+        "INSERT dbo.items (name, v) VALUES (N'hello', 'x'); DELETE dbo.log; USE master",
+    );
+    ok(
+        &mut session,
+        "CREATE TABLE dbo.loc (id INT, label NVARCHAR(20)); INSERT dbo.loc VALUES (1, N'one')",
+    );
+    (server, session)
+}
+
+fn count(session: &Session, sql: &str) -> i64 {
+    session.db.query_row(sql, [], |row| row.get(0)).unwrap()
+}
+
+#[test]
+fn statements_in_another_database_run_there_and_restore_the_catalog() {
+    let (_server, mut session) = fixture();
+    let home = catalog(&session);
+    assert_eq!(home, "memory.dbo");
+    ok(&mut session, "SELECT id, name FROM foo.dbo.items");
+    assert_eq!(catalog(&session), home);
+    // The trigger belongs to foo and fires there.
+    ok(
+        &mut session,
+        "INSERT foo.dbo.items (name, v) VALUES (N'two', 'y')",
+    );
+    assert_eq!(catalog(&session), home);
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.log"), 1);
+    ok(
+        &mut session,
+        "IF NOT EXISTS (SELECT 1 FROM foo.dbo.log WHERE msg = N'logged two') THROW 50001, 'not logged', 1",
+    );
+    // Writes from the current database through a three-part target run
+    // in that database too, reading master's tables by their catalog.
+    ok(
+        &mut session,
+        "INSERT foo.dbo.items (name) SELECT label FROM dbo.loc; UPDATE i SET v = 'z' FROM foo.dbo.items i JOIN loc l ON l.id = i.id",
+    );
+    assert_eq!(catalog(&session), home);
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.items"), 3);
+    assert_eq!(
+        native(&session, "SELECT v FROM foo.dbo.items WHERE id = 1"),
+        "z"
+    );
+    // Reading another database while writing the current one stays here.
+    ok(
+        &mut session,
+        "INSERT dbo.loc SELECT id, name FROM foo.dbo.items WHERE id = 2",
+    );
+    assert_eq!(count(&session, "SELECT count(*) FROM memory.dbo.loc"), 2);
+    assert_eq!(catalog(&session), home);
+    // DB_NAME() keeps naming the session's database outside the trigger.
+    ok(
+        &mut session,
+        "IF DB_NAME() <> N'master' OR NOT EXISTS (SELECT 1 FROM foo.dbo.items WHERE name = N'two') THROW 50001, 'wrong database', 1",
+    );
+    assert_eq!(catalog(&session), home);
+}
+
+#[test]
+fn another_database_does_not_take_ddl_or_temporary_objects() {
+    let (_server, mut session) = fixture();
+    let (number, _, _, message) = fails(&mut session, "CREATE TABLE foo.dbo.made (id INT)");
+    assert_eq!(number, 40515);
+    assert_eq!(
+        message,
+        "unsupported reference to foo.dbo.made in another database; USE foo first"
+    );
+    let (number, _, _, message) = fails(&mut session, "DROP TABLE IF EXISTS foo.dbo.items");
+    assert_eq!(number, 40515);
+    assert_eq!(
+        message,
+        "unsupported reference to foo.dbo.items in another database; USE foo first"
+    );
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.items"), 1);
+    let (number, _, _, message) = fails(
+        &mut session,
+        "SELECT label INTO #t FROM dbo.loc; INSERT foo.dbo.items (name) SELECT label FROM #t",
+    );
+    assert_eq!(number, 40515);
+    assert_eq!(
+        message,
+        "unsupported cross-database statement: it writes dbo.items in database 'foo' and also references temporary tables or table variables"
+    );
+    assert_eq!(catalog(&session), "memory.dbo");
+}
+
+#[test]
+fn a_transaction_writes_one_database() {
+    let (_server, mut session) = fixture();
+    for (sql, written, modified) in [
+        (
+            "BEGIN TRAN; INSERT dbo.loc VALUES (5, N'five'); INSERT foo.dbo.items (name) VALUES (N'x')",
+            "foo",
+            "master",
+        ),
+        (
+            "BEGIN TRAN; INSERT foo.dbo.items (name) VALUES (N'x'); INSERT dbo.loc VALUES (5, N'five')",
+            "master",
+            "foo",
+        ),
+    ] {
+        let (number, state, class, message) = fails(&mut session, sql);
+        assert_eq!((number, state, class), (40515, 1, 16), "{sql}");
+        assert_eq!(
+            message,
+            format!(
+                "unsupported cross-database transaction: database '{written}' cannot be modified in a transaction that has already modified database '{modified}'; a transaction may write only one database"
+            )
+        );
+        // The doomed transaction ended with the batch; nothing committed.
+        assert_eq!(session.transactions, 0, "{sql}");
+        assert_eq!(catalog(&session), "memory.dbo", "{sql}");
+        assert_eq!(count(&session, "SELECT count(*) FROM memory.dbo.loc"), 1);
+        assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.items"), 1);
+    }
+    // Inside TRY the transaction is doomed instead, as for other
+    // uncommittable errors.
+    ok(
+        &mut session,
+        "BEGIN TRAN; BEGIN TRY INSERT dbo.loc VALUES (5, N'five'); INSERT foo.dbo.items (name) VALUES (N'x') END TRY BEGIN CATCH IF XACT_STATE() <> -1 THROW 50001, 'not doomed', 1; ROLLBACK END CATCH",
+    );
+    assert_eq!(session.transactions, 0);
+    // One database per transaction works, in either direction.
+    ok(
+        &mut session,
+        "BEGIN TRAN; INSERT foo.dbo.items (name) VALUES (N'x'); UPDATE foo.dbo.items SET v = 'w' WHERE name = N'x'; SELECT COUNT(*) FROM dbo.loc; COMMIT",
+    );
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.items"), 2);
+    assert_eq!(catalog(&session), "memory.dbo");
+}
+
+#[test]
+fn a_failed_statement_in_another_database_restores_the_catalog_after_rollback() {
+    let (_server, mut session) = fixture();
+    // The conversion error aborts DuckDB's transaction, where USE cannot
+    // run; the catalog comes back at ROLLBACK.
+    let (out, success) = run(
+        &mut session,
+        "BEGIN TRAN; INSERT foo.dbo.items (name, v) VALUES (N'x', 'y'); UPDATE foo.dbo.items SET v = CAST(CAST('nope' AS INT) AS VARCHAR(10))",
+    );
+    assert!(!success, "{:?}", errors(&out));
+    assert_eq!(session.transactions, 1);
+    ok(&mut session, "ROLLBACK");
+    assert_eq!(catalog(&session), "memory.dbo");
+    ok(&mut session, "SELECT label FROM dbo.loc");
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.items"), 1);
+}
+
+#[test]
+fn preparation_binds_other_databases_without_running() {
+    let (_server, session) = fixture();
+    for sql in [
+        "SELECT name, LEN(name) FROM foo.dbo.items WHERE id = @id",
+        "SELECT l.label, i.name FROM dbo.loc l JOIN foo.dbo.items i ON i.id = l.id WHERE i.id = @id",
+        "INSERT foo.dbo.items (name) SELECT label FROM dbo.loc WHERE id = @id",
+    ] {
+        session
+            .validate_prepared_sql(sql, &[("@id".into(), Type::Int)])
+            .unwrap_or_else(|error| panic!("{sql}: {error:#}"));
+        assert_eq!(catalog(&session), "memory.dbo", "{sql}");
+    }
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.items"), 1);
+}
+
+#[test]
+fn single_user_databases_admit_only_their_user() {
+    let server = Server::open(":memory:").unwrap();
+    let mut owner = session(&server);
+    ok(&mut owner, "CREATE DATABASE solo");
+    ok(
+        &mut owner,
+        "USE solo; CREATE TABLE dbo.t (id INT); INSERT dbo.t VALUES (1); USE master",
+    );
+    ok(&mut owner, "ALTER DATABASE solo SET SINGLE_USER");
+    let mut other = session(&server);
+    assert_eq!(
+        fails(&mut other, "SELECT id FROM solo.dbo.t"),
+        (
+            924,
+            1,
+            14,
+            "Database 'solo' is already open and can only have one user at a time.".into()
+        )
+    );
+    assert_eq!(
+        fails(
+            &mut other,
+            "SELECT o.id FROM solo.dbo.t o CROSS JOIN sys.objects"
+        )
+        .0,
+        924
+    );
+    ok(&mut owner, "SELECT id FROM solo.dbo.t");
+    assert_eq!(catalog(&other), "memory.dbo");
+    // A statement in progress keeps the database in use, like USE.
+    ok(&mut owner, "ALTER DATABASE solo SET MULTI_USER");
+    ok(&mut other, "SELECT id FROM solo.dbo.t");
+}
