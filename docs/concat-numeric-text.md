@@ -15,16 +15,23 @@ sources/styles, mismatched payloads and nonfinite IEEE inputs return distinct
 pure errors, without inventing SQL diagnostics whose source context is absent.
 Only implicit/default style and explicit style 0 are admitted.
 
-REAL/FLOAT preserve signed zero as `-0`. The formatter scales the binary value,
-rounds to six significant digits, then places the decimal point using strings.
-Extreme powers are split to avoid overflowing scale factors for subnormals.
-Fixed notation uses rounded exponents -4 through 5; scientific notation strips
-trailing mantissa zeros and pads signed exponents to at least three digits.
-Binary scaling is an implementation inference that matches the retained adjacent
-IEEE probes, not a claim about SQL Server’s internal algorithm. Rust’s ordinary
-`.5e` rounding is insufficient: the captured FLOAT nearest 1.234575 produces
-`1.23458`, while the initial implementation produced `1.23457`. The predecessor
-failure is retained in the worker’s private verification log.
+REAL/FLOAT preserve signed zero as `-0`. The formatter first converts the
+absolute IEEE value to 17 significant decimal digits, then rounds those guarded
+digits to six using decimal arithmetic. It handles carry before placing the
+point or selecting fixed/scientific notation. Fixed notation uses rounded
+exponents -4 through 5; scientific notation strips trailing mantissa zeros and
+pads signed exponents to at least three digits. No floating scaling factors or
+reparsed rounded floating values choose the final digits.
+
+This is an implementation inference matching retained observations, not a claim
+about SQL Server’s internal algorithm. Ordinary Rust `.5e` formatting fails the
+captured FLOAT nearest 1.234575 (`1.23457` versus SQL `1.23458`). Binary scaling
+passed the initial reference but failed the broader owner-run task830 grid:
+FLOAT bits `bee671526d3d6e16` produced `1.23457e-200` versus SQL `1.23456e-200`.
+The predecessor fails 1,632 of 52,032 non-NULL ordinary text comparisons across
+four raw runs (68 distinct inputs). The guarded decimal candidate matches all
+52,032. Original raw contexts/rows/descriptors and private before-failure logs
+are preserved; wider finite behavior remains unproved.
 
 The path-included integration test reads every applicable observation of merged
 reference #827 (`reference/concat-numeric-format.json`, SHA-256

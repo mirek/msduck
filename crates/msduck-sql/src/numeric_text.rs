@@ -100,18 +100,17 @@ fn float(value: f64) -> Result<String, Error> {
     if value == 0.0 {
         return Ok(if value.is_sign_negative() { "-0" } else { "0" }.into());
     }
-    // Binary scaling before integer rounding matches the retained six-digit probes.
-    // Split extreme powers so subnormal and maximum finite operands stay finite.
+    // A guarded 17-significant-digit decimal conversion, then six-digit
+    // decimal rounding, matches both retained IEEE grids. Scaling in binary
+    // can push adjacent inputs across a half-digit boundary.
     let raw = format!("{:.16e}", value.abs());
-    let (_, raw_exponent) = raw.split_once('e').expect("scientific format");
+    let (mantissa, raw_exponent) = raw.split_once('e').expect("scientific format");
     let mut exponent: i32 = raw_exponent.parse().expect("scientific exponent");
-    let power = 5 - exponent;
-    let scaled = if power > 308 {
-        (value.abs() * 1e300) * 10f64.powi(power - 300)
-    } else {
-        value.abs() * 10f64.powi(power)
-    };
-    let mut coefficient = scaled.round() as u32;
+    let guarded = mantissa.replace('.', "");
+    let mut coefficient = guarded[..6].parse::<u32>().expect("six decimal digits");
+    if guarded.as_bytes()[6] >= b'5' {
+        coefficient += 1;
+    }
     if coefficient >= 1_000_000 {
         coefficient /= 10;
         exponent += 1;
