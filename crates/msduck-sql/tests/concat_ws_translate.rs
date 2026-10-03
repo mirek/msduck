@@ -455,7 +455,9 @@ fn compile_diagnostics_retain_all_captured_identity_fields() {
     for (name, function, count) in [
         ("cws one argument", Function::ConcatWs, 2),
         ("cws no arguments", Function::ConcatWs, 0),
+        ("cws separator only null", Function::ConcatWs, 1),
         ("cws 255 arguments", Function::ConcatWs, 255),
+        ("cws 256 arguments", Function::ConcatWs, 256),
         ("tr two arguments", Function::Translate, 2),
         ("tr four arguments", Function::Translate, 4),
     ] {
@@ -523,6 +525,23 @@ fn compile_diagnostics_retain_all_captured_identity_fields() {
             ),
         ));
     }
+    cases.push((
+        "tr integer characters",
+        rules::plan(
+            Function::Translate,
+            &[
+                literal(Some("a1b"), false).0,
+                literal(Some("1"), false).0,
+                Argument {
+                    kind: Some(Type::Int),
+                    converted_width: None,
+                    collation: None,
+                },
+            ],
+            DEFAULT,
+            &catalog(),
+        ),
+    ));
     for (name, result) in cases {
         let Err(Error::Sql(actual)) = result else {
             panic!("missing SQL error: {name}")
@@ -1131,4 +1150,458 @@ fn translate_supplementary_utf8_and_mismatch_cases_retain_captured_contracts() {
         }
     }
     assert_eq!(comparisons, 40);
+}
+
+fn assert_character_descriptor(p: &rules::Plan, column: &Value, name: &str) {
+    let unicode = p.declaration.family() == Family::Nvarchar;
+    assert_eq!(
+        column["type"],
+        if unicode { "NVarChar" } else { "VarChar" },
+        "{name}"
+    );
+    assert_eq!(column["flags"], p.flags, "{name}");
+    let bytes = match p.declaration.length() {
+        Length::Max => 65535,
+        Length::Bounded(n) => u64::from(n) * if unicode { 2 } else { 1 },
+    };
+    assert_eq!(column["length"], bytes, "{name}");
+    assert_eq!(column["precision"], Value::Null, "{name}");
+    assert_eq!(column["scale"], Value::Null, "{name}");
+    assert_eq!(column["collation"]["lcid"], 1033, "{name}");
+    assert_eq!(column["collation"]["flags"], 13, "{name}");
+    assert_eq!(column["collation"]["version"], 0, "{name}");
+    assert_eq!(column["collation"]["sortId"], 52, "{name}");
+    assert_eq!(column["collation"]["codepage"], "CP1252", "{name}");
+}
+
+fn assert_runtime_error(actual: &Error, expected: &Value) {
+    let Error::Sql(actual) = actual else {
+        panic!("missing SQL runtime error: {actual:?}")
+    };
+    assert_eq!(json!(actual.number), expected["number"]);
+    assert_eq!(json!(actual.state), expected["state"]);
+    assert_eq!(json!(actual.severity), expected["class"]);
+    assert_eq!(json!(actual.message), expected["message"]);
+}
+
+#[test]
+fn character_rpc_declarations_and_values_match_all_captured_requests() {
+    let names = [
+        "rpc cws unicode",
+        "rpc cws ansi",
+        "rpc cws null separator",
+        "rpc cws null argument",
+        "rpc cws inferred length argument",
+        "rpc cws max argument",
+        "rpc cws unicode replay",
+        "rpc tr unicode",
+        "rpc tr ansi",
+        "rpc tr max input",
+        "rpc tr null input",
+        "rpc tr length mismatch",
+        "rpc tr mismatch then select",
+        "rpc tr unicode replay",
+    ];
+    let f = fixture();
+    let mut comparisons = 0;
+    for c in f["containers"].as_array().unwrap() {
+        for run in c["runs"].as_array().unwrap() {
+            for name in names {
+                let request = run
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|r| r["name"] == name)
+                    .unwrap();
+                let parameters = request["parameters"].as_array().unwrap();
+                // Bind declarations before reading execution payloads. The one
+                // inferred tedious parameter has a captured wire declaration
+                // of NVARCHAR(1); the core never infers it from a current value.
+                let arguments: Vec<_> = parameters
+                    .iter()
+                    .map(|parameter| {
+                        let family = match parameter["type"].as_str().unwrap() {
+                            "NVarChar" => Family::Nvarchar,
+                            "VarChar" => Family::Varchar,
+                            other => panic!("unexpected character request type: {other}"),
+                        };
+                        let width = parameter["options"]["length"].as_u64().unwrap_or_else(|| {
+                            assert_eq!(name, "rpc cws inferred length argument");
+                            assert_eq!(parameter["name"], "a");
+                            1
+                        });
+                        let cap = if family == Family::Nvarchar {
+                            4000
+                        } else {
+                            8000
+                        };
+                        arg(
+                            family,
+                            if width > cap {
+                                Length::Max
+                            } else {
+                                Length::Bounded(width as u16)
+                            },
+                        )
+                    })
+                    .collect();
+                let function = if name.starts_with("rpc cws") {
+                    Function::ConcatWs
+                } else {
+                    Function::Translate
+                };
+                let p = rules::plan(function, &arguments, DEFAULT, &catalog()).unwrap();
+                let values: Vec<_> = parameters
+                    .iter()
+                    .map(|parameter| parameter["value"].as_str().and_then(text))
+                    .collect();
+                let before = values.clone();
+                let result = rules::evaluate(&p, &values, &default_match);
+                let captured = &request["result"];
+                assert_character_descriptor(&p, &captured["sets"][0]["columns"][0], name);
+                if captured["errors"].as_array().unwrap().is_empty() {
+                    let value = result.unwrap().map(|v| String::from_utf16(&v).unwrap());
+                    assert_eq!(json!([[value]]), captured["sets"][0]["rows"], "{name}");
+                } else {
+                    assert_eq!(captured["errors"].as_array().unwrap().len(), 1);
+                    assert_runtime_error(&result.unwrap_err(), &captured["errors"][0]);
+                    assert!(captured["sets"][0]["rows"].as_array().unwrap().is_empty());
+                }
+                if name == "rpc tr mismatch then select" {
+                    // Retain evidence for later shell integration: the pure
+                    // expression core does not execute subsequent statements.
+                    assert_eq!(captured["sets"].as_array().unwrap().len(), 2);
+                    assert_eq!(captured["sets"][1]["rows"], json!([[1]]));
+                }
+                assert_eq!(values, before);
+                comparisons += 1;
+            }
+        }
+    }
+    assert_eq!(comparisons, 56);
+}
+
+#[test]
+fn column_batches_preserve_nulls_and_prefix_rows_before_runtime_error() {
+    let implicit = |family, width| {
+        Argument::character(
+            CharacterType::new(family, Length::Bounded(width)).unwrap(),
+            Label::Implicit(DEFAULT.into()),
+        )
+    };
+    let integer = Argument {
+        kind: Some(Type::Int),
+        converted_width: None,
+        collation: None,
+    };
+    let rows = [
+        [Some("-"), Some("a"), Some("u"), Some("1")],
+        [None, Some("a"), None, None],
+        [Some("+"), None, Some("u"), Some("3")],
+        [Some(""), None, None, None],
+    ];
+    let cases = [
+        (
+            "cws column rows",
+            Function::ConcatWs,
+            vec![
+                literal(Some(","), true).0,
+                implicit(Family::Varchar, 10),
+                implicit(Family::Nvarchar, 10),
+                integer,
+            ],
+        ),
+        (
+            "cws column null separator",
+            Function::ConcatWs,
+            vec![
+                implicit(Family::Nvarchar, 3),
+                implicit(Family::Varchar, 10),
+                implicit(Family::Nvarchar, 10),
+            ],
+        ),
+        (
+            "tr column rows",
+            Function::Translate,
+            vec![
+                implicit(Family::Varchar, 10),
+                literal(Some("au"), false).0,
+                literal(Some("AU"), false).0,
+            ],
+        ),
+        (
+            "tr column mismatch row",
+            Function::Translate,
+            vec![
+                literal(Some("a-b+c"), true).0,
+                implicit(Family::Nvarchar, 3),
+                literal(Some("x"), true).0,
+            ],
+        ),
+    ];
+    let f = fixture();
+    let mut comparisons = 0;
+    for (name, function, arguments) in cases {
+        let p = rules::plan(function, &arguments, DEFAULT, &catalog()).unwrap();
+        let mut results = vec![];
+        let mut error = None;
+        for (index, [separator, ansi, unicode, integer]) in rows.iter().copied().enumerate() {
+            let values: Vec<_> = match name {
+                "cws column rows" => [Some(","), ansi, unicode, integer]
+                    .into_iter()
+                    .map(|v| v.and_then(text))
+                    .collect(),
+                "cws column null separator" => [separator, ansi, unicode]
+                    .into_iter()
+                    .map(|v| v.and_then(text))
+                    .collect(),
+                "tr column rows" => [ansi, Some("au"), Some("AU")]
+                    .into_iter()
+                    .map(|v| v.and_then(text))
+                    .collect(),
+                "tr column mismatch row" => [Some("a-b+c"), separator, Some("x")]
+                    .into_iter()
+                    .map(|v| v.and_then(text))
+                    .collect(),
+                _ => unreachable!(),
+            };
+            let before = values.clone();
+            let result = rules::evaluate(&p, &values, &default_match);
+            assert_eq!(values, before);
+            match result {
+                Ok(output) => results.push(json!([
+                    index + 1,
+                    output.map(|v| String::from_utf16(&v).unwrap())
+                ])),
+                Err(actual) => {
+                    assert_eq!(name, "tr column mismatch row");
+                    assert_eq!(index, 3);
+                    error = Some(actual);
+                    break;
+                }
+            }
+        }
+        for c in f["containers"].as_array().unwrap() {
+            for run in c["runs"].as_array().unwrap() {
+                let captured = observed(run, name);
+                assert_eq!(json!(results), captured["sets"][0]["rows"], "{name}");
+                assert_character_descriptor(&p, &captured["sets"][0]["columns"][1], name);
+                match &error {
+                    Some(actual) => {
+                        assert_eq!(captured["errors"].as_array().unwrap().len(), 1);
+                        assert_runtime_error(actual, &captured["errors"][0]);
+                    }
+                    None => assert!(captured["errors"].as_array().unwrap().is_empty()),
+                }
+                comparisons += 1;
+            }
+        }
+    }
+    assert_eq!(comparisons, 16);
+}
+
+#[test]
+fn remaining_character_and_explicit_integer_text_cases_match_captures() {
+    let integer = Argument {
+        kind: Some(Type::Int),
+        converted_width: None,
+        collation: None,
+    };
+    let lit = |s: &str, unicode| literal(Some(s), unicode).0;
+    let cases = vec![
+        (
+            "cws supplementary unicode",
+            Function::ConcatWs,
+            vec![lit("😀", true), lit("a", true), lit("𝄞", true)],
+            vec![text("😀"), text("a"), text("𝄞")],
+        ),
+        (
+            "cws supplementary to varchar",
+            Function::ConcatWs,
+            vec![lit("-", false), lit("😀", true), lit("a", false)],
+            vec![text("-"), text("😀"), text("a")],
+        ),
+        (
+            "cws integer separator",
+            Function::ConcatWs,
+            vec![integer.clone(), lit("a", false), lit("b", false)],
+            vec![text("0"), text("a"), text("b")],
+        ),
+        (
+            "tr integer input",
+            Function::Translate,
+            vec![integer, lit("1", false), lit("9", false)],
+            vec![text("12321"), text("1"), text("9")],
+        ),
+    ];
+    let f = fixture();
+    let mut comparisons = 0;
+    for (name, function, arguments, values) in cases {
+        let p = rules::plan(function, &arguments, DEFAULT, &catalog()).unwrap();
+        let output = rules::evaluate(&p, &values, &default_match)
+            .unwrap()
+            .unwrap();
+        for c in f["containers"].as_array().unwrap() {
+            for run in c["runs"].as_array().unwrap() {
+                let captured = observed(run, name);
+                assert_character_descriptor(&p, &captured["sets"][0]["columns"][0], name);
+                assert_eq!(
+                    json!(String::from_utf16(&output).unwrap()),
+                    captured["sets"][0]["rows"][0][0],
+                    "{name}"
+                );
+                assert!(captured["errors"].as_array().unwrap().is_empty());
+                if name == "cws supplementary unicode" {
+                    assert_eq!(json!(output.len()), captured["sets"][0]["rows"][0][1]);
+                }
+                comparisons += 1;
+            }
+        }
+    }
+    assert_eq!(comparisons, 16);
+}
+
+#[test]
+fn concat_max_output_and_predicate_inputs_match_captured_values() {
+    let f = fixture();
+    let p = rules::plan(
+        Function::ConcatWs,
+        &[
+            literal(Some("-"), false).0,
+            arg(Family::Varchar, Length::Max),
+            arg(Family::Varchar, Length::Bounded(8000)),
+        ],
+        DEFAULT,
+        &catalog(),
+    )
+    .unwrap();
+    assert_eq!(p.declaration.length(), Length::Max);
+    let output = rules::evaluate(
+        &p,
+        &[text("-"), text(&"x".repeat(5000)), text(&"y".repeat(5000))],
+        &default_match,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        output,
+        "x".repeat(5000)
+            .chars()
+            .chain(['-'])
+            .chain("y".repeat(5000).chars())
+            .map(|c| c as u16)
+            .collect::<Vec<_>>()
+    );
+    let predicate = rules::plan(
+        Function::ConcatWs,
+        &[
+            literal(Some(","), false).0,
+            arg(Family::Varchar, Length::Bounded(10)),
+            arg(Family::Nvarchar, Length::Bounded(10)),
+        ],
+        DEFAULT,
+        &catalog(),
+    )
+    .unwrap();
+    let inputs = [
+        [Some("a"), Some("u")],
+        [Some("a"), None],
+        [None, Some("u")],
+        [None, None],
+    ];
+    let matching: Vec<_> = inputs
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, [a, u])| {
+            let value = rules::evaluate(
+                &predicate,
+                &[text(","), a.and_then(text), u.and_then(text)],
+                &default_match,
+            )
+            .unwrap();
+            (value == text("a,u")).then(|| json!([index + 1]))
+        })
+        .collect();
+    for c in f["containers"].as_array().unwrap() {
+        for run in c["runs"].as_array().unwrap() {
+            let max = observed(run, "cws varchar max long value");
+            assert_eq!(max["sets"][0]["columns"][0]["type"], "IntN");
+            assert_eq!(max["sets"][0]["columns"][0]["length"], 8);
+            assert_eq!(
+                json!(output.len().to_string()),
+                max["sets"][0]["rows"][0][0]
+            );
+            assert_eq!(
+                json!(matching),
+                observed(run, "cws in predicate")["sets"][0]["rows"]
+            );
+        }
+    }
+}
+
+#[test]
+fn incomplete_catalogs_and_conversion_contracts_remain_explicit_barriers() {
+    let base = vec![arg(Family::Varchar, Length::Bounded(1)); 3];
+    for function in [Function::ConcatWs, Function::Translate] {
+        let mut missing = base.clone();
+        missing[1].collation = None;
+        assert_eq!(
+            rules::plan(function, &missing, DEFAULT, &catalog()),
+            Err(Error::UnknownCollation)
+        );
+        for position in 0..3 {
+            let mut unknown = base.clone();
+            unknown[position].collation = Some(Label::Implicit("unavailable_catalog_entry".into()));
+            assert_eq!(
+                rules::plan(function, &unknown, DEFAULT, &catalog()),
+                Err(Error::UnknownCollation)
+            );
+        }
+        let mut ambiguous = catalog();
+        let mut duplicate = ambiguous[0].clone();
+        duplicate.name = DEFAULT.to_ascii_lowercase();
+        ambiguous.push(duplicate);
+        assert_eq!(
+            rules::plan(function, &base, DEFAULT, &ambiguous),
+            Err(Error::UnknownCollation)
+        );
+        let mut unresolved = base.clone();
+        unresolved[0].collation = Some(Label::NoCollation {
+            left: DEFAULT.into(),
+            right: "missing".into(),
+        });
+        assert_eq!(
+            rules::plan(function, &unresolved, DEFAULT, &catalog()),
+            Err(Error::UnknownCollation)
+        );
+    }
+    for kind in [Type::Text, Type::Ntext, Type::Image] {
+        let mut arguments = base.clone();
+        arguments[1] = Argument {
+            kind: Some(kind),
+            converted_width: None,
+            collation: None,
+        };
+        assert_eq!(
+            rules::plan(Function::ConcatWs, &arguments, DEFAULT, &catalog()),
+            Err(Error::UnknownConversion)
+        );
+    }
+    let mut values = vec![text("a"), text("b"), text("c")];
+    let p = rules::plan(Function::Translate, &base, DEFAULT, &catalog()).unwrap();
+    assert_eq!(
+        rules::evaluate(&p, &values, &|_, _| None),
+        Err(Error::UnknownComparison)
+    );
+    values.pop();
+    assert_eq!(
+        rules::evaluate(&p, &values, &default_match),
+        Err(Error::InvalidPayload)
+    );
+    let arguments = vec![Argument::null_literal(), base[1].clone(), base[2].clone()];
+    let p = rules::plan(Function::ConcatWs, &arguments, DEFAULT, &catalog()).unwrap();
+    assert_eq!(
+        rules::evaluate(&p, &[text("x"), text("b"), text("c")], &default_match),
+        Err(Error::InvalidPayload)
+    );
 }
