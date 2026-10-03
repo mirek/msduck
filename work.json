@@ -10365,6 +10365,22 @@
       ],
       "issue": 854,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkZHr"
+    },
+    {
+      "id": "limits-json-root-v1-hooks",
+      "title": "FOR JSON ROOT without a name: dialect token pass and AUTO root-name hook",
+      "state": "ready",
+      "authorization": "Direct owner instruction from mirek in this session (2026-10-03): /goal continue/help with development using multiple workers. Companion of limits-json-root-v1 (issue #849), decomposed by its claiming worker for files outside that task's scope. No external submission is input.",
+      "scope": [
+        "crates/msduck-sql/src/dialect.rs",
+        "src/for_json/auto.rs"
+      ],
+      "acceptance": [
+        "dialect::tokenize calls the json_string token pass that completes a bare FOR JSON ROOT option; the FOR JSON AUTO adapter resolves the default AUTO root name through the json_string syntax rules. Delivered in the same PR as limits-json-root-v1 and verified with its checks."
+      ],
+      "dependencies": [],
+      "issue": 849,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkY_S"
     }
   ]
 }
