@@ -9742,7 +9742,7 @@
       "id": "concat-ws-translate-core-recovery-v1",
       "title": "Implement deterministic CONCAT_WS and TRANSLATE from recovered evidence",
       "issue": 812,
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing goal; actual merged recovered reference806/807 replaces blocked253 predecessor.",
       "scope": [
         "crates/msduck-sql/src/concat_ws.rs",
