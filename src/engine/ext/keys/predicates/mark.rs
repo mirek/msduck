@@ -324,6 +324,15 @@ fn ansi(catalog: &Catalog, parameters: &Parameters, expr: &Expr) -> bool {
     }
 }
 
+/// An operand [`literals`] already turned into `LOWER(RTRIM(…))`.
+fn ansi_keyed(expr: &Expr) -> bool {
+    let name =
+        |e: &Expr, wanted: &str| matches!(e, Expr::Function(f) if f.name.to_string() == wanted);
+    name(expr, "LOWER")
+        && matches!(expr, Expr::Function(f) if matches!(&f.args, FunctionArguments::List(list)
+            if matches!(list.args.as_slice(), [FunctionArg::Unnamed(FunctionArgExpr::Expr(inner))] if name(inner, "RTRIM"))))
+}
+
 /// Mark the operands of one operation when any of them is Unicode text;
 /// otherwise mark operands of unknown type for the backend `typeof`
 /// dispatch. Explicitly collated operations are left to the COLLATE
@@ -435,6 +444,22 @@ pub(super) fn literals(parameters: &Parameters, expr: &mut Expr) {
         .iter()
         .all(|o| !collated(o) && !marked(o) && text(&catalog, parameters, o))
     {
+        return;
+    }
+    // ANSI comparisons ignore case and trailing spaces but no unit (CHAR(0)
+    // included), so they compare lowercased, right-trimmed text rather than
+    // the Unicode key.
+    if !like && operands.iter().all(|o| ansi_keyed(o)) {
+        return;
+    }
+    if !like && operands.iter().all(|o| ansi(&catalog, parameters, o)) {
+        for operand in operands {
+            let inner = std::mem::replace(operand, Expr::Value(Value::Null.into()));
+            *operand = msduck_sql::expr::unary_function(
+                "LOWER",
+                msduck_sql::expr::unary_function("RTRIM", inner),
+            );
+        }
         return;
     }
     // ASCII pattern matching ignores the value's trailing blanks (the

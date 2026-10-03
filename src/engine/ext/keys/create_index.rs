@@ -387,22 +387,35 @@ pub(super) fn first_duplicate(
     }
     // Character keys drop trailing spaces and may fold case; the duplicate
     // is shown as stored, the least of the equal values.
+    // One stored row's character values (the least, by their hexadecimal
+    // text), so the shown tuple is an actual duplicate.
     let stored: Vec<Option<String>> = columns
         .iter()
         .map(|column| match column.kind() {
             Ok(value::Storage::Unicode) => Some(format!(
-                "min(hex(struct_extract({}, '__msduck_utf16le')))",
+                "coalesce(hex(struct_extract({}, '__msduck_utf16le')), '-')",
                 column.quoted()
             )),
-            Ok(value::Storage::Ansi) => Some(format!("min(hex({}))", column.quoted())),
+            Ok(value::Storage::Ansi) => Some(format!("coalesce(hex({}), '-')", column.quoted())),
             _ => None,
         })
         .collect();
+    let representative = (stored.iter().any(Option::is_some)).then(|| {
+        format!(
+            "min(concat_ws('|', {}))",
+            stored
+                .iter()
+                .flatten()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    });
     let selected = components
         .iter()
         .cloned()
         .chain(components.iter().map(|c| format!("CAST({c} AS VARCHAR)")))
-        .chain(stored.iter().flatten().cloned())
+        .chain(representative.iter().cloned())
         .collect::<Vec<_>>()
         .join(", ");
     let sql = format!(
@@ -413,7 +426,7 @@ pub(super) fn first_duplicate(
     );
     let mut statement = db.prepare(&sql)?;
     let width = components.len();
-    let extra = stored.iter().flatten().count();
+    let extra = usize::from(representative.is_some());
     let mut rows = statement.query_map([], |row| {
         let values = (width..2 * width)
             .map(|i| row.get::<_, String>(i))
@@ -427,13 +440,15 @@ pub(super) fn first_duplicate(
         return Ok(None);
     };
     let mut shown = value::managed_values(columns, &values).unwrap_or_default();
-    let mut raw = raw.into_iter();
+    let representative = raw.into_iter().flatten().next().unwrap_or_default();
+    let mut raw = representative.split('|');
     for ((column, stored), shown) in columns.iter().zip(&stored).zip(shown.iter_mut()) {
         if stored.is_some()
-            && let Some(Some(text)) = raw.next()
+            && let Some(text) = raw.next()
+            && text != "-"
             && shown != "<NULL>"
         {
-            *shown = column.display(&text, true);
+            *shown = column.display(text, true);
         }
     }
     Ok(Some(creation(name, &table.qualified(), &shown)))
