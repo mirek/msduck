@@ -72,3 +72,18 @@ exclusive. The original four-run fixture remains byte-for-byte unchanged.
 fields, packet headers, requests, metadata, callbacks and readback values to
 verify that a hostname difference cannot hide drift. It also verifies exact
 fixture replay and prelaunch output protection without starting a container.
+
+A fresh recovery capture on 2026-10-03 completed the four database observations,
+then correctly failed strict retained comparison on a different TDS response
+header SPID (`0x0063` versus `0x0039`). Header identity is outside the permitted
+ERROR hostname range. This is retained as raw drift, not a passing fresh exact
+comparison; the observer does not silently discard session IDs to make it pass.
+Offline exact fixture replay and mutation tests remain independent evidence.
+The complete byte-difference inspection found 40 changed wire fields across the
+16 observations, confined to response-header SPID bytes and the parsed ERROR
+server-name bytes. All original typed readback, callback, error and descriptor
+fields matched; this separate field-level result does not change the failed raw
+exact comparison. Fresh raw SHA-256:
+`1ada114378157739a3effa51f9e50a9cde5ad62f690794cd3c34f98d6a2692a7`.
+Retained fixture SHA-256:
+`f842d48d442697181072410b114294eb781882c3b9ead63e1a9d7b746ee0d849`.
