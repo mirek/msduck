@@ -10432,6 +10432,22 @@
       ],
       "issue": 856,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkaeE"
+    },
+    {
+      "id": "prepared-regression-ci-companion-v1",
+      "title": "Include prepared capture regressions in full CI client inventory",
+      "state": "ready",
+      "authorization": "Owner continuing compatibility and autonomous factory authorization; verified Codex finding4172146063 on PR846. Bounded companion of claimed845/856, separate receipt and same existing worker/worktree.",
+      "scope": [
+        ".github/workflows/ci.yml"
+      ],
+      "dependencies": [],
+      "issue": 857,
+      "acceptance": [
+        "Add tests/reference-prepared.test.mjs to the existing explicit full CI client test list. Preserve required fast CI, optional full triggers, client sharding arguments, all existing tests and review/trust/upload gates. No new cache or worker.",
+        "Verify inventory/source diff and final exact-head CI/review plus prepared845 npm verification. Combine with PR846 under fresh own receipt; resolve confirmed review only after verifying fix. Worker owns merge and prompt registry/project completion for all companions."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkcdR"
     }
   ]
 }
