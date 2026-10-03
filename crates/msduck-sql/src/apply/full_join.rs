@@ -178,17 +178,20 @@ fn rewrite_select(select: &mut Select) {
         op: BinaryOperator::And,
         right: Box::new(right),
     });
-    // Hide the side column from an unqualified `*`; `alias.*` never sees it.
+    // Hide the side columns from an unqualified `*`; `alias.*` never sees
+    // them. The qualified name cannot exclude a user column of that name.
     for item in &mut select.projection {
         if let SelectItem::Wildcard(options) = item {
-            let side = ObjectName::from(vec![Ident::new(SIDE)]);
             let mut names = match options.opt_exclude.take() {
                 Some(ExcludeSelectItem::Single(name)) => vec![name],
                 Some(ExcludeSelectItem::Multiple(names)) => names,
                 None => vec![],
             };
-            if !names.contains(&side) {
-                names.push(side);
+            for alias in &sides {
+                let side = ObjectName::from(vec![Ident::new(alias), Ident::new(SIDE)]);
+                if !names.contains(&side) {
+                    names.push(side);
+                }
             }
             options.opt_exclude = Some(ExcludeSelectItem::Multiple(names));
         }
@@ -252,7 +255,8 @@ fn alias(factor: &TableFactor) -> Option<&TableAlias> {
         | TableFactor::OpenJsonTable { alias, .. }
         | TableFactor::Function { alias, .. }
         | TableFactor::TableFunction { alias, .. }
-        | TableFactor::UNNEST { alias, .. } => alias.as_ref(),
+        | TableFactor::UNNEST { alias, .. }
+        | TableFactor::NestedJoin { alias, .. } => alias.as_ref(),
         _ => None,
     }
 }
@@ -363,110 +367,133 @@ fn volatile(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> boo
 }
 
 /// Whether the join references a name its own operands do not define, or a
-/// table-valued function argument names a column (siblings are not visible to
-/// a function's arguments, so any column there is an outer reference).
+/// table-valued function argument names an unqualified column (siblings are
+/// not visible to a function's arguments, so such a column is an outer
+/// reference). Qualifiers resolve through the lexical scopes of the join and
+/// of each nested query, so a name defined only inside an operand's subquery
+/// does not hide an outer reference in the condition.
 fn correlated(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> bool {
-    #[derive(Default)]
-    struct Names {
-        defined: HashSet<String>,
-        qualifiers: HashSet<String>,
-        function_columns: bool,
+    struct Scopes {
+        scopes: Vec<HashSet<String>>,
+        outer: bool,
     }
-    fn arguments(names: &mut Names, args: &impl Visit) {
+    fn unqualified_columns(args: &impl Visit) -> bool {
         struct Columns(bool);
         impl Visitor for Columns {
             type Break = ();
+            fn pre_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
+                // A subquery argument resolves its own names.
+                ControlFlow::Break(())
+            }
             fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
-                match expr {
-                    Expr::Identifier(ident) if !ident.value.starts_with('@') => {
-                        self.0 = true;
-                        ControlFlow::Break(())
-                    }
-                    Expr::CompoundIdentifier(_) => {
-                        self.0 = true;
-                        ControlFlow::Break(())
-                    }
-                    _ => ControlFlow::Continue(()),
+                if matches!(expr, Expr::Identifier(ident) if !ident.value.starts_with('@')) {
+                    self.0 = true;
+                    return ControlFlow::Break(());
                 }
+                ControlFlow::Continue(())
             }
         }
         let mut columns = Columns(false);
         let _ = args.visit(&mut columns);
-        names.function_columns |= columns.0;
+        columns.0
     }
-    impl Visitor for Names {
+    impl Visitor for Scopes {
         type Break = ();
         fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
-            let alias = match factor {
-                TableFactor::Table {
-                    name, alias, args, ..
-                } => {
-                    // An alias hides the base name: `t.c` then means an outer `t`.
-                    if alias.is_none()
-                        && let Some(last) = name.0.last().and_then(|part| part.as_ident())
-                    {
-                        self.defined.insert(last.value.to_lowercase());
-                    }
-                    if let Some(args) = args {
-                        arguments(self, &args.args);
-                    }
-                    alias
-                }
-                TableFactor::OpenJsonTable {
-                    json_expr, alias, ..
-                } => {
-                    arguments(self, json_expr);
-                    alias
-                }
-                TableFactor::Function { args, alias, .. } => {
-                    arguments(self, args);
-                    alias
-                }
-                TableFactor::TableFunction { expr, alias } => {
-                    arguments(self, expr);
-                    alias
-                }
-                TableFactor::UNNEST {
-                    array_exprs, alias, ..
-                } => {
-                    arguments(self, array_exprs);
-                    alias
-                }
-                TableFactor::Derived { alias, .. } | TableFactor::NestedJoin { alias, .. } => alias,
-                _ => {
-                    // Unknown factor kinds count as outer references.
-                    self.function_columns = true;
-                    &None
-                }
+            self.outer |= match factor {
+                TableFactor::Table { args, .. } => args
+                    .as_ref()
+                    .is_some_and(|args| unqualified_columns(&args.args)),
+                TableFactor::OpenJsonTable { json_expr, .. } => unqualified_columns(json_expr),
+                TableFactor::Function { args, .. } => unqualified_columns(args),
+                TableFactor::TableFunction { expr, .. } => unqualified_columns(expr),
+                TableFactor::UNNEST { array_exprs, .. } => unqualified_columns(array_exprs),
+                TableFactor::Derived { .. } | TableFactor::NestedJoin { .. } => false,
+                // Unknown factor kinds count as outer references.
+                _ => true,
             };
-            if let Some(alias) = alias {
-                self.defined.insert(alias.name.value.to_lowercase());
-            }
             ControlFlow::Continue(())
         }
         fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
+            let mut names = HashSet::new();
             if let Some(with) = &query.with {
                 for cte in &with.cte_tables {
-                    self.defined.insert(cte.alias.name.value.to_lowercase());
+                    names.insert(cte.alias.name.value.to_lowercase());
                 }
             }
+            body_names(&query.body, &mut names);
+            self.scopes.push(names);
+            ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
+            self.scopes.pop();
             ControlFlow::Continue(())
         }
         fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
             if let Expr::CompoundIdentifier(parts) = expr
                 && parts.len() >= 2
             {
-                self.qualifiers
-                    .insert(parts[parts.len() - 2].value.to_lowercase());
+                let qualifier = parts[parts.len() - 2].value.to_lowercase();
+                if !self.scopes.iter().any(|scope| scope.contains(&qualifier)) {
+                    self.outer = true;
+                    return ControlFlow::Break(());
+                }
             }
             ControlFlow::Continue(())
         }
     }
-    let mut names = Names::default();
-    let _ = left.visit(&mut names);
-    let _ = right.visit(&mut names);
-    let _ = condition.visit(&mut names);
-    names.function_columns || !names.qualifiers.is_subset(&names.defined)
+    let mut names = HashSet::new();
+    join_names(left, &mut names);
+    factor_names(right, &mut names);
+    let mut scopes = Scopes {
+        scopes: vec![names],
+        outer: false,
+    };
+    let _ = left.visit(&mut scopes);
+    let _ = right.visit(&mut scopes);
+    let _ = condition.visit(&mut scopes);
+    scopes.outer
+}
+
+/// Names a query's own FROM clauses define, without nested queries.
+fn body_names(body: &SetExpr, names: &mut HashSet<String>) {
+    match body {
+        SetExpr::Select(select) => {
+            for table in &select.from {
+                join_names(table, names);
+            }
+        }
+        SetExpr::SetOperation { left, right, .. } => {
+            body_names(left, names);
+            body_names(right, names);
+        }
+        _ => {}
+    }
+}
+
+fn join_names(table: &TableWithJoins, names: &mut HashSet<String>) {
+    factor_names(&table.relation, names);
+    for join in &table.joins {
+        factor_names(&join.relation, names);
+    }
+}
+
+/// The alias of a relation, or the base name of an unaliased table (an alias
+/// hides the base name: `t.c` then means an outer `t`).
+fn factor_names(factor: &TableFactor, names: &mut HashSet<String>) {
+    if let Some(alias) = alias(factor) {
+        names.insert(alias.name.value.to_lowercase());
+    } else if let TableFactor::Table { name, .. } = factor
+        && let Some(last) = name.0.last().and_then(|part| part.as_ident())
+    {
+        names.insert(last.value.to_lowercase());
+    }
+    if let TableFactor::NestedJoin {
+        table_with_joins, ..
+    } = factor
+    {
+        join_names(table_with_joins, names);
+    }
 }
 
 #[cfg(test)]
@@ -541,6 +568,23 @@ mod tests {
     }
 
     #[test]
+    fn nested_join_operands_and_inner_scopes() {
+        // An aliased parenthesized join filters the condition laterally.
+        let sql = rewritten(
+            "SELECT 1 FROM OPENJSON(p.lhs) l FULL JOIN (OPENJSON(p.rhs) a JOIN OPENJSON(p.rhs) b ON a.[key] = b.[key]) AS r ON l.[key] = a.[key]",
+        );
+        assert!(sql.contains("LEFT OUTER JOIN LATERAL (SELECT * FROM (OPENJSON(p.rhs) a JOIN OPENJSON(p.rhs) b ON a.[key] = b.[key]) AS r WHERE"), "{sql}");
+        // `p` inside the left operand's subquery does not define the outer `p`.
+        let sql = rewritten(
+            "SELECT 1 FROM (SELECT p.k FROM t AS p) AS l FULL JOIN u AS r ON l.k = r.k AND p.id = 1",
+        );
+        assert!(!sql.contains("FULL"), "{sql}");
+        // Names a subquery defines for itself are not outer references.
+        let sql = "SELECT 1 FROM (SELECT p.k FROM t AS p) AS l FULL JOIN u AS r ON l.k = r.k AND EXISTS (SELECT 1 FROM v AS q WHERE q.k = r.k)";
+        assert!(rewritten(sql).contains("FULL"), "{sql}");
+    }
+
+    #[test]
     fn unqualified_star_excludes_the_side_column_and_rewrite_is_idempotent() {
         let mut statement = Parser::parse_sql(
             &crate::dialect::ServerDialect,
@@ -553,7 +597,10 @@ mod tests {
         };
         rewrite(query);
         let once = query.to_string();
-        assert!(once.contains(&format!("* EXCLUDE ({SIDE})")), "{once}");
+        assert!(
+            once.contains(&format!("* EXCLUDE ({SIDES}.{SIDE})")),
+            "{once}"
+        );
         assert!(
             once.ends_with(&format!(
                 "JOIN t ON t.k = l.[key] WHERE ({SIDES}.{SIDE} = 1 OR NOT EXISTS (SELECT 1 FROM OPENJSON(p.lhs) l WHERE l.[key] = r.[key]))"

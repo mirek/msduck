@@ -70,7 +70,7 @@ fn star_hides_the_side_column_and_existing_filters_are_kept() {
         "SELECT x.* FROM items i CROSS APPLY (SELECT * FROM OPENJSON(i.lhs) l FULL JOIN OPENJSON(i.rhs) r ON l.[key] = r.[key] WHERE l.[key] IS NULL) x",
     );
     assert!(
-        sql.contains("SELECT * EXCLUDE (__msduck_full_join_side) FROM"),
+        sql.contains("SELECT * EXCLUDE (__msduck_full_join.__msduck_full_join_side) FROM"),
         "{sql}"
     );
     assert!(
