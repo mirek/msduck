@@ -1016,3 +1016,23 @@ fn every_context_property_and_missing_transitive_edge_stays_explicit() {
         Some(vec![])
     );
 }
+
+#[test]
+fn native_undefined_cp1252_byte_roundtrips_but_client_replacement_is_not_source() {
+    let props = context_properties();
+    let context = Context::new(Domain::Varchar, props.clone()).unwrap();
+    assert_eq!(
+        msduck_core::encoding::encode_cp1252(&decode_cp1252(&[0x81])).unwrap(),
+        [0x81]
+    );
+    check_translation(&context, &props, &[129, 127], &[129], &[88], &[88, 127]);
+    let plan = core_plan(&context, &props);
+    assert_eq!(
+        concat_ws::evaluate_with_keys::<u16>(
+            &plan,
+            &[Some(vec![0xfffd]), Some(vec![129]), Some(vec![88])],
+            &|_| panic!("client replacement is not an encodable SQL operand")
+        ),
+        Err(concat_ws::Error::InvalidPayload)
+    );
+}

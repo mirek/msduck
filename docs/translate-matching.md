@@ -86,7 +86,8 @@ checks 9,284 admitted matching results, 1,036 explicit unknowns, 21,648 complete
 rows and 624 retained diagnostics. The additional 64 #841 prepared programs
 retain all 416 bindings: 260 admitted matching results, 12 explicit unknowns and
 80 exact SQL errors; NULL outcomes and descriptor-stable repeats remain intact.
-Six focused tests and strict SQL all-targets Clippy passed on the reused
+Six complete replay/context tests and an additional native 0081/client U+FFFD
+regression passed, along with strict SQL all-targets Clippy on the reused
 Rust 1.95 target. Full workspace/client/audit gates remain pending. Further
 focused test/gate evidence is recorded on the implementation PR. No general linguistic matching or runtime
 compatibility completion is claimed.
