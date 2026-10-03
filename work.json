@@ -9762,7 +9762,7 @@
     {
       "id": "concat-text-conversion-reference-v1",
       "title": "Capture per-type text conversion contracts for CONCAT_WS and TRANSLATE adapters",
-      "state": "ready",
+      "state": "done",
       "issue": 814,
       "authorization": "Direct continuing owner SQL Server compatibility goal and small parallel-worker instruction; complete individual source widths/formatting before runtime adapters consume pure plans.",
       "scope": [
