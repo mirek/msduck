@@ -8,6 +8,7 @@ pub mod catalog_snapshot;
 pub mod checked_expression;
 pub mod checked_projection;
 pub mod concat;
+pub mod concat_ws;
 pub mod cte_columns;
 pub mod cte_recursion;
 pub mod dialect;
