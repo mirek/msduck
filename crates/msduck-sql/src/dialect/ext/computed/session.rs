@@ -381,6 +381,17 @@ fn variant_property(expr: &Expr) -> Option<(&Function, &Expr)> {
 fn variant_result(expr: &Expr) -> bool {
     match expr {
         Expr::Nested(inner) => variant_result(inner),
+        // CAST(<session value> AS sql_variant).
+        Expr::Cast {
+            expr: operand,
+            data_type,
+            ..
+        }
+        | Expr::Convert {
+            expr: operand,
+            data_type: Some(data_type),
+            ..
+        } if crate::variant_pack::is_variant(data_type) => reads_session_context(operand),
         Expr::Case {
             conditions,
             else_result,
@@ -523,6 +534,22 @@ pub fn value_operands(expr: &mut Expr) -> Vec<&mut Expr> {
 
 /// The declared type name of a constant or explicitly converted expression,
 /// as conversion errors print it; `None` when it is not evident.
+/// Whether `expr` calls SESSION_CONTEXT anywhere.
+fn reads_session_context(expr: &Expr) -> bool {
+    struct Find;
+    impl Visitor for Find {
+        type Break = ();
+        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+            if session_context(expr).is_some() {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            }
+        }
+    }
+    expr.visit(&mut Find).is_break()
+}
+
 fn unnested(mut expr: &Expr) -> &Expr {
     while let Expr::Nested(inner) = expr {
         expr = inner;
@@ -558,6 +585,8 @@ fn static_type_name(expr: &Expr) -> Option<String> {
             Value::SingleQuotedString(_) => Some("varchar".into()),
             // Integer constants are int when they fit, otherwise numeric, as
             // are decimal constants (captured from SQL Server).
+            // Scientific constants are float.
+            Value::Number(text, _) if text.contains(['e', 'E']) => Some("float".into()),
             Value::Number(text, _) if text.bytes().all(|b| b.is_ascii_digit() || b == b'.') => {
                 Some(
                     if text.parse::<i32>().is_ok() {
@@ -898,6 +927,7 @@ mod tests {
             "CREATE TABLE t (v nvarchar(10) DEFAULT (COALESCE(N'x', SESSION_CONTEXT(N'foo'))))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(NULL, SESSION_CONTEXT(N'foo'))))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL((NULL), SESSION_CONTEXT(N'foo'))))",
+            "CREATE TABLE t (v nvarchar(10) DEFAULT CAST(SESSION_CONTEXT(N'foo') AS sql_variant))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT (ISNULL(CAST(NULL AS sql_variant), SESSION_CONTEXT(N'foo'))))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT (CASE WHEN 1 = 1 THEN SESSION_CONTEXT(N'foo') END))",
             "CREATE TABLE t (v nvarchar(10) DEFAULT IIF(1 = 1, N'x', SESSION_CONTEXT(N'foo')))",
@@ -931,6 +961,10 @@ mod tests {
             (
                 "CREATE TABLE t (v bigint DEFAULT (ISNULL(3000000000, SESSION_CONTEXT(N'k'))))",
                 "numeric",
+            ),
+            (
+                "CREATE TABLE t (v float DEFAULT (ISNULL(1e0, SESSION_CONTEXT(N'k'))))",
+                "float",
             ),
         ] {
             let error = rewritten(sql).unwrap_err();
