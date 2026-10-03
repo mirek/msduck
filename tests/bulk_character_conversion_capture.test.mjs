@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {readFile, mkdtemp, writeFile, realpath, symlink, link, rm, truncate} from 'node:fs/promises'
+import {readFile, mkdir, mkdtemp, writeFile, realpath, symlink, link, rm, truncate} from 'node:fs/promises'
 import {join} from 'node:path'
-import {tmpdir} from 'node:os'
+import {fileURLToPath} from 'node:url'
 import {spawnSync} from 'node:child_process'
 import {EventEmitter} from 'node:events'
 import {createHash} from 'node:crypto'
@@ -10,7 +10,12 @@ import {cases, rowsFor, jsonSize, CAPTURE_LIMIT, validate, validateRetained, com
 const fixture = new URL('../reference/bulk-character-conversion.json', import.meta.url)
 const load = async () => JSON.parse(await readFile(fixture, 'utf8'))
 const find = (run, name) => run.observations.find(o => o.case.name === name)
-const scratch = async work => {const dir = await realpath(await mkdtemp(join(tmpdir(), 'msduck-conversion-'))); try {await work(dir)} finally {await rm(dir, {recursive: true, force: true})}}
+const scratch = async work => {
+  const root = fileURLToPath(new URL('../.tmp/',import.meta.url))
+  await mkdir(root,{recursive:true})
+  const dir = await realpath(await mkdtemp(join(root,'msduck-conversion-')))
+  try {await work(dir)} finally {await rm(dir,{recursive:true,force:true})}
+}
 
 test('four captures preserve all CP1251 native bytes and distinguish undefined-byte SQL units from client display', async () => {
   const value = validateRetained(await readFile(fixture))
