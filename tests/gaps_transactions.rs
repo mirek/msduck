@@ -1039,6 +1039,14 @@ fn snapshot_transactions_need_the_option_and_read_their_snapshot() {
     assert_eq!(run(&mut a, "SELECT v FROM __msduck_customer"), Err(3952));
     assert_eq!(run(&mut a, "UPDATE t SET v = 2 FROM t AS t"), Err(3952));
     run(&mut a, "WITH t AS (SELECT 1 AS v) SELECT v FROM t").unwrap();
+    // Only within its own query.
+    assert_eq!(
+        run(
+            &mut a,
+            "SELECT (WITH t AS (SELECT 1 AS n) SELECT n FROM t) AS n FROM t"
+        ),
+        Err(3952)
+    );
     assert_eq!(
         run(
             &mut a,

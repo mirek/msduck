@@ -265,6 +265,7 @@ pub(super) fn track_write(session: &mut Session, statement: &Statement) -> Resul
             .collect(),
         Statement::CreateIndex(index) => vec![index.table_name.clone()],
         Statement::CreateView(view) => vec![view.name.clone()],
+        Statement::AlterView { name, .. } => vec![name.clone()],
         Statement::Query(query) => match query.body.as_ref() {
             SetExpr::Select(select) => select
                 .into
@@ -501,29 +502,43 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
 
 /// Every table name a statement reads or writes, excluding table-valued
 /// function calls, an UPDATE or DELETE target that names the alias of a
-/// FROM relation (`UPDATE x ... FROM t AS x`), and one-part names of the
-/// statement's common table expressions (anywhere in the statement, so a
-/// CTE also hides a table of the same name outside its own scope).
+/// FROM relation (`UPDATE x ... FROM t AS x`), and one-part names of common
+/// table expressions in scope.
 fn relations(statement: &Statement) -> Vec<ObjectName> {
     struct Relations {
         names: Vec<ObjectName>,
         functions: Vec<ObjectName>,
-        ctes: Vec<String>,
+        /// The CTE names of each enclosing query, innermost last.
+        scopes: Vec<Vec<String>>,
     }
     impl Visitor for Relations {
         type Break = ();
         fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
-            if let Some(with) = &query.with {
-                self.ctes.extend(
-                    with.cte_tables
-                        .iter()
-                        .map(|cte| cte.alias.name.value.to_lowercase()),
-                );
-            }
+            self.scopes.push(
+                query
+                    .with
+                    .iter()
+                    .flat_map(|with| &with.cte_tables)
+                    .map(|cte| cte.alias.name.value.to_lowercase())
+                    .collect(),
+            );
+            ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _query: &Query) -> ControlFlow<()> {
+            self.scopes.pop();
             ControlFlow::Continue(())
         }
         fn pre_visit_relation(&mut self, relation: &ObjectName) -> ControlFlow<()> {
-            self.names.push(relation.clone());
+            let cte = match relation.0.as_slice() {
+                [part] => part.as_ident().is_some_and(|ident| {
+                    let name = ident.value.to_lowercase();
+                    self.scopes.iter().any(|scope| scope.contains(&name))
+                }),
+                _ => false,
+            };
+            if !cte {
+                self.names.push(relation.clone());
+            }
             ControlFlow::Continue(())
         }
         fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
@@ -541,13 +556,13 @@ fn relations(statement: &Statement) -> Vec<ObjectName> {
     let mut visitor = Relations {
         names: Vec::new(),
         functions: Vec::new(),
-        ctes: Vec::new(),
+        scopes: Vec::new(),
     };
     let _ = statement.visit(&mut visitor);
     let Relations {
         mut names,
         functions,
-        ctes,
+        ..
     } = visitor;
     // The target is visited before its FROM relations; only that one
     // occurrence is the alias.
@@ -559,12 +574,6 @@ fn relations(statement: &Statement) -> Vec<ObjectName> {
     names
         .into_iter()
         .filter(|name| !functions.contains(name))
-        .filter(|name| match name.0.as_slice() {
-            [part] => part
-                .as_ident()
-                .is_none_or(|ident| !ctes.contains(&ident.value.to_lowercase())),
-            _ => true,
-        })
         .collect()
 }
 
