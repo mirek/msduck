@@ -22,12 +22,15 @@ and filters with `ISNULL(old_value, N'') <> ISNULL(new_value, N'')`.
   its STRUCT display text. Integer and other first types are unchanged.
   This covers carriers that reach ISNULL through derived tables, inline
   functions and APPLY, which the predicate catalog cannot type.
-- The NVARCHAR and NCHAR widths that ISNULL applies for a known first
-  argument (`__msduck_isnull_nvarchar_width`, `__msduck_isnull_nchar_width`)
-  accept both VARCHAR text and carriers and keep the input's backend type.
-  Previously a carrier from an aggregate subquery, as in
-  `N'text' + ISNULL((SELECT MAX(v) FROM ...), N'')`, reached the VARCHAR-only
-  width function and failed to bind (found while verifying #901).
+- The NVARCHAR and NCHAR widths that ISNULL applies for a known bounded
+  first argument (`__msduck_isnull_nvarchar_width`,
+  `__msduck_isnull_nchar_width`) accept VARCHAR text and carriers and
+  return text, as the predicate pins convert carrier columns mixed with
+  text. Previously a carrier from an aggregate subquery, as in
+  `N'text' + ISNULL((SELECT MAX(v) FROM ...), N'')`, reached the
+  VARCHAR-only width function and failed to bind (found while verifying
+  #901); a carrier result would also have failed in comparisons with
+  literals. An unpaired surrogate in such a bounded result becomes U+FFFD.
 
 The multirow trigger from the report, ISNULL over OPENJSON keys and values
 in projections and stored results, and ISNULL over aggregated subqueries now

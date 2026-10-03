@@ -152,10 +152,11 @@ fn multirow_trigger_diffs_json_snapshots_through_isnull() {
 }
 
 #[test]
-fn isnull_widths_keep_carriers_of_aggregated_subqueries() {
+fn isnull_widths_convert_carriers_of_aggregated_subqueries() {
     let (_server, mut session) = session();
     // A carrier from an aggregate subquery used to reach the VARCHAR-only
-    // NVARCHAR width function and fail to bind.
+    // NVARCHAR width function and fail to bind; the bounded result is text,
+    // so it also compares with literals.
     batch(
         &mut session,
         "CREATE TABLE tn(n NVARCHAR(3) NULL, c NCHAR(3) NULL); INSERT INTO tn VALUES (NULL, NULL), (N'ab', N'ab');
@@ -175,15 +176,27 @@ fn isnull_widths_keep_carriers_of_aggregated_subqueries() {
             .map(|row| row.map(|v| Some(v.to_string())).to_vec())
             .to_vec()
     );
-    // Both overloads: VARCHAR text and carriers, NULLs and NCHAR padding.
+    batch(
+        &mut session,
+        "SELECT CASE WHEN ISNULL((SELECT MAX(v) FROM (VALUES (N'a')) t(v)), N'') = N'a' THEN 1 ELSE 0 END AS hit INTO width_predicate",
+    );
+    assert_eq!(
+        rows(
+            &session,
+            1,
+            "SELECT CAST(hit AS VARCHAR) FROM width_predicate"
+        ),
+        vec![vec![Some("1".into())]]
+    );
+    // Both overloads give text: VARCHAR and carriers, NULLs and NCHAR padding.
     assert_eq!(
         rows(
             &session,
             4,
             "SELECT __msduck_isnull_nvarchar_width('a🦆bc', 3),
-                    __msduck_unicode_text(__msduck_isnull_nvarchar_width(__msduck_pack_unicode('abcd'), 2)),
-                    __msduck_isnull_nchar_width('a', 3),
-                    __msduck_unicode_text(__msduck_isnull_nchar_width(NULL::STRUCT(__msduck_utf16le BLOB), 3))"
+                    __msduck_isnull_nvarchar_width(__msduck_pack_unicode('abcd'), 2),
+                    __msduck_isnull_nchar_width(__msduck_pack_unicode('a'), 3),
+                    __msduck_isnull_nchar_width(NULL::STRUCT(__msduck_utf16le BLOB), 3)"
         ),
         vec![vec![
             Some("a🦆".into()),

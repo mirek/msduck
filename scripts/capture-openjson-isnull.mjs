@@ -74,7 +74,7 @@ const cases = [
   // Issue #901 follow-up: ISNULL over an aggregated (carrier) subquery inside concatenation.
   ['concat isnull string_agg nvarchar', [], "SELECT N'text' + ISNULL((SELECT STRING_AGG(v, N',') FROM (VALUES (N'a'),(N'b')) t(v)), N'') AS s;"],
   ['concat isnull string_agg varchar', [], "SELECT 'text' + ISNULL((SELECT STRING_AGG(v, ',') FROM (VALUES ('a'),('b')) t(v)), '') AS s;"],
-  ['concat isnull aggregate subquery', [], "SELECT N'text' + ISNULL((SELECT MAX(v) FROM (VALUES (N'a'),(N'b')) t(v)), N'') AS s, ISNULL((SELECT MIN(v) FROM (VALUES (N'abc')) t(v)), N'') AS m;"],
+  ['concat isnull aggregate subquery', [], "SELECT N'text' + ISNULL((SELECT MAX(v) FROM (VALUES (N'a'),(N'b')) t(v)), N'') AS s, ISNULL((SELECT MIN(v) FROM (VALUES (N'abc')) t(v)), N'') AS m, CASE WHEN ISNULL((SELECT MAX(v) FROM (VALUES (N'a')) t(v)), N'') = N'a' THEN 1 ELSE 0 END AS e;"],
   ['isnull stored unicode widths', ['CREATE TABLE tn(n NVARCHAR(3) NULL, c NCHAR(3) NULL); INSERT INTO tn VALUES (NULL, NULL), (N\'ab\', N\'ab\');'], "SELECT ISNULL(n, N'xyzw') AS a, ISNULL(c, N'q') AS b, N'<' + ISNULL(n, N'') + N'>' AS d, ISNULL((SELECT STRING_AGG(n, N',') FROM tn), N'') AS e FROM tn ORDER BY n;"],
 ].map(([name, setup, query]) => ({ name, setup, query }))
 
