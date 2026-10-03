@@ -10076,7 +10076,7 @@
     {
       "id": "concat-source-conversion-binding-v1",
       "title": "Compose typed source conversion with CONCAT_WS and TRANSLATE",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server-compatible Rust/DuckDB goal and faster PR cycle. Supersedes unclaimed backlog821 with one bounded conversion-composition task covering its entire binary acceptance plus newly implemented numeric/temporal/GUID formatters. Old821 has no claim and no dependent tasks; no live scope or receipt is taken over. No external input, no engine reservation.",
       "scope": [
         "crates/msduck-sql/src/lib.rs",
