@@ -11300,6 +11300,30 @@
       ],
       "issue": 904,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PlXvL"
+    },
+    {
+      "id": "bulk-character-cp1252-reference-v1",
+      "title": "Capture exhaustive native CP1252 SQL conversion projections",
+      "issue": 906,
+      "state": "ready",
+      "authorization": "Owner continuing full-server goal and parallel-work instruction; approved plan890 and reviewed raw884/895. CP1252 exhaustive source evidence is missing for complete conversion consumers.",
+      "scope": [
+        "scripts/capture-bulk-character-cp1252.mjs",
+        "reference/bulk-character-cp1252.json",
+        "tests/bulk_character_cp1252_capture.test.mjs",
+        "docs/bulk-character-cp1252-reference.md"
+      ],
+      "dependencies": [
+        "bulk-character-encoding-reference-v1",
+        "bulk-character-conversion-reference-v1",
+        "bulk-character-adapter-plan-v1"
+      ],
+      "acceptance": [
+        "At most12 bounded cases, each<=260rows: every native CP1252 source byte individually plus NULL/empty to same CP1252, CP1251, UTF8 and SQLUnicode MAX targets. Add mixed and large/fragmentation controls including undefined native byte81/8D/90 distinctions, native source identity and source/target facts. Capture actual tables rather than using client/platform codecs as ground truth. Do not infer padding/capacity/assignment or arbitrary collation support.",
+        "Four fresh databases on two pinned SQLServer17.0.4065.4 containers, retained actual source/image/Tedious20/Node provenance and original framing excluding credentials. Preserve original native VARBINARY and SQL UTF16 unit projections separately from display, NULL/empty, descriptors, error/info/DONE/callback and original-session diagnostics; retain complete raw differences before validation. Reuse reviewed895/899 bounded trace/comparison/envelope guards, reserved diagnostics, fragment signature checks, output path safety and cleanup; finite evidence is not universal conversion correctness.",
+        "Reuse existing isolated worker tree/private SQL reference resources only. No extra agents/worktrees/native caches, no canonical Linux source/build/cache writes. Fresh exclusive receipt after genuine completed dependencies. Push checkpoints/draft, focused tests both hosts, source-pinned four-run reproduction, immutable raw/sidecars retained, independent and exact-head Codex review or genuine fallback, requiredCI, claiming-worker merge/completion and board/issue verification. No Rust/engine/catalog/output/BulkLoad edits; owner853 reservation respected."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Plbp5"
     }
   ]
 }
