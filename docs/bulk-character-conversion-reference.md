@@ -166,6 +166,8 @@ validation, with `captureFailure` in the sidecar so failure metadata cannot
 overflow a near-limit raw artifact. If the retained-fixture comparison also exceeds its
 bound, its sidecar records `differencesOmitted: true` and the failure instead of
 claiming to contain complete differences; the command still fails.
+Serialization appends a newline only when it fits the same byte limit used by
+the bounded reader. An exact-limit raw artifact remains readable and unchanged.
 Each exchange reserves a 4 KiB diagnostic allowance before installing listeners,
 from a separate 64 KiB budget inside the existing capture-envelope reserve.
 An exhausted payload budget still returns previously retained packets and an

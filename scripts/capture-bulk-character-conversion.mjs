@@ -469,8 +469,8 @@ export async function readCaptureFile(path) {
 async function saveCapture(actual, output, captureError) {
   await guardOutput(output); await guardOutput(`${output}.comparison.json`)
   await mkdir(dirname(output), {recursive: true})
-  jsonSize(actual)
-  const bytes = JSON.stringify(actual) + '\n'
+  const size = jsonSize(actual)
+  const bytes = JSON.stringify(actual) + (size < CAPTURE_LIMIT ? '\n' : '')
   await writeFile(output, bytes, {flag: 'wx'})
   let expected, retainedBytes
   try {retainedBytes = await readCaptureFile(fixture); expected = JSON.parse(retainedBytes.toString())} catch (error) {if (error.code !== 'ENOENT') throw error}
@@ -485,7 +485,8 @@ async function saveCapture(actual, output, captureError) {
       ...(captureError ? {captureFailure: failure(captureError)} : {})}
     jsonSize(comparison)
   }
-  await writeFile(`${output}.comparison.json`, JSON.stringify(comparison) + '\n', {flag: 'wx'})
+  const comparisonSize = jsonSize(comparison)
+  await writeFile(`${output}.comparison.json`, JSON.stringify(comparison) + (comparisonSize < CAPTURE_LIMIT ? '\n' : ''), {flag: 'wx'})
   if (comparisonError) throw comparisonError
   if (retainedBytes) validateRetained(retainedBytes)
   return {cases: cases.length, runs: actual.runs.length, output, sha256: createHash('sha256').update(bytes).digest('hex')}

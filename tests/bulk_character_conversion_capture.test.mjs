@@ -303,12 +303,19 @@ test('invalid captures and complete comparison sidecars are preserved before sem
 
 test('derived comparison overflow preserves all bounded raw runs and an explicit failed sidecar', async () => {
   await scratch(async dir => {
-    for (const [count,size] of [[4,11*1024*1024],[2,(CAPTURE_LIMIT-128)/2]]) {
+    for (const [count,size] of [[4,11*1024*1024],[2,0]]) {
     const raw = {format:1, runs:Array.from({length:count}, (_, i) => ({data:String(i).repeat(size)}))}
-    assert.ok(jsonSize(raw) < CAPTURE_LIMIT)
+    if (!size) {
+      const available = CAPTURE_LIMIT-jsonSize(raw)
+      raw.runs[0].data='0'.repeat(Math.floor(available/2))
+      raw.runs[1].data='1'.repeat(Math.ceil(available/2))
+      assert.equal(jsonSize(raw),CAPTURE_LIMIT)
+    } else assert.ok(jsonSize(raw) < CAPTURE_LIMIT)
     const output = join(dir,`comparison-overflow-${count}.json`)
     await assert.rejects(finalizeCapture(raw,output), /bounded/)
-    const saved = JSON.parse(await readFile(output,'utf8'))
+    const savedBytes = await readCaptureFile(output)
+    if (!size) assert.equal(savedBytes.length,CAPTURE_LIMIT)
+    const saved = JSON.parse(savedBytes.toString())
     assert.deepEqual(saved,raw)
     assert.equal(saved.comparisons,undefined)
     const sidecar = JSON.parse(await readFile(output+'.comparison.json','utf8'))
