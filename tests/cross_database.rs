@@ -586,3 +586,40 @@ fn feature_statements_report_writes_to_a_second_database() {
         )
     );
 }
+
+#[test]
+fn user_functions_bind_in_the_session_database() {
+    let (_server, mut session) = fixture();
+    ok(&mut session, "USE foo");
+    ok(
+        &mut session,
+        "CREATE FUNCTION dbo.f(@x INT) RETURNS INT AS BEGIN RETURN @x + 1000 END",
+    );
+    ok(&mut session, "USE master");
+    ok(
+        &mut session,
+        "CREATE FUNCTION dbo.f(@x INT) RETURNS INT AS BEGIN RETURN @x + 1 END",
+    );
+    // master's dbo.f, not foo's.
+    ok(
+        &mut session,
+        "IF (SELECT dbo.f(i.id) FROM foo.dbo.items i WHERE i.id = 1) <> 2 THROW 50001, 'wrong function', 1",
+    );
+    ok(
+        &mut session,
+        "DECLARE @v INT = (SELECT dbo.f(id) FROM foo.dbo.items WHERE id = 1); IF @v <> 2 THROW 50001, 'wrong function', 1",
+    );
+    assert_eq!(
+        fails(
+            &mut session,
+            "UPDATE foo.dbo.items SET v = CAST(dbo.f(id) AS VARCHAR(10))"
+        ),
+        (
+            40515,
+            1,
+            16,
+            "unsupported cross-database statement: it writes database 'foo' and calls functions of the session's database".into()
+        )
+    );
+    assert_eq!(catalog(&session), "memory.dbo");
+}

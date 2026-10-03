@@ -234,8 +234,13 @@ Remaining limits, refused explicitly unless noted:
   that writes database '...'`: the destination belongs to the session's
   database, and the statement may write only one. Plain `OUTPUT` works, and
   `OUTPUT INTO` works in statements that write the current database.
-- Functions that resolve object names, such as `OBJECT_ID`, in a statement
-  that runs in another database resolve them in that database.
+- User functions bind in the session's database, so a statement calling a
+  schema-qualified function (`dbo.f(...)`) runs there: a read of another
+  database works, but a write to another database fails with 40515
+  `unsupported cross-database statement: it writes database '...' and calls
+  functions of the session's database`.
+- Built-in functions that resolve object names, such as `OBJECT_ID`, in a
+  statement that runs in another database resolve them in that database.
 - A missing table in another database fails with 208 but with DuckDB's
   message, as a missing table in the current database does.
 - Calls to procedures and functions in another database, and synonyms, are not

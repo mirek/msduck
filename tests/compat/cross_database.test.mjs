@@ -21,11 +21,12 @@ const observations = run.filter(observation => !/^(server version|setup \d+|sing
   .map(observation => [observation.name, observation.sql])
 
 // What a client sees of a batch: complete descriptors (with all flags and
-// the collation), rows, errors and completion tokens.
+// the collation), rows, errors with their line numbers and completion
+// tokens.
 const brief = result => ({
   columns: result.sets.map(set => set.columns.map(c => [c.name, c.type, c.length, c.precision, c.scale, c.flags, c.collation])),
   rows: result.sets.map(set => set.rows),
-  errors: result.errors.map(e => [e.number, e.state, e.class, e.message]),
+  errors: result.errors.map(e => [e.number, e.state, e.class, e.message, e.lineNumber]),
   done: result.done.map(d => [d.kind, d.rowCount, d.more]),
   rowCount: result.rowCount,
 })
@@ -52,7 +53,7 @@ const known = {
   'two databases in one transaction': expected => Object.assign(expected, {
     columns: [],
     rows: [],
-    errors: [[40515, 1, 16, "unsupported cross-database transaction: database 'xdb_foo' cannot be modified in a transaction that has already modified database 'master'; a transaction may write only one database"]],
+    errors: [[40515, 1, 16, "unsupported cross-database transaction: database 'xdb_foo' cannot be modified in a transaction that has already modified database 'master'; a transaction may write only one database", 1]],
     done: [['done', null, true], ['done', 1, true], ['done', null, false]],
     rowCount: 1,
   }),
@@ -63,7 +64,7 @@ const known = {
   },
   // DDL in another database is refused.
   'create table in another database': expected => {
-    expected.errors = [[40515, 1, 16, 'unsupported reference to xdb_foo.dbo.made in another database; USE xdb_foo first']]
+    expected.errors = [[40515, 1, 16, 'unsupported reference to xdb_foo.dbo.made in another database; USE xdb_foo first', 1]]
   },
 }
 

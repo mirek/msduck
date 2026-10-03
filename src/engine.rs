@@ -1018,8 +1018,24 @@ impl Session {
             }
             Ok(())
         };
-        if relations.foreign.len() == 1 && relations.local.is_empty() && !relations.into {
+        // User functions bind in the session's database, so a statement
+        // that calls them stays there: a read reads the other database from
+        // here, and a write to it is refused.
+        let refuse_routines = |written: &str| -> Result<()> {
+            if relations.routines {
+                bail!(
+                    "unsupported cross-database statement: it writes database '{written}' and calls functions of the session's database"
+                );
+            }
+            Ok(())
+        };
+        if relations.foreign.len() == 1
+            && relations.local.is_empty()
+            && !relations.into
+            && !(relations.routines && dml.is_none())
+        {
             refuse_output_into(&display(database))?;
+            refuse_routines(&display(database))?;
             return Ok(CrossDatabase::Home(database.clone(), vec![]));
         }
         // A statement that writes another database runs there, reading the
@@ -1042,6 +1058,7 @@ impl Session {
                 );
             }
             refuse_output_into(&display(&alias.value))?;
+            refuse_routines(&display(&alias.value))?;
             let home = alias.value.clone();
             let others = relations
                 .foreign
@@ -8020,6 +8037,9 @@ struct Relations {
     /// UPDATE and DELETE target nodes that name a FROM alias
     /// (`alias_targets`).
     targets: Vec<*const ObjectName>,
+    /// Whether the statement calls schema-qualified (user) functions, which
+    /// bind in the session's database.
+    routines: bool,
 }
 impl Relations {
     fn collect<T: Visit>(node: &T, current: String, targets: &[*const ObjectName]) -> Self {
@@ -8100,6 +8120,13 @@ impl Visitor for Relations {
         } = factor
         {
             self.functions.push(name);
+            self.routines |= name.0.len() > 1;
+        }
+        ControlFlow::Continue(())
+    }
+    fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+        if let Expr::Function(function) = expr {
+            self.routines |= function.name.0.len() > 1;
         }
         ControlFlow::Continue(())
     }
