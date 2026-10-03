@@ -120,9 +120,14 @@ pub(super) fn alter(session: &mut Session, request: Request) -> Result<Execution
     let _reservation = reserve(session, &alias)?;
     let previous = catalog.snapshot_isolation(&session.db, &alias)?;
     if previous != target {
-        // Only transactions that began before the transition are waited for.
-        let cutoff = SEQUENCE.fetch_add(1, Ordering::SeqCst);
-        catalog.set_snapshot_isolation(&session.db, &alias, transition)?;
+        // Only transactions that began before the transition are waited
+        // for. Holding the transaction table orders the cutoff and the
+        // transition against reads that check the state and register.
+        let cutoff = {
+            let _transactions = active_transactions();
+            catalog.set_snapshot_isolation(&session.db, &alias, transition)?;
+            SEQUENCE.fetch_add(1, Ordering::SeqCst)
+        };
         let db = session.db.try_clone()?;
         let publish = || catalog.set_snapshot_isolation(&db, &alias, target);
         if let Err(error) = wait_for_transactions(session, &alias, *on, cutoff, publish) {
@@ -245,7 +250,15 @@ pub(super) fn end(session: &Session) {
 /// Update how the session's transaction uses a database. Outside a
 /// transaction this starts an entry for its autocommit transactions.
 fn usage(session: &Session, alias: &str, update: impl FnOnce(&mut Usage)) {
-    let mut transactions = active_transactions();
+    usage_in(&mut active_transactions(), session, alias, update);
+}
+
+fn usage_in(
+    transactions: &mut HashMap<u64, Active>,
+    session: &Session,
+    alias: &str,
+    update: impl FnOnce(&mut Usage),
+) {
     let active = if session.transactions == 0 {
         transactions
             .entry(session.ext.token)
@@ -418,7 +431,6 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
         return Ok(());
     }
     let catalog = session.database.catalog().clone();
-    let mut states: HashMap<String, SnapshotIsolation> = HashMap::new();
     for name in relations(statement) {
         let parts: Vec<&str> = name
             .0
@@ -456,28 +468,29 @@ pub(super) fn check_access(session: &mut Session, statement: &Statement) -> Resu
         } else {
             session.database.alias().to_owned()
         };
-        let state = match states.get(&alias) {
-            Some(state) => *state,
-            None => {
-                let state = catalog.snapshot_isolation(&session.db, &alias)?;
-                states.insert(alias.clone(), state);
-                state
-            }
-        };
-        let read = || {
-            active_transactions()
-                .get(&session.ext.token)
-                .and_then(|active| active.databases.get(&alias))
-                .is_some_and(|usage| usage.read)
-        };
+        // The state is read and the access registered while holding the
+        // transaction table, so a change waits for every read that saw ON.
+        let mut transactions = active_transactions();
+        let state = catalog.snapshot_isolation(&session.db, &alias)?;
+        let read = transactions
+            .get(&session.ext.token)
+            .and_then(|active| active.databases.get(&alias))
+            .is_some_and(|usage| usage.read);
         // A transaction that read under SNAPSHOT before OFF began continues.
-        if state == SnapshotIsolation::On || (state == SnapshotIsolation::ToOff && read()) {
-            usage(session, &alias, |usage| usage.read = true);
+        if read && matches!(state, SnapshotIsolation::On | SnapshotIsolation::ToOff) {
             continue;
         }
+        // A missing object fails with its own error and reads nothing.
         if !exists(session, &alias, schema, object)? {
             continue;
         }
+        if state == SnapshotIsolation::On {
+            usage_in(&mut transactions, session, &alias, |usage| {
+                usage.read = true
+            });
+            continue;
+        }
+        drop(transactions);
         if session.transactions > 0 {
             session.transaction_doomed = true;
         }

@@ -1251,12 +1251,15 @@ fn allow_snapshot_isolation_changes_wait_for_open_transactions() {
     )
     .unwrap();
     run(&mut observer, "SET TRANSACTION ISOLATION LEVEL SNAPSHOT").unwrap();
-    // Nor is a SNAPSHOT transaction that has not accessed data.
+    // Nor is a SNAPSHOT transaction that has not accessed data, even after
+    // naming a missing table.
     run(
         &mut reader,
         "SET TRANSACTION ISOLATION LEVEL SNAPSHOT; BEGIN TRAN; SELECT 1",
     )
     .unwrap();
+    assert_eq!(run(&mut reader, "SELECT v FROM missing"), Err(208));
+    check(&mut reader, "@@TRANCOUNT = 1").unwrap();
     let (result, elapsed) = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF")
         .join()
         .unwrap();
