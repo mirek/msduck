@@ -590,6 +590,16 @@ fn correlated(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> b
                 join_names(table, &mut names);
             }
             self.scopes.push(names);
+            // `alias.*` is not an expression but references `alias` too.
+            let mut qualifiers = HashSet::new();
+            wildcard_qualifiers(select, &mut qualifiers);
+            if qualifiers
+                .iter()
+                .any(|name| !self.scopes.iter().any(|scope| scope.contains(name)))
+            {
+                self.outer = true;
+                return ControlFlow::Break(());
+            }
             ControlFlow::Continue(())
         }
         fn post_visit_select(&mut self, _: &Select) -> ControlFlow<()> {
@@ -842,6 +852,10 @@ mod tests {
         assert!(sql.contains(&format!("AS {SIDES}_1 ({SIDE})")), "{sql}");
         let sql =
             rewritten("SELECT 1 FROM (SELECT p.id AS k FROM t) AS p FULL JOIN u AS r ON p.k = r.k");
+        assert!(!sql.contains("FULL"), "{sql}");
+        let sql = rewritten(
+            "SELECT 1 FROM (SELECT p.* FROM t) AS l FULL JOIN (SELECT 1 AS id) AS r ON l.id = r.id",
+        );
         assert!(!sql.contains("FULL"), "{sql}");
     }
 
