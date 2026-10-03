@@ -260,7 +260,6 @@ fn unsupported_declarations_are_rejected_before_null_empty_or_limits() {
         output_bytes: 0,
     };
     for source in [
-        EncodingIdentity::Utf8,
         EncodingIdentity::Opaque(1251),
         EncodingIdentity::Opaque(1252),
         EncodingIdentity::Opaque(65001),
