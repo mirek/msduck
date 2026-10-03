@@ -68,8 +68,9 @@ general conversion rule.
 The current core explicitly rejects ANSI UTF8 evaluation as UnknownEncoding;
 matching facts for its measured ASCII/finite sets remain known independently.
 Native undefined CP1252 bytes such as 81 retain their SQL byte/unit identity,
-while tedious decodes the text cell to U+FFFD and the current converted-text
-core cannot round-trip those units (InvalidPayload). Tests check each actual
+while tedious decodes the text cell to U+FFFD. The native unit 0081 round-trips
+through the core CP1252 codec; mistakenly reusing the client-decoded U+FFFD as
+the SQL operand fails CP1252 encoding (InvalidPayload). Tests check each actual
 raw SQL result and client-decoded result separately. They neither substitute a
 separately evaluated binary projection for text nor normalize either result to
 obtain a pass. These encoding integration barriers remain future adapter work.

@@ -391,8 +391,9 @@ fn check_translation(
             .iter()
             .any(|v| msduck_core::encoding::encode_cp1252(&String::from_utf16(v).unwrap()).is_err())
     {
-        // Native CP1252 undefined bytes retain SQL byte identity, while the
-        // current converted-text core cannot round-trip these payloads.
+        // Native CP1252 undefined bytes round-trip. This branch concerns
+        // genuinely unrepresentable Unicode payloads, including a client
+        // U+FFFD mistakenly substituted for the native SQL unit0081.
         assert_eq!(actual, Err(concat_ws::Error::InvalidPayload));
     } else {
         assert_eq!(actual.unwrap().as_deref(), Some(expected));
