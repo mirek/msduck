@@ -527,3 +527,28 @@ fn output_into_stays_out_of_statements_in_other_databases() {
     assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.items"), 2);
     assert_eq!(catalog(&session), "memory.dbo");
 }
+
+#[test]
+fn write_errors_name_databases_with_quotes() {
+    let (_server, mut session) = fixture();
+    ok(&mut session, "CREATE DATABASE [q\"uote]");
+    ok(
+        &mut session,
+        "USE [q\"uote]; CREATE TABLE dbo.t (id INT); USE master",
+    );
+    let (number, _, _, message) = fails(
+        &mut session,
+        "BEGIN TRAN; INSERT dbo.loc VALUES (5, N'five'); INSERT [q\"uote].dbo.t VALUES (1)",
+    );
+    assert_eq!(number, 40515);
+    assert_eq!(
+        message,
+        "unsupported cross-database transaction: database 'q\"uote' cannot be modified in a transaction that has already modified database 'master'; a transaction may write only one database"
+    );
+    assert_eq!(session.transactions, 0);
+    ok(&mut session, "INSERT [q\"uote].dbo.t VALUES (2)");
+    assert_eq!(
+        count(&session, "SELECT count(*) FROM \"q\"\"uote\".dbo.t"),
+        1
+    );
+}

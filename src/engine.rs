@@ -1151,11 +1151,16 @@ impl Session {
         else {
             return error;
         };
-        let names = rest.split_once('"').and_then(|(written, rest)| {
-            rest.split_once("already modified database \"")
-                .and_then(|(_, rest)| rest.split_once('"'))
+        // DuckDB inserts catalog names unescaped, so split at the fixed text
+        // around them rather than at quotes, which names may contain.
+        let names = rest
+            .split_once("\" in a transaction that has already modified database \"")
+            .and_then(|(written, rest)| {
+                rest.rsplit_once(
+                    "\" - a single transaction can only write to a single attached database",
+                )
                 .map(|(modified, _)| (written, modified))
-        });
+            });
         let Some((written, modified)) = names else {
             return error;
         };
