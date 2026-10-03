@@ -102,6 +102,17 @@ test('oversized encoded packets and unfinished EOM are rejected before acceptanc
   assert.throws(() => validate(incomplete), /complete EOM framing/)
 })
 
+test('uniformly changed image and server version cannot relabel retained provenance', async () => {
+  const retained = await load()
+  const image = structuredClone(retained)
+  for (const container of image.containers) container.image = `mcr.microsoft.com/mssql/server:2025-latest@sha256:${'0'.repeat(64)}`
+  assert.throws(() => validate(image), /fixed captured server image/)
+  const version = structuredClone(retained)
+  for (const run of version.runs) run.version.result.sets[0].rows[0][0] = '17.0.9999.9'
+  version.comparisons = version.runs.slice(1).map(run => compare(run, version.runs[0]))
+  assert.throws(() => validate(version), /fixed captured server version/)
+})
+
 test('existing files, hard links, dangling links and symlink parents are refused before Docker', async () => {
   await mkdir(new URL('../.tmp/', import.meta.url), {recursive: true})
   const directory = await mkdtemp(new URL('../.tmp/bulk-staging-guards-', import.meta.url))

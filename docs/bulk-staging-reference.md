@@ -44,7 +44,8 @@ differences must be inspected. A raw mismatch is not a compatibility pass.
 per-case readback rows/identity/trigger membership, descriptors, diagnostic
 state/class/text, trust and completion events, and recomputed difference
 summaries without starting Docker. Uniform changes in all four runs cannot
-become their own oracle. Encoded packet length and remaining exchange budget
+become their own oracle or relabel the pinned image and ProductVersion.
+Encoded packet length and remaining exchange budget
 are checked before regex or buffer allocation. Explicit-transaction requests
 must carry a nonzero transaction descriptor in their raw ALL_HEADERS.
 Run

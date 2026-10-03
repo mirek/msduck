@@ -14,6 +14,8 @@ import {withReferenceContainer} from './lib/reference-container.mjs'
 const fixture = fileURLToPath(new URL('../reference/bulk-staging-reference.json', import.meta.url))
 const LIMIT = 8 * 1024 * 1024
 const MAX_PACKETS = 8192
+const GOLD_IMAGE = 'mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a'
+const GOLD_VERSION = '17.0.4065.4'
 export const cases = [
   ...[1, 332, 333, 334, 499, 500, 501, 999, 1000, 1001, 1501].map(count => ({name: `defaults-${count}`, count, fireTriggers: true})),
   {name: 'keep-nulls-staged', count: 1001, fireTriggers: true, keepNulls: true},
@@ -232,9 +234,10 @@ export function validate(value) {
   assert.equal(value.format, 1)
   assert.equal(value.containers.length, 2)
   assert.equal(value.runs.length, 4)
-  for (const container of value.containers) assert.match(container.image, /@sha256:[0-9a-f]{64}$/)
+  for (const container of value.containers) assert.equal(container.image, GOLD_IMAGE, 'fixed captured server image')
   assert.equal(value.containers[0].image, value.containers[1].image, 'one pinned image for both independent containers')
   for (const run of value.runs) {
+    assert.equal(run.version.result.sets[0].rows[0][0], GOLD_VERSION, 'fixed captured server version')
     const database = run.version.result.sets[0].rows[0][1]
     assert.match(database, /^msduck_audit_[0-9a-f]{32}$/)
     assert.equal(run.observations.length, cases.length)
