@@ -9987,7 +9987,7 @@
     {
       "id": "temporal-guid-format-reference-v1",
       "title": "Capture exact temporal and GUID implicit text contexts",
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner SQL Server compatibility goal; owner-run read-only investigation of merged815 identifies absent exact temporal storage, locale/prepared/boundary evidence before deterministic source-format integration. No external input.",
       "scope": [
         "scripts/capture-temporal-guid-format.mjs",
