@@ -13,6 +13,7 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
+        mpsc,
     },
     thread,
     time::{Duration, Instant},
@@ -71,6 +72,42 @@ fn contains_utf16(tokens: &[u8], text: &str) -> bool {
         .flat_map(u16::to_le_bytes)
         .collect::<Vec<_>>();
     tokens.windows(needle.len()).any(|window| window == needle)
+}
+
+/// Bound a real-clock probe without sleeping through the deadline on success.
+/// Dropping also wakes/joins the watchdog if a probe panics.
+struct RequestWatchdog {
+    stop: mpsc::Sender<()>,
+    worker: Option<thread::JoinHandle<()>>,
+}
+
+impl RequestWatchdog {
+    fn new(flag: Arc<AtomicBool>, deadline: Duration) -> Self {
+        let (stop, receiver) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            if matches!(
+                receiver.recv_timeout(deadline),
+                Err(mpsc::RecvTimeoutError::Timeout)
+            ) {
+                flag.store(true, Ordering::SeqCst);
+            }
+        });
+        Self {
+            stop,
+            worker: Some(worker),
+        }
+    }
+}
+
+impl Drop for RequestWatchdog {
+    fn drop(&mut self) {
+        let _ = self.stop.send(());
+        if let Some(worker) = self.worker.take() {
+            // The watchdog only receives a message or sets an atomic flag.
+            // Do not cause a second panic if its caller is already unwinding.
+            let _ = worker.join();
+        }
+    }
 }
 
 #[test]
@@ -513,14 +550,25 @@ fn waitfor_delay_and_time_wait_and_validate() {
     let started = Instant::now();
     run(&mut s, "DECLARE @d INT = 1; WAITFOR DELAY @d").unwrap();
     assert!(started.elapsed() >= Duration::from_secs(1));
-    // WAITFOR TIME with seconds after midnight, one second ahead.
+    // Allow query work a five-second margin. Missing a one-second target
+    // otherwise waits until tomorrow, which is correct server behavior but an
+    // unbounded test. Cancellation is a failure here, never a successful wait.
+    let flag = Arc::new(AtomicBool::new(false));
+    let watchdog = RequestWatchdog::new(flag.clone(), Duration::from_secs(10));
     let started = Instant::now();
-    run(
-        &mut s,
-        "DECLARE @t INT = DATEDIFF(SECOND, CAST(CAST(GETDATE() AS DATE) AS DATETIME), GETDATE()) + 1; WAITFOR TIME @t",
-    )
-    .unwrap();
-    assert!(started.elapsed() < Duration::from_secs(3));
+    let outcome = s.batch_response_with_read_cancel(
+        "DECLARE @t INT = DATEDIFF(SECOND, CAST(CAST(GETDATE() AS DATE) AS DATETIME), GETDATE()) + 5; WAITFOR TIME @t",
+        &Default::default(),
+        Mode::Batch,
+        flag,
+    );
+    drop(watchdog);
+    assert!(
+        matches!(outcome, Outcome::Finished { success: true, .. }),
+        "WAITFOR TIME must finish before its watchdog: {outcome:?}"
+    );
+    assert!(started.elapsed() >= Duration::from_secs(3));
+    assert!(started.elapsed() < Duration::from_secs(10));
     // An invalid literal is 148 while compiling: nothing runs.
     run(&mut s, "CREATE TABLE dbo.t(n INT)").unwrap();
     assert_eq!(
@@ -550,6 +598,29 @@ fn waitfor_delay_and_time_wait_and_validate() {
     run(&mut s, "BEGIN TRAN; WAITFOR DELAY '00:00:00.010'").unwrap();
     assert_eq!(s.transactions, 1);
     run(&mut s, "COMMIT").unwrap();
+}
+
+#[test]
+fn missed_waitfor_time_target_is_cancelled_before_the_next_day() {
+    let server = Server::open(":memory:").unwrap();
+    let mut s = session(&server);
+    let flag = Arc::new(AtomicBool::new(false));
+    let watchdog = RequestWatchdog::new(flag.clone(), Duration::from_secs(4));
+    let started = Instant::now();
+    let outcome = s.batch_response_with_read_cancel(
+        "DECLARE @t INT = DATEDIFF(SECOND, CAST(CAST(GETDATE() AS DATE) AS DATETIME), GETDATE()) + 1;
+         WAITFOR DELAY '00:00:02'; WAITFOR TIME @t; THROW 51000, 'missed target ran a later statement', 1",
+        &Default::default(),
+        Mode::Batch,
+        flag,
+    );
+    drop(watchdog);
+    assert!(matches!(outcome, Outcome::Cancelled { .. }), "{outcome:?}");
+    assert!(started.elapsed() >= Duration::from_secs(4));
+    assert!(started.elapsed() < Duration::from_secs(8));
+    // The watchdog was specific to the completed request; the session remains usable.
+    run(&mut s, "SELECT 1").unwrap();
+    assert_eq!(ints(&s, "SELECT 1"), [1]);
 }
 
 #[test]
