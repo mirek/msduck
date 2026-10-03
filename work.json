@@ -9779,6 +9779,25 @@
         "Fresh claim/receipt in completed existing prepared-rpc worker worktree; isolated Linux reference directory, random owned ports and read-only cached Node dependencies. No new worktrees/native cache/implementation agents, no shared native runner writes or lock bypass. Focused owner PR, source/reference validation and exact requiredCI/verifiedreview or authorizedfallback; claiming worker owns merge and prompt issue/project/registry completion. No engine reservation, runtime edits or server compatibility completion claim."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pj5U3"
+    },
+    {
+      "id": "concat-ws-translate-export-v1",
+      "title": "Register deterministic CONCAT_WS and TRANSLATE core API",
+      "issue": 816,
+      "state": "ready",
+      "authorization": "Continuing owner compatibility goal; expose reviewed pure core after812 merge to prepare binding/runtime integration.",
+      "scope": [
+        "crates/msduck-sql/src/lib.rs",
+        "docs/concat-ws-export.md"
+      ],
+      "dependencies": [
+        "concat-ws-translate-core-recovery-v1"
+      ],
+      "acceptance": [
+        "Export the merged concat_ws module from msduck-sql, preserving deterministic crate boundaries. Document public planning/evaluation API and explicit conversion/collation-key/diagnostic-context inputs, outstanding binding/native/client integration, and raw-reference authority. Do not claim server support or change core semantics.",
+        "Fresh exclusive claim/receipt in a completed existing worktree, no new local Cargo/native caches or engine.rs reservation. Cached Linux checks under shared runner lock, formatter/workspace strict Clippy/tests/client verification appropriate to Rust export, exact required CI/review or owner-authorized fallback. Worker owns merge and prompt registry/project/issue completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pj92W"
     }
   ]
 }
