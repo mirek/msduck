@@ -10,6 +10,10 @@
 //!   collations to DuckDB collations.
 //! - `native` holds the DuckDB scalar functions; `temporal`, `binary` and
 //!   `dotnet` the pure formatting and parsing rules they use.
+//! - `delimited_target` resolves CAST and CONVERT targets such as
+//!   `[nvarchar](10)` or `sysname` that features build from stored
+//!   declarations, and `unstyled_max` turns CONVERT without a style to a
+//!   `max` type into CAST (`rewrite_expr`; docs/bracket-types.md).
 use super::Feature;
 use crate::engine::{Parameter, Session};
 use anyhow::Result;
@@ -57,13 +61,77 @@ impl Feature for Hooks {
         collation::validate(expr)?;
         properties::rewrite(session, expr, parameters)?;
         format::rewrite(expr, parameters)?;
-        style::validate(expr, parameters)
+        style::validate(expr, parameters)?;
+        delimited_target(expr);
+        unstyled_max(expr);
+        Ok(())
     }
 
     fn lower_expr(&self, expr: &mut Expr) -> Result<(), String> {
         style::lower(expr)?;
         collation::lower(expr)
     }
+}
+
+/// A CAST or CONVERT target that names a system type with delimiters, such as
+/// `[nvarchar](10)`, or `sysname`, as the plain type. `batch::parse` resolves
+/// every target written in a statement, so the targets left here are casts
+/// that features build from stored declarations, such as a scalar function's
+/// parameters and RETURNS type. They keep declaration defaults: `[varchar]`
+/// is `varchar(1)`, as the plain declaration is.
+fn delimited_target(expr: &mut Expr) {
+    if let Expr::Cast { data_type, .. }
+    | Expr::Convert {
+        data_type: Some(data_type),
+        ..
+    } = expr
+        && let Some(resolved) =
+            msduck_sql::dialect::ext::conversion::bracket_types::declared_value_type(data_type)
+    {
+        *data_type = resolved;
+    }
+}
+
+/// CONVERT or TRY_CONVERT without a style to `nvarchar(max)`, `varchar(max)`
+/// or `varbinary(max)`, as the equivalent CAST or TRY_CAST. No built-in
+/// lowering takes over such a CONVERT, so written either plainly or as
+/// `[nvarchar](max)` it reached DuckDB as a call of an unknown `convert`
+/// function. Rewritten before binding, the CAST gets every lowering the
+/// translator gives CAST, including the one for Unicode carriers.
+/// See docs/bracket-types.md.
+fn unstyled_max(expr: &mut Expr) {
+    use sqlparser::ast::{BinaryLength, CastKind, CharacterLength, DataType};
+    let Expr::Convert {
+        is_try,
+        expr: value,
+        data_type: Some(data_type),
+        charset: None,
+        target_before_value: true,
+        styles,
+    } = expr
+    else {
+        return;
+    };
+    if !styles.is_empty()
+        || !matches!(
+            data_type,
+            DataType::Nvarchar(Some(CharacterLength::Max))
+                | DataType::Varchar(Some(CharacterLength::Max))
+                | DataType::Varbinary(Some(BinaryLength::Max))
+        )
+    {
+        return;
+    }
+    *expr = Expr::Cast {
+        kind: if *is_try {
+            CastKind::TryCast
+        } else {
+            CastKind::Cast
+        },
+        expr: value.clone(),
+        data_type: data_type.clone(),
+        format: None,
+    };
 }
 
 /// The unnamed scalar arguments of a plain function call, or `None` when the

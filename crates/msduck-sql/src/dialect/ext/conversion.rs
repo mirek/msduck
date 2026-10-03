@@ -1,10 +1,13 @@
-//! Syntax for: Explicit COLLATE, styled CONVERT, FORMAT, SERVERPROPERTY, DATABASEPROPERTYEX and ROWCOUNT_BIG.
+//! Syntax for: Explicit COLLATE, styled CONVERT, FORMAT, SERVERPROPERTY, DATABASEPROPERTYEX and ROWCOUNT_BIG,
+//! and delimited system type names such as `CONVERT([nvarchar](200), x)`.
 //!
-//! Stub until its gap task lands; see docs/extension-hooks.md.
+//! See docs/extension-hooks.md and docs/bracket-types.md.
 use sqlparser::{
     ast::Statement,
     parser::{Parser, ParserError},
 };
+
+pub mod bracket_types;
 
 /// Parse a statement this feature owns, or decline without consuming tokens.
 pub fn parse(_parser: &mut Parser) -> Option<Result<Statement, ParserError>> {

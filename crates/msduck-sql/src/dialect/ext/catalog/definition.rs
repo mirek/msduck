@@ -278,7 +278,14 @@ fn bracket(name: &str) -> String {
 
 /// The bracketed type of CONVERT: `[int]`, `[varchar](10)`, `[decimal](5,2)`.
 fn type_name(kind: &DataType) -> Option<String> {
-    let text = kind.to_string().to_ascii_lowercase();
+    // A delimited system type name, such as `[nvarchar](200)` as written,
+    // reads like its plain spelling (docs/bracket-types.md).
+    let plain = crate::dialect::ext::conversion::bracket_types::plain_type(kind);
+    let text = plain
+        .as_ref()
+        .unwrap_or(kind)
+        .to_string()
+        .to_ascii_lowercase();
     let (name, arguments) = match text.split_once('(') {
         Some((name, rest)) => (name.trim(), Some(rest.strip_suffix(')')?.replace(' ', ""))),
         None => (text.trim(), None),
