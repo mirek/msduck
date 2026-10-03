@@ -479,6 +479,162 @@ fn instead_of_triggers_replace_the_statement() {
 }
 
 #[test]
+fn merge_fires_after_triggers_once_per_action() {
+    let (_server, mut session) = memory();
+    // The workload report repro (#852): a trivial AFTER INSERT trigger.
+    ok(&mut session, "CREATE TABLE items(id int PRIMARY KEY)");
+    ok(
+        &mut session,
+        "CREATE TRIGGER foo_trigger ON items AFTER INSERT AS BEGIN SET NOCOUNT ON; END",
+    );
+    ok(
+        &mut session,
+        "MERGE items AS target USING(VALUES(1)) AS source(id) ON target.id=source.id WHEN NOT MATCHED THEN INSERT(id) VALUES(source.id);",
+    );
+    assert_eq!(number(&session, "SELECT count(*) FROM dbo.items"), 1);
+
+    ok(
+        &mut session,
+        "CREATE TABLE m(id INT PRIMARY KEY, v INT, w INT);
+         CREATE TABLE src(id INT, v INT);
+         CREATE TABLE log(msg VARCHAR(200));
+         CREATE TABLE out(act NVARCHAR(10), id INT);
+         INSERT m VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3);
+         INSERT src VALUES (2, 20), (3, 30), (4, 40);",
+    );
+    ok(
+        &mut session,
+        "CREATE TRIGGER m_iud ON m AFTER INSERT, UPDATE, DELETE AS
+           INSERT log SELECT CONCAT('rc=', @@ROWCOUNT,
+             ' i=', (SELECT STRING_AGG(CONCAT(id, ':', v), ',') WITHIN GROUP (ORDER BY id) FROM inserted),
+             ' d=', (SELECT STRING_AGG(CONCAT(id, ':', v), ',') WITHIN GROUP (ORDER BY id) FROM deleted),
+             ' uv=', CASE WHEN UPDATE(v) THEN 1 ELSE 0 END, ' uw=', CASE WHEN UPDATE(w) THEN 1 ELSE 0 END)",
+    );
+    ok(
+        &mut session,
+        "CREATE TRIGGER m_d ON m AFTER DELETE AS INSERT log SELECT CONCAT('d-only rc=', @@ROWCOUNT)",
+    );
+    // INSERT, UPDATE then DELETE; the DELETE action affects no row but fires.
+    ok(
+        &mut session,
+        "MERGE m USING src ON src.id = m.id
+         WHEN NOT MATCHED BY SOURCE AND m.id = 1 THEN UPDATE SET w = 7
+         WHEN NOT MATCHED BY SOURCE THEN DELETE
+         WHEN MATCHED THEN UPDATE SET v = src.v
+         WHEN NOT MATCHED THEN INSERT (id, v) VALUES (src.id, src.v)
+         OUTPUT $action, inserted.id INTO out;
+         INSERT log SELECT CONCAT('merge rc=', @@ROWCOUNT);",
+    );
+    assert_eq!(
+        texts(&session, "SELECT msg FROM dbo.log ORDER BY rowid"),
+        [
+            "rc=4 i=4:40 d= uv=1 uw=1",
+            "rc=4 i=1:1,2:20,3:30 d=1:1,2:2,3:3 uv=1 uw=1",
+            "rc=4 i= d= uv=0 uw=0",
+            "d-only rc=4",
+            "merge rc=4",
+        ]
+    );
+    assert_eq!(number(&session, "SELECT count(*) FROM dbo.out"), 4);
+
+    // OUTPUT without INTO is refused while a matching trigger is enabled,
+    // naming the alias; a disabled trigger does not count.
+    assert_eq!(
+        fails(
+            &mut session,
+            "MERGE dbo.m AS x USING src ON src.id = x.id WHEN MATCHED THEN DELETE OUTPUT deleted.id;"
+        ),
+        (
+            334,
+            1,
+            16,
+            "The target table 'x' of the DML statement cannot have any enabled triggers if the statement contains an OUTPUT clause without INTO clause.".into()
+        )
+    );
+    ok(
+        &mut session,
+        "DISABLE TRIGGER m_iud ON m; DISABLE TRIGGER m_d ON m; DELETE log",
+    );
+    ok(
+        &mut session,
+        "MERGE m USING src ON src.id = m.id WHEN MATCHED AND m.id = 4 THEN DELETE OUTPUT deleted.id;",
+    );
+    assert_eq!(number(&session, "SELECT count(*) FROM dbo.log"), 0);
+    assert_eq!(number(&session, "SELECT count(*) FROM dbo.m"), 3);
+}
+
+#[test]
+fn merge_trigger_errors_and_instead_of() {
+    let (_server, mut session) = memory();
+    ok(
+        &mut session,
+        "CREATE TABLE me(id INT PRIMARY KEY, v INT);
+         CREATE TABLE log(msg VARCHAR(100));
+         CREATE TABLE src(id INT, v INT);
+         INSERT me VALUES (1, 1), (2, 2);
+         INSERT src VALUES (2, 20), (3, -30);",
+    );
+    ok(
+        &mut session,
+        "CREATE TRIGGER me_ins ON me AFTER INSERT AS
+           IF EXISTS (SELECT 1 FROM inserted WHERE v < 0)
+           BEGIN RAISERROR('negative', 16, 1); ROLLBACK TRANSACTION; END",
+    );
+    ok(
+        &mut session,
+        "CREATE TRIGGER me_upd ON me AFTER UPDATE AS INSERT log VALUES ('upd')",
+    );
+    // RAISERROR and ROLLBACK in the INSERT action's trigger undo the whole
+    // MERGE, end the batch, and leave the UPDATE action's trigger unfired.
+    for sql in [
+        "MERGE me USING src ON src.id = me.id WHEN MATCHED THEN UPDATE SET v = src.v WHEN NOT MATCHED THEN INSERT VALUES (src.id, src.v); SELECT 'after'",
+        "BEGIN TRAN; INSERT log VALUES ('in tran'); MERGE me USING src ON src.id = me.id WHEN MATCHED THEN UPDATE SET v = src.v WHEN NOT MATCHED THEN INSERT VALUES (src.id, src.v); SELECT 'after'",
+    ] {
+        let (out, ok) = run(&mut session, sql);
+        assert!(!ok);
+        assert_eq!(error_numbers(&out), [50000, 3609], "{sql}");
+        assert_eq!(session.transactions, 0, "{sql}");
+    }
+    assert_eq!(
+        texts(
+            &session,
+            "SELECT CAST(id AS VARCHAR) || ':' || v FROM dbo.me ORDER BY id"
+        ),
+        ["1:1", "2:2"]
+    );
+    assert_eq!(number(&session, "SELECT count(*) FROM dbo.log"), 0);
+
+    // INSTEAD OF triggers on only some of the actions fail with 5316.
+    ok(&mut session, "DROP TRIGGER me_ins, me_upd");
+    ok(
+        &mut session,
+        "CREATE TRIGGER me_ioi ON me INSTEAD OF INSERT AS INSERT log SELECT CONCAT('ioi ', id, ':', v) FROM inserted",
+    );
+    assert_eq!(
+        fails(
+            &mut session,
+            "MERGE dbo.me AS x USING src ON src.id = x.id WHEN MATCHED THEN DELETE WHEN NOT MATCHED THEN INSERT VALUES (src.id, src.v);"
+        ),
+        (
+            5316,
+            1,
+            16,
+            "The target 'dbo.me' of the MERGE statement has an INSTEAD OF trigger on some, but not all, of the actions specified in the MERGE statement. In a MERGE statement, if any action has an enabled INSTEAD OF trigger on the target, then all actions must have enabled INSTEAD OF triggers.".into()
+        )
+    );
+    // With INSTEAD OF triggers for every action the table is not written.
+    ok(
+        &mut session,
+        "MERGE me USING src ON src.id = me.id WHEN NOT MATCHED THEN INSERT VALUES (src.id, src.v); INSERT log SELECT CONCAT('rc=', @@ROWCOUNT)",
+    );
+    assert_eq!(
+        texts(&session, "SELECT msg FROM dbo.log ORDER BY rowid"),
+        ["ioi 3:-30", "rc=1"]
+    );
+    assert_eq!(number(&session, "SELECT count(*) FROM dbo.me"), 2);
+}
+
+#[test]
 fn errors_and_rollback_in_triggers_end_the_batch() {
     let (_server, mut session) = memory();
     ok(

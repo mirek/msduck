@@ -13,6 +13,7 @@
 //! INSTEAD OF triggers receive images without writing the table: INSERT runs
 //! against an empty copy of the table (same declarations and defaults, no
 //! constraints), UPDATE against a copy of the selected rows.
+use super::super::merge::{Capture, Kind as MergeKind};
 use super::super::{Partial, reenter};
 use super::{
     Frame, IMAGE_PREFIX, Parameter, Session, Table, Trigger, any_triggers, quote, resolve,
@@ -224,9 +225,9 @@ pub(super) fn statement(
     statement: &mut Statement,
     parameters: &mut HashMap<String, Parameter>,
 ) -> Result<Option<Execution>> {
-    if let Statement::Merge(merge) = statement {
-        merge_guard(session, merge)?;
-        return Ok(None);
+    if let Some(merge) = merge_of(statement) {
+        let merge = merge.clone();
+        return merge_statement(session, statement, &merge, parameters);
     }
     let Some((_, inner)) = dml(statement) else {
         return Ok(None);
@@ -286,63 +287,296 @@ pub(super) fn statement(
         return Ok(None);
     }
     if frames.len() >= 32 {
-        return Err(SqlError::new(
-            217,
-            1,
-            "Maximum stored procedure, function, trigger, or view nesting level exceeded (limit 32).",
-        )
-        .into());
+        return Err(nesting_exceeded());
     }
-    run(
-        session,
-        statement.clone(),
-        parameters,
-        &table,
-        &shape,
-        instead,
-        after,
-    )
+    transaction(session, |session| {
+        let images = Images::new(session, &table);
+        let result = fire(
+            session,
+            statement.clone(),
+            parameters,
+            &table,
+            &shape,
+            instead,
+            after,
+            &images,
+        );
+        images.drop(&session.db);
+        result
+    })
     .map(Some)
 }
 
-/// MERGE does not fire triggers yet; refuse it explicitly when an enabled
-/// trigger on its target matches one of its actions.
-fn merge_guard(session: &mut Session, merge: &Merge) -> Result<()> {
-    let TableFactor::Table { name, .. } = &merge.table else {
-        return Ok(());
-    };
-    let Some(parts) = idents(name) else {
-        return Ok(());
-    };
-    if !any_triggers(&session.db) {
-        return Ok(());
+/// The MERGE inside an optional WITH.
+fn merge_of(statement: &Statement) -> Option<&Merge> {
+    match statement {
+        Statement::Merge(merge) => Some(merge),
+        Statement::Query(query) => match query.body.as_ref() {
+            SetExpr::Merge(Statement::Merge(merge)) => Some(merge),
+            _ => None,
+        },
+        _ => None,
     }
-    let Ok(Some(table)) = resolve(session, &parts) else {
-        return Ok(());
-    };
-    let events: Vec<Event> = merge
+}
+
+/// The events of a MERGE's actions, in firing order (INSERT, UPDATE,
+/// DELETE). Each fires once per statement, however many clauses name it.
+fn merge_events(merge: &Merge) -> Vec<Event> {
+    Event::ALL
+        .into_iter()
+        .filter(|event| {
+            merge.clauses.iter().any(|clause| {
+                matches!(
+                    (&clause.action, event),
+                    (MergeAction::Insert(_), Event::Insert)
+                        | (MergeAction::Update(_), Event::Update)
+                        | (MergeAction::Delete { .. }, Event::Delete)
+                )
+            })
+        })
+        .collect()
+}
+
+/// The columns any UPDATE clause of a MERGE assigns, in lower case.
+fn merge_assigned(merge: &Merge) -> Vec<String> {
+    let mut columns: Vec<String> = merge
         .clauses
         .iter()
-        .filter_map(|clause| match clause.action {
-            MergeAction::Insert(_) => Some(Event::Insert),
-            MergeAction::Update(_) => Some(Event::Update),
-            MergeAction::Delete { .. } => Some(Event::Delete),
+        .filter_map(|clause| match &clause.action {
+            MergeAction::Update(update) => match &update.kind {
+                MergeUpdateKind::Set(assignments) => Some(assignments),
+                _ => None,
+            },
             _ => None,
         })
+        .flatten()
+        .filter_map(|assignment| match &assignment.target {
+            AssignmentTarget::ColumnName(name) => name.0.last().and_then(|part| part.as_ident()),
+            AssignmentTarget::Tuple(_) => None,
+        })
+        .map(|ident| ident.value.to_lowercase())
         .collect();
-    if let Some(trigger) = triggers_on(&session.db, table.object_id)?
+    columns.sort();
+    columns.dedup();
+    columns
+}
+
+/// MERGE: fire the target's triggers for each action the statement names,
+/// once per action and in INSERT, UPDATE, DELETE order, even when the
+/// action affects no rows. The MERGE feature materializes each action's
+/// images (see `merge::Capture`). With INSTEAD OF triggers for every
+/// action the target is not written; INSTEAD OF triggers for only some
+/// actions fail with 5316.
+fn merge_statement(
+    session: &mut Session,
+    statement: &Statement,
+    merge: &Merge,
+    parameters: &mut HashMap<String, Parameter>,
+) -> Result<Option<Execution>> {
+    if session.transaction_doomed || !any_triggers(&session.db) {
+        return Ok(None);
+    }
+    let TableFactor::Table { name, alias, .. } = &merge.table else {
+        return Ok(None);
+    };
+    let Some(parts) = idents(name) else {
+        return Ok(None);
+    };
+    let Ok(Some(table)) = resolve(session, &parts) else {
+        return Ok(None);
+    };
+    if table.kind != "U" {
+        return Ok(None);
+    }
+    let events = merge_events(merge);
+    let enabled: Vec<Trigger> = triggers_on(&session.db, table.object_id)?
         .into_iter()
-        .find(|trigger| {
+        .filter(|trigger| {
             !trigger.disabled && trigger.events.iter().any(|event| events.contains(event))
         })
-    {
-        bail!(
-            "MERGE into '{}' is not supported while its trigger '{}' is enabled",
-            parts.join("."),
-            trigger.name
-        );
+        .collect();
+    if enabled.is_empty() {
+        return Ok(None);
     }
-    Ok(())
+    if matches!(
+        merge.output,
+        Some(OutputClause::Output {
+            into_table: None,
+            ..
+        })
+    ) {
+        let written = alias
+            .as_ref()
+            .map_or_else(|| parts.join("."), |alias| alias.name.value.clone());
+        return Err(SqlError::new(
+            334,
+            1,
+            format!(
+                "The target table '{written}' of the DML statement cannot have any enabled triggers if the statement contains an OUTPUT clause without INTO clause."
+            ),
+        )
+        .into());
+    }
+    let frames = &session.ext.triggers.frames;
+    let instead: Vec<Option<Trigger>> = events
+        .iter()
+        .map(|event| {
+            enabled
+                .iter()
+                .find(|trigger| {
+                    trigger.instead_of
+                        && trigger.events.contains(event)
+                        && !frames
+                            .iter()
+                            .any(|frame| frame.trigger == trigger.object_id)
+                })
+                .cloned()
+        })
+        .collect();
+    let covered = instead.iter().flatten().count();
+    if covered > 0 && covered < events.len() {
+        return Err(SqlError::new(
+            5316,
+            1,
+            format!(
+                "The target '{}' of the MERGE statement has an INSTEAD OF trigger on some, but not all, of the actions specified in the MERGE statement. In a MERGE statement, if any action has an enabled INSTEAD OF trigger on the target, then all actions must have enabled INSTEAD OF triggers.",
+                parts.join(".")
+            ),
+        )
+        .into());
+    }
+    let current = frames.last().map(|frame| frame.trigger);
+    let plan: Vec<(Event, Vec<Trigger>)> = if covered > 0 {
+        events
+            .into_iter()
+            .zip(instead)
+            .map(|(event, trigger)| (event, trigger.into_iter().collect()))
+            .collect()
+    } else {
+        events
+            .into_iter()
+            .map(|event| {
+                let after = enabled
+                    .iter()
+                    .filter(|trigger| {
+                        !trigger.instead_of
+                            && trigger.events.contains(&event)
+                            && Some(trigger.object_id) != current
+                    })
+                    .cloned()
+                    .collect();
+                (event, after)
+            })
+            .filter(|(_, after): &(Event, Vec<Trigger>)| !after.is_empty())
+            .collect()
+    };
+    if plan.is_empty() {
+        return Ok(None);
+    }
+    if frames.len() >= 32 {
+        return Err(nesting_exceeded());
+    }
+    let assigned = merge_assigned(merge);
+    transaction(session, |session| {
+        let images: Vec<Images> = plan.iter().map(|_| Images::new(session, &table)).collect();
+        let result = fire_merge(
+            session,
+            statement.clone(),
+            parameters,
+            &table,
+            &plan,
+            covered > 0,
+            &assigned,
+            &images,
+        );
+        for images in &images {
+            images.drop(&session.db);
+        }
+        result
+    })
+    .map(Some)
+}
+
+/// Run a MERGE that leaves the images of `plan`'s actions, then the
+/// triggers of each action. Every body sees the statement's row count.
+#[allow(clippy::too_many_arguments)]
+fn fire_merge(
+    session: &mut Session,
+    statement: Statement,
+    parameters: &mut HashMap<String, Parameter>,
+    table: &Table,
+    plan: &[(Event, Vec<Trigger>)],
+    instead: bool,
+    assigned: &[String],
+    images: &[Images],
+) -> std::result::Result<Execution, Failure> {
+    let kind = |event: Event| match event {
+        Event::Insert => MergeKind::Insert,
+        Event::Update => MergeKind::Update,
+        Event::Delete => MergeKind::Delete,
+    };
+    session.ext.merge.capture = Some(Capture {
+        instead,
+        images: plan
+            .iter()
+            .zip(images)
+            .map(|((event, _), images)| {
+                (
+                    kind(*event),
+                    images.inserted.clone(),
+                    images.deleted.clone(),
+                )
+            })
+            .collect(),
+    });
+    let execution = reenter(session, "triggers", |session| {
+        session.execute(statement, parameters)
+    });
+    // The MERGE feature takes the request; drop it if the statement failed
+    // before reaching it.
+    session.ext.merge.capture = None;
+    let mut execution = execution?;
+    let count = execution.count.unwrap_or(0);
+    let native = table.native();
+    let columns = columns(&session.db, table.object_id)?;
+    for ((event, triggers), images) in plan.iter().zip(images) {
+        let updated = match event {
+            Event::Insert => None,
+            Event::Delete => Some(Vec::new()),
+            Event::Update => Some(assigned.to_vec()),
+        };
+        let columns_updated = columns_updated(&columns, *event, updated.as_deref());
+        for trigger in triggers {
+            let frame = Frame {
+                trigger: trigger.object_id,
+                table: native.clone(),
+                inserted: images.inserted.clone(),
+                deleted: images.deleted.clone(),
+                updated: updated.clone(),
+                columns_updated: columns_updated.clone(),
+            };
+            match body(session, trigger, frame, count) {
+                Ok(tokens) => execution.tokens.extend(tokens),
+                Err((tokens, error)) => {
+                    execution.tokens.extend(tokens);
+                    return Err(Failure::Trigger {
+                        tokens: execution.tokens,
+                        error,
+                    });
+                }
+            }
+        }
+    }
+    Ok(execution)
+}
+
+fn nesting_exceeded() -> anyhow::Error {
+    SqlError::new(
+        217,
+        1,
+        "Maximum stored procedure, function, trigger, or view nesting level exceeded (limit 32).",
+    )
+    .into()
 }
 
 /// The tables of one firing, dropped when it ends.
@@ -397,14 +631,11 @@ fn largest_rowid(db: &duckdb::Connection, table: &str) -> duckdb::Result<i64> {
     )
 }
 
-fn run(
+/// Run a firing in the caller's transaction, or in one opened for the
+/// statement, and turn its failure into a statement or batch error.
+fn transaction(
     session: &mut Session,
-    statement: Statement,
-    parameters: &mut HashMap<String, Parameter>,
-    table: &Table,
-    shape: &Shape,
-    instead: Option<Trigger>,
-    after: Vec<Trigger>,
+    work: impl FnOnce(&mut Session) -> std::result::Result<Execution, Failure>,
 ) -> Result<Execution> {
     let outermost = session.ext.triggers.frames.is_empty();
     let autocommit = session.transactions == 0;
@@ -415,12 +646,7 @@ fn run(
     if outermost {
         session.ext.triggers.autocommit = autocommit;
     }
-    let images = Images::new(session, table);
-    let result = fire(
-        session, statement, parameters, table, shape, instead, after, &images,
-    );
-    images.drop(&session.db);
-    match result {
+    match work(session) {
         Ok(execution) => {
             if autocommit && session.transactions == 1 {
                 if let Err(error) = session.db.execute_batch("COMMIT") {

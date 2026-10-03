@@ -129,6 +129,21 @@ extension hooks in docs/extension-hooks.md.
      `deleted` or the source fails with 4104; that includes the target
      alias.
 
+## Triggers
+
+A MERGE fires the target's AFTER triggers once per action type it names, in
+INSERT, UPDATE, DELETE order, even for actions that affect no rows. INSTEAD
+OF triggers replace the write when every action has one, and fail with 5316
+otherwise. The behavior is described in docs/gaps-triggers.md and captured
+in `reference/gaps-triggers.json`.
+
+The triggers feature runs first. Before the MERGE writes anything, it asks
+this module (through `merge::Capture`) to store each requested action's
+`inserted` and `deleted` rows as tables. `deleted` holds the stored rows
+selected by row id, and `inserted` holds the new images. With INSTEAD OF
+triggers the module skips the constraint checks and the writes. It returns
+the number of selected rows instead.
+
 ## Evidence
 
 - `reference/gaps-merge.json` holds 42 observations, captured by
@@ -186,7 +201,8 @@ extension hooks in docs/extension-hooks.md.
     caller's earlier work. It marks the transaction uncommittable
     (`XACT_STATE() = -1`), and the transaction is rolled back at the end of
     the batch (3998) unless the batch rolls it back first.
-- **Triggers.** MERGE writes do not fire triggers.
+- **Triggers.** Triggers fire per action (see [Triggers](#triggers)); the
+  general trigger limits in docs/gaps-triggers.md apply.
 - **Identity functions.** MERGE inserts do not update `SCOPE_IDENTITY()`
   or `@@IDENTITY`.
 - **IDENTITY_INSERT.** The session setting is not consulted, so explicit

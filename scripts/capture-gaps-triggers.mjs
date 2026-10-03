@@ -2,7 +2,8 @@
 // SQL Server evidence for DML triggers (issue #721): result rows, ERROR and
 // INFO tokens and raw DONE tokens for trigger definitions, firing with
 // multirow inserted/deleted images, UPDATE()/COLUMNS_UPDATED(), nesting,
-// INSTEAD OF, DISABLE/ENABLE and error/ROLLBACK propagation.
+// INSTEAD OF, DISABLE/ENABLE and error/ROLLBACK propagation, and MERGE
+// firing (issue #852).
 //
 // Every case runs in its own database of one fresh pinned container, batch by
 // batch through tedious's SQL batch path. tests/compat/triggers.test.mjs
@@ -253,6 +254,155 @@ IF @@TRANCOUNT > 0 ROLLBACK`,
   SELECT 'trigger result' AS r;`,
       "INSERT t9 VALUES (5,5) SELECT 'next5' AS x",
       "SELECT id FROM t9 ORDER BY id; SELECT msg FROM log9 WHERE msg LIKE 'after rollback%'",
+    ],
+  },
+  {
+    name: 'MERGE fires AFTER triggers once per action, in INSERT, UPDATE, DELETE order',
+    batches: [
+      `CREATE TABLE m(id INT IDENTITY(10, 1) PRIMARY KEY, k INT UNIQUE, v INT, w INT DEFAULT 42, c AS v * 2)
+CREATE TABLE mlog(seq INT IDENTITY, msg VARCHAR(400), cu VARBINARY(10))
+CREATE TABLE ms(k INT, v INT)
+CREATE TABLE mout(act NVARCHAR(10), iid INT, did INT)
+INSERT m(k, v, w) VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3)
+INSERT ms VALUES (2, 20), (3, 30), (4, 40)`,
+      `CREATE TRIGGER m_iud ON m AFTER INSERT, UPDATE, DELETE AS
+  DECLARE @rc INT = @@ROWCOUNT;
+  INSERT mlog(msg, cu) SELECT CONCAT('iud rc=', @rc, ' tc=', @@TRANCOUNT,
+    ' i=', (SELECT STRING_AGG(CONCAT(id, ':', k, ':', v, ':', w, ':', c), ',') WITHIN GROUP (ORDER BY id) FROM inserted),
+    ' d=', (SELECT STRING_AGG(CONCAT(id, ':', k, ':', v, ':', w, ':', c), ',') WITHIN GROUP (ORDER BY id) FROM deleted),
+    ' uv=', CASE WHEN UPDATE(v) THEN 1 ELSE 0 END, ' uw=', CASE WHEN UPDATE(w) THEN 1 ELSE 0 END,
+    ' nest=', TRIGGER_NESTLEVEL()), COLUMNS_UPDATED();
+  SELECT 'trigger set' AS ts, (SELECT COUNT(*) FROM inserted) AS i, (SELECT COUNT(*) FROM deleted) AS d`,
+      "CREATE TRIGGER m_i ON m AFTER INSERT AS INSERT mlog(msg) SELECT 'i-only rc=' + CAST(@@ROWCOUNT AS VARCHAR)",
+      "CREATE TRIGGER m_d ON m AFTER DELETE AS INSERT mlog(msg) SELECT 'd-only rc=' + CAST(@@ROWCOUNT AS VARCHAR)",
+      `MERGE m USING ms ON ms.k = m.k
+WHEN NOT MATCHED BY SOURCE AND m.k = 1 THEN UPDATE SET w = 7
+WHEN NOT MATCHED BY SOURCE THEN DELETE
+WHEN MATCHED THEN UPDATE SET v = ms.v
+WHEN NOT MATCHED THEN INSERT (k, v) VALUES (ms.k, ms.v)
+OUTPUT $action, inserted.id, deleted.id INTO mout;
+SELECT @@ROWCOUNT AS rc`,
+      'SELECT seq, msg, cu FROM mlog ORDER BY seq; SELECT id, k, v, w, c FROM m ORDER BY id; SELECT act, iid, did FROM mout ORDER BY act, iid',
+      'DELETE mlog',
+      `MERGE m USING (SELECT 99 AS k) AS s ON s.k = m.k
+WHEN MATCHED AND 1 = 0 THEN DELETE
+WHEN MATCHED THEN UPDATE SET w = 5
+WHEN NOT MATCHED BY SOURCE AND m.k > 100 THEN DELETE;
+SELECT @@ROWCOUNT AS rc`,
+      'MERGE m USING ms ON ms.k = m.k WHEN MATCHED THEN UPDATE SET k = m.k + 100;',
+      'WITH src AS (SELECT k, v FROM ms WHERE k = 4) MERGE dbo.m AS x USING src ON src.k = x.k WHEN NOT MATCHED BY SOURCE AND x.k = 1 THEN DELETE; SELECT @@ROWCOUNT AS rc',
+      'SELECT seq, msg, cu FROM mlog ORDER BY seq; SELECT id, k, v, w, c FROM m ORDER BY id',
+      'MERGE m USING ms ON ms.k = m.k WHEN MATCHED THEN UPDATE SET v = ms.v + 1 OUTPUT $action, inserted.id;',
+      'MERGE dbo.m AS x USING ms ON ms.k = x.k WHEN MATCHED THEN DELETE OUTPUT $action, deleted.id;',
+      'DROP TRIGGER m_iud, m_i',
+      'MERGE m USING ms ON ms.k = m.k WHEN MATCHED THEN UPDATE SET v = 0 OUTPUT $action, inserted.id;',
+      'DISABLE TRIGGER m_d ON m',
+      'DELETE mlog',
+      'MERGE m USING ms ON ms.k = m.k WHEN NOT MATCHED BY SOURCE THEN DELETE OUTPUT $action, deleted.k; SELECT COUNT(*) AS n FROM mlog',
+    ],
+  },
+  {
+    name: 'MERGE trigger errors, ROLLBACK and COMMIT',
+    batches: [
+      'CREATE TABLE me(id INT PRIMARY KEY, v INT); CREATE TABLE melog(msg VARCHAR(300)); CREATE TABLE mes(id INT, v INT); INSERT me VALUES (1, 1), (2, 2); INSERT mes VALUES (2, 20), (3, -30)',
+      `CREATE TRIGGER me_ins ON me AFTER INSERT AS
+  IF EXISTS (SELECT 1 FROM inserted WHERE v < 0)
+  BEGIN
+    RAISERROR('negative', 16, 1);
+    ROLLBACK TRANSACTION;
+    INSERT melog SELECT 'after rollback rows=' + CAST(COUNT(*) AS VARCHAR) FROM inserted;
+    RETURN
+  END
+  INSERT melog SELECT 'ok tc=' + CAST(@@TRANCOUNT AS VARCHAR)`,
+      "CREATE TRIGGER me_upd ON me AFTER UPDATE AS INSERT melog SELECT 'upd rows=' + CAST(COUNT(*) AS VARCHAR) FROM inserted",
+      "MERGE me USING mes ON mes.id = me.id WHEN MATCHED THEN UPDATE SET v = mes.v WHEN NOT MATCHED THEN INSERT VALUES (mes.id, mes.v); SELECT 'after' AS x",
+      'SELECT @@TRANCOUNT AS tc; SELECT id, v FROM me ORDER BY id; SELECT msg FROM melog ORDER BY msg',
+      "BEGIN TRAN; INSERT melog VALUES ('in tran'); MERGE me USING mes ON mes.id = me.id WHEN MATCHED THEN UPDATE SET v = mes.v WHEN NOT MATCHED THEN INSERT VALUES (mes.id, mes.v); SELECT 'after2' AS x",
+      'SELECT @@TRANCOUNT AS tc; SELECT id, v FROM me ORDER BY id; SELECT msg FROM melog ORDER BY msg',
+      'DROP TRIGGER me_ins',
+      "CREATE TRIGGER me_throw ON me AFTER DELETE AS INSERT melog VALUES ('before throw'); THROW 50001, 'thrown', 1;",
+      'INSERT me VALUES (5, 5)',
+      "MERGE me USING mes ON mes.id = me.id WHEN NOT MATCHED BY SOURCE THEN DELETE; SELECT 'after3' AS x",
+      'SELECT @@TRANCOUNT AS tc; SELECT id, v FROM me ORDER BY id; SELECT msg FROM melog ORDER BY msg',
+      `BEGIN TRAN
+BEGIN TRY
+  MERGE me USING mes ON mes.id = me.id WHEN NOT MATCHED BY SOURCE THEN DELETE;
+END TRY
+BEGIN CATCH
+  SELECT ERROR_NUMBER() AS en, ERROR_MESSAGE() AS em, @@TRANCOUNT AS tc, XACT_STATE() AS xs
+END CATCH
+SELECT @@TRANCOUNT AS tc2
+IF @@TRANCOUNT > 0 ROLLBACK`,
+      `BEGIN TRY
+  MERGE me USING mes ON mes.id = me.id WHEN NOT MATCHED BY SOURCE THEN DELETE;
+END TRY
+BEGIN CATCH
+  SELECT ERROR_NUMBER() AS en, @@TRANCOUNT AS tc, XACT_STATE() AS xs
+END CATCH`,
+      'DROP TRIGGER me_throw',
+      "CREATE TRIGGER me_commit ON me AFTER UPDATE AS COMMIT; INSERT melog VALUES ('after commit')",
+      "MERGE me USING mes ON mes.id = me.id WHEN MATCHED THEN UPDATE SET v = 99; SELECT 'after4' AS x",
+      'SELECT @@TRANCOUNT AS tc; SELECT id, v FROM me ORDER BY id; SELECT msg FROM melog ORDER BY msg',
+    ],
+  },
+  {
+    name: 'MERGE with INSTEAD OF triggers',
+    batches: [
+      'CREATE TABLE mi(id INT IDENTITY(10, 1) PRIMARY KEY, k INT, v INT DEFAULT 7); CREATE TABLE milog(seq INT IDENTITY, msg VARCHAR(300)); CREATE TABLE mis(k INT, v INT); CREATE TABLE miout(act NVARCHAR(10), id INT); INSERT mi(k, v) VALUES (1, 1), (2, 2); INSERT mis VALUES (2, 20), (3, 30)',
+      `CREATE TRIGGER mi_ioi ON mi INSTEAD OF INSERT AS
+  INSERT milog(msg) SELECT CONCAT('ioi rc=', @@ROWCOUNT, ' i=', (SELECT STRING_AGG(CONCAT(id, ':', k, ':', v), ',') WITHIN GROUP (ORDER BY k) FROM inserted), ' d=', (SELECT COUNT(*) FROM deleted))`,
+      'MERGE mi USING mis ON mis.k = mi.k WHEN MATCHED THEN UPDATE SET v = mis.v WHEN NOT MATCHED THEN INSERT (k) VALUES (mis.k); SELECT @@ROWCOUNT AS rc',
+      'MERGE dbo.mi AS x USING mis ON mis.k = x.k WHEN MATCHED THEN DELETE WHEN NOT MATCHED THEN INSERT (k) VALUES (mis.k);',
+      'MERGE mi USING mis ON mis.k = mi.k WHEN NOT MATCHED THEN INSERT (k) VALUES (mis.k); SELECT @@ROWCOUNT AS rc',
+      'MERGE mi USING mis ON mis.k = mi.k WHEN MATCHED THEN UPDATE SET v = mis.v; SELECT @@ROWCOUNT AS rc',
+      'SELECT seq, msg FROM milog ORDER BY seq; SELECT id, k, v FROM mi ORDER BY id',
+      `CREATE TRIGGER mi_iou ON mi INSTEAD OF UPDATE, DELETE AS
+  INSERT milog(msg) SELECT CONCAT('iou rc=', @@ROWCOUNT,
+    ' i=', (SELECT STRING_AGG(CONCAT(id, ':', k, ':', v), ',') WITHIN GROUP (ORDER BY id) FROM inserted),
+    ' d=', (SELECT STRING_AGG(CONCAT(id, ':', k, ':', v), ',') WITHIN GROUP (ORDER BY id) FROM deleted),
+    ' uv=', CASE WHEN UPDATE(v) THEN 1 ELSE 0 END)`,
+      "CREATE TRIGGER mi_after ON mi AFTER INSERT, UPDATE, DELETE AS INSERT milog(msg) SELECT 'after i=' + CAST((SELECT COUNT(*) FROM inserted) AS VARCHAR)",
+      'DELETE milog',
+      'MERGE mi USING mis ON mis.k = mi.k WHEN MATCHED THEN UPDATE SET v = mis.v + 1 WHEN NOT MATCHED THEN INSERT (k) VALUES (mis.k) WHEN NOT MATCHED BY SOURCE THEN DELETE; SELECT @@ROWCOUNT AS rc',
+      'MERGE mi USING (VALUES (2, 9)) AS s(k, v) ON s.k = mi.k WHEN MATCHED THEN UPDATE SET v = s.v OUTPUT $action, inserted.v INTO miout; SELECT @@ROWCOUNT AS rc',
+      'SELECT seq, msg FROM milog ORDER BY seq; SELECT id, k, v FROM mi ORDER BY id; SELECT act, id FROM miout',
+      'DISABLE TRIGGER mi_ioi ON mi',
+      'MERGE mi USING mis ON mis.k = mi.k WHEN MATCHED THEN UPDATE SET v = mis.v WHEN NOT MATCHED THEN INSERT (k) VALUES (mis.k); SELECT @@ROWCOUNT AS rc',
+      'MERGE mi USING mis ON mis.k = mi.k WHEN NOT MATCHED THEN INSERT (k) VALUES (mis.k); SELECT @@ROWCOUNT AS rc',
+      "SELECT seq, msg FROM milog WHERE seq > 3 ORDER BY seq; SELECT id, k, v FROM mi ORDER BY id",
+    ],
+  },
+  {
+    name: 'MERGE inside triggers: nesting and recursion',
+    batches: [
+      'CREATE TABLE na(id INT PRIMARY KEY, v INT); CREATE TABLE nb(id INT PRIMARY KEY, v INT); CREATE TABLE nlog(seq INT IDENTITY, msg VARCHAR(300)); CREATE TABLE ns(id INT, v INT); INSERT na VALUES (1, 1), (2, 2); INSERT ns VALUES (2, 20), (3, 30)',
+      `CREATE TRIGGER na_t ON na AFTER INSERT, UPDATE AS
+  INSERT nlog(msg) SELECT 'na nest=' + CAST(TRIGGER_NESTLEVEL() AS VARCHAR) + ' i=' + CAST(COUNT(*) AS VARCHAR) FROM inserted;
+  MERGE nb USING inserted i ON i.id = nb.id WHEN MATCHED THEN UPDATE SET v = i.v WHEN NOT MATCHED THEN INSERT VALUES (i.id, i.v);
+  MERGE na USING inserted i ON i.id = na.id WHEN MATCHED THEN UPDATE SET v = na.v + 1000;`,
+      "CREATE TRIGGER nb_t ON nb AFTER INSERT, UPDATE AS INSERT nlog(msg) SELECT 'nb nest=' + CAST(TRIGGER_NESTLEVEL() AS VARCHAR) + ' i=' + CAST(COUNT(*) AS VARCHAR) + ' rc=' + CAST(@@ROWCOUNT AS VARCHAR) FROM inserted",
+      'MERGE na USING ns ON ns.id = na.id WHEN MATCHED THEN UPDATE SET v = ns.v WHEN NOT MATCHED THEN INSERT VALUES (ns.id, ns.v); SELECT @@ROWCOUNT AS rc',
+      'SELECT seq, msg FROM nlog ORDER BY seq; SELECT id, v FROM na ORDER BY id; SELECT id, v FROM nb ORDER BY id',
+    ],
+  },
+  {
+    name: 'MERGE report repro: a trivial AFTER INSERT trigger and an audit trigger',
+    batches: [
+      'CREATE TABLE items(id int PRIMARY KEY)',
+      'CREATE TRIGGER foo_trigger ON items AFTER INSERT AS BEGIN SET NOCOUNT ON; END',
+      'MERGE items AS target USING(VALUES(1)) AS source(id) ON target.id=source.id WHEN NOT MATCHED THEN INSERT(id) VALUES(source.id); SELECT @@ROWCOUNT AS rc',
+      'SELECT id FROM items ORDER BY id',
+      'CREATE TABLE stock(id INT PRIMARY KEY, qty INT); CREATE TABLE audit(seq INT IDENTITY, act CHAR(1), id INT, old_qty INT, new_qty INT)',
+      `CREATE TRIGGER stock_audit ON stock AFTER INSERT, UPDATE AS
+BEGIN
+  SET NOCOUNT ON;
+  INSERT audit(act, id, old_qty, new_qty)
+  SELECT CASE WHEN d.id IS NULL THEN 'I' ELSE 'U' END, i.id, d.qty, i.qty
+  FROM inserted i LEFT JOIN deleted d ON d.id = i.id ORDER BY i.id;
+END`,
+      'INSERT stock VALUES (1, 10)',
+      'MERGE stock AS target USING (VALUES (1, 15), (2, 20)) AS source(id, qty) ON target.id = source.id WHEN MATCHED THEN UPDATE SET qty = source.qty WHEN NOT MATCHED THEN INSERT (id, qty) VALUES (source.id, source.qty); SELECT @@ROWCOUNT AS rc',
+      'SELECT seq, act, id, old_qty, new_qty FROM audit ORDER BY seq; SELECT id, qty FROM stock ORDER BY id',
     ],
   },
 ]

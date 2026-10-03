@@ -20,7 +20,10 @@ Expected behavior comes from `reference/gaps-triggers.json`, captured from the
 pinned SQL Server 2025 image with `scripts/capture-gaps-triggers.mjs`.
 `tests/compat/triggers.test.mjs` replays every captured batch against msduck
 through tedious and compares result rows and ERROR tokens (number, state,
-class and message); the three known differences are listed below.
+class and message); the known differences are listed below. The last five
+cases cover MERGE (issue #852); the very last is the workload report's
+repro, a MERGE into a table with a trivial AFTER INSERT trigger plus an
+INSERT/UPDATE audit trigger.
 `tests/gaps_triggers.rs` covers the same behavior through the engine,
 including concurrent sessions and a restart.
 
@@ -112,6 +115,34 @@ statement would have written:
 
 The statement's row count (DONE and `@@ROWCOUNT`) is the number of those rows.
 
+### MERGE
+
+A MERGE fires its target's triggers once for each action type its WHEN
+clauses name, after all of its writes, in the order INSERT, UPDATE, DELETE.
+An action fires even when it affects no rows, and an action named by several
+clauses (for example two DELETE clauses) fires once. Triggers on events the
+statement does not name do not fire.
+
+- Each firing sees only its action's rows: new rows for INSERT, old rows for
+  DELETE, both for UPDATE. A trigger defined for several events runs once per
+  action.
+- `@@ROWCOUNT` in every body is the whole MERGE's row count.
+- `UPDATE(column)` and `COLUMNS_UPDATED()` report every column for the
+  INSERT action, the columns any UPDATE clause assigns for the UPDATE action,
+  and no column for DELETE.
+- An error, `ROLLBACK` or `COMMIT` in a trigger body ends the batch as for
+  the other statements, and the remaining actions' triggers do not fire.
+  The MERGE's `@@ROWCOUNT` and OUTPUT INTO rows are unaffected by the bodies.
+- `OUTPUT` without `INTO` fails with 334 when an enabled trigger matches one
+  of the statement's actions. The message names the target alias when there
+  is one.
+- INSTEAD OF: when every action has an enabled INSTEAD OF trigger, the MERGE
+  does not change the table. Each action's trigger receives the rows it would
+  have written (inserted rows with defaults and IDENTITY 0), the statement's
+  row count is the number of those rows, and OUTPUT INTO still writes them.
+  AFTER triggers do not fire. When only some actions have one, the MERGE
+  fails with 5316 before anything runs. Disabled triggers do not count.
+
 ### Errors and ROLLBACK
 
 A statement on a table with triggers runs in a transaction: the caller's, or
@@ -152,6 +183,10 @@ one opened for the statement in autocommit mode.
   `#<object id>` keys for user tables and rewrites an image name's key to
   `#<table id>`, so images bind with the triggering table's declarations.
   The macro still evaluates its argument once and costs the same.
+- MERGE images come from the MERGE feature itself (`merge::Capture`): it
+  materializes each requested action's `deleted` rows (by row id) and
+  `inserted` new images, including computed columns, before writing. The
+  triggers then run after the whole statement, one action at a time.
 - INSTEAD OF INSERT runs the statement against an empty copy of the table
   (same declarations and defaults, no constraints, identity default 0);
   INSTEAD OF UPDATE runs it against a copy of the selected rows.
@@ -172,8 +207,6 @@ one opened for the statement in autocommit mode.
   SQL Server keeps reporting 2. BEGIN TRANSACTION left open by a trigger
   keeps the transaction open, but the count after nested user transactions
   can differ from SQL Server's.
-- MERGE does not fire triggers yet; a MERGE whose actions match an enabled
-  trigger on its target fails explicitly.
 - Triggers on views (INSTEAD OF), DDL triggers (`ON DATABASE`, `ON ALL
   SERVER`), logon triggers, `sp_settriggerorder`, the RECURSIVE_TRIGGERS and
   nested-triggers options, `WITH ENCRYPTION`/`EXECUTE AS` semantics and
