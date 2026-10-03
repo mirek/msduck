@@ -221,6 +221,13 @@ that uses them sees the session that queries or inserts.
 
 **Not asserted by the capture:**
 
+- **Converting compound sql_variant results.** An explicit conversion is
+  applied to `SESSION_CONTEXT` itself, or to `SQL_VARIANT_PROPERTY` of it. A
+  conversion of a compound sql_variant result, such as
+  `CONVERT(nvarchar(10), CASE WHEN ... THEN SESSION_CONTEXT(N'k') END)` or
+  `CONVERT(int, ISNULL(SESSION_CONTEXT(N'k'), 0))`, is refused with 40515;
+  SQL Server accepts it. Convert each `SESSION_CONTEXT` operand instead.
+
 - **Comparing SESSION_CONTEXT itself.** A DEFAULT that compares the
   `sql_variant`, such as `CASE WHEN SESSION_CONTEXT(N'foo') = 1 THEN ...`, is
   refused with 40515; convert it or test `SQL_VARIANT_PROPERTY` first.

@@ -366,6 +366,7 @@ fn select_items(set: &mut SetExpr, each: &mut dyn FnMut(&mut Expr) -> Result<()>
             for item in &mut select.projection {
                 // `SELECT @v = ...` assigns rather than returns.
                 if let SelectItem::ExprWithAlias { alias, .. } = item
+                    && alias.quote_style.is_none()
                     && alias.value.starts_with('@')
                 {
                     continue;
