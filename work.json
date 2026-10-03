@@ -9869,7 +9869,7 @@
       "id": "remote-cache-symlinks-recovery-v1",
       "title": "Recover remote cache symlink exclusion and receiver migration",
       "issue": 822,
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner standing unresponsive-worker takeover and continuing compatibility/build-efficiency goal; recover approved322/ownerPR323 exact052a220 checkpoint plus verified owner-enabled Codex P2 on stale receiver symlinks. No external content.",
       "scope": [
         "scripts/remote-build.mjs",
