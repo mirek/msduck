@@ -10505,6 +10505,22 @@
       ],
       "issue": 859,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pkekg"
+    },
+    {
+      "id": "unresponsive-recovery-docs-v1",
+      "title": "Align stale-worker recovery guide with immediate successor authorization",
+      "state": "ready",
+      "authorization": "Direct owner instruction: take over unresponsive workers without halting the factory. Canonical skill/parallel guide already authorize evidence-based recovery without another approval or mandatory six-hour wait; docs/agent-work.md still has stale thresholds and unconditional live-wait wording. First-party current source only; no third-party content.",
+      "scope": [
+        "docs/agent-work.md"
+      ],
+      "dependencies": [],
+      "issue": 860,
+      "acceptance": [
+        "Exact scope: docs/agent-work.md. Align its stale evidence and recovery procedure with the canonical skill: contact/check available owner-approved worker/job status, distinguish an actively progressing worker from unresponsive/stopped work, record evidence, revoke the old task and publish/claim a bounded fresh successor without further approval or mandatory delay. Preserve old branches/receipts/permanent claims/evidence, stop only attributable jobs, honor locks and never relax trust or merge gates. Pending checks or age alone are not proof. Do not take over the owner's separately held engine.rs work.",
+        "Fresh claim in the completed existing root worktree, focused documentation PR. Source/link review, exact required CI and independent/Codex review; no cold DuckDB tests for this prose-only change. Worker owns merge and registry/project completion. No new agent, worktree or native cache."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pkfqw"
     }
   ]
 }
