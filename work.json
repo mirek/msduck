@@ -9909,7 +9909,7 @@
       "id": "waitfor-time-test-watchdog-v1",
       "title": "Bound real-clock WAITFOR TIME verification without changing server semantics",
       "issue": 825,
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner goal and fast verification cycle; fix first-party observed next-day test hang in tests/gaps_transactions.rs. Keep engine.rs free and actual clock/runtime behavior unchanged.",
       "scope": [
         "tests/gaps_transactions.rs",
