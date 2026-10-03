@@ -602,8 +602,8 @@ fn static_type_name(expr: &Expr) -> Option<String> {
         Expr::UnaryOp {
             op: UnaryOperator::Minus | UnaryOperator::Plus,
             expr,
-        } if matches!(expr.as_ref(), Expr::Value(value) if matches!(value.value, Value::Number(..))) => {
-            static_type_name(expr)
+        } if matches!(unnested(expr), Expr::Value(value) if matches!(value.value, Value::Number(..))) => {
+            static_type_name(unnested(expr))
         }
         _ => None,
     }
@@ -952,6 +952,10 @@ mod tests {
             ),
             (
                 "CREATE TABLE t (v int DEFAULT (ISNULL(-1, SESSION_CONTEXT(N'k'))))",
+                "int",
+            ),
+            (
+                "CREATE TABLE t (v int DEFAULT (ISNULL(-((1)), SESSION_CONTEXT(N'k'))))",
                 "int",
             ),
             (
