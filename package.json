@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "cargo build --workspace --all-targets && node --test tests/tedious.test.mjs tests/compatibility.test.mjs tests/tls.test.mjs tests/datepart_numeric.test.mjs tests/reference-compare.test.mjs",
+    "test": "cargo build --workspace --all-targets && node --test tests/tedious.test.mjs tests/compatibility.test.mjs tests/tls.test.mjs tests/datepart_numeric.test.mjs tests/reference-compare.test.mjs tests/reference-prepared.test.mjs",
     "audit:local": "cargo build --workspace --all-targets && node scripts/compatibility.mjs",
     "audit:compare": "cargo build --workspace --all-targets && node scripts/compatibility.mjs --compare",
     "audit:docker": "cargo build --workspace --all-targets && node scripts/docker-compare.mjs",
