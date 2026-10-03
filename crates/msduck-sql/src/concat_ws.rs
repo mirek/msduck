@@ -337,7 +337,9 @@ pub fn evaluate(
                     *replacement
                 } else {
                     let mut replacement = unit;
-                    for (candidate, mapped) in source.iter().zip(replacements) {
+                    for (candidate, mapped) in characters(source, plan.supplementary)
+                        .zip(characters(replacements, plan.supplementary))
+                    {
                         if comparisons == MAX_MATCH_COMPARISONS {
                             return Err(Error::ComparisonLimit);
                         }
@@ -373,10 +375,12 @@ pub fn evaluate_with_keys<K: Ord>(
         values,
         &|plan, input, source, replacements, output| {
             let mut lookup = std::collections::BTreeMap::new();
-            for (candidate, mapped) in source.iter().zip(replacements) {
+            for (candidate, mapped) in characters(source, plan.supplementary)
+                .zip(characters(replacements, plan.supplementary))
+            {
                 lookup
                     .entry(key(candidate).ok_or(Error::UnknownComparison)?)
-                    .or_insert(*mapped);
+                    .or_insert(mapped);
             }
             for unit in characters(input, plan.supplementary) {
                 let resolved = lookup
@@ -393,7 +397,7 @@ pub fn evaluate_with_keys<K: Ord>(
 fn evaluate_with_translator(
     plan: &Plan,
     values: &[Option<Vec<u16>>],
-    translate: &impl Fn(&Plan, &[u16], &[&[u16]], &[&[u16]], &mut Vec<u16>) -> Result<(), Error>,
+    translate: &impl Fn(&Plan, &[u16], &[u16], &[u16], &mut Vec<u16>) -> Result<(), Error>,
 ) -> Result<Option<Vec<u16>>, Error> {
     if values.len() != plan.arguments.len() {
         return Err(Error::InvalidPayload);
@@ -466,15 +470,17 @@ fn evaluate_with_translator(
             let [Some(input), Some(from), Some(to)] = values else {
                 return Ok(None);
             };
-            let source: Vec<_> = characters(from, plan.supplementary).collect();
-            let replacements: Vec<_> = characters(to, plan.supplementary).collect();
-            if source.len() != replacements.len() {
+            // Count without allocating per-character slice vectors, including
+            // MAX mappings. Stream the same borrowed payloads during evaluation.
+            if characters(from, plan.supplementary).count()
+                != characters(to, plan.supplementary).count()
+            {
                 return Err(sql(9828, if unicode(plan.declaration) { 3 } else { 1 }, "The second and third arguments of the TRANSLATE built-in function must contain an equal number of characters.".into()));
             }
-            if source.is_empty() {
+            if from.is_empty() {
                 append(&mut output, input, plan.declaration.length());
             } else {
-                translate(plan, input, &source, &replacements, &mut output)?;
+                translate(plan, input, from, to, &mut output)?;
             }
         }
     }

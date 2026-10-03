@@ -1762,3 +1762,39 @@ fn indexed_keys_keep_first_mapping_no_chaining_and_empty_mapping_semantics() {
     assert_eq!(error.number, 9828);
     assert_eq!(error.state, 3);
 }
+
+#[test]
+fn max_mappings_stream_duplicates_and_preserve_mismatch() {
+    let p = rules::plan(
+        Function::Translate,
+        &vec![arg(Family::Nvarchar, Length::Max); 3],
+        DEFAULT,
+        &catalog(),
+    )
+    .unwrap();
+    let values = [
+        text("a"),
+        Some(vec![97; 1_000_000]),
+        Some(vec![98; 1_000_000]),
+    ];
+    let comparisons = std::cell::Cell::new(0);
+    assert_eq!(
+        rules::evaluate(&p, &values, &|a, b| {
+            comparisons.set(comparisons.get() + 1);
+            Some(a == b)
+        })
+        .unwrap(),
+        text("b")
+    );
+    assert_eq!(comparisons.get(), 1);
+    assert_eq!(
+        rules::evaluate_with_keys(&p, &values, &|unit| Some(unit[0])).unwrap(),
+        text("b")
+    );
+    let mismatch = [text("a"), Some(vec![97; 1_000_000]), text("b")];
+    let Err(Error::Sql(error)) = rules::evaluate_with_keys(&p, &mismatch, &|_| None::<u16>) else {
+        panic!("large mismatch must retain SQL diagnostic before key evaluation")
+    };
+    assert_eq!(error.number, 9828);
+    assert_eq!(error.state, 3);
+}

@@ -103,3 +103,9 @@ The owner-pinned mirek/mssqlite dispatcher at
 `7f71f2081602f8e3051998f5c11f058e65fe24ec` maps CONCAT_WS to SQLite and TRANSLATE
 to a custom backend function. Its AST/backend separation is useful context;
 those mappings are not SQL Server ground truth and are not copied as semantics.
+
+TRANSLATE counts mapping characters without allocating per-character slice vectors,
+then streams borrowed UTF-16 character slices in both evaluators. A million-entry
+duplicate MAX mapping produces the first replacement with one opaque comparison;
+the keyed evaluator keeps one distinct key. Large unequal mappings still return
+the captured 9828 diagnostic before consulting unavailable comparison weights.
