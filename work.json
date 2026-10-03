@@ -11633,6 +11633,31 @@
       ],
       "issue": 930,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pl8E8"
+    },
+    {
+      "id": "ansi-native-projection-adapter-v1",
+      "title": "Bridge native ANSI carrier projections with explicit plans",
+      "issue": 932,
+      "state": "ready",
+      "authorization": "Continuing owner full-server goal and explicit owner-directed bounded projection-adapter follow-up; approved parent message authorizes publish, fresh claim, implementation and worker-owned merge/completion.",
+      "scope": [
+        "src/ansi_carrier.rs",
+        "src/ansi_carrier/projection.rs",
+        "tests/ansi_carrier_projection.rs",
+        "docs/ansi-carrier-projection.md"
+      ],
+      "dependencies": [
+        "ansi-native-storage-prototype-v1",
+        "ansi-cp1251-projection-v1",
+        "ansi-cp1252-projection-v1",
+        "utf8-valid-projection-v1"
+      ],
+      "acceptance": [
+        "Provide caller/connection-owned explicit plans and registration for native ANSI carrier to native target carrier or existing UTF16 carrier. Preserve original source encoding and validate physical types, tags, parent/child NULL, row bounds and zero-row shapes. Support only completed CP1251/CP1252 projection domains and strict valid UTF8 native identity/UTF16. Unsupported target/source plans fail before nullable payload handling. No lossy String intermediate, malformed UTF8 repair, context admission or fabricated SQL diagnostics.",
+        "Preflight complete chunk payload limits before mutating output; enforce per-cell input/output and aggregate bounds with checked accounting and fallible allocations. Preserve native byte identity, raw UTF16 units, NULL/empty and original input; volatile input evaluates once. No common Value/backend_value, engine, ext, TDS export, collation gate, capacity/CAST policy or runtime hook edits.",
+        "Native tests replay all applicable original variable-storage projection controls across all four retained source runs; expected native/UTF16 payloads and original descriptors come from references, never candidate results or client display. Fixed capacity/storage padding remains outside complete projection. Cover materialization, Arrow/vector zero/multichunk/NULL/tag failures, statement atomicity/transaction reuse, limits and malformed UTF8 explicit failure; meaningful predecessor missing-adapter evidence. Full exact-head fmt/workspace Rust/strict Clippy/build, complete clients, raw audit and manifest/binary provenance; independent and verified Codex reviews, required CI, worker-owned merge/registry/issue/project completion. Reuse existing resources under shared locks; no new agents/worktrees/native caches.\n"
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pl8pr"
     }
   ]
 }
