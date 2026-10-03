@@ -11471,6 +11471,31 @@
         "Fresh exclusive receipt after genuine dependenciesDone. Reuse existing isolated worker/private reference resources only; no newagents/worktrees/nativecaches or canonicalLinux source/build/cache writes. Worker owns checkpoints/draftPR, focused meaningful tests bothhosts, full finalsource-pinned four-run reproduction with independently recomputed complete sidecar, independent/Codex review or genuine fallback, exactrequiredCI/merge and promptregistry/issue/projectcompletion. No Rust/engine/catalog/output/BulkLoad edits; finite evidence leaves general Unicode/codepage and runtime integration gaps explicit."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Plrno"
+    },
+    {
+      "id": "bulk-character-utf8-bounded-target-reference-v1",
+      "title": "Capture UTF8 source-form decoding into bounded targets",
+      "issue": 919,
+      "state": "backlog",
+      "authorization": "Continuing owner full-server goal and approved first-party source-form work918 reveals bounded-source to MAX target admission failure before decoder. Capture paired bounded targets without inferring platform strict/lossy decoding or normalizing counters.",
+      "scope": [
+        "scripts/capture-bulk-character-utf8-bounded-target.mjs",
+        "reference/bulk-character-utf8-bounded-target.json",
+        "tests/bulk_character_utf8_bounded_target_capture.test.mjs",
+        "docs/bulk-character-utf8-bounded-target-reference.md"
+      ],
+      "dependencies": [
+        "bulk-character-conversion-reference-v1",
+        "bulk-character-utf8-boundary-reference-v1",
+        "bulk-character-utf8-source-form-reference-v1",
+        "bulk-character-adapter-plan-v1"
+      ],
+      "acceptance": [
+        "Exactly96 probes: same24 prescribed913 byte vectors times matching sourceVARCHAR64/MAX forms times nativeUTF8VARCHAR64 and UnicodeNVARCHAR64 targets, each NULL plus isolated challenge. Source and target declarations/TYPEINFO match; input vectors fit widths, so this is decoder/admission evidence rather than capacity overflow. Compare complete original outcomes against unchanged895/913/918 evidence; retain raw SQL/type/collation/native bytes/SQL UTF16 units/display/descriptors/errors/info/DONE/callback/original-session counters and any variation explicitly.",
+        "Four fresh databases/two pinnedSQLServer17.0.4065.4 containers with actual source/image/Tedious20/Node provenance. Reuse reviewed895/899 bounded helpers and pin ancestor/helper inputs. Original postloginframes excludingcredentials, typeddescriptors, all errors/info/DONE/callbacks and original-session counters must survive. Bounded raw+complete unnormalized sidecar before goldvalidation; independently pin complete semantics/request/response/framing and reject uniform corruption or payload-preserving repartition with recomputed comparisons. Raw-first capture under timeout/asynchronous failure/comparison exhaustion, output alias refusal and cleanup remain verified.",
+        "Fresh exclusive receipt after genuine dependenciesDone. Reuse existing isolated worker/private reference resources only; no newagents/worktrees/nativecaches or canonicalLinux source/build/cache writes. Worker owns checkpoints/draftPR, focused meaningful tests bothhosts, full finalsource-pinned four-run reproduction with independently recomputed complete sidecar, independent/Codex review or genuine fallback, exactrequiredCI/merge and promptregistry/issue/projectcompletion. No Rust/engine/catalog/output/BulkLoad edits; finite evidence leaves general Unicode/codepage and runtime integration gaps explicit."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PlspM"
     }
   ]
 }
