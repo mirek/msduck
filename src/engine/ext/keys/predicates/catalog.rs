@@ -64,6 +64,55 @@ struct Relations {
     backend: HashMap<String, String>,
     qualifiers: HashMap<String, HashSet<String>>,
     defined: HashSet<String>,
+    /// OPENJSON row sources, by a name no relation can have.
+    openjson: HashMap<String, HashMap<String, Column>>,
+}
+
+/// The columns of an OPENJSON row source: the default schema's key
+/// (NVARCHAR(4000)), value (NVARCHAR(MAX)) and type, or the declared WITH
+/// columns, whose NVARCHAR and NCHAR values are carriers.
+fn openjson_columns(columns: &[OpenJsonTableColumn]) -> HashMap<String, Column> {
+    let column = |declared: DataType| {
+        let family = match msduck_sql::sql_type::declaration(&declared) {
+            Ok(msduck_core::types::Type::Character(kind)) => Some(kind.family()),
+            _ => None,
+        };
+        let carrier = matches!(
+            family,
+            Some(msduck_core::character::Family::Nvarchar | msduck_core::character::Family::Nchar)
+        );
+        Column {
+            carrier,
+            text: family.is_some(),
+            declared: carrier.then_some(declared),
+            collation: None,
+        }
+    };
+    if columns.is_empty() {
+        let text = |length| DataType::Nvarchar(Some(length));
+        return HashMap::from([
+            (
+                "key".into(),
+                column(text(CharacterLength::IntegerLength {
+                    length: 4000,
+                    unit: None,
+                })),
+            ),
+            ("value".into(), column(text(CharacterLength::Max))),
+            ("type".into(), column(DataType::Int(None))),
+        ]);
+    }
+    columns
+        .iter()
+        .map(|c| {
+            (
+                lower(&c.name),
+                column(msduck_sql::expression_metadata::openjson::declared_type(
+                    &c.r#type,
+                )),
+            )
+        })
+        .collect()
 }
 
 impl Relations {
@@ -136,16 +185,29 @@ impl Visitor for Relations {
             for column in &alias.columns {
                 self.defined.insert(lower(&column.name));
             }
-            if !matches!(factor, TableFactor::Table { args: None, .. }) {
+            if !matches!(
+                factor,
+                TableFactor::Table { args: None, .. } | TableFactor::OpenJsonTable { .. }
+            ) {
                 self.qualifiers
                     .entry(lower(&alias.name))
                     .or_default()
                     .insert(DERIVED.into());
             }
         }
-        if let TableFactor::OpenJsonTable { columns, .. } = factor {
+        if let TableFactor::OpenJsonTable { columns, alias, .. } = factor {
             for column in columns {
                 self.defined.insert(lower(&column.name));
+            }
+            // A column list in the alias renames the columns: unknown here.
+            let renamed = alias.as_ref().is_some_and(|a| !a.columns.is_empty());
+            let name = format!("\0openjson{}", self.openjson.len());
+            self.qualifiers
+                .entry(alias.as_ref().map_or("openjson".into(), |a| lower(&a.name)))
+                .or_default()
+                .insert(if renamed { DERIVED.into() } else { name.clone() });
+            if !renamed {
+                self.openjson.insert(name, openjson_columns(columns));
             }
         }
         if let TableFactor::Table {
@@ -196,7 +258,7 @@ impl Catalog {
         let mut relations = Relations::default();
         let _ = node.visit(&mut relations);
         let mut catalog = Catalog {
-            tables: HashMap::new(),
+            tables: relations.openjson,
             qualifiers: relations.qualifiers,
             defined: relations.defined,
             names: HashMap::new(),
@@ -295,8 +357,11 @@ impl Catalog {
         }
         for (table, columns) in &mut self.tables {
             for (name, column) in columns.iter_mut() {
-                if column.carrier {
-                    column.declared = types.get(&(table.clone(), name.clone())).cloned().flatten();
+                // OPENJSON columns keep their declarations.
+                if column.carrier
+                    && let Some(declared) = types.get(&(table.clone(), name.clone()))
+                {
+                    column.declared = declared.clone();
                 }
             }
         }
