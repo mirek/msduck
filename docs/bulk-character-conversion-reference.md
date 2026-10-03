@@ -54,6 +54,9 @@ Replay also requires four distinct database names, two distinct server
 identities paired with their two databases, exactly three version identity
 cells, and the observed packet status bytes 0 or 1. Extra data cannot disappear
 inside an identity projection.
+Outgoing SPIDs must be zero. Incoming SPIDs must agree across all packets and
+exchanges of the same connection; replacement-session readback and cleanup use
+their own connection identity. Original SPID values remain in raw evidence.
 
 ## Measured outcomes
 
@@ -168,8 +171,9 @@ completed with exit zero. Its 10,357,418-byte raw artifact has SHA256
 its complete 6,659,908-byte comparison sidecar contains 5,331 differences
 against the retained fixture. All semantic and payload projections match the
 independent pins; original ephemeral identities and packet headers remain
-different in raw evidence. Both local and Linux focused suites pass twelve tests,
-including duplicate-run, extra-cell, packet-status and aborted-startup negatives.
+different in raw evidence. Both local and Linux focused suites pass thirteen tests,
+including duplicate-run, extra-cell, packet-status, SPID-mixing and aborted-startup
+negatives.
 
 Legacy TEXT, arbitrary collation/codepage profiles, a general best-fit map,
 Unicode-source isolated surrogates and combinations of large values with all

@@ -164,6 +164,20 @@ test('duplicate capture identities, added version cells and unsupported packet s
   assert.throws(()=>validate(status),/packet status/)
 })
 
+test('mixed inbound SPIDs across packets or phases and nonzero outbound SPIDs are rejected', async () => {
+  const retained=await load()
+  for(const mode of ['one-inbound-packet','whole-phase','outbound']) {
+    const actual=structuredClone(retained)
+    for(const run of actual.runs) {
+      const o=find(run,'utf8-max-fragmented')
+      const packets=mode==='outbound' ? o.execution.packets.filter(p=>p.direction==='out').slice(0,1) : o.readback.packets.filter(p=>p.direction==='in').slice(0,mode==='whole-phase'?undefined:1)
+      for(const p of packets) {const bytes=Buffer.from(p.rawHex,'hex');bytes.writeUInt16BE(0xffff,4);p.rawHex=bytes.toString('hex')}
+    }
+    actual.comparisons=actual.runs.slice(1).map(run=>compare(run,actual.runs[0]))
+    assert.throws(()=>validate(actual),/SPID/)
+  }
+})
+
 test('JSON preflight bounds exact UTF8 escaped size and rejects excessive or cyclic captures before serialization', () => {
   for (const value of [null,true,false,42,-0,'a\n\u0000é🦆\ud800',[null,'x'],{x:[1,2],s:'"\\'}]) assert.equal(jsonSize(value), Buffer.byteLength(JSON.stringify(value)))
   assert.equal(jsonSize(''), 2)

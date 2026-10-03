@@ -295,9 +295,9 @@ export function responseSignature(record, database, serverName) {
 function requestSignature(record) {
   return createHash('sha256').update(record.packets.filter(p => p.direction === 'out').map(p => p.rawHex.slice(16)).join('')).digest('hex')
 }
-function validatePackets(record) {
+function validatePackets(record, expectedSpid) {
   assert.ok(record.packets.length <= MAX_PACKETS)
-  let size = 0, message = null
+  let size = 0, message = null, inboundSpid = expectedSpid
   for (const p of record.packets) {
     assert.ok(['in','out'].includes(p.direction) && /^(?:[0-9a-f]{2})+$/.test(p.rawHex) && p.rawHex.length <= 65534)
     size += p.rawHex.length / 2
@@ -306,6 +306,11 @@ function validatePackets(record) {
     assert.ok(bytes.length >= 8 && bytes.readUInt16BE(2) === bytes.length)
     assert.ok(p.direction === 'in' ? bytes[0] === 4 : [1,6,7].includes(bytes[0]))
     assert.ok(bytes[1] === 0 || bytes[1] === 1, 'fixed controlled packet status')
+    const spid = bytes.readUInt16BE(4)
+    if (p.direction === 'in') {
+      if (inboundSpid === undefined) inboundSpid = spid
+      assert.equal(spid, inboundSpid, 'consistent inbound connection SPID')
+    } else assert.equal(spid, 0, 'fixed outbound SPID')
     assert.equal(bytes[7], 0)
     if (message) {assert.equal(message.direction, p.direction); assert.equal(message.type, bytes[0])}
     else message = {direction: p.direction, type: bytes[0], packetId: 1}
@@ -314,6 +319,7 @@ function validatePackets(record) {
     if (bytes[1] & 1) message = null
   }
   assert.equal(message, null, 'complete retained EOM')
+  return inboundSpid
 }
 export function semantic(o, database, serverName) {
   // Independent semantic digest only; original full packets/fields/differences
@@ -364,8 +370,10 @@ export function validate(actual) {
       if (o.recoveryReadback) assert.equal(o.recoveryReadback.session, 'replacement', 'fixed recovery session')
       validateRequests(o)
       assert.equal(semantic(o, database, serverName), GOLD.semantics[o.case.name], 'fixed independent semantic digest: ' + o.case.name)
+      const originalSpid = validatePackets(o.metadata)
+      const replacementSpid = o.recoveryReadback ? validatePackets(o.recoveryReadback) : originalSpid
       for (const phase of ['metadata','setup','execution','readback','recoveryReadback','cleanup']) if (o[phase]) {
-        validatePackets(o[phase])
+        validatePackets(o[phase], phase === 'recoveryReadback' || phase === 'cleanup' ? replacementSpid : originalSpid)
         assert.equal(requestSignature(o[phase]), GOLD.requests[o.case.name][phase], 'fixed request payload: ' + o.case.name + '/' + phase)
         assert.equal(responseSignature(o[phase], database, serverName), GOLD.responses[o.case.name][phase], 'fixed response payload: ' + o.case.name + '/' + phase)
       }
