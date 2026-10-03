@@ -225,9 +225,10 @@ test('a failed prepare that still leaves a handle sends no execute or unprepare'
 test('capture output may not alias the retained fixture, including via symlinks', async () => {
   const { mkdtemp, mkdir, writeFile, symlink, rm } = await import('node:fs/promises')
   const { join, relative } = await import('node:path')
-  const { tmpdir } = await import('node:os')
-  const { pathToFileURL } = await import('node:url')
-  const root = await mkdtemp(join(tmpdir(), 'msduck-fixture-guard-'))
+  const { pathToFileURL, fileURLToPath } = await import('node:url')
+  const scratch = fileURLToPath(new URL('../.tmp/', import.meta.url))
+  await mkdir(scratch, { recursive: true })
+  const root = await mkdtemp(join(scratch, 'msduck-fixture-guard-'))
   try {
     await mkdir(join(root, 'reference'))
     const fixture = join(root, 'reference', 'x.json')
