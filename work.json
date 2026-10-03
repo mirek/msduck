@@ -10032,7 +10032,7 @@
     {
       "id": "concat-collation-wire-v1",
       "title": "Encode captured SC and UTF8 collation descriptors",
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner SQL Server-compatible Rust/DuckDB goal and parallel factory; owner-approved merged reference807 retains four exact SQL Server observations. Completed resource-collation118 no longer reserves this codec. No external input.",
       "scope": [
         "crates/msduck-tds/src/collation.rs",
