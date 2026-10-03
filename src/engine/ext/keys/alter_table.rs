@@ -224,12 +224,12 @@ pub(super) fn run(
     }
 }
 
-/// ALTER TABLE ADD PRIMARY KEY or UNIQUE over CHAR or VARCHAR columns under
-/// a case-insensitive collation (the database default), which the
-/// constraints feature parses and adds. DuckDB enforces such a constraint
-/// natively by exact value; a managed index then enforces case-insensitive
-/// uniqueness, after checking existing rows (1505 and 1750, as SQL Server
-/// reports them).
+/// ALTER TABLE ADD PRIMARY KEY or UNIQUE over CHAR or VARCHAR columns, which
+/// the constraints feature parses and adds. DuckDB enforces such a
+/// constraint natively by exact value; a managed index then enforces SQL
+/// Server's equality (trailing spaces ignored, and case under a
+/// case-insensitive collation), after checking existing rows (1505 and
+/// 1750, as SQL Server reports them).
 pub(super) fn add_keys(
     session: &mut Session,
     statement: &Statement,
@@ -246,10 +246,12 @@ pub(super) fn add_keys(
     let Some(table) = tables::resolve(&session.db, &alter.table)? else {
         return Ok(None);
     };
+    // DuckDB's native constraint compares the stored text exactly; SQL
+    // Server ignores trailing spaces, and case under the default collation.
     let folded = |table: &tables::Table, name: &str| {
         table
             .column(name)
-            .is_some_and(|c| matches!(c.kind(), Ok(Storage::Ansi)) && c.case_insensitive())
+            .is_some_and(|c| matches!(c.kind(), Ok(Storage::Ansi)))
     };
     let adds = items.iter().any(|item| match item {
         AddItem::Constraint(constraint) => match &constraint.kind {

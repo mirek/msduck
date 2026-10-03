@@ -81,7 +81,7 @@ A managed index has these key expressions:
      BIN2 equality.
    - VARCHAR/CHAR: the text without trailing spaces (lowercased under a
      case-insensitive collation), in hexadecimal. A key over such columns
-     always gets a managed index under a case-insensitive collation, because
+     always gets a managed index (also when added by ALTER TABLE), because
      DuckDB's native constraint compares the stored text exactly.
    - DATETIME2 and DATETIMEOFFSET: the UTC ticks. Two DATETIMEOFFSET values
      at the same instant are equal, whatever their offsets.

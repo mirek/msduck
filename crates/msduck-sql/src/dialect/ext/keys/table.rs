@@ -9,8 +9,8 @@
 //! STRUCT storage (Unicode carriers, DATETIME2, DATETIMEOFFSET) is only
 //! managed, and is removed from the statement DuckDB sees. DuckDB's native
 //! constraints compare VARCHAR values exactly, so a key over CHAR or VARCHAR
-//! columns under a case-insensitive collation (the database default) also
-//! gets a managed index that enforces case-insensitive uniqueness.
+//! columns also gets a managed index that ignores trailing spaces, and case
+//! under a case-insensitive collation (the database default).
 use sqlparser::ast::*;
 
 /// Where a constraint is declared.
@@ -44,23 +44,17 @@ fn struct_stored(kind: &DataType) -> bool {
         || matches!(crate::temporal_scale::datetimeoffset(kind), Ok(Some(_)))
 }
 
-/// A CHAR or VARCHAR column whose values compare case-insensitively.
-fn folded_ansi(column: &ColumnDef) -> bool {
-    let ansi = matches!(
+/// A CHAR or VARCHAR column. DuckDB's native constraint compares the stored
+/// text exactly, while SQL Server ignores trailing spaces under every
+/// collation and case under case-insensitive ones (the database default).
+fn ansi(column: &ColumnDef) -> bool {
+    matches!(
         crate::sql_type::declaration(&column.data_type),
         Ok(msduck_core::types::Type::Character(character)) if matches!(
             character.family(),
             msduck_core::character::Family::Char | msduck_core::character::Family::Varchar
         )
-    );
-    let collation = column
-        .options
-        .iter()
-        .find_map(|option| match &option.option {
-            ColumnOption::Collation(name) => Some(name.to_string()),
-            _ => None,
-        });
-    ansi && super::collation::case_insensitive(collation.as_deref())
+    )
 }
 
 fn variant(kind: &DataType) -> bool {
@@ -256,7 +250,7 @@ fn find(table: &CreateTable) -> Result<Vec<Constraint>, Diagnostic> {
                 ));
             }
             stored |= struct_stored(&column.data_type);
-            folded |= folded_ansi(column);
+            folded |= ansi(column);
             nullable |= !constraint.primary && !not_null(column) && !primary_column(&primary, name);
         }
         constraint.native = !stored;
@@ -390,7 +384,8 @@ mod tests {
         // A unique key over primary key columns cannot hold NULL.
         let t = table("CREATE TABLE k (a int, b int, PRIMARY KEY (a, b), UNIQUE (b, a))");
         assert!(constraints(&t).unwrap().iter().all(|c| !c.managed));
-        // Case-insensitive CHAR/VARCHAR keys also get a managed index.
+        // CHAR/VARCHAR keys also get a managed index (trailing spaces, and
+        // case under a case-insensitive collation).
         let t = table(
             "CREATE TABLE c (a varchar(10) NOT NULL PRIMARY KEY, b char(4) COLLATE Latin1_General_CS_AS NOT NULL UNIQUE, c varchar(4) COLLATE Latin1_General_CI_AI NOT NULL UNIQUE)",
         );
@@ -400,7 +395,7 @@ mod tests {
                 .iter()
                 .map(|c| (c.native, c.managed))
                 .collect::<Vec<_>>(),
-            [(true, true), (true, false), (true, true)]
+            [(true, true), (true, true), (true, true)]
         );
         let t = table("CREATE TABLE m (a int NOT NULL PRIMARY KEY (a))");
         let mut stripped = t.clone();
