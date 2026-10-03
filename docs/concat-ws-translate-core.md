@@ -130,8 +130,10 @@ surrogate at the cap. A pair cut inside one argument is dropped, and a later
 argument cannot refill the space. Evaluation therefore truncates each append
 independently and latches exhaustion, rather than flattening and trimming the
 whole output. The actual earlier whole-output implementation at 3ed52ac fails
-the new cross-argument regression (25 pass / 1 fail). The capture worker is retaining expanded boundary/lone-surrogate
-controls as a separate reference task before final merge.
+the new cross-argument regression (25 pass / 1 fail). Expanded boundary and
+lone-surrogate controls have since merged through PR #818 as
+`reference/concat-boundary.json`; their native CAST controls retain the distinct
+behavior rather than serving as substitute function expectations.
 
 Four identical expanded 44-record captures (SHA-256
 `a9aacc82bdfd34f6fb854cf95d2a8fda9a2a3b9eb20b46e55fb6d78c13219ecf`)
