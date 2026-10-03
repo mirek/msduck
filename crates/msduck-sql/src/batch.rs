@@ -24,6 +24,7 @@ pub fn parse(sql: &str) -> Result<Vec<Statement>> {
                 None => crate::drop_index_syntax::parse_error(error),
             }
         })?;
+        crate::dialect::ext::conversion::bracket_types::normalize(&mut statement);
         explicit_defaults(&mut statement);
         crate::variant_cast::mark(&mut statement);
         crate::window_frame::validate_syntax(&statement).map_err(anyhow::Error::msg)?;
