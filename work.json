@@ -10916,6 +10916,22 @@
         "Exclusive claim in an existing isolated worktree/cache; no additional agents or native build. Focused Node tests on both hosts and syntax/diff checks, exact-head requiredCI and independent/Codex review or genuine availability fallback. Worker owns PR review follow-up, exact-head merge and registry/project completion. No Rust/runtime/corpus/expected-reference edits."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkyP3"
+    },
+    {
+      "id": "compatibility-docker-output-v1",
+      "title": "Flush Docker comparison planning output under backpressure",
+      "state": "ready",
+      "issue": 887,
+      "authorization": "Owner continuing goal; companion to claimed CLI flush task887 in same focused PR after separate fresh receipt. First-party source evidence only.",
+      "scope": [
+        "scripts/docker-compare.mjs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "For successful --list-cases and --plan forwarding, wait until complete stdout is written before exiting. Preserve original forwarded bytes, preflight argument/status behavior and no-Docker guarantees; no reference-container behavior changes.",
+        "Ship with compatibility-cli-output-v1 under actual delayed-consumption pipe regressions for both direct and Docker CLI paths, preserving original assertions. Same claiming worker handles exact-head tests/reviews/CI/merge and completion of both receipts. No extra agent/cache/native build."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkyP3"
     }
   ]
 }
