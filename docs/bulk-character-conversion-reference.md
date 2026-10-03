@@ -57,6 +57,9 @@ inside an identity projection.
 Outgoing SPIDs must be zero. Incoming SPIDs must agree across all packets and
 exchanges of the same connection; replacement-session readback and cleanup use
 their own connection identity. Original SPID values remain in raw evidence.
+Each SQL exchange must contain its outgoing Batch and incoming response;
+execution must contain Batch/response followed by BulkLoad/response. Changing
+only message-type headers cannot evade payload digests.
 
 ## Measured outcomes
 
@@ -145,6 +148,15 @@ review. Uniform corruption is rejected even if all four runs and their
 comparison summaries are changed together. Tests also cover packet corruption,
 session labels, resource bounds and output aliasing.
 
+Trace guard failures reach the awaited exchange rather than throwing from a
+stream listener. The collector detaches listeners and closes the connection;
+already retained packets and the failure record reach bounded partial output.
+The failure records the observed input length and SHA256, with a labelled prefix
+of at most 256 bytes within the remaining exchange/aggregate budget. An oversized
+or malformed input is not presented as a complete validated packet. Asynchronous
+oversized incoming and malformed outgoing tests verify promise completion,
+cleanup and preservation of this partial evidence and its comparison sidecar.
+
 Raw cross-run comparison counts are 14, 997 and 997; the differences retain
 original database/container names, diagnostics, response bytes and packet
 headers. Verification digests use a separate, documented projection: version
@@ -171,9 +183,14 @@ completed with exit zero. Its 10,357,418-byte raw artifact has SHA256
 its complete 6,659,908-byte comparison sidecar contains 5,331 differences
 against the retained fixture. All semantic and payload projections match the
 independent pins; original ephemeral identities and packet headers remain
-different in raw evidence. Both local and Linux focused suites pass thirteen tests,
-including duplicate-run, extra-cell, packet-status, SPID-mixing and aborted-startup
-negatives.
+different in raw evidence. A further SPID-hardened capture from source
+`e0a4f30418cb9f6ab66e8a270154ce9a99a47d66babfd93977164a5c494f9fb2`
+also completed with exit zero, raw SHA256
+`c7c0775f354ba2ac867b73662fd16ef37c881c1403ff1e7c5116e847005e6c4d`.
+These recorded capture sources remain explicitly admitted for offline checking.
+Both local and Linux focused suites pass fifteen tests, including duplicate-run,
+extra-cell, packet-status, SPID/type corruption, asynchronous trace guards and
+aborted-startup negatives.
 
 Legacy TEXT, arbitrary collation/codepage profiles, a general best-fit map,
 Unicode-source isolated surrogates and combinations of large values with all

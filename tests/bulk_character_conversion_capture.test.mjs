@@ -4,7 +4,9 @@ import {readFile, mkdtemp, writeFile, realpath, symlink, link, rm, truncate} fro
 import {join} from 'node:path'
 import {tmpdir} from 'node:os'
 import {spawnSync} from 'node:child_process'
-import {cases, rowsFor, jsonSize, CAPTURE_LIMIT, validate, validateRetained, compare, guardOutput, persistCapture, readCaptureFile} from '../scripts/capture-bulk-character-conversion.mjs'
+import {EventEmitter} from 'node:events'
+import {createHash} from 'node:crypto'
+import {cases, rowsFor, jsonSize, CAPTURE_LIMIT, validate, validateRetained, compare, guardOutput, persistCapture, readCaptureFile, exchange} from '../scripts/capture-bulk-character-conversion.mjs'
 const fixture = new URL('../reference/bulk-character-conversion.json', import.meta.url)
 const load = async () => JSON.parse(await readFile(fixture, 'utf8'))
 const find = (run, name) => run.observations.find(o => o.case.name === name)
@@ -175,6 +177,48 @@ test('mixed inbound SPIDs across packets or phases and nonzero outbound SPIDs ar
     }
     actual.comparisons=actual.runs.slice(1).map(run=>compare(run,actual.runs[0]))
     assert.throws(()=>validate(actual),/SPID/)
+  }
+})
+
+test('uniform request-type corruption cannot hide behind unchanged payload signatures', async () => {
+  const retained=await load()
+  for(const phase of ['metadata','setup','readback','cleanup','execution']) {
+    const actual=structuredClone(retained)
+    for(const run of actual.runs)for(const p of find(run,'utf8-max-fragmented')[phase].packets.filter(p=>p.direction==='out'&&p.rawHex.startsWith('01'))) {
+      const bytes=Buffer.from(p.rawHex,'hex');bytes[0]=6;p.rawHex=bytes.toString('hex')
+    }
+    actual.comparisons=actual.runs.slice(1).map(run=>compare(run,actual.runs[0]))
+    assert.throws(()=>validate(actual),/message direction\/type/)
+  }
+})
+
+test('asynchronous trace guards close the connection and preserve bounded failed evidence through the awaited exchange', {timeout:10000}, async () => {
+  for(const direction of ['in','out']) {
+    const incoming=new EventEmitter(),outgoing=new EventEmitter()
+    let closed=0
+    const connection={messageIo:{outgoingMessageStream:outgoing,socket:incoming},close(){closed++}}
+    const prefix=Buffer.from('040100090039010000','hex')
+    const invalid=direction==='in'?Buffer.alloc(2*1024*1024+1,0x61):Buffer.from('0701000a00000100ff','hex')
+    const record=await exchange(connection,()=>{
+      queueMicrotask(()=>{incoming.emit('data',prefix);(direction==='in'?incoming:outgoing).emit('data',invalid)})
+      return new Promise(()=>{})
+    },{take(){}})
+    assert.equal(closed,1)
+    assert.equal(incoming.listenerCount('data'),0)
+    assert.equal(outgoing.listenerCount('data'),0)
+    assert.deepEqual(record.packets,[{direction:'in',rawHex:prefix.toString('hex')}])
+    assert.equal(record.result.traceFailure.direction,direction)
+    assert.equal(record.result.traceFailure.observedBytes,invalid.length)
+    assert.equal(record.result.traceFailure.sha256,createHash('sha256').update(invalid).digest('hex'))
+    assert.equal(record.result.traceFailure.inputPrefixHex,invalid.subarray(0,256).toString('hex'))
+    assert.ok(record.result.transportError)
+    await scratch(async dir=>{
+      const output=join(dir,'trace-failed.json')
+      await assert.rejects(persistCapture({format:1,containers:[],runs:[],trace:record},output))
+      const saved=JSON.parse(await readFile(output,'utf8'))
+      assert.deepEqual(saved.trace,record)
+      assert.equal(JSON.parse(await readFile(output+'.comparison.json','utf8')).retained,true)
+    })
   }
 })
 
