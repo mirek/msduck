@@ -209,6 +209,7 @@ for (const [name,type,value] of sources) {
     for (const [operation,sql] of [
       ['tr',`TRANSLATE(${expr},'','')`], ['tr unicode',`TRANSLATE(${expr},N'',N'')`],
       ['cws source',`CONCAT_WS('',${expr},'')`], ['cws separator',`CONCAT_WS(${expr},'a','b')`], ['cws last',`CONCAT_WS('','',${expr})`],
+      ['cws isolated first',`CONCAT_WS(NULL,${expr},NULL)`], ['cws isolated last',`CONCAT_WS(NULL,NULL,${expr})`],
       ['cws unicode',`CONCAT_WS(N'',${expr},N'')`],
     ]) cases.push([`${name} ${suffix} ${operation}`, `SELECT ${sql} AS value`])
   }
@@ -339,7 +340,7 @@ function validate(run) {
   }
 }
 function validateContract(run) {
-  const expected='7882eca22b24d7619149001ef25d9484e0c51ec99dfd144ec682adca780613bc'
+  const expected='81131cf39a04bf7a3fc53bdc604ad1f826d94f1dd726f4e4637cf48969ffb512'
   assert.equal(createHash('sha256').update(JSON.stringify(run)).digest('hex'),expected,'complete conversion observation contract')
 }
 function firstDifference(left, right) {
