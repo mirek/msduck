@@ -74,9 +74,11 @@ impl Feature for Hooks {
 }
 
 /// A CAST or CONVERT target that names a system type with delimiters, such as
-/// `[nvarchar](10)`, or `sysname`, as the plain type. Statements parse with
-/// such targets resolved already; this covers casts that features build from
-/// stored declarations, such as a scalar function's RETURNS type.
+/// `[nvarchar](10)`, or `sysname`, as the plain type. `batch::parse` resolves
+/// every target written in a statement, so the targets left here are casts
+/// that features build from stored declarations, such as a scalar function's
+/// parameters and RETURNS type. They keep declaration defaults: `[varchar]`
+/// is `varchar(1)`, as the plain declaration is.
 fn delimited_target(expr: &mut Expr) {
     if let Expr::Cast { data_type, .. }
     | Expr::Convert {
@@ -84,7 +86,7 @@ fn delimited_target(expr: &mut Expr) {
         ..
     } = expr
         && let Some(resolved) =
-            msduck_sql::dialect::ext::conversion::bracket_types::value_type(data_type)
+            msduck_sql::dialect::ext::conversion::bracket_types::declared_value_type(data_type)
     {
         *data_type = resolved;
     }

@@ -203,3 +203,43 @@ fn catalog_text_renders_delimited_names_like_sql_server() {
     );
     assert_eq!(source_definition("CONVERT([notatype],1)"), None);
 }
+
+#[test]
+fn stored_declarations_keep_declaration_defaults() {
+    use msduck_sql::dialect::ext::conversion::bracket_types::declared_value_type;
+    use sqlparser::ast::CharacterLength;
+    let custom =
+        |name: &str| DataType::Custom(ObjectName::from(vec![Ident::with_quote('[', name)]), vec![]);
+    let one = Some(CharacterLength::IntegerLength {
+        length: 1,
+        unit: None,
+    });
+    assert_eq!(
+        declared_value_type(&custom("varchar")),
+        Some(DataType::Varchar(one))
+    );
+    assert_eq!(
+        declared_value_type(&custom("nvarchar")),
+        Some(DataType::Nvarchar(one))
+    );
+    assert_eq!(
+        declared_value_type(&custom("char")),
+        Some(DataType::Char(one))
+    );
+    assert_eq!(
+        declared_value_type(&custom("nchar")),
+        Some(DataType::Custom(
+            ObjectName::from(vec![Ident::new("nchar")]),
+            vec!["1".into()]
+        ))
+    );
+    assert_eq!(
+        declared_value_type(&custom("int")),
+        Some(DataType::Int(None))
+    );
+    assert_eq!(
+        value_type(&custom("varchar")),
+        Some(DataType::Varchar(None))
+    );
+    assert_eq!(declared_value_type(&custom("notatype")), None);
+}

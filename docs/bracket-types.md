@@ -60,7 +60,10 @@ places resolve the names themselves:
   (task `v025-bracket-types-v1-catalog-text`).
 - The conversion runtime (`src/engine/ext/conversion.rs`) resolves CAST and
   CONVERT targets that features build from stored declarations, such as a
-  scalar function's RETURNS type, before binding.
+  function's parameters, RETURNS type and table columns, before binding.
+  Every target written in a statement is resolved by `batch::parse` first,
+  so these keep declaration defaults: a parameter `@x [varchar]` is
+  `varchar(1)`, like `@x varchar`, not the `varchar(30)` of a CAST.
 
 The runtime also rewrites CONVERT and TRY_CONVERT without a style to
 `nvarchar(max)`, `varchar(max)` or `varbinary(max)` as the equivalent CAST or
@@ -80,9 +83,10 @@ slower in a debug build. Normalizing after `parse_statement` in
 
 ## Evidence
 
-`tests/compat/bracket_types.test.mjs` runs 14 cases, each in a fresh database,
-and compares columns (name, type, length, precision, scale), rows and errors
-(number, state, class, message) with values captured from
+`tests/compat/bracket_types.test.mjs` runs 15 cases, each in a fresh database,
+and compares every step's complete canonical capture (descriptors with flags
+and collations, rows, DONE tokens, row counts, errors and informational
+messages) with the capture from
 `mcr.microsoft.com/mssql/server:2025-latest@sha256:86cc6144ef39bb0fbed2329e1ad79b13ee82e7b2e4739213a0db0800e668a74a`
 (Microsoft SQL Server 2025 RTM-CU7, 17.0.4065.4). The capture ran each case's
 statements through `scripts/lib/compatibility.mjs` `capture` in a database
@@ -98,7 +102,7 @@ declarations resolve.
 ## Remaining differences
 
 Each of these also holds for the plain spelling; the compat test asserts
-msduck's current behavior:
+the exact current differences, so a change in either direction fails it:
 
 - `sysname` table columns fail with DuckDB's 208 (SQL Server creates them,
   `TYPE_NAME` = `sysname`).
@@ -109,6 +113,9 @@ msduck's current behavior:
 - `numeric(p,s)` is described as decimal; `decimal` without a precision keeps
   the operand's scale (SQL Server: `decimal(18,0)`); a binary literal shorter
   than `binary(n)` fails instead of being padded.
-- `sys.columns` descriptors differ from SQL Server's (the rows match).
+- `sys.columns` descriptors differ from SQL Server's (the rows match), and
+  some CAST and function results are not flagged as computed.
+- A function table column `varbinary` without a length is `varbinary(30)`
+  (SQL Server: 1).
 - Arithmetic overflow 8115 has state 1 (SQL Server: 2), and a malformed CAST
   reports msduck's generic syntax error 102 (SQL Server: 156).

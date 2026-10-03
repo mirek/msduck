@@ -172,6 +172,32 @@ pub fn value_type(kind: &DataType) -> Option<DataType> {
     (resolved != *kind).then_some(resolved)
 }
 
+/// [`value_type`] for a type stored from a declaration, such as a function
+/// parameter, RETURNS type or table column: a delimited character type
+/// without a length declares length 1, as `varchar` does there, not the 30
+/// of a CAST target.
+pub fn declared_value_type(kind: &DataType) -> Option<DataType> {
+    let mut resolved = value_type(kind)?;
+    let one = || {
+        Some(CharacterLength::IntegerLength {
+            length: 1,
+            unit: None,
+        })
+    };
+    match &mut resolved {
+        DataType::Char(length @ None)
+        | DataType::Varchar(length @ None)
+        | DataType::Nvarchar(length @ None) => *length = one(),
+        DataType::Custom(name, modifiers)
+            if modifiers.is_empty() && name.to_string().eq_ignore_ascii_case("nchar") =>
+        {
+            *modifiers = vec!["1".into()];
+        }
+        _ => {}
+    }
+    Some(resolved)
+}
+
 /// The type a delimited or `sys`-qualified system type name written as
 /// `kind` parses to without delimiters, keeping `sysname` as a name; `None`
 /// for every other type. Catalog text renders such a type like the plain one.
