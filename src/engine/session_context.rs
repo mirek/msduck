@@ -359,6 +359,11 @@ fn select_items(set: &mut SetExpr, each: &mut dyn FnMut(&mut Expr) -> Result<()>
             for item in &mut select.projection {
                 if let SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } = item
                 {
+                    // Parentheses are transparent.
+                    let mut expr = expr;
+                    while let Expr::Nested(inner) = expr {
+                        expr = inner;
+                    }
                     each(expr)?;
                 }
             }
