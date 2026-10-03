@@ -707,20 +707,7 @@ fn aggregate(name: &str, expr: &Expr) -> Option<Expr> {
         // The extremum of (key, value) pairs; NULL values stay NULL so the
         // aggregate (and the NULL-elimination warning) still sees them.
         "min" | "max" if !distinct && converted(value) => {
-            let pair = case(
-                Expr::IsNull(Box::new(value.clone())),
-                null(),
-                Expr::Dictionary(vec![
-                    DictionaryField {
-                        key: Ident::with_quote('\'', "__msduck_k"),
-                        value: Box::new(key(value.clone())),
-                    },
-                    DictionaryField {
-                        key: Ident::with_quote('\'', "__msduck_v"),
-                        value: Box::new(value.clone()),
-                    },
-                ]),
-            );
+            let pair = keyed_pair(value)?;
             Some(case(
                 Expr::BinaryOp {
                     left: Box::new(call("typeof", vec![sample])),
@@ -736,6 +723,39 @@ fn aggregate(name: &str, expr: &Expr) -> Option<Expr> {
         }
         _ => None,
     }
+}
+
+/// `{key, value}` of a carrier for MIN/MAX, NULL for NULL, evaluating the
+/// value once per row (it may be volatile).
+fn keyed_pair(value: &Expr) -> Option<Expr> {
+    const TEMPLATE: &str = "list_extract(list_transform([__msduck_value], __msduck_m -> \
+        CASE WHEN __msduck_m IS NULL THEN NULL ELSE {'__msduck_k': __msduck_key, '__msduck_v': __msduck_m} END), 1)";
+    let mut pair = sqlparser::parser::Parser::new(&sqlparser::dialect::DuckDbDialect {})
+        .try_with_sql(TEMPLATE)
+        .ok()?
+        .parse_expr()
+        .ok()?;
+    let element = Expr::Identifier(Ident::new("__msduck_m"));
+    let keyed = key(element);
+    struct Fill<'a> {
+        value: &'a Expr,
+        key: &'a Expr,
+    }
+    impl VisitorMut for Fill<'_> {
+        type Break = ();
+        fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
+            if let Expr::Identifier(ident) = expr {
+                match ident.value.as_str() {
+                    "__msduck_value" => *expr = self.value.clone(),
+                    "__msduck_key" => *expr = self.key.clone(),
+                    _ => {}
+                }
+            }
+            ControlFlow::Continue(())
+        }
+    }
+    let _ = VisitMut::visit(&mut pair, &mut Fill { value, key: &keyed });
+    Some(pair)
 }
 
 fn function(name: &str, expr: &Expr) -> Option<Expr> {
@@ -1094,7 +1114,7 @@ mod tests {
         assert_eq!(
             least,
             "CASE WHEN typeof(any_value(n)) = 'STRUCT(__msduck_utf16le BLOB)' \
-             THEN struct_extract(min(CASE WHEN n IS NULL THEN NULL ELSE {'__msduck_k': __msduck_unicode_order_key(__msduck_unicode_input(n)), '__msduck_v': n} END), '__msduck_v') \
+             THEN struct_extract(min(list_extract(list_transform([n], __msduck_m -> CASE WHEN __msduck_m IS NULL THEN NULL ELSE {'__msduck_k': __msduck_unicode_order_key(__msduck_unicode_input(__msduck_m)), '__msduck_v': __msduck_m} END), 1)), '__msduck_v') \
              ELSE min(n) END"
         );
         // Window extrema and explicitly collated values keep DuckDB's.

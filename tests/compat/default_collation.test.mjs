@@ -11,7 +11,8 @@ import { start, query } from '../support/client.mjs'
 
 const fixture = JSON.parse(readFileSync(new URL('../../reference/default-collation.json', import.meta.url)))
 
-// Cases whose rows or diagnostics differ from SQL Server, by reason.
+// Cases whose descriptors, rows or diagnostics differ from SQL Server, by
+// reason.
 const known = new Map([
   ['ignorable unicode units', 'NCHAR of a surrogate code unit is unsupported'],
   ['surrogate pair', 'NCHAR of a surrogate code unit is unsupported'],
@@ -19,13 +20,21 @@ const known = new Map([
   ['ordering weights', 'punctuation and digits follow code points, not SQL Server sort weights'],
   ['group by', 'grouping by an expression of a column keeps DuckDB grouping (trailing spaces)'],
   ['alter table add unique', 'ALTER TABLE ADD UNIQUE over nvarchar is unsupported (constraints)'],
+  ['catalog', 'sys.columns names are nvarchar(max), and the _SC_UTF8 column keeps the default descriptor'],
+  ['add column', 'sys.columns.collation_name is nvarchar(max), not sysname'],
 ])
 
 // System-generated constraint names end in a random hexadecimal suffix.
 const message = text => text.replace(/__[0-9A-F]{16}'/g, "__<hash>'")
 
+// Result descriptors: name, type, length and the TDS collation fields.
+const describe = column => [column.name, column.type, column.length,
+  column.collation?.sortId === undefined ? null
+    : [column.collation.lcid, column.collation.flags, column.collation.version, column.collation.sortId]]
+
 function outcome(result) {
   return {
+    columns: result.sets.map(set => set.columns.map(describe)),
     rows: canonical(result.sets.map(set => set.rows)),
     errors: result.errors.map(e => [e.number, e.state, e.class, message(e.message)]),
   }
@@ -37,6 +46,7 @@ test('comparisons, grouping, keys and column collations match the SQL Server cap
   for (const entry of fixture.cases) {
     const local = outcome(await capture(connection, entry.sql))
     const reference = {
+      columns: entry.sets.map(set => set.columns.map(describe)),
       rows: entry.sets.map(set => set.rows),
       errors: entry.errors.map(e => [e.number, e.state, e.class, message(e.message)]),
     }
