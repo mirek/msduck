@@ -36,7 +36,7 @@ and ANSI UTF-8 evaluation do not acquire invented behavior. Character payloads
 must respect their declared widths and fixed-width padding. Core CP1252 encoding
 validates ANSI payloads; Unicode payloads retain isolated surrogate units.
 
-Thirty private Rust tests pass using cached, compiler-compatible Linux
+Thirty-one private Rust tests pass using cached, compiler-compatible Linux
 dependencies and isolated temporary binaries, with strict Clippy and formatting.
 They compare 21 ordinary character cases across all four captures (84 comparisons),
 26 declaration/collation cases (104 comparisons), 10 supplementary/UTF-8/mismatch
@@ -187,3 +187,11 @@ completion events privately; it is not a full raw-token comparison or a runtime
 pass. Registration alone cannot fix these differences: adapters must bind the
 declaration plan and route execution through the deterministic rules, preserving
 error metadata and statement behavior.
+
+Independent review against merged conversion reference #815 found that Unicode
+CONCAT_WS XML/SQL_VARIANT rejections named `varchar` instead of `nvarchar`.
+The regression fails on efff2ef and checks all 24 source/NULL/argument-role
+observations across all four captures (96 exact diagnostics). Planning now
+selects the conversion family from all original character declarations before
+rejecting a source, without consulting values. A separate rendering test covers
+Unicode following the rejected source; it is not a new SQL Server capture.

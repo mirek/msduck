@@ -2193,3 +2193,72 @@ fn resolved_no_collation_preserves_source_encoding_or_reports_unknown() {
         );
     }
 }
+
+#[test]
+fn rejected_concat_sources_use_the_declared_conversion_family() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../reference/concat-text-conversion.json"
+    ))
+    .unwrap();
+    for (source, kind) in [("xml", Type::Xml), ("variant", Type::Variant)] {
+        let rejected = Argument {
+            kind: Some(kind),
+            converted_width: None,
+            collation: None,
+        };
+        for nullness in ["value", "null"] {
+            for role in [
+                "source",
+                "separator",
+                "last",
+                "isolated first",
+                "isolated last",
+                "unicode",
+            ] {
+                let ansi = literal(Some(""), false).0;
+                let unicode = literal(Some(""), true).0;
+                let null = Argument::null_literal();
+                let arguments = match role {
+                    "source" => [ansi.clone(), rejected.clone(), ansi],
+                    "separator" => [rejected.clone(), ansi.clone(), ansi],
+                    "last" => [ansi.clone(), ansi, rejected.clone()],
+                    "isolated first" => [null.clone(), rejected.clone(), null],
+                    "isolated last" => [null.clone(), null, rejected.clone()],
+                    "unicode" => [unicode.clone(), rejected.clone(), unicode],
+                    _ => unreachable!(),
+                };
+                let name = format!("{source} {nullness} cws {role}");
+                let Err(Error::Sql(actual)) =
+                    rules::plan(Function::ConcatWs, &arguments, DEFAULT, &catalog())
+                else {
+                    panic!("missing conversion diagnostic: {name}");
+                };
+                for container in fixture["containers"].as_array().unwrap() {
+                    for run in container["runs"].as_array().unwrap() {
+                        let captured = observed(run, &name);
+                        assert!(captured["sets"].as_array().unwrap().is_empty(), "{name}");
+                        assert_eq!(captured["errors"].as_array().unwrap().len(), 1, "{name}");
+                        let expected = &captured["errors"][0];
+                        assert_eq!(json!(actual.number), expected["number"], "{name}");
+                        assert_eq!(json!(actual.state), expected["state"], "{name}");
+                        assert_eq!(json!(actual.severity), expected["class"], "{name}");
+                        assert_eq!(json!(actual.message), expected["message"], "{name}");
+                    }
+                }
+            }
+        }
+        // A rendering contract, not an additional SQL Server capture: inspect
+        // original declarations even when Unicode follows the rejected source.
+        let arguments = [
+            rejected,
+            literal(Some(""), false).0,
+            literal(Some(""), true).0,
+        ];
+        let Err(Error::Sql(actual)) =
+            rules::plan(Function::ConcatWs, &arguments, DEFAULT, &catalog())
+        else {
+            panic!("missing conversion diagnostic");
+        };
+        assert!(actual.message.contains(" to nvarchar is not allowed."));
+    }
+}

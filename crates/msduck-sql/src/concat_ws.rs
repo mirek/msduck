@@ -143,27 +143,30 @@ pub fn plan_with_context(
         Ok(first)
     };
     let mut combined: Option<Label> = None;
-    let mut is_unicode = false;
+    // Conversion family is determined by all original declarations, including
+    // a Unicode argument following a source rejected during conversion.
+    let is_unicode = arguments
+        .iter()
+        .any(|argument| matches!(argument.kind, Some(Type::Character(kind)) if unicode(kind)));
     let mut source_encodings = Vec::new();
     for (index, argument) in arguments.iter().enumerate() {
         match argument.kind {
-            Some(Type::Character(kind)) => {
-                if argument.converted_width != Some(kind.length()) {
-                    return Err(Error::InvalidDeclaration);
-                }
-                is_unicode |= unicode(kind);
+            Some(Type::Character(kind)) if argument.converted_width != Some(kind.length()) => {
+                return Err(Error::InvalidDeclaration);
             }
+            Some(Type::Character(_)) => {}
             Some(Type::Variant | Type::Xml) if function == Function::ConcatWs => {
                 let kind = if argument.kind == Some(Type::Variant) {
                     "sql_variant"
                 } else {
                     "xml"
                 };
+                let target = if is_unicode { "nvarchar" } else { "varchar" };
                 return Err(sql(
                     257,
                     3,
                     format!(
-                        "Implicit conversion from data type {kind} to varchar is not allowed. Use the CONVERT function to run this query."
+                        "Implicit conversion from data type {kind} to {target} is not allowed. Use the CONVERT function to run this query."
                     ),
                 ));
             }
