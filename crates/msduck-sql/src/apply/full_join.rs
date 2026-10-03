@@ -317,6 +317,10 @@ fn relation_names(select: &Select) -> HashSet<String> {
             }
             ControlFlow::Continue(())
         }
+        fn pre_visit_select(&mut self, select: &Select) -> ControlFlow<()> {
+            wildcard_qualifiers(select, &mut self.0);
+            ControlFlow::Continue(())
+        }
         fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
             if let Expr::CompoundIdentifier(parts) = expr {
                 for part in &parts[..parts.len().saturating_sub(1)] {
@@ -328,19 +332,23 @@ fn relation_names(select: &Select) -> HashSet<String> {
     }
     let mut names = Names(HashSet::new());
     let _ = select.visit(&mut names);
-    // `alias.*` is not an expression, but it references `alias` too.
+    wildcard_qualifiers(select, &mut names.0);
+    names.0
+}
+
+/// `alias.*` is not an expression, but it references `alias` too.
+fn wildcard_qualifiers(select: &Select, names: &mut HashSet<String>) {
     for item in &select.projection {
         if let SelectItem::QualifiedWildcard(SelectItemQualifiedWildcardKind::ObjectName(name), _) =
             item
         {
             for part in &name.0 {
                 if let Some(ident) = part.as_ident() {
-                    names.0.insert(ident.value.to_lowercase());
+                    names.insert(ident.value.to_lowercase());
                 }
             }
         }
     }
-    names.0
 }
 
 /// A name no relation or qualifier of the SELECT uses, reserved for this one.
@@ -514,6 +522,21 @@ fn correlated(left: &TableWithJoins, right: &TableFactor, condition: &Expr) -> b
             }
             body_names(&query.body, &mut names);
             self.scopes.push(names);
+            ControlFlow::Continue(())
+        }
+        fn pre_visit_select(&mut self, select: &Select) -> ControlFlow<()> {
+            // Without FROM, an unqualified column can only be an outer one.
+            if select.from.is_empty()
+                && (select.projection.iter().any(|item| match item {
+                    SelectItem::UnnamedExpr(expr) | SelectItem::ExprWithAlias { expr, .. } => {
+                        unqualified_columns(expr)
+                    }
+                    _ => false,
+                }) || select.selection.as_ref().is_some_and(unqualified_columns))
+            {
+                self.outer = true;
+                return ControlFlow::Break(());
+            }
             ControlFlow::Continue(())
         }
         fn post_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
@@ -737,6 +760,18 @@ mod tests {
     fn unqualified_condition_columns_count_as_outer_references() {
         let sql = rewritten("SELECT 1 FROM a FULL JOIN b ON a.k = b.k AND id = 1");
         assert!(!sql.contains("FULL"), "{sql}");
+    }
+
+    #[test]
+    fn from_less_operands_and_nested_wildcards() {
+        let sql = rewritten(
+            "SELECT 1 FROM (SELECT id AS k) AS l FULL JOIN (SELECT 1 AS k) AS r ON l.k = r.k",
+        );
+        assert!(!sql.contains("FULL"), "{sql}");
+        let sql = rewritten(
+            "SELECT (SELECT __msduck_full_join.* FOR JSON PATH) AS j FROM OPENJSON(lhs) l FULL JOIN OPENJSON(rhs) r ON l.[key] = r.[key]",
+        );
+        assert!(sql.contains(&format!("AS {SIDES}_1 ({SIDE})")), "{sql}");
     }
 
     #[test]
