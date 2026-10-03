@@ -11075,6 +11075,33 @@
         "Fresh exclusive receipt, existing isolated worktree/reference dependencies, no extra agent/nativecache or shared builder source/executable mutation. Exact-head focused Node checks and required CI, independent/Codex review or genuine availability fallback. Worker owns review corrections, exacthead merge and protectedregistry/project completion. No core/TDS/commonhelper/runtime/export or reserved engine.rs edits. Publish separate pure conversion implementation only from independently verified observed domains."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pk5z9"
+    },
+    {
+      "id": "ansi-cp1251-projection-v1",
+      "title": "Implement native CP1251 SQL projection kernels",
+      "state": "ready",
+      "authorization": "Continuing owner goal and bounded adapter plan890; reviewed reference895 and public carrier894. Availability requires genuine dependencycompletion, no mocked runtime compatibility.",
+      "issue": 897,
+      "scope": [
+        "crates/msduck-core/src/ansi_conversion.rs",
+        "crates/msduck-core/src/lib.rs",
+        "crates/msduck-core/tests/ansi_conversion.rs",
+        "docs/ansi-conversion.md"
+      ],
+      "dependencies": [
+        "ansi-byte-carrier-v1",
+        "ansi-byte-export-v1",
+        "bulk-character-conversion-reference-v1",
+        "bulk-character-adapter-plan-v1"
+      ],
+      "acceptance": [
+        "Public deterministic CP1251 byte projection APIs consume explicit native carrier/view encoding and explicit target, preserve native source identity and NULL versus empty. Unsupported source/target profiles are validated before NULL and return typed explicit unsupported errors. No implicit numeric/opaque codepage aliases.",
+        "Implement exhaustive CP1251-to-SQL-UTF16 and CP1251-to-native-CP1252 tables from all256 retained original/native/SQL-unit cells, including undefined byte98->U0098; CP1251-to-native-UTF8 derives from verified SQL units, and same-native CP1251 preserves every byte. Test all256 against unmodified retained four-run fixture, and mixed/large original captured controls from884/895. General best-fit or unprobed Unicode-source/UTF8 malformed semantics must not be invented.",
+        "Separate raw projections from target-family capacity/padding and bulk failure/transaction diagnostics; do not silently truncate/pad or claim width semantics from this kernel. Explicit input/output resource limits and checked preflight before allocation/copy, allocation failure handling, source immutability, output bounds include UTF16 byte accounting. Tests cover exactlimit/oneover, largeMAX captured roundtrip, allbyte98 native/client/SQL distinctions, NULL/empty, unsupportedprofiles beforeNULL and UTF8 expansion.",
+        "Export through own scoped corelib edit and test real public API (no pathimport bypass). No DuckDB/Arrow/TDS/parser/session/environment/global-state dependency; no edits to carrier/other codecs or owner engine.rs. Preserve fixture hashes; no generated-client decoder used as semantic ground truth.",
+        "Reuse existing isolated root worktree/cache and sharedLinux builder lock, no new agents/worktrees/nativecaches. Focused core suite, fmt, workspace Rust, strictalltargetClippy, fulltedious client suite and raw325case audit with exacthead/source/binary evidence. Independent and verified Codex review or genuine fallback, requiredCI, exacthead merge and promptregistry/project completion. Runtime storage/bulk/output adoption remains explicitly pending with separate scoped tasks."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PlCvt"
     }
   ]
 }
