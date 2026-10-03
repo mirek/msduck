@@ -11555,7 +11555,7 @@
       "id": "utf8-valid-projection-v1",
       "title": "Implement valid UTF8 native and SQL UTF16 projection",
       "issue": 926,
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner full-server compatibility goal and explicit owner-directed valid UTF8 follow-up after completed CP1251 capacity #921; source/native/SQL-unit evidence from owner references #895, #913 and #919.",
       "scope": [
         "crates/msduck-core/src/ansi_conversion.rs",
