@@ -123,11 +123,12 @@ pub(super) fn alter(session: &mut Session, request: Request) -> Result<Execution
         // Only transactions that began before the transition are waited for.
         let cutoff = SEQUENCE.fetch_add(1, Ordering::SeqCst);
         catalog.set_snapshot_isolation(&session.db, &alias, transition)?;
-        if let Err(error) = wait_for_transactions(session, &alias, *on, cutoff) {
+        let db = session.db.try_clone()?;
+        let publish = || catalog.set_snapshot_isolation(&db, &alias, target);
+        if let Err(error) = wait_for_transactions(session, &alias, *on, cutoff, publish) {
             catalog.set_snapshot_isolation(&session.db, &alias, previous)?;
             return Err(error);
         }
-        catalog.set_snapshot_isolation(&session.db, &alias, target)?;
     }
     Ok(Execution::statement(tokens, None, 215))
 }
@@ -264,6 +265,23 @@ pub(super) fn track_write(session: &mut Session, statement: &Statement) -> Resul
             .collect(),
         Statement::CreateIndex(index) => vec![index.table_name.clone()],
         Statement::CreateView(view) => vec![view.name.clone()],
+        Statement::Query(query) => match query.body.as_ref() {
+            SetExpr::Select(select) => select
+                .into
+                .iter()
+                .flat_map(|into| &into.targets)
+                .filter_map(|target| match target {
+                    sqlparser::ast::Expr::Identifier(ident) => {
+                        Some(ObjectName::from(vec![ident.clone()]))
+                    }
+                    sqlparser::ast::Expr::CompoundIdentifier(idents) => {
+                        Some(ObjectName::from(idents.clone()))
+                    }
+                    _ => None,
+                })
+                .collect(),
+            _ => write_target(statement).into_iter().collect(),
+        },
         _ => write_target(statement).into_iter().collect(),
     };
     for target in targets {
@@ -302,14 +320,23 @@ fn temporary(ident: &Ident) -> bool {
 }
 
 /// Wait until the other sessions' transactions that an
-/// ALLOW_SNAPSHOT_ISOLATION change waits for have ended: ON waits for
+/// ALLOW_SNAPSHOT_ISOLATION change waits for have ended (ON waits for
 /// transactions that wrote to the database, OFF also for SNAPSHOT
-/// transactions that used it.
-fn wait_for_transactions(session: &mut Session, alias: &str, on: bool, cutoff: u64) -> Result<()> {
+/// transactions that used it), then `publish` the final state. The last
+/// check and `publish` hold the transaction table, so no waited-for
+/// transaction can start writing in between.
+fn wait_for_transactions(
+    session: &mut Session,
+    alias: &str,
+    on: bool,
+    cutoff: u64,
+    publish: impl FnOnce() -> Result<()>,
+) -> Result<()> {
     let catalog = catalog_id(session);
     let token = session.ext.token;
-    let blocked = || {
-        active_transactions().iter().any(|(other, active)| {
+    loop {
+        let transactions = active_transactions();
+        let blocked = transactions.iter().any(|(other, active)| {
             *other != token
                 && active.sequence < cutoff
                 && active.catalog == catalog
@@ -317,12 +344,13 @@ fn wait_for_transactions(session: &mut Session, alias: &str, on: bool, cutoff: u
                     .databases
                     .get(alias)
                     .is_some_and(|usage| usage.wrote || (!on && active.snapshot))
-        })
-    };
-    while blocked() {
+        });
+        if !blocked {
+            return publish();
+        }
+        drop(transactions);
         pause(session)?;
     }
-    Ok(())
 }
 
 fn conflicting_values_error() -> SqlError {

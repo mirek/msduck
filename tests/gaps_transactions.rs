@@ -1222,6 +1222,27 @@ fn allow_snapshot_isolation_changes_wait_for_open_transactions() {
         Some((1, Some("ON".into())))
     );
     run(&mut reader, "COMMIT").unwrap();
+    // SELECT INTO writes the database.
+    run(&mut writer, "BEGIN TRAN; SELECT v INTO copy FROM t").unwrap();
+    let off = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF");
+    thread::sleep(Duration::from_millis(500));
+    assert_eq!(
+        snapshot_state(&observer, "probe_db"),
+        Some((2, Some("IN_TRANSITION_TO_OFF".into())))
+    );
+    run(&mut writer, "ROLLBACK").unwrap();
+    assert_eq!(off.join().unwrap().0, Ok(()));
+    run(
+        &mut observer,
+        "SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
+    )
+    .unwrap();
+    run(
+        &mut observer,
+        "ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON",
+    )
+    .unwrap();
+    run(&mut observer, "SET TRANSACTION ISOLATION LEVEL SNAPSHOT").unwrap();
     // Temporary-table DDL is not a write to the database.
     run(&mut writer, "BEGIN TRAN; CREATE TABLE #scratch (v INT)").unwrap();
     let (result, elapsed) = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF")
