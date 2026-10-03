@@ -91,5 +91,11 @@ The tedious test lists them exactly:
   aggregate-subquery form previously failed to bind. Keeping exact units
   needs carrier-aware comparison of these results, which belongs to the
   predicate lowering.
+- A non-text replacement of a Unicode first argument converts with
+  DuckDB's text cast, so `ISNULL(j.[value], CAST(1 AS BIT))` returns
+  `true` and dates lose their SQL Server style. NVARCHAR variables and
+  stored columns already behaved this way through the existing ELSE branch;
+  SQL Server's character formatting is applied by AST conversion lowering,
+  which the bind-time macro cannot reach.
 - The OPENJSON `type` column is `int`; SQL Server reports `tinyint`, so
   `ISNULL(j.[type], 0)` is `int` too.
