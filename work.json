@@ -11608,7 +11608,7 @@
     {
       "id": "bulk-character-utf8-multibyte-reference-v1",
       "title": "Capture deeper UTF8 continuation and mixed-sequence controls",
-      "state": "ready",
+      "state": "done",
       "authorization": "Continuing owner full SQL Server compatible Rust/DuckDB goal; first-party merged926/927 evidence leaves third/fourth-byte transitions and mixed malformed sequences ungrounded. Reuse existing resources.",
       "scope": [
         "scripts/capture-bulk-character-utf8-multibyte.mjs",
