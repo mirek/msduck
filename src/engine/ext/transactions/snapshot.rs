@@ -289,11 +289,6 @@ pub(super) fn track_write(session: &mut Session, statement: &Statement) -> Resul
         Statement::CreateIndex(index) => vec![index.table_name.clone()],
         Statement::CreateView(view) => vec![view.name.clone()],
         Statement::AlterView { name, .. } => vec![name.clone()],
-        Statement::CreateSchema { .. } => {
-            let alias = session.database.alias().to_owned();
-            usage(session, &alias, |usage| usage.wrote = true);
-            Vec::new()
-        }
         Statement::Query(query) => match query.body.as_ref() {
             SetExpr::Select(select) => select
                 .into
@@ -311,7 +306,34 @@ pub(super) fn track_write(session: &mut Session, statement: &Statement) -> Resul
                 .collect(),
             _ => write_target(statement).into_iter().collect(),
         },
-        _ => write_target(statement).into_iter().collect(),
+        Statement::Insert(_)
+        | Statement::Update(_)
+        | Statement::Delete(_)
+        | Statement::Merge(_) => write_target(statement).into_iter().collect(),
+        // Statements that never write a database by themselves; a
+        // procedure's or dynamic batch's statements are tracked one by one.
+        Statement::Set(_)
+        | Statement::Declare { .. }
+        | Statement::Use(_)
+        | Statement::StartTransaction { .. }
+        | Statement::Commit { .. }
+        | Statement::Rollback { .. }
+        | Statement::Savepoint { .. }
+        | Statement::Throw(_)
+        | Statement::Print(_)
+        | Statement::Return(_)
+        | Statement::Execute { .. } => Vec::new(),
+        Statement::Raise(_) if msduck_sql::drop_index_syntax::request(statement).is_none() => {
+            Vec::new()
+        }
+        _ if msduck_sql::dialect::ext::transactions::request(statement).is_some() => Vec::new(),
+        // Any other statement (DROP INDEX, other DDL, procedures of other
+        // features) counts as a write to the current database.
+        _ => {
+            let alias = session.database.alias().to_owned();
+            usage(session, &alias, |usage| usage.wrote = true);
+            Vec::new()
+        }
     };
     for target in targets {
         let idents: Vec<&Ident> = target.0.iter().filter_map(|part| part.as_ident()).collect();

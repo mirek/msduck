@@ -1253,6 +1253,27 @@ fn allow_snapshot_isolation_changes_wait_for_open_transactions() {
     )
     .unwrap();
     run(&mut observer, "SET TRANSACTION ISOLATION LEVEL SNAPSHOT").unwrap();
+    // So is DROP INDEX, which msduck parses into its own statement.
+    run(&mut writer, "CREATE INDEX ix ON t (v)").unwrap();
+    run(&mut writer, "BEGIN TRAN; DROP INDEX ix ON t").unwrap();
+    let off = alter("ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION OFF");
+    thread::sleep(Duration::from_millis(500));
+    assert_eq!(
+        snapshot_state(&observer, "probe_db"),
+        Some((2, Some("IN_TRANSITION_TO_OFF".into())))
+    );
+    run(&mut writer, "ROLLBACK").unwrap();
+    assert_eq!(off.join().unwrap().0, Ok(()));
+    run(
+        &mut observer,
+        "SET TRANSACTION ISOLATION LEVEL READ COMMITTED",
+    )
+    .unwrap();
+    run(
+        &mut observer,
+        "ALTER DATABASE probe_db SET ALLOW_SNAPSHOT_ISOLATION ON",
+    )
+    .unwrap();
     // A procedure definition is a write.
     run(&mut writer, "BEGIN TRAN").unwrap();
     run(&mut writer, "CREATE PROCEDURE p AS SELECT 1").unwrap();
