@@ -1,9 +1,11 @@
-# Native CP1251 and CP1252 projections
+# Native codepage and valid UTF8 projections
 
 `msduck_core::ansi_conversion::project` consumes an explicit source declaration,
 an optional native `AnsiView`, a `ProjectionTarget` and `ProjectionLimits`.
-The admitted sources are CP1251 and CP1252. Targets are native CP1251, CP1252, UTF8 and SQL
-UTF16 units. Opaque numeric tags do not alias named encodings. Unsupported plans
+CP1251 and CP1252 sources admit native CP1251, CP1252, UTF8 and SQL UTF16 targets.
+Valid UTF8 scalar sources admit native UTF8 identity and SQL UTF16 units only;
+UTF8-to-CP1251/CP1252 conversion remains unsupported, including for NULL.
+Opaque numeric tags do not alias named encodings. Unsupported plans
 fail before NULL handling; a non-NULL carrier must match its declaration.
 NULL stays `None` and empty input produces an empty non-NULL projected value.
 
@@ -57,3 +59,52 @@ original fixture without modifying it. This avoids asking `serde_json::Value`
 to represent unrelated diagnostics containing lone UTF16 surrogates. Expected
 conversion values come from exact native-byte/SQL-unit fields, never a lossy
 client decoder; diagnostic differences remain in the original reference.
+
+## Valid UTF8 scalar domain
+
+For an explicitly declared UTF8 source, strict scalar validation follows source
+identity and the active input-byte limit. Native UTF8 output copies the original
+valid bytes; SQL UTF16 output encodes scalar values into one/two units. Checked
+unit counting and multiplication establish the final output-byte budget before
+fallible allocation. The borrowed source and UTF16 iterator introduce no expanded
+temporary. An empty value remains non-NULL and NULL performs no allocation.
+
+Malformed/truncated input returns `ProjectionError::InvalidUtf8` with the original
+byte offset (`valid_up_to`) and an optional error length (`None` for incomplete
+input). This is an explicit boundary of the valid-scalar API, not SQL error 7339,
+4896, 9833 or a SQL Server malformed-decoding algorithm. Native SQL UTF8 can retain
+malformed bytes while SQL UTF16 and client display differ; those original fields
+remain in the references. The carrier can still preserve raw bytes, but this
+projection API never repairs them or produces U+FFFD to hide a difference.
+
+Public tests replay all applicable variable-storage observations from these
+unchanged owner captures:
+
+| Reference | SHA256 |
+| --- | --- |
+| Conversion895 | `f55527a2b0969d7104510d9b76a3303c82b28eac05d4ad11bc2acaf472caab27` |
+| UTF8 boundary913 | `fa1e3ae36794cfc4b197d2ff122c5ab5effb99f3b449d0ad2eafea354c18be6a` |
+| UTF8 bounded target919 | `6c951a06d19c60c2a71e4656b570976baf726982cffcdef207d8e96bb5b92455` |
+
+Selection requires matching declared/wire UTF8, variable source/target families
+and native UTF8/Unicode targets. It uses declaration facts before comparing
+candidate output. Fixed CHAR/NCHAR storage observations retain their original
+padding/capacity results outside this complete-projection contract. Failed
+declaration/admission/decoding loads have no stored-value oracle and are counted
+explicitly rather than turned into successful rows.
+
+All four runs of every selected case are retained: 716 observations include 236
+failed loads; 920 valid rows provide 1396 native-byte/SQL-unit comparisons. Valid
+NULL/ASCII controls inside mixed-malformed successful cases still participate;
+184 malformed rows in those cases remain outside scalar projection. A separate
+test checks every retained malformed input, including unsuccessful loads, for
+explicit byte errors. Source/output type and the observed UTF8 profile (LCID 1033,
+flags 96, version 2, sort 0) are checked; none enables an operational collation gate.
+Every successful value checks exact and one-under active byte limits and source
+immutability. Supplementary and scalar-boundary controls use captured SQL units.
+
+The capacity layer still rejects UTF8 sources. General UTF8-to-single-byte best
+fit, malformed SQL decoding/admission, isolated UTF16 surrogates and complete
+storage/BulkLoad/output adoption remain separate work. The valid domain is a
+Unicode scalar contract supported by finite SQL observations, not exhaustive
+proof of SQL Server behavior across contexts or collations.

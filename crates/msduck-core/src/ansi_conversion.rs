@@ -1,4 +1,4 @@
-//! Native CP1251/CP1252 projections established by retained SQL Server byte probes.
+//! Native CP1251/CP1252 and valid UTF8 projections from retained SQL Server probes.
 //! Complete projections are separate from the BulkLoad capacity submodule.
 //! SQL diagnostics and wire collation admission belong to root adapters.
 use crate::ansi_bytes::{AnsiBytes, AnsiView, ByteError, EncodingIdentity};
@@ -33,6 +33,11 @@ pub enum ProjectionError {
         declared: EncodingIdentity,
         actual: EncodingIdentity,
     },
+    /// Outside the valid UTF8 scalar domain; this is not a SQL diagnostic.
+    InvalidUtf8 {
+        valid_up_to: usize,
+        error_len: Option<usize>,
+    },
     Limit {
         resource: Resource,
         requested: usize,
@@ -56,6 +61,13 @@ impl fmt::Display for ProjectionError {
             Self::SourceEncodingMismatch { declared, actual } => write!(
                 f,
                 "ANSI source {actual:?} differs from declaration {declared:?}"
+            ),
+            Self::InvalidUtf8 {
+                valid_up_to,
+                error_len,
+            } => write!(
+                f,
+                "invalid UTF8 projection bytes at {valid_up_to} (error length {error_len:?})"
             ),
             Self::Limit {
                 resource,
@@ -117,7 +129,7 @@ fn allocate<T>(elements: usize, requested_bytes: usize) -> Result<Vec<T>, Projec
     Ok(output)
 }
 
-/// Project the admitted CP1251/CP1252 source domains, with an explicit declaration
+/// Project CP1251/CP1252 or valid UTF8 source domains, with an explicit declaration
 /// even for NULL. Unsupported plans fail before inspecting the nullable value.
 /// A carrier must agree with its declaration. The input is never modified.
 /// Resource bounds are checked before reserving/copying the output. These are
@@ -128,6 +140,9 @@ pub fn project(
     target: ProjectionTarget,
     limits: ProjectionLimits,
 ) -> Result<Option<ProjectedValue>, ProjectionError> {
+    if source_encoding == EncodingIdentity::Utf8 {
+        return project_utf8(value, target, limits);
+    }
     let characters = match source_encoding {
         EncodingIdentity::Cp1251 => &CP1251_TO_SQL_CHAR,
         EncodingIdentity::Cp1252 => &CP1252_TO_SQL_CHAR,
@@ -208,6 +223,68 @@ pub fn project(
                 })?;
             ProjectedValue::Native(owned)
         }
+    };
+    Ok(Some(projected))
+}
+
+/// A strict scalar domain, separate from SQL Server's context-specific malformed
+/// byte grammar and BulkLoad declaration/wire admission. No lossy repair.
+fn project_utf8(
+    value: Option<AnsiView<'_>>,
+    target: ProjectionTarget,
+    limits: ProjectionLimits,
+) -> Result<Option<ProjectedValue>, ProjectionError> {
+    if let ProjectionTarget::Native(encoding) = target
+        && encoding != EncodingIdentity::Utf8
+    {
+        return Err(ProjectionError::UnsupportedTarget(encoding));
+    }
+    let Some(value) = value else { return Ok(None) };
+    if value.encoding() != EncodingIdentity::Utf8 {
+        return Err(ProjectionError::SourceEncodingMismatch {
+            declared: EncodingIdentity::Utf8,
+            actual: value.encoding(),
+        });
+    }
+    let input = value.bytes();
+    check_limit(Resource::Input, input.len(), limits.input_bytes)?;
+    let text = std::str::from_utf8(input).map_err(|error| ProjectionError::InvalidUtf8 {
+        valid_up_to: error.valid_up_to(),
+        error_len: error.error_len(),
+    })?;
+    let projected = match target {
+        ProjectionTarget::Native(EncodingIdentity::Utf8) => {
+            check_limit(Resource::Output, input.len(), limits.output_bytes)?;
+            let mut bytes = allocate(input.len(), input.len())?;
+            bytes.extend_from_slice(input);
+            ProjectedValue::Native(
+                AnsiBytes::from_vec(EncodingIdentity::Utf8, bytes, limits.output_bytes).map_err(
+                    |error| match error {
+                        ByteError::LengthOverflow => ProjectionError::LengthOverflow,
+                        ByteError::Limit { requested, maximum } => ProjectionError::Limit {
+                            resource: Resource::Output,
+                            requested,
+                            maximum,
+                        },
+                    },
+                )?,
+            )
+        }
+        ProjectionTarget::SqlUtf16 => {
+            let unit_count = text.chars().try_fold(0usize, |count, scalar| {
+                count
+                    .checked_add(scalar.len_utf16())
+                    .ok_or(ProjectionError::LengthOverflow)
+            })?;
+            let output_bytes = unit_count
+                .checked_mul(2)
+                .ok_or(ProjectionError::LengthOverflow)?;
+            check_limit(Resource::Output, output_bytes, limits.output_bytes)?;
+            let mut units = allocate(unit_count, output_bytes)?;
+            units.extend(text.encode_utf16());
+            ProjectedValue::SqlUtf16(units)
+        }
+        ProjectionTarget::Native(_) => unreachable!("UTF8 target validated before NULL"),
     };
     Ok(Some(projected))
 }
