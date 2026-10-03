@@ -10948,6 +10948,26 @@
         "Prove actual predecessor wrapper fails with seven child successes and corrected wrapper passes on both hosts. Run complete reference-compare and CLI suites, preserve raw evidence; same exact-head CI/independent/Codex gates, worker-owned merge and all companion registry/project completion. No native/cache/agent expansion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PkyP3"
+    },
+    {
+      "id": "bulk-character-adapter-plan-v1",
+      "title": "Specify lossless BulkLoad character carrier and conversion boundaries",
+      "state": "ready",
+      "issue": 890,
+      "authorization": "Owner continuing goal and decomposition from merged raw884 reference. Source-reviewed prerequisite for complete implementation, not a narrower compatibility completion claim.",
+      "scope": [
+        "docs/bulk-character-adapter-plan.md"
+      ],
+      "dependencies": [
+        "bulk-character-encoding-reference-v1"
+      ],
+      "acceptance": [
+        "Inventory exact current source contracts from codec TypeInfo/bytes through INSERT BULK binding, load rows, logical Parameter/Value, DuckDB storage and result descriptors/wire. Separate observed source behavior from raw SQL Server evidence and unproven hypotheses, with source symbols/links and immutable fixture hashes.",
+        "Specify lossless native ANSI byte carriage with explicit source/target collation and encoding inputs, bounded ownership/NULL/MAX/codepoint behavior, conversion/diagnostic and atomicity boundaries. Preserve malformed UTF8 nativebytes/public text/SQLUnicode distinctions and9833/7339 outcomes; no strict/lossy universal decoder or invented codepage/collation support. Deterministic rules stay effect-free; catalogs/backend/transport remain root-side.",
+        "Decompose ordered independently claimable deterministic carrier/reference and root runtime/storage/output tasks with exact file scopes, acceptance/gates, and current reservations/dependencies. engine.rs remains owner-controlled and root bulk staging882 shares plan/load so must sequence. Explicitly list additional groundtruth needed; never represent incomplete inputs/tests as full compatibility.",
+        "Fresh own receipt in completed existing root worktree, source/link/diff review and exact-head requiredCI/independent/Codex review or genuine availability fallback; documentation-only no cold native rebuild. Worker owns focused PR, merge, protectedregistry/project completion and publication of concrete follow-on work under standing goal authorization."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pk0fb"
     }
   ]
 }
