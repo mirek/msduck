@@ -10844,6 +10844,27 @@
         "Run AGENTS.md fmt/workspaceRust/strictall-targetClippy/fullnpm/audit for exact frozen head, retain raw audit differences and requiredCI/independent/Codex review or availability fallback. Reuse existing worktree/cache and honor shared builder locks; claiming worker owns focusedPR, review follow-up, exact-head merge and registry/project completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PksRa"
+    },
+    {
+      "id": "bulk-character-encoding-reference-v1",
+      "title": "Capture BulkLoad character collation and byte encoding semantics",
+      "state": "ready",
+      "issue": 884,
+      "authorization": "Owner continuing full SQL Server compatibility goal; first-party BulkLoad hardcoded CP1252 source gap and docs/gaps-bulk.md. No third-party content; no runtime edit or extra factory agent/cache.",
+      "scope": [
+        "scripts/capture-bulk-character-encoding.mjs",
+        "reference/bulk-character-encoding.json",
+        "tests/bulk_character_encoding_capture.test.mjs",
+        "docs/bulk-character-encoding-reference.md"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Capture four independent fresh databases across two pinned SQL Server containers, exact version/image and controlled client provenance. Probe ANSI CP1252/UTF8/Cyrillic wire collations and source/target differences, NULL/empty/bounded/MAX/nonASCII/multibyte packet fragmentation and malformed/unrepresentable bytes where controlled client can send them. Keep supplied/native bytes separate from client-decoded text; do not invent unsupported probes or universal rules.",
+        "Preserve generated SQL/type metadata, exact five-byte collation, raw post-login packets excluding credentials, rows/descriptors/native binary projections, error state/class/message, callback and DONE. Bound capture/decoding; exclusive overwrite/alias guards before Docker. Save raw and complete comparison sidecar before gold validation; fixed provenance, retained byte pin and semantic checks independently of recomputed difference summaries. Preserve failed runs/raw differences without normalization.",
+        "Meaningful offline fixture replay/uniform-corruption/output-guard tests; inspect actual all-four-run outcomes and document uncertainties. Reuse existing isolated reference resources/worktree and dependencies; do not mutate shared builder sources/executable/native cache or add agents. No runtime/codec/common-helper edits.",
+        "Focused PR links884, fresh exclusive claim, exact-head requiredCI/independent/Codex review or genuine availability fallback. Worker owns fixes, exact-head merge and registry/project completion. Reference-only checks do not need cold DuckDB rebuild. Publish separate bounded wire-adapter runtime task from the captured evidence if needed."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PkuRl"
     }
   ]
 }
