@@ -9346,7 +9346,7 @@
     {
       "id": "gaps-release-docs-v1",
       "title": "Release docs and v0.2.5 for the workload gap features",
-      "state": "ready",
+      "state": "done",
       "authorization": "Direct owner instruction from mirek in this session (2026-10-01), issue #781, umbrella #710.",
       "scope": [
         "README.md",
