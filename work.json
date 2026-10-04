@@ -12196,6 +12196,25 @@
       ],
       "issue": 971,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PnB_8"
+    },
+    {
+      "id": "openjson-predicate-query-scopes-v1",
+      "title": "Keep OPENJSON predicate bindings within visible query scopes",
+      "state": "ready",
+      "authorization": "Continuing owner SQL Server compatibility goal and verified owner-initiated Codex review4177555316. Own native f687 probe with outer NVARCHAR10 value NULL and nested OPENJSON EXISTS reproduces COALESCE/CASE/IIF fallback STRUCT conversion errors; outer nonNULL masked them. Existing root owns catalog and pinning/tests/docs under900/966. This bounded disjoint companion connects their scoped catalog views through marker, grouping and ordering visitors. No third-party intake, no engine.rs/new workers/cache copies.",
+      "scope": [
+        "src/engine/ext/keys/predicates/mark.rs",
+        "src/engine/ext/keys/predicates/group.rs",
+        "src/engine/ext/keys/predicates/order.rs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Connect explicit query/select catalog scope views through the predicate marker, padding, grouping and ordering consumers. Keep nested/sibling OPENJSON sources from poisoning outer carrier references; respect local alias shadowing and correlation, derived/CTE/renaming uncertainty and set arm boundaries. Preserve conservative same-name physical catalog behavior and typed parameter metadata.",
+        "Companion-owned catalog/pinning/native/client tests must reproduce NULL fallback predecessor error and cover independent nested/sibling/CTE/derived sources, aliases and correlation without skips or expectation weakening. Scope this task to exactly three visitors; sameworker separately owns catalog/pin/tests/docs.",
+        "Reuse same root worktree/cache/Linuxlock, combine PR964, freeze head and run full fmt/strictClippy/workspaceRust/alltargetbuild/npm/rawaudit/requiredCI and independent/Codexreview/fallback; resolve verified finding and merge/complete all claims."
+      ],
+      "issue": 972,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PnEIp"
     }
   ]
 }
