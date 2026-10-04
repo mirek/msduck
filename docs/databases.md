@@ -194,7 +194,10 @@ separate DuckDB catalog, so the engine places each statement in one of them:
   database. Combined with other databases' objects or user functions, it
   fails with 40515 `unsupported cross-database statement: it reads catalog
   views of database '...' together with objects or user functions of other
-  databases`.
+  databases`. DML may read another database's catalog views only when it
+  writes that database and reads no third one; otherwise it fails with 40515
+  `unsupported cross-database statement: it reads catalog views of another
+  database than the one it writes`.
 - INSERT, UPDATE and DELETE that write another database run with it as
   DuckDB's default catalog. Features then treat it as the current database:
   declared column types and nvarchar storage, identity, defaults, triggers,

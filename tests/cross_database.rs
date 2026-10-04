@@ -689,3 +689,32 @@ fn ambiguous_write_errors_name_no_database() {
     );
     assert_eq!(session.transactions, 0);
 }
+
+#[test]
+fn dml_reads_catalog_views_only_of_the_database_it_writes() {
+    let (_server, mut session) = fixture();
+    ok(&mut session, "CREATE TABLE dbo.audit (name NVARCHAR(128))");
+    assert_eq!(
+        fails(
+            &mut session,
+            "INSERT dbo.audit SELECT name FROM foo.sys.columns"
+        ),
+        (
+            40515,
+            1,
+            16,
+            "unsupported cross-database statement: it reads catalog views of another database than the one it writes".into()
+        )
+    );
+    // Writing foo from its own catalog views runs in foo.
+    ok(
+        &mut session,
+        "USE foo; CREATE TABLE dbo.cols (name NVARCHAR(128)); USE master",
+    );
+    ok(
+        &mut session,
+        "INSERT foo.dbo.cols SELECT name FROM foo.sys.columns WHERE name = 'v'",
+    );
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.cols"), 1);
+    assert_eq!(count(&session, "SELECT count(*) FROM memory.dbo.audit"), 0);
+}

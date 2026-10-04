@@ -1082,6 +1082,17 @@ impl Session {
                 display(database)
             );
         }
+        // DML reads another database's catalog views correctly only while
+        // running in that database, which it does when it writes there and
+        // reads no third database.
+        let refuse_catalog_views = || -> Result<()> {
+            if relations.catalog_views && relations.foreign.len() > 1 {
+                bail!(
+                    "unsupported cross-database statement: it reads catalog views of another database than the one it writes"
+                );
+            }
+            Ok(())
+        };
         if relations.foreign.len() == 1 && relations.local.is_empty() && !relations.into {
             refuse_output_into(&display(database))?;
             refuse_routines(&display(database))?;
@@ -1108,7 +1119,13 @@ impl Session {
             }
             refuse_output_into(&display(&alias.value))?;
             refuse_routines(&display(&alias.value))?;
+            refuse_catalog_views()?;
             return Ok(CrossDatabase::Home(alias.value.clone(), held));
+        }
+        if relations.catalog_views {
+            bail!(
+                "unsupported cross-database statement: it reads catalog views of another database than the one it writes"
+            );
         }
         Ok(CrossDatabase::Mixed(held))
     }
