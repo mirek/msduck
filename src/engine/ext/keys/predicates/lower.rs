@@ -433,18 +433,36 @@ fn compare(left: &Expr, op: &BinaryOperator, right: &Expr) -> Option<Expr> {
             )
         })
     };
-    let text_peer = |value: &Expr| {
-        narrow(value)
-            || matches!(value,
-            Expr::Value(v) if matches!(v.value, Value::SingleQuotedString(_) | Value::NationalStringLiteral(_)))
-            || matches!(
-                value,
-                Expr::Cast {
-                    data_type: DataType::Varchar(_) | DataType::Text | DataType::String(_),
-                    ..
-                }
-            )
-    };
+    fn text_peer(value: &Expr) -> bool {
+        match value {
+            Expr::Nested(inner) | Expr::Collate { expr: inner, .. } => text_peer(inner),
+            Expr::Value(v) => matches!(
+                v.value,
+                Value::SingleQuotedString(_) | Value::NationalStringLiteral(_)
+            ),
+            Expr::Cast {
+                data_type: DataType::Varchar(_) | DataType::Text | DataType::String(_),
+                ..
+            } => true,
+            Expr::Function(f) => matches!(
+                f.name.to_string().as_str(),
+                MARK | TEXT
+                    | INPUT
+                    | OPERAND
+                    | CARRIER_INPUT
+                    | "__msduck_pack_unicode"
+                    | "__msduck_unicode_from_le"
+                    | "__msduck_concat_unicode"
+                    | "__msduck_cast_carrier_nvarchar"
+                    | "__msduck_cast_carrier_nchar"
+                    | "__msduck_isnull_nvarchar_width"
+                    | "__msduck_isnull_nchar_width"
+            ),
+            // MAYBE and generic names containing "unicode" are not type
+            // declarations: e.g. __msduck_unicode itself returns an integer.
+            _ => false,
+        }
+    }
     let width_text =
         unicode_width(left) && text_peer(right) || unicode_width(right) && text_peer(left);
     if comparison(op) && (marked(left) || marked(right) || width_text) {

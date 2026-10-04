@@ -291,3 +291,57 @@ fn carrier_width_preserves_isolated_units_padding_and_null_validity() {
             .is_err()
     );
 }
+
+#[test]
+fn public_width_comparison_keeps_derived_numeric_peer_coercion() {
+    let (_server, mut session) = session();
+    for (name, sql) in [
+        (
+            "derived_numeric_peer",
+            "SELECT CASE WHEN ISNULL((SELECT CAST(N'02' AS NVARCHAR(2))),N'') = t.n THEN 1 ELSE 0 END AS hit INTO derived_numeric_peer FROM (SELECT 2 AS n) t",
+        ),
+        (
+            "cte_numeric_peer",
+            "WITH t(n) AS (SELECT 2) SELECT CASE WHEN ISNULL((SELECT CAST(N'02' AS NVARCHAR(2))),N'') = t.n THEN 1 ELSE 0 END AS hit INTO cte_numeric_peer FROM t",
+        ),
+    ] {
+        batch(&mut session, sql);
+        assert_eq!(
+            session
+                .db
+                .query_row::<i32, _, _>(&format!("SELECT hit FROM {name}"), [], |r| r.get(0))
+                .unwrap(),
+            1
+        );
+    }
+}
+
+#[test]
+fn width_adapter_does_not_promote_unknown_integer_marker_to_text() {
+    let (_server, mut session) = session();
+    // Native adapter/marker entry point. The ordinary public derived/CTE
+    // controls above also test any earlier binding that may resolve the peer.
+    batch(
+        &mut session,
+        "SELECT CASE WHEN __msduck_isnull_nvarchar_width((SELECT N'02'),2) = __msduck_unicode_maybe(t.n) THEN 1 ELSE 0 END AS hit INTO unknown_marker_peer FROM (SELECT 2 AS n) t",
+    );
+    assert_eq!(
+        session
+            .db
+            .query_row::<i32, _, _>("SELECT hit FROM unknown_marker_peer", [], |r| r.get(0))
+            .unwrap(),
+        1
+    );
+    batch(
+        &mut session,
+        "SELECT CASE WHEN __msduck_isnull_nvarchar_width((SELECT N'02'),2) = __msduck_unicode(CHAR(2)) THEN 1 ELSE 0 END AS hit INTO integer_unicode_function_peer",
+    );
+    assert_eq!(
+        session
+            .db
+            .query_row::<i32, _, _>("SELECT hit FROM integer_unicode_function_peer", [], |r| r
+                .get(0))
+            .unwrap(),
+        1
+    );
+}
