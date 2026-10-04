@@ -12215,6 +12215,22 @@
       ],
       "issue": 972,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PnEIp"
+    },
+    {
+      "id": "openjson-alternative-parameter-binding-v1",
+      "title": "Pass explicit parameter declarations into Unicode alternative pinning",
+      "state": "ready",
+      "authorization": "Continuing owner SQL Server compatibility goal and verified owner-initiated Codex finding4177974662. Own cd1 source/executable-stable runtime capture shows COALESCE/CASE/IIF isolated UTF16 loss. Root owns catalog/pin/concat/lower/tests; this disjoint companion passes explicit parameter declarations into their character-only alternatives guard. No engine/newworker/cache/externalcontent.",
+      "scope": [
+        "src/engine/ext/keys/predicates.rs"
+      ],
+      "dependencies": [],
+      "issue": 973,
+      "acceptance": [
+        "Pass existing parameters through the scoped pinning detection/application calls; types use only declared parameter kinds, never values. Companion-owned character conversion must preserve common Unicode family/width, raw units, NULL/lazy/single-evaluation behavior; leave numeric/unknown precedence unchanged.",
+        "Reuse same root worktree/cache/receipt and Linux lock. Original/new native/client/pinned SQLServer controls plus full frozen fmt/strictClippy/workspaceRust/alltargetbuild/npm/rawaudit/exactCI/reviews. CombinePR964, merge then complete registry/project/issue."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PnLdk"
     }
   ]
 }
