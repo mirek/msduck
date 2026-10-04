@@ -912,8 +912,10 @@ pub(crate) fn catalog_dependent_views(
     let mut dependent = std::collections::HashSet::new();
     for (schema, view, read) in &views {
         if read.as_ref().is_none_or(|read| {
-            read.iter()
-                .any(|(schema, _)| schema == "sys" || schema == "information_schema")
+            // sys.databases lists the same databases everywhere.
+            read.iter().any(|(schema, name)| {
+                schema == "information_schema" || schema == "sys" && name != "databases"
+            })
         }) {
             dependent.insert((schema.clone(), view.clone()));
         }

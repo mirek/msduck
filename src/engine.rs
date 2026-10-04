@@ -1017,6 +1017,7 @@ impl Session {
         // Views of another database that read its catalog views count as
         // reading them.
         let mut catalog_views = relations.catalog_views;
+        let mut catalog_view_database = relations.catalog_view_database.clone();
         if !catalog_views {
             let mut dependent = std::collections::HashMap::new();
             for name in &relations.foreign_names {
@@ -1036,6 +1037,7 @@ impl Session {
                 let key = (schema.value.to_lowercase(), object.value.to_lowercase());
                 if dependent[&database.value].contains(&key) {
                     catalog_views = true;
+                    catalog_view_database.get_or_insert_with(|| database.value.clone());
                 }
             }
         }
@@ -1124,7 +1126,7 @@ impl Session {
             }
             bail!(
                 "unsupported cross-database statement: it reads catalog views of database '{}' together with objects or user functions of other databases",
-                display(database)
+                display(catalog_view_database.as_deref().unwrap_or(database))
             );
         }
         // DML reads another database's catalog views correctly only while
@@ -8157,6 +8159,8 @@ struct Relations {
     /// are read. They describe the DuckDB default catalog, so only a
     /// statement running in that database reads them correctly.
     catalog_views: bool,
+    /// The database whose catalog views are read first.
+    catalog_view_database: Option<String>,
     /// Whether the session database's catalog views are read.
     local_catalog_views: bool,
     /// The names of `local`, other than temporary objects.
@@ -8225,6 +8229,8 @@ impl Relations {
                             && !view.value.eq_ignore_ascii_case("databases"))
                 {
                     self.catalog_views = true;
+                    self.catalog_view_database
+                        .get_or_insert_with(|| database.value.clone());
                 }
             }
             [ObjectNamePart::Identifier(single)]

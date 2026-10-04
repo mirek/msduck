@@ -941,3 +941,28 @@ fn table_function_calls_in_views_are_not_view_dependencies() {
         "IF (SELECT COUNT(*) FROM foo.dbo.parts p JOIN dbo.loc l ON 1 = 1) <> 2 THROW 50001, 'parts', 1",
     );
 }
+
+#[test]
+fn catalog_view_errors_name_their_database_and_sys_databases_is_shared() {
+    let (_server, mut session) = fixture();
+    ok(&mut session, "CREATE DATABASE zzz");
+    ok(&mut session, "USE foo");
+    ok(
+        &mut session,
+        "CREATE VIEW dbo.database_list AS SELECT name FROM sys.databases",
+    );
+    ok(&mut session, "USE master");
+    // A view over sys.databases joins local tables like any view.
+    ok(
+        &mut session,
+        "IF (SELECT COUNT(*) FROM foo.dbo.database_list d JOIN dbo.loc l ON d.name = N'foo') <> 1 THROW 50001, 'databases', 1",
+    );
+    assert_eq!(
+        fails(
+            &mut session,
+            "SELECT i.id FROM foo.dbo.items i CROSS JOIN zzz.sys.columns c"
+        )
+        .3,
+        "unsupported cross-database statement: it reads catalog views of database 'zzz' together with objects or user functions of other databases"
+    );
+}
