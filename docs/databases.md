@@ -220,6 +220,10 @@ separate DuckDB catalog, so the engine places each statement in one of them:
 - Preparation (`sp_prepare`) binds such statements the same way without
   running them, and RPC parameters work as in the current database.
 - A restored database is an ordinary user database and is read the same way.
+- Detecting reads of catalog views through views is textual: a view whose
+  DuckDB definition cannot be parsed counts as reading catalog views, and
+  unusual definitions may be placed conservatively (refused) or, in rare
+  shapes, not recognized.
 
 DuckDB writes one attached database per transaction. SQL Server lets one
 transaction modify several databases; msduck refuses the statement that would
