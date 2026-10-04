@@ -11683,6 +11683,29 @@
       ],
       "issue": 933,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pl98k"
+    },
+    {
+      "id": "ansi-stored-utf8-native-adapter-v1",
+      "title": "Project stored UTF8 carriers through the native DuckDB adapter",
+      "state": "ready",
+      "authorization": "Owner continuing compatibility goal and first-party raw SQL Server stored projection fixture/core933; existing strict root adapter cannot implement accepted malformed bytes or SQL EOF boundaries. This bounded root effect adapter is prerequisite to coordinated engine/Value/catalog/BulkLoad/wire integration, not a replacement for that integration.",
+      "issue": 936,
+      "scope": [
+        "src/ansi_carrier/projection.rs",
+        "tests/ansi_stored_utf8_projection.rs",
+        "docs/ansi-carrier-projection.md"
+      ],
+      "dependencies": [
+        "ansi-native-projection-adapter-v1",
+        "ansi-stored-utf8-projection-v1"
+      ],
+      "acceptance": [
+        "Add an explicitly selected stored UTF8 to SQL UTF16 projection plan over the existing native ANSI carrier; use the complete deterministic stored_utf8 API, retain strict project/plan behavior and do not infer metadata or encoding from current row contents. Source identity/NULL/output declarations and Unicode carrier ceilings are validated before payload handling. Native source storage/readback remains exact and encoding identity is explicit.",
+        "Preflight whole-chunk physical shape/capacity/tags/child validity and original input/resource limits, all stored decoding/error and fallible output allocations before output mutation. Preserve exact NULL/empty/unit pairs, bounded byte accounting and late boundary/output-limit failure atomicity, transaction recovery and single operand evaluation across chunks. Keep boundary errors distinguishable without pretending native callback errors already provide endpoint SQL9833 tokens.",
+        "Replay all unchanged6088 original direct SQL outcomes through actual DuckDB callbacks, including SQL boundary failures and malformed successes; original raw fixture/pins remain immutable. Also test frozen EOF/selector controls, actual native persistence/Arrow results, mismatch/malformed physical inputs, zero-row shapes, exact/one-above limits and initialized-output preservation. No engine.rs, Value, catalog/collation gate, admission, capacity or TDS edits; runtime hook integration remains pending under owner-held scope.",
+        "Use own existing tree/cache and locked Linux builder. Full exact-head AGENTS fmt/workspaceRust/strictall-targetClippy/npm/audit with preserved raw differences, independent and verifiedCodex review or authorized availability fallback, requiredCI; worker owns focusedPR, exact-head merge and registry/issue/project completion. Do not start until933 is actually merged and done."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PmIPz"
     }
   ]
 }
