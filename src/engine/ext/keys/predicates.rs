@@ -112,9 +112,9 @@ fn rewrite<T: Visit + VisitMut + 'static>(
         return Ok(());
     }
     mark::rewrite(&catalog, parameters, node)?;
-    if pin::sites(node) && pin::rewrite(&catalog, node, false) {
+    if pin::sites(node) && pin::rewrite(&catalog, parameters, node, false) {
         catalog.declare(db, node)?;
-        pin::rewrite(&catalog, node, true);
+        pin::rewrite(&catalog, parameters, node, true);
     }
     if ordered && let Some(statement) = (node as &mut dyn std::any::Any).downcast_mut::<Statement>()
     {

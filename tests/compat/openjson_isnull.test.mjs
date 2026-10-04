@@ -28,7 +28,6 @@ const knownResults = {
   "isnull key and value types": () => ({"sets":[{"columns":[["key","NVarChar",8000],["k","NVarChar",8000],["v","NVarChar",65535],["va","NVarChar",65535],["t","Int",null],["n","IntN",8],["b","IntN",8]],"rows":[["a","a","1","1",2,"1","2"],["b","b","","ansi",0,"0","0"],["c","c","x ","x ",1,"1","4"],["d","d","🦆","🦆",1,"2","4"],["e","e","[1,2]","[1,2]",4,"5","10"],["f","f","true","true",3,"4","8"],["g","g","","",1,"0","0"]]}],"errors":[],"done":[1,7]}),
   "carrier as replacement": () => ({"sets":[],"errors":[{"number":50000,"class":16,"state":1,"message":"VARCHAR value is not representable in Windows-1252"}],"done":[1,1,null]}),
   "explicit schema": () => ({"sets":[{"columns":[["a","NVarChar",20],["b","NVarChar",65535],["c","NVarChar",65535],["i","NVarChar",65535],["e","Int",null],["j","NVarChar",65535]],"rows":[["1","nb","x ","n",0,"[1,2]"]]}],"errors":[],"done":[1,1]}),
-  "explicit schema varchar document": () => ({"sets":[{"columns":[["a","NVarChar",20],["b","VarChar",5],["c","NVarChar",65535]],"rows":[["p","nb","p"]]}],"errors":[],"done":[1,1]}),
   "two sources full join": () => ({"sets":[{"columns":[["id","Int",null],["k","NVarChar",65535],["l","NVarChar",65535],["r","NVarChar",65535]],"rows":[[1,"a","1",null],[1,"b","2","3"],[1,"c",null,"4"],[2,"x",null,"1"]]}],"errors":[],"done":[4]}),
   "two sources through function": () => ({"sets":[{"columns":[["id","Int",null],["key","NVarChar",65535],["old_value","NVarChar",65535],["new_value","NVarChar",65535],["o","NVarChar",65535],["n","NVarChar",65535]],"rows":[]}],"errors":[{"number":245,"class":16,"state":1,"message":"Conversion Error: Type VARCHAR with value '-' can't be cast to the destination type STRUCT(__msduck_utf16le BLOB)\n\nLINE 1: ... __msduck_isnull(x.old_value, '-') AS o, COALESCE(x.new_value, '-') AS n FROM items i LEFT OUTER JOIN LATERAL (SELECT __ms...\n                                                                          ^"}],"done":[null]}),
 }
@@ -62,4 +61,136 @@ test('OPENJSON WITH columns do not capture scalar variables', async t => {
   assert.deepEqual(result.rows, [[7]])
   const columns = result.columns.at(-1)
   assert.equal(columns[0].type.name, 'Int')
+})
+
+// Raw SQL Server 17.0.4065.4 captures: isolated units remain unmodified.
+const rawAlternativeCases = [
+  {
+    "name": "isolated alternatives",
+    "query": "SELECT j.[key],COALESCE(j.[value],N'z') AS c,CASE WHEN j.[value] IS NULL THEN N'z' ELSE j.[value] END AS k,IIF(j.[value] IS NULL,N'z',j.[value]) AS i FROM OPENJSON(N'{\"a\":\"\\ud800\",\"b\":null,\"c\":\"\\udc00\"}') j ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "key",
+              "NVarChar",
+              8000
+            ],
+            [
+              "c",
+              "NVarChar",
+              65535
+            ],
+            [
+              "k",
+              "NVarChar",
+              65535
+            ],
+            [
+              "i",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "a",
+              "\ud800",
+              "\ud800",
+              "\ud800"
+            ],
+            [
+              "b",
+              "z",
+              "z",
+              "z"
+            ],
+            [
+              "c",
+              "\udc00",
+              "\udc00",
+              "\udc00"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        3
+      ]
+    }
+  },
+  {
+    "name": "bounded common",
+    "query": "SELECT j.id,COALESCE(j.v,CAST(N'abcde' AS NVARCHAR(5))) AS v FROM OPENJSON(N'[{\"id\":1,\"v\":\"\\ud800xy\"},{\"id\":2,\"v\":null}]') WITH(id INT,v NVARCHAR(2)) j ORDER BY j.id",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "id",
+              "IntN",
+              4
+            ],
+            [
+              "v",
+              "NVarChar",
+              10
+            ]
+          ],
+          "rows": [
+            [
+              1,
+              "\ud800x"
+            ],
+            [
+              2,
+              "abcde"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  },
+  {
+    "name": "integer precedence",
+    "query": "SELECT COALESCE(j.[value],7) AS v FROM OPENJSON(N'{\"a\":\"1\",\"b\":null}') j ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "IntN",
+              4
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ],
+            [
+              7
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        2
+      ]
+    }
+  }
+]
+
+test('OPENJSON alternatives preserve captured raw units, bounded widths and numeric precedence', async t => {
+  const connection = await start(t)
+  for (const entry of rawAlternativeCases) {
+    assert.deepEqual(keep(await capture(connection, entry.query)), entry.expected, entry.name)
+  }
 })

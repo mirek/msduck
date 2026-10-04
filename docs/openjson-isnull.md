@@ -49,8 +49,13 @@ renamed column lists remain unknown. Same-named physical tables retain the
 existing conservative shared description. Quoted `[@p]` columns stay distinct from unquoted scalar `@p`.
 ISNULL keeps its direct OPENJSON carrier first argument: its native dispatch
 already packs replacements into that type, so declaration pinning must not
-convert it to text and lose exact UTF-16 units or change stored values. Other
-mixed alternatives still use declaration pinning.
+convert it to text and lose exact UTF-16 units or change stored values. Character-only COALESCE, IIF and CASE alternatives with direct OPENJSON
+sources instead convert each result branch to a common Unicode carrier
+declaration. This preserves raw UTF-16 through literals, declared parameters
+and ANSI columns, while conditions and selected operands retain their original
+evaluation. Numeric and unresolved alternatives keep the existing path.
+Character-only set branches align complete results, using each branch’s query
+scope; the physical alternative’s internal conversion remains unchanged.
 This lets the existing comparison and alternative-expression lowering handle
 COALESCE, IIF, CASE, predicates and ordering over direct OPENJSON sources.
 
@@ -71,7 +76,7 @@ COALESCE, IIF, CASE, predicates and ordering over direct OPENJSON sources.
   collation.
 - `tests/compat/openjson_isnull.test.mjs` replays every case through
   tedious, comparing column names, types and lengths, rows, errors and DONE
-  counts. Known differences assert msduck's complete current result. Nine previously
+  counts. Known differences assert msduck's complete current result. Ten previously
   failing complete cases now use the unchanged reference expectations.
 - `tests/openjson_isnull.rs` checks the native ISNULL dispatch (carrier code
   units including an unpaired surrogate, carrier replacements of text,
@@ -106,3 +111,21 @@ The tedious test lists them exactly:
   which the bind-time macro cannot reach.
 - The OPENJSON `type` column is `int`; SQL Server reports `tinyint`, so
   `ISNULL(j.[type], 0)` is `int` too.
+
+### Additional raw-unit evidence
+
+Native tests cover isolated high/low surrogates through COALESCE, CASE and IIF,
+NULL fallbacks from literals, declared parameters and ANSI columns, bounded
+NVARCHAR widths, common NCHAR widths, carrier peers and UNION branches. Native
+sequence controls check that selected volatile leaves execute once and unselected
+fallbacks do not execute. The fixed-width result adapter introduced after root
+annotation preserves native carriers rather than stringifying their STRUCT.
+
+Additional pinned SQL Server 17.0.4065.4 captures distinguish dynamic NCHAR(3)
+with VARCHAR(5) alternatives (NVARCHAR(5)) from constant-folded COALESCE. They
+also expose a remaining source conversion difference: an OPENJSON NCHAR(3)
+containing only U+D800 is short in SQL Server, and conversion to the common
+NCHAR(5) yields U+D800, two NUL units and two spaces. msduck currently pads the
+source with spaces and yields U+D800 followed by four spaces. The native test
+records msduck’s current value; it does not establish SQL Server parity for that
+source conversion. Full-width NCHAR source controls avoid this separate gap.

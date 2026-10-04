@@ -849,6 +849,26 @@ fn function(name: &str, expr: &Expr) -> Option<Expr> {
         return Some(lowered);
     }
     let args = arguments(expr)?;
+    // Fixed-result lowering introduces this width adapter after the root
+    // annotation pass. A proved native carrier must never enter its VARCHAR
+    // overload, which would stringify the STRUCT. Move its single operand
+    // into the equivalent native carrier conversion without a typeof CASE.
+    if name == "__msduck_nchar_width"
+        && let [value, width] = args.as_slice()
+        && function_name(value).is_some_and(|name| {
+            matches!(
+                name.as_str(),
+                "__msduck_cast_carrier_nchar"
+                    | "__msduck_cast_carrier_nvarchar"
+                    | "__msduck_carrier_input"
+            )
+        })
+    {
+        return Some(call(
+            "__msduck_cast_carrier_nchar",
+            vec![(*value).clone(), (*width).clone()],
+        ));
+    }
     if let Some((cast, unicode)) = carrier_cast(name)
         && let [value, width] = args.as_slice()
         && converted(value)
@@ -1282,6 +1302,18 @@ mod tests {
         );
         let member = lowered("__msduck_unicode_in(n) NOT IN (SELECT v FROM t)");
         assert!(member.starts_with("NOT ((CASE WHEN EXISTS (SELECT 1 FROM (SELECT v FROM t) AS __msduck_in (__msduck_v) WHERE __msduck_unicode_order_key(__msduck_unicode_operand(n)) = __msduck_unicode_order_key(__msduck_unicode_operand(__msduck_in.__msduck_v))) THEN true"), "{member}");
+    }
+
+    #[test]
+    fn fixed_width_adapter_preserves_a_native_carrier() {
+        assert_eq!(
+            lowered("__msduck_nchar_width(__msduck_cast_carrier_nchar(n,3),5)"),
+            "__msduck_cast_carrier_nchar(__msduck_cast_carrier_nchar(n, 3), 5)"
+        );
+        assert_eq!(
+            lowered("__msduck_nchar_width('x',5)"),
+            "__msduck_nchar_width('x', 5)"
+        );
     }
 
     #[test]

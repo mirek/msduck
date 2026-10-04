@@ -16,7 +16,7 @@ pub(super) struct Column {
     pub openjson: bool,
     /// Whether the backend type is text (VARCHAR or a carrier).
     pub text: bool,
-    /// The SQL Server declaration of a carrier column, after [`Catalog::declare`].
+    /// The SQL Server declaration, after [`Catalog::declare`] for physical columns.
     pub declared: Option<DataType>,
     /// A declared collation other than the database default.
     pub collation: Option<String>,
@@ -208,7 +208,7 @@ fn openjson_columns(columns: &[OpenJsonTableColumn]) -> HashMap<String, Column> 
             carrier,
             openjson: true,
             text: family.is_some(),
-            declared: carrier.then_some(declared),
+            declared: Some(declared),
             collation: None,
         }
     };
@@ -555,14 +555,22 @@ impl Catalog {
         for (table, columns) in &mut self.tables {
             for (name, column) in columns.iter_mut() {
                 // OPENJSON columns keep their declarations.
-                if column.carrier
-                    && let Some(declared) = types.get(&(table.clone(), name.clone()))
-                {
+                if let Some(declared) = types.get(&(table.clone(), name.clone())) {
                     column.declared = declared.clone();
                 }
             }
         }
         Ok(())
+    }
+
+    /// An agreed explicit declaration; unknown source/alias barriers still apply.
+    pub fn declaration(&self, expr: &Expr) -> Option<DataType> {
+        let columns = self.candidates(expr)?;
+        let first = columns.first()?.declared.as_ref()?;
+        columns
+            .iter()
+            .all(|column| column.declared.as_ref() == Some(first))
+            .then(|| first.clone())
     }
 
     /// Whether some relation has a carrier column of this (lowercase) name.

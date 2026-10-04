@@ -436,3 +436,178 @@ fn write_target_aliases_ignore_unrelated_same_named_tables() {
         .unwrap();
     assert_eq!(unrelated, "unrelated");
 }
+
+#[test]
+fn openjson_character_alternatives_preserve_raw_units_and_null_fallbacks() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        "CREATE TABLE alternative_peer(fallback VARCHAR(3)); INSERT alternative_peer VALUES('z')",
+    );
+    for (index, expression) in [
+        "COALESCE(j.[value],N'z')",
+        "CASE WHEN j.[value] IS NULL THEN N'z' ELSE j.[value] END",
+        "IIF(j.[value] IS NULL,N'z',j.[value])",
+        "COALESCE(j.[value],@replacement)",
+        "COALESCE(j.[value],p.fallback)",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        batch(
+            &mut session,
+            &format!(
+                "DECLARE @replacement NVARCHAR(3)=N'z'; CREATE TABLE alternatives_{index}(k NVARCHAR(10),v NVARCHAR(MAX)); INSERT alternatives_{index} SELECT j.[key],{expression} FROM OPENJSON(N'{{\"a\":\"\\ud800\",\"b\":null,\"c\":\"\\udc00\"}}') j CROSS JOIN alternative_peer p"
+            ),
+        );
+        let units: Vec<Vec<u8>> = session.db.prepare(&format!(
+            "SELECT v.__msduck_utf16le FROM alternatives_{index} ORDER BY __msduck_carrier_utf8(k)"
+        )).unwrap().query_map([], |r| r.get(0)).unwrap().collect::<duckdb::Result<_>>().unwrap();
+        assert_eq!(
+            units,
+            vec![vec![0, 0xd8], vec![b'z', 0], vec![0, 0xdc]],
+            "{expression}"
+        );
+    }
+}
+
+#[test]
+fn openjson_character_alternatives_keep_common_widths_and_fixed_padding() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        r#"CREATE TABLE fixed_alternatives(id INT,v NVARCHAR(MAX));
+        INSERT fixed_alternatives SELECT j.id,COALESCE(j.v,CAST(N'q' AS NCHAR(5)))
+        FROM OPENJSON(N'[{"id":1,"v":"\ud800"},{"id":2,"v":null}]') WITH(id INT,v NCHAR(3)) j;
+        CREATE TABLE bounded_alternatives(id INT,v NVARCHAR(MAX));
+        INSERT bounded_alternatives SELECT j.id,COALESCE(j.v,CAST(N'abcde' AS NVARCHAR(5)))
+        FROM OPENJSON(N'[{"id":1,"v":"\ud800xy"},{"id":2,"v":null}]') WITH(id INT,v NVARCHAR(2)) j;"#,
+    );
+    let payloads = |table: &str| -> Vec<Vec<u8>> {
+        session
+            .db
+            .prepare(&format!(
+                "SELECT v.__msduck_utf16le FROM {table} ORDER BY id"
+            ))
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<duckdb::Result<_>>()
+            .unwrap()
+    };
+    assert_eq!(
+        payloads("fixed_alternatives"),
+        vec![
+            vec![0, 0xd8, b' ', 0, b' ', 0, b' ', 0, b' ', 0],
+            vec![b'q', 0, b' ', 0, b' ', 0, b' ', 0, b' ', 0],
+        ]
+    );
+    assert_eq!(
+        payloads("bounded_alternatives"),
+        vec![
+            vec![0, 0xd8, b'x', 0],
+            vec![b'a', 0, b'b', 0, b'c', 0, b'd', 0, b'e', 0],
+        ]
+    );
+}
+
+#[test]
+fn openjson_character_alternatives_evaluate_selected_volatile_leaves_once() {
+    let (_server, mut session) = session();
+    session
+        .db
+        .execute_batch("CREATE SEQUENCE alternative_counter START 10")
+        .unwrap();
+    batch(
+        &mut session,
+        r#"CREATE TABLE lazy_alternatives(k NVARCHAR(10),v NVARCHAR(MAX));
+        INSERT lazy_alternatives SELECT j.[key],COALESCE(j.[value],CAST(nextval('alternative_counter') AS NVARCHAR(10)))
+        FROM OPENJSON(N'{"a":"\ud800","b":null,"c":"\udc00"}') j;"#,
+    );
+    let counter: i64 = session
+        .db
+        .query_row(
+            "SELECT last_value FROM duckdb_sequences() WHERE sequence_name='alternative_counter'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(counter, 10);
+    let units: Vec<Vec<u8>> = session
+        .db
+        .prepare(
+            "SELECT v.__msduck_utf16le FROM lazy_alternatives ORDER BY __msduck_carrier_utf8(k)",
+        )
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(
+        units,
+        vec![vec![0, 0xd8], vec![b'1', 0, b'0', 0], vec![0, 0xdc]]
+    );
+    batch(
+        &mut session,
+        r#"CREATE TABLE first_alternatives(v NVARCHAR(MAX));
+        INSERT first_alternatives SELECT COALESCE(CAST(nextval('alternative_counter') AS NVARCHAR(10)),j.[value])
+        FROM OPENJSON(N'{"a":"\ud800","b":null,"c":"\udc00"}') j;"#,
+    );
+    let counter: i64 = session
+        .db
+        .query_row(
+            "SELECT last_value FROM duckdb_sequences() WHERE sequence_name='alternative_counter'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(counter, 13);
+}
+
+#[test]
+fn openjson_fixed_carrier_peers_keep_common_padding() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        r#"CREATE TABLE fixed_peers(id INT,c NVARCHAR(MAX),d NVARCHAR(MAX));
+        INSERT fixed_peers SELECT j.id,CASE WHEN j.id=1 THEN j.a ELSE j.b END,COALESCE(j.a,j.b)
+        FROM OPENJSON(N'[{"id":1,"a":"\ud800bc","b":"uvwxy"},{"id":2,"a":null,"b":"uvwxy"}]')
+        WITH(id INT,a NCHAR(3),b NCHAR(5)) j;"#,
+    );
+    let values: Vec<(Vec<u8>, Vec<u8>)> = session
+        .db
+        .prepare("SELECT c.__msduck_utf16le,d.__msduck_utf16le FROM fixed_peers ORDER BY id")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    let first = vec![0, 0xd8, b'b', 0, b'c', 0, b' ', 0, b' ', 0];
+    let second = vec![b'u', 0, b'v', 0, b'w', 0, b'x', 0, b'y', 0];
+    assert_eq!(
+        values,
+        vec![(first.clone(), first), (second.clone(), second)]
+    );
+}
+
+#[test]
+fn openjson_ansi_peer_alternatives_align_with_text_set_branches() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        r#"CREATE TABLE set_peer(v VARCHAR(5)); INSERT set_peer VALUES('z');
+        CREATE TABLE mixed_set_result(v NVARCHAR(MAX));
+        INSERT mixed_set_result SELECT COALESCE(j.[value],p.v) FROM OPENJSON(N'{"a":"\ud800","b":null}') j CROSS JOIN set_peer p
+        UNION ALL SELECT v FROM set_peer;"#,
+    );
+    let mut units: Vec<Vec<u8>> = session
+        .db
+        .prepare("SELECT v.__msduck_utf16le FROM mixed_set_result")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    units.sort();
+    assert_eq!(units, vec![vec![0, 0xd8], vec![b'z', 0], vec![b'z', 0]]);
+}
