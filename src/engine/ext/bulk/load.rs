@@ -224,6 +224,23 @@ impl Load {
             .map(|value| value.bytes.as_ref().map_or(0, Vec::len))
             .sum::<usize>();
         for (index, (value, bound)) in row.iter().zip(&self.plan.columns).enumerate() {
+            if let msduck_core::types::Type::Character(character) = bound.declared
+                && msduck_core::bulk_character_admission::row(
+                    character,
+                    value.bytes.as_ref().map(Vec::len),
+                ) == msduck_core::bulk_character_admission::Row::DeclaredLengthExceeded
+            {
+                let mut error = SqlError::new(
+                    4815,
+                    1,
+                    format!(
+                        "Received an invalid column length from the bcp client for colid {}.",
+                        index + 1,
+                    ),
+                );
+                error.severity = 17;
+                return Err(error.into());
+            }
             let value = wire::value(&columns[index].type_info, value.bytes.as_deref())?;
             if matches!(value, Value::Null)
                 && !self.plan.options.keep_nulls

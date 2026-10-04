@@ -7,6 +7,7 @@
 //! do (the crate does not export it).
 use anyhow::{Result, bail, ensure};
 use msduck_core::{
+    bulk_character_admission::{self as admission, Metadata, Wire, WireLength},
     character::Family as CharacterFamily,
     types::Type,
     value::{Decimal, TimeUnit, Value},
@@ -131,6 +132,40 @@ pub(super) fn incompatible(
     target_nullable: bool,
     target_max: bool,
 ) -> Option<u8> {
+    if let Type::Character(character) = declared {
+        let wire_family = match wire.type_info.id {
+            0xa7 => Some(CharacterFamily::Varchar),
+            0xaf => Some(CharacterFamily::Char),
+            0xe7 => Some(CharacterFamily::Nvarchar),
+            0xef => Some(CharacterFamily::Nchar),
+            _ => None,
+        };
+        let length = match wire.type_info.format {
+            ValueFormat::ShortLen { max, .. } => {
+                u16::try_from(max).ok().map(WireLength::BoundedBytes)
+            }
+            ValueFormat::Plp { .. } => Some(WireLength::Plp),
+            _ => None,
+        };
+        if let (Some(family), Some(length)) = (wire_family, length) {
+            match admission::metadata(
+                *character,
+                Wire {
+                    family,
+                    length,
+                    nullable: wire.flags & 1 != 0,
+                },
+                target_nullable,
+                target_max,
+            ) {
+                Metadata::Admitted => return None,
+                Metadata::FamilyOrNullability => return Some(1),
+                Metadata::MaxFraming => return Some(2),
+                // Preserve the existing adapter behavior for unmeasured shapes.
+                Metadata::Unknown => {}
+            }
+        }
+    }
     let family = wire_family(&wire.type_info);
     if family.is_none() || family != declared_family(declared) {
         return Some(1);
