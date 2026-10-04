@@ -11802,6 +11802,31 @@
       ],
       "issue": 944,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PmSv3"
+    },
+    {
+      "id": "bulk-character-metadata-reference-v1",
+      "title": "Measure BulkLoad character declaration versus wire metadata admission",
+      "state": "ready",
+      "authorization": "Owner full SQL Server compatibility goal; source/fixture evidence described in publication. This is actual SQL Server ground truth for the next root admission integration, not an operational collation gate.",
+      "scope": [
+        "scripts/capture-bulk-character-metadata.mjs",
+        "reference/bulk-character-metadata.json",
+        "tests/bulk_character_metadata_capture.test.mjs",
+        "docs/bulk-character-metadata-reference.md"
+      ],
+      "dependencies": [
+        "bulk-character-capacity-reference-v1",
+        "bulk-character-utf8-source-form-reference-v1",
+        "ansi-utf8-capacity-core-v1"
+      ],
+      "acceptance": [
+        "Inspect existing899/918/919 collectors and retain original fixtures unchanged. Establish declared versus wire widths independently of targetMAX: bounded character targets width1/8 and MAX, equal and mismatched bounded source widths, bounded/MAX framing in both directions, CHAR versus VARCHAR declared/wire families where possible. Use NULL/empty/ASCII and challenge rows to distinguish pre-row declaration admission from conversion/capacity; include CP1252 operational controls plus explicit CP1251/UTF8 reference profiles without enabling unproven runtime gates. Cover Unicode byte versus unit metadata controls if needed to establish the admitted rule; record remaining domains explicitly rather than guess.",
+        "Four fresh databases in two pinned SQL17.0.4065.4 containers, original raw packets/full descriptors/errors/info/DONE/callback/readback/original-session counters preserved before validation. Bound artifacts48MiB/500000nodes/depth64, exchanges2MiB/1024frames/connect2sec, source rows explicitly bounded, credentials excluded, output alias/symlink/existing-file guards before Docker, awaited cleanup. Reuse pinned owner-reviewed helpers without modifying shared sources; record collector/source/profile/version hashes.",
+        "Freeze final collector, independently reproduce in four more fresh databases/two containers; retain all complete recursive raw path/value differences and exact counter/diagnostic drift without normalization. Pin independently measured semantics/request/response/framing including checked ephemeral identities. Uniform semantic/framing/counter corruption must fail even if derived comparisons are recomputed. Focused tests must verify provenance, completeness, malformed lengths and output limits/aliases/raw preservation; run on both hosts. No native cache or canonical build/binary mutation for a reference-only task.",
+        "Worker takes own fresh claim and isolated existing tree/receipt, focused checkpoints/draft PR, independent and verified Codex review or authorized availability fallback, requiredCI, exact-head merge and prompt registry/issue/project completion. Reuse existing remote private reference workspace and cached SQL image; no new agents/worktrees/native caches or unrelated process termination. Only after this task is merged and Done may a successor claim measured runtime admission changes."
+      ],
+      "issue": 945,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PmZSu"
     }
   ]
 }
