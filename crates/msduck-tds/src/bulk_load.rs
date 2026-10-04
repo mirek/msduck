@@ -9,6 +9,12 @@ const MAX_COLUMNS: usize = 1024;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
     Malformed,
+    /// Zero-based column and original length prefix; no SQL diagnostic implied.
+    CharacterLength {
+        column: usize,
+        bytes: usize,
+        max: usize,
+    },
     UnsupportedType,
     EncryptedColumn,
     ColumnLimit,
@@ -434,13 +440,13 @@ fn read_row(c: &mut Cursor<'_>, columns: &[Column]) -> ReadResult<(Vec<Value>, u
         return Err(invalid(Error::Malformed));
     }
     let mut row = Vec::with_capacity(columns.len());
-    for column in columns {
-        row.push(read_value(c, &column.type_info)?);
+    for (index, column) in columns.iter().enumerate() {
+        row.push(read_value(c, &column.type_info, index)?);
     }
     Ok((row, c.at))
 }
 
-fn read_value(c: &mut Cursor<'_>, ty: &TypeInfo) -> ReadResult<Value> {
+fn read_value(c: &mut Cursor<'_>, ty: &TypeInfo, column: usize) -> ReadResult<Value> {
     let bytes = match ty.format {
         ValueFormat::Fixed(len) => Some(c.take(len)?.to_vec()),
         ValueFormat::ByteLen { max, exact } => {
@@ -459,8 +465,19 @@ fn read_value(c: &mut Cursor<'_>, ty: &TypeInfo) -> ReadResult<Value> {
             if len == usize::from(u16::MAX) {
                 None
             } else {
-                if len > max || (unicode && !len.is_multiple_of(2)) {
+                if unicode && !len.is_multiple_of(2) {
                     return Err(invalid(Error::Malformed));
+                }
+                if len > max {
+                    return Err(invalid(if matches!(ty.id, 0xa7 | 0xaf | 0xe7 | 0xef) {
+                        Error::CharacterLength {
+                            column,
+                            bytes: len,
+                            max,
+                        }
+                    } else {
+                        Error::Malformed
+                    }));
                 }
                 Some(c.take(len)?.to_vec())
             }

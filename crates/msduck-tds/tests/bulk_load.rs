@@ -302,6 +302,62 @@ fn invalid_plp_and_numeric_payloads_fail_before_eom() {
 }
 
 #[test]
+fn character_length_facts_precede_payload_allocation_and_keep_column_index() {
+    for id in [0xa7, 0xaf, 0xe7, 0xef] {
+        let unicode = matches!(id, 0xe7 | 0xef);
+        let max: u16 = if unicode { 2 } else { 1 };
+        let mut type_info = vec![id];
+        type_info.extend(max.to_le_bytes());
+        type_info.extend([9, 4, 0xd0, 0, 0x34]);
+        let metadata = metadata(&[column("id", &[0x26, 4], 0), column("value", &type_info, 1)]);
+        let length = if unicode { 4u16 } else { 2u16 };
+        let mut wire = metadata.clone();
+        wire.extend([0xd1, 4, 1, 0, 0, 0]);
+        wire.extend(length.to_le_bytes());
+        // No oversized payload or final DONE is needed to expose the length.
+        for split in 0..wire.len() {
+            let mut decoder = Decoder::new(EomMode::RequireDone);
+            assert!(
+                decoder.push(&wire[..split], false).is_ok(),
+                "id={id:x} split={split}"
+            );
+            assert_eq!(
+                decoder.push(&wire[split..], false).err(),
+                Some(Error::CharacterLength {
+                    column: 1,
+                    bytes: usize::from(length),
+                    max: usize::from(max),
+                })
+            );
+            assert_eq!(decoder.push(&[], true).err(), Some(Error::Poisoned));
+            assert_eq!(decoder.pending_len(), 0);
+        }
+        let mut exact = metadata;
+        exact.extend([0xd1, 4, 1, 0, 0, 0]);
+        exact.extend(max.to_le_bytes());
+        exact.extend(std::iter::repeat_n(0x41, usize::from(max)));
+        exact.extend(done());
+        let mut decoder = Decoder::new(EomMode::RequireDone);
+        let rows = decoder.push(&exact, true).unwrap().rows;
+        assert_eq!(rows[0][1].bytes, Some(vec![0x41; usize::from(max)]));
+        if unicode {
+            let mut odd = wire[..wire.len() - 2].to_vec();
+            odd.extend(3u16.to_le_bytes());
+            let mut decoder = Decoder::new(EomMode::RequireDone);
+            assert_eq!(decoder.push(&odd, false).err(), Some(Error::Malformed));
+        }
+    }
+}
+
+#[test]
+fn bounded_binary_length_error_remains_malformed() {
+    let mut wire = metadata(&[column("binary", &[0xa5, 1, 0], 1)]);
+    wire.extend([0xd1, 2, 0]);
+    let mut decoder = Decoder::new(EomMode::RequireDone);
+    assert_eq!(decoder.push(&wire, false).err(), Some(Error::Malformed));
+}
+
+#[test]
 fn legacy_ntext_max_metadata_keeps_isolated_utf16_units() {
     let mut type_info = vec![0x63];
     type_info.extend(u32::MAX.to_le_bytes());

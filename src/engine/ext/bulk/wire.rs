@@ -181,7 +181,32 @@ pub(super) fn incompatible(
 }
 
 /// One ROW value as a parameter of the declared type. The family was
-/// checked against the declaration, so the value has its representation.
+/// checked against the declaration and source ROW length admitted before
+/// this conversion. Fixed-source padding precedes target storage conversion.
+pub(super) fn declared_value(
+    info: &TypeInfo,
+    declared: &Type,
+    bytes: Option<&[u8]>,
+) -> Result<Value> {
+    let mut value = value(info, bytes)?;
+    if let Type::Character(character) = declared
+        && let Some(padding) = admission::padding_units(*character, bytes.map(<[u8]>::len))
+    {
+        match &mut value {
+            Value::Text(text) => {
+                text.try_reserve(padding)?;
+                text.extend(std::iter::repeat_n(' ', padding));
+            }
+            Value::Unicode(units) => {
+                units.try_reserve(padding)?;
+                units.extend(std::iter::repeat_n(32, padding));
+            }
+            _ => bail!("invalid admitted fixed character representation"),
+        }
+    }
+    Ok(value)
+}
+
 pub(super) fn value(info: &TypeInfo, bytes: Option<&[u8]>) -> Result<Value> {
     let Some(bytes) = bytes else {
         return Ok(Value::Null);
@@ -316,6 +341,36 @@ fn time(info: &TypeInfo, bytes: &[u8]) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fixed_unicode_source_padding_preserves_isolated_units_and_null() {
+        let declared = Type::Character(
+            msduck_core::character::CharacterType::new(
+                CharacterFamily::Nchar,
+                msduck_core::character::Length::Bounded(4),
+            )
+            .unwrap(),
+        );
+        let info = TypeInfo {
+            id: 0xef,
+            format: ValueFormat::ShortLen {
+                max: 2,
+                unicode: true,
+            },
+            precision: None,
+            scale: None,
+            collation: None,
+        };
+        assert_eq!(declared_value(&info, &declared, None).unwrap(), Value::Null);
+        assert_eq!(
+            declared_value(&info, &declared, Some(&[0x3e, 0xd8])).unwrap(),
+            Value::Unicode(vec![0xd83e, 32, 32, 32])
+        );
+        assert_eq!(
+            declared_value(&info, &declared, Some(&[])).unwrap(),
+            Value::Text("    ".into())
+        );
+    }
     use msduck_core::character::{CharacterType, Length};
 
     fn column(id: u8, format: ValueFormat, flags: u16) -> WireColumn {

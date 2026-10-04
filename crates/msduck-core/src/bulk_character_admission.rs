@@ -79,3 +79,18 @@ pub fn row(declared: CharacterType, bytes: Option<usize>) -> Row {
         Row::Admitted
     }
 }
+
+/// Fixed-source spaces after an admitted original ROW. None means NULL,
+/// variable source, or an invalid/oversized byte shape; validate ROW first.
+/// Unicode spaces are units, not bytes. No payload is read or allocated here.
+pub fn padding_units(declared: CharacterType, bytes: Option<usize>) -> Option<usize> {
+    let (Length::Bounded(width), Some(bytes)) = (declared.length(), bytes) else {
+        return None;
+    };
+    let units = match declared.family() {
+        Family::Char => bytes,
+        Family::Nchar if bytes % 2 == 0 => bytes / 2,
+        _ => return None,
+    };
+    usize::from(width).checked_sub(units)
+}
