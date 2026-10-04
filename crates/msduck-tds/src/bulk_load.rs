@@ -85,6 +85,7 @@ pub struct Chunk {
 pub struct Decoder {
     pending: Vec<u8>,
     columns: Option<Vec<Column>>,
+    character_byte_limits: Option<Vec<Option<usize>>>,
     done: Option<Done>,
     mode: EomMode,
     finished: bool,
@@ -96,11 +97,28 @@ impl Decoder {
         Self {
             pending: Vec::new(),
             columns: None,
+            character_byte_limits: None,
             done: None,
             mode,
             finished: false,
             poisoned: false,
         }
+    }
+
+    /// Explicit source capacities, in bytes and column order. These are caller
+    /// inputs, independent of advertised TYPE_INFO widths and current values.
+    /// Only modern bounded character ROWs use them; NULL has no payload.
+    /// The supplied column count must match metadata before decoding a ROW.
+    #[cfg_attr(
+        test,
+        allow(
+            dead_code,
+            reason = "Default reference replay path-imports this codec without source limits"
+        )
+    )]
+    pub fn with_character_byte_limits(mut self, limits: Vec<Option<usize>>) -> Self {
+        self.character_byte_limits = Some(limits);
+        self
     }
 
     pub fn columns(&self) -> Option<&[Column]> {
@@ -183,7 +201,11 @@ impl Decoder {
             }
             let columns = self.columns.as_deref().expect("metadata parsed");
             match self.pending[0] {
-                0xd1 => match parse_row(&self.pending, columns)? {
+                0xd1 => match parse_row(
+                    &self.pending,
+                    columns,
+                    self.character_byte_limits.as_deref(),
+                )? {
                     Some((row, used)) => {
                         rows.push(row);
                         self.pending.drain(..used);
@@ -431,22 +453,43 @@ fn read_type_info(c: &mut Cursor<'_>) -> ReadResult<TypeInfo> {
     })
 }
 
-fn parse_row(bytes: &[u8], columns: &[Column]) -> Result<Option<(Vec<Value>, usize)>, Error> {
-    parsed(read_row(&mut Cursor::new(bytes), columns))
+fn parse_row(
+    bytes: &[u8],
+    columns: &[Column],
+    limits: Option<&[Option<usize>]>,
+) -> Result<Option<(Vec<Value>, usize)>, Error> {
+    if limits.is_some_and(|limits| limits.len() != columns.len()) {
+        return Err(Error::Malformed);
+    }
+    parsed(read_row(&mut Cursor::new(bytes), columns, limits))
 }
 
-fn read_row(c: &mut Cursor<'_>, columns: &[Column]) -> ReadResult<(Vec<Value>, usize)> {
+fn read_row(
+    c: &mut Cursor<'_>,
+    columns: &[Column],
+    limits: Option<&[Option<usize>]>,
+) -> ReadResult<(Vec<Value>, usize)> {
     if c.u8()? != 0xd1 {
         return Err(invalid(Error::Malformed));
     }
     let mut row = Vec::with_capacity(columns.len());
     for (index, column) in columns.iter().enumerate() {
-        row.push(read_value(c, &column.type_info, index)?);
+        row.push(read_value(
+            c,
+            &column.type_info,
+            index,
+            limits.and_then(|limits| limits[index]),
+        )?);
     }
     Ok((row, c.at))
 }
 
-fn read_value(c: &mut Cursor<'_>, ty: &TypeInfo, column: usize) -> ReadResult<Value> {
+fn read_value(
+    c: &mut Cursor<'_>,
+    ty: &TypeInfo,
+    column: usize,
+    character_limit: Option<usize>,
+) -> ReadResult<Value> {
     let bytes = match ty.format {
         ValueFormat::Fixed(len) => Some(c.take(len)?.to_vec()),
         ValueFormat::ByteLen { max, exact } => {
@@ -468,16 +511,20 @@ fn read_value(c: &mut Cursor<'_>, ty: &TypeInfo, column: usize) -> ReadResult<Va
                 if unicode && !len.is_multiple_of(2) {
                     return Err(invalid(Error::Malformed));
                 }
-                if len > max {
-                    return Err(invalid(if matches!(ty.id, 0xa7 | 0xaf | 0xe7 | 0xef) {
-                        Error::CharacterLength {
+                if matches!(ty.id, 0xa7 | 0xaf | 0xe7 | 0xef) {
+                    // SQL Server admits payloads beyond advertised width. The
+                    // u16 prefix bounds framing; source capacity is explicit.
+                    if let Some(max) = character_limit
+                        && len > max
+                    {
+                        return Err(invalid(Error::CharacterLength {
                             column,
                             bytes: len,
                             max,
-                        }
-                    } else {
-                        Error::Malformed
-                    }));
+                        }));
+                    }
+                } else if len > max {
+                    return Err(invalid(Error::Malformed));
                 }
                 Some(c.take(len)?.to_vec())
             }
