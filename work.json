@@ -11730,6 +11730,30 @@
       ],
       "issue": 938,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PmOX0"
+    },
+    {
+      "id": "bulk-character-utf8-capacity-reference-v1",
+      "title": "Capture UTF8 source capacity and fixed padding",
+      "state": "ready",
+      "authorization": "Owner continuing fully functional SQL Server compatibility goal and explicit preference for2-3 parallel workers with bounded disk use. First-party capacity core914/921 and native adapter938 expose unsupported UTF8 sources; completed source-form918 and bounded-target919 fit every target and cannot establish overflow. Publish a disjoint capture-only companion while root owns native938 exact-head verification; no external input approved.",
+      "scope": [
+        "scripts/capture-bulk-character-utf8-capacity.mjs",
+        "reference/bulk-character-utf8-capacity.json",
+        "tests/bulk_character_utf8_capacity_capture.test.mjs",
+        "docs/bulk-character-utf8-capacity-reference.md"
+      ],
+      "dependencies": [
+        "bulk-character-utf8-source-form-reference-v1",
+        "bulk-character-utf8-bounded-target-reference-v1"
+      ],
+      "acceptance": [
+        "Construct at most128 frozen explicit cases per run, with matching bounded VARCHAR64/bounded TYPE_INFO and MAX/PLP source forms; bounded variable/fixed native UTF8 and Unicode target widths plus selected CP1251/CP1252 controls. Include NULL/empty, exact/one-above capacity, valid multibyte/supplementary boundaries, ASCII-space/NUL/NBSP overflow and admitted/malformed/incomplete controls. Each isolated NULL+challenge load preserves actual source/declaration/collation and cannot hide a later challenge behind an earlier failure. Do not infer source form, repair bytes or replace rejected loads with successful projection expectations.",
+        "Acquire four fresh databases in two pinned SQL Server17.0.4065.4 containers and independently reproduce the entire matrix at the final collector source. Pin reviewed helper/ancestor hashes before Docker; preserve every raw SQL/packet/native/SQL UTF16/typed-descriptor/error/info/DONE/callback/original-session-counter observation and complete unnormalized comparison sidecars. Maintain inherited48MiB/500000node/depth64 retention,2MiB phases/1024frames/connect2sec limits, exclusive output/alias guards and raw-first asynchronous/retention failure behavior. Await all cleanup and distinguish observation timeouts from terminal jobs. Initial unknown outcomes are ground truth, not guessed validation rules.",
+        "Add meaningful focused Node tests for frozen inputs, retained original/fresh replay pins, original source-form/capacity outcomes and representative boundary counterexamples, provenance/contextual identity checks, uniform semantic/payload/frame corruption, output aliases and bounded raw-first failure retention. Document exact source/artifact hashes and remaining finite-coverage/admission/capacity/runtime limits; do not claim arbitrary collation/CAST/assignment or full endpoint compatibility. No Rust, engine, Value, collation gate, shared helper, existing reference or corpus-normalization edits.",
+        "One existing worker/tree and cache only: no new worktree/native cache or Cargo builds, use the already cached pinned SQL image and isolated attributable remote capture outputs without modifying root canonical builder. Coordinate with live root native938 verification and owner engine work; no receipt adoption or unrelated job termination. Claim before work and verify before writes/push/PR updates. Worker owns focused capture PR, independent/verified Codex review or authorized availability fallback, exact-head required CI, merge and prompt registry/issue/project Done."
+      ],
+      "issue": 940,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PmQd-"
     }
   ]
 }
