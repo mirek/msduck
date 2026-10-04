@@ -12247,6 +12247,37 @@
         "Companion966 owns root application and native/client/pinned reference tests for UNION/INTERSECT/EXCEPT; sameworker reusedtree/cache/lock, combinePR964 and all frozenfmt/strictClippy/workspaceRust/alltargetbuild/npm/rawaudit/exactCI/review/fallback gates. Worker owns merge then registry/issues/project completion."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PnRyr"
+    },
+    {
+      "id": "openjson-set-collation-domains-v1",
+      "title": "Honor declared collation domains in Unicode set operations",
+      "state": "backlog",
+      "authorization": "Continuing owner full SQL Server compatibility goal. First-party pinned SQL Server17.0.4065.4 and stable-executable14b3b1d runtime captures confirm nondefault BIN2 trailing-space UNION/INTERSECT gaps; raw owner issue975 contains complete captures. CurrentPR964 intentionally gates default equality and documents this limitation. Backlog successor only: depends on current claims finishing; no new workers/caches/engine.rs/externalcontent.",
+      "issue": 975,
+      "scope": [
+        "crates/msduck-sql/src/variant_sets.rs",
+        "src/engine/ext/keys/predicates/pin.rs",
+        "src/engine/ext/keys/predicates/catalog.rs",
+        "src/engine/ext/keys/predicates/lower.rs",
+        "tests/openjson_isnull.rs",
+        "tests/compat/openjson_isnull.test.mjs",
+        "scripts/capture-openjson-set-collation.mjs",
+        "reference/openjson-set-collation.json",
+        "docs/openjson-isnull.md"
+      ],
+      "dependencies": [
+        "v025-openjson-catalog-v1",
+        "openjson-isnull-carrier-pinning-v1",
+        "isnull-carrier-adapters-v1",
+        "openjson-distinct-set-equality-v1"
+      ],
+      "acceptance": [
+        "First reproduce the four complete owner-published captures, preserve the pinned reference image/version and raw descriptors/UTF16/errors/DONE in a checked-in generator and fixture. BIN2 a/A stays distinct; a versus a-space UNION returns one a and INTERSECT returns one a, not native raw-STRUCT equality. Preserve case-sensitive linguistic evidence and document any remaining order differences rather than sorting/filtering them away.",
+        "Carry explicit/implicit declared collation domains and conflict/unknown states through each immediate binary set boundary. Use the appropriate supported binary/linguistic equality machinery with trailing-space semantics, NULL-safe membership and original payloads. Never silently use the default folded key for a nondefault/unknown domain. Pass all rules explicitly into the deterministic SQL crate; no backend/I/O/global dependencies.",
+        "Preserve nested numeric conversion boundaries, query scopes, output names, alias/CTE hygiene, isolated UTF16 and single evaluation including volatile controls. Add meaningful default, BIN2, CS/CI and conflicting-declaration controls, with SQL Server captures as evidence. Do not edit engine.rs or weaken existing tests.",
+        "Activate/claim only after dependencies done under exclusive protocol. Reuse an existing build workspace and respect its lock; frozen fmt/strictClippy/workspaceRust/alltargetbuild/npm/rawaudit/exactCI/reviews, then worker owns merge and registry/issue/project completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PnZzE"
     }
   ]
 }
