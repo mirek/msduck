@@ -11962,6 +11962,30 @@
       ],
       "issue": 956,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PmltS"
+    },
+    {
+      "id": "ansi-utf8-native-projection-v1",
+      "title": "Complete valid UTF8 native codepage projections using captured maps",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatibility goal; current source rejects complete valid UTF8 native CP1251/CP1252 projections despite task942 retaining all63488 valid BMP scalar outputs in four runs, and task956 proving source collation precedence and supplementary controls. Reuse measured tables without guessed encodings or public runtime claims.",
+      "scope": [
+        "crates/msduck-core/src/ansi_conversion.rs",
+        "crates/msduck-core/src/ansi_conversion/capacity.rs",
+        "crates/msduck-core/tests/ansi_capacity_utf8.rs",
+        "crates/msduck-core/tests/ansi_utf8_native_projection.rs",
+        "docs/ansi-conversion.md"
+      ],
+      "dependencies": [
+        "ansi-utf8-capacity-core-v1",
+        "bulk-character-collation-precedence-reference-v1"
+      ],
+      "acceptance": [
+        "Admit explicitly declared valid UTF8 source into native CP1251/CP1252 using the existing captured complete BMP tables. Preserve strict malformed-input errors, source identity, NULL/empty, original bytes, checked output size and allocation/resource bounds. Keep complete projection separate from capacity cropping/padding and root SQL diagnostics. No guessed arbitrary collation or general CAST support.",
+        "Compare every valid BMP scalar against all eight retained native outputs, plus untouched task956 sampled native results, supplementary and mixed controls. Check input/output boundary and error priority, unsupported target before NULL and invalid byte offsets. No fixture changes or normalization.",
+        "Fresh exclusive claim in reused completed worktree; no new agents/worktrees/native caches. Full exact-head formatter/workspace Rust/strict all-target Clippy/client/audit evidence, CI and verified review or authorized availability fallback. Claiming worker owns PR through merge and registry/project completion. Document remaining native Value/catalog/storage/output integration."
+      ],
+      "issue": 958,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pmqgg"
     }
   ]
 }
