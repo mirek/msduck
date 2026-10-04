@@ -37,7 +37,13 @@ This mode uses four fresh databases in two pinned containers, preserves original
 
 The current collector source SHA256 is `e9713f72ceb80509228de085644a5a42636bf267ac889656c5deccdf35e538d7`. Its original 1522-input mode also completed all6088queries, awaited cleanup and exited0. That fresh raw artifact is15859531bytes, SHA256 `5026ef455d36cb1fd197fca58dacc56d6a69fe68abcc2eb72271cefe2159da73`; its complete12937-difference sidecar against the original fixture was independently reconstructed without changing either raw capture.
 
-Further class, seeded-random, selector-endpoint and malformed/mixed-family captures challenged successive candidates instead of being normalized to fit them. The actual Rust API was independently replayed against20750 original and fresh observations with zero unit/error mismatches. Nine focused Rust tests cover the6088 original outcomes, all33 public EOF controls, malformed repairs versus the strict API, supplementary pairs, NULL/identity and exact resource limits. Focused strict Clippy and formatting checks pass. These checks do not replace the remaining full verification gates.
+Independent review identified a retention bug in derived inter-run comparisons. Finalization now checks their combined envelope before attaching them; overflow persists the original bounded observations and an explicit omission/failure sidecar, then reports failure. Capture failures likewise live in the sidecar. The regression uses two different 20 MiB values: the raw observations fit the unchanged 48 MiB limit while their derived comparisons do not. It verifies exact raw retention and the labelled sidecar, then removes only its synthetic outputs:
+
+```sh
+node scripts/capture-stored-utf8-projection.mjs --test-retention .tmp/stored-retention-test.json
+```
+
+Further class, seeded-random, selector-endpoint and malformed/mixed-family captures challenged successive candidates instead of being normalized to fit them. The actual Rust API was independently replayed against20834 original and fresh observations with zero unit/error mismatches. Nine focused Rust tests cover the6088 original outcomes, all33 public EOF controls, malformed repairs versus the strict API, supplementary pairs, NULL/identity and exact resource limits. Focused strict Clippy and formatting checks pass. These checks do not replace the remaining full verification gates.
 
 ### Further source-form and EOF controls
 
