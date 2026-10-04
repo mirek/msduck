@@ -11831,7 +11831,7 @@
     {
       "id": "bulk-character-admission-runtime-v1",
       "title": "Apply measured character metadata and row admission in BulkLoad runtime",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing server goal; first-party source analysis and final owner task945 evidence only. Preliminary captures are not sufficient authorization to invent a rule. Begin only after945 merged/Done and this task is made ready.",
       "scope": [
         "crates/msduck-core/src/bulk_character_admission.rs",
@@ -11858,7 +11858,7 @@
     {
       "id": "bulk-character-wire-length-facts-v1",
       "title": "Retain bounded character ROW length facts for measured runtime admission",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing fully functional SQL Server compatibility goal. Original owner-run capacity899 eight ROW controls prove declared character overflow is SQL4815; claimed947 cannot recover that fact from shared decoder generic Malformed. First-party disjoint companion, same worker and paired PR948; no third-party inputs or scope mutation.",
       "scope": [
         "crates/msduck-tds/src/bulk_load.rs",
