@@ -12024,6 +12024,24 @@
         "Same claimant combines with958 and expectation supplement. Frozenhead fullfmt/workspaceRust/strictClippy/client/rawaudit/requiredCI/verifiedreview or authorizedfallback; own merge/completion. Keep rootValue/catalog/publicBulkLoad adoption limitations explicit. Reuse cache and shared builderlock."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pmqgg"
+    },
+    {
+      "id": "ansi-utf8-capacity-separation-expectations-v1",
+      "title": "Verify capacity and complete UTF8 projections remain separate",
+      "state": "ready",
+      "authorization": "Owner continuing compatibility goal and frozenbe1745f Linux workspace failure: tests/ansi_capacity_projection.rs:910 asserts strict UTF8 CP1/2 plans unsupported after completing all512 original capacity observations. New strict complete projections are supported and separately retain malformed rejection. Same worker disjoint one-file test companion for958; preserve all existing raw oracle comparisons.",
+      "issue": 958,
+      "scope": [
+        "tests/ansi_capacity_projection.rs"
+      ],
+      "dependencies": [
+        "ansi-utf8-capacity-core-v1"
+      ],
+      "acceptance": [
+        "Replace obsolete unsupported namedCP1/CP2 constructor assertion with supported plan assertions and meaningful no-truncation resource failure/native bytes proof if needed. Preserve all512 original raw capacity observations,264 failedloads and exact source/target/family/error distinctions; no fixture changes or skipped comparisons. Malformed strict complete projection remains distinct from capacity-specific decoder.",
+        "Same claiming worker combines with958 and existing supplements; exact frozenhead fullworkspace/client/audit checks, CI and verifiedreview or authorizedfallback; merge and registry completion only together."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pmqgg"
     }
   ]
 }
