@@ -623,3 +623,40 @@ fn user_functions_bind_in_the_session_database() {
     );
     assert_eq!(catalog(&session), "memory.dbo");
 }
+
+#[test]
+fn reads_stay_in_the_session_database_except_for_catalog_views() {
+    let (_server, mut session) = fixture();
+    // Functions that depend on the current database keep the session's.
+    ok(
+        &mut session,
+        "IF (SELECT TOP 1 OBJECT_ID('dbo.loc') FROM foo.dbo.items) IS NULL THROW 50001, 'not master', 1",
+    );
+    // Another database's catalog views describe that database.
+    ok(
+        &mut session,
+        "IF NOT EXISTS (SELECT 1 FROM foo.sys.columns WHERE name = 'v') THROW 50001, 'not foo', 1",
+    );
+    ok(
+        &mut session,
+        "DECLARE @n INT, @c NVARCHAR(128); SELECT @n = COUNT(*), @c = MAX(TABLE_CATALOG) FROM foo.INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME IN ('items', 'loc'); IF @n <> 1 OR @c <> N'foo' THROW 50001, 'not foo', 1",
+    );
+    assert_eq!(
+        fails(
+            &mut session,
+            "SELECT c.name FROM foo.sys.columns c JOIN dbo.loc l ON 1 = 1"
+        ),
+        (
+            40515,
+            1,
+            16,
+            "unsupported cross-database statement: it reads catalog views of database 'foo' together with objects or user functions of other databases".into()
+        )
+    );
+    // A missing object of another database is an invalid object name.
+    assert_eq!(
+        fails(&mut session, "SELECT id FROM FOO.dbo.missing"),
+        (208, 1, 16, "Invalid object name 'foo.dbo.missing'.".into())
+    );
+    assert_eq!(catalog(&session), "memory.dbo");
+}

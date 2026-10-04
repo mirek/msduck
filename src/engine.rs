@@ -988,6 +988,35 @@ impl Session {
             return Ok(CrossDatabase::Local);
         };
         let display = |alias: &str| self.database.catalog().display_name(alias);
+        // Like SQL Server, a missing object of another database is an
+        // invalid object name.
+        for name in &relations.foreign_names {
+            if let Some((alias, local)) =
+                crate::query_catalog::foreign_relation(&self.db, &relations.current, name)?
+                && !crate::query_catalog::in_catalog(&self.db, &alias, || {
+                    self.db.query_row(
+                        "SELECT __msduck_object_id(?,NULL) IS NOT NULL",
+                        [local.to_string()],
+                        |row| row.get::<_, bool>(0),
+                    )
+                })?
+            {
+                let parts = local
+                    .0
+                    .iter()
+                    .map(|part| match part {
+                        ObjectNamePart::Identifier(ident) => ident.value.clone(),
+                        part => part.to_string(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(".");
+                bail!(SqlError::new(
+                    208,
+                    1,
+                    format!("Invalid object name '{}.{parts}'.", display(&alias)),
+                ));
+            }
+        }
         let dml = match statement {
             None => None,
             Some(Statement::Query(query)) => match query.body.as_ref() {
@@ -1029,11 +1058,29 @@ impl Session {
             }
             Ok(())
         };
-        if relations.foreign.len() == 1
-            && relations.local.is_empty()
-            && !relations.into
-            && !(relations.routines && dml.is_none())
-        {
+        // Reads stay in the session's database, where functions that depend
+        // on the current database (OBJECT_ID, @@DBTS, user functions) bind,
+        // and read other databases through their catalogs. Another
+        // database's catalog views describe it only from inside it.
+        if dml.is_none() {
+            if !relations.catalog_views {
+                return Ok(CrossDatabase::Mixed(
+                    relations.foreign.into_keys().collect(),
+                ));
+            }
+            if relations.foreign.len() == 1
+                && relations.local.is_empty()
+                && !relations.into
+                && !relations.routines
+            {
+                return Ok(CrossDatabase::Home(database.clone(), vec![]));
+            }
+            bail!(
+                "unsupported cross-database statement: it reads catalog views of database '{}' together with objects or user functions of other databases",
+                display(database)
+            );
+        }
+        if relations.foreign.len() == 1 && relations.local.is_empty() && !relations.into {
             refuse_output_into(&display(database))?;
             refuse_routines(&display(database))?;
             return Ok(CrossDatabase::Home(database.clone(), vec![]));
@@ -8024,6 +8071,12 @@ fn dml_target(statement: &Statement) -> Option<ObjectName> {
 struct Relations {
     current: String,
     foreign: std::collections::BTreeMap<String, String>,
+    /// Relations of other databases, as qualified.
+    foreign_names: Vec<ObjectName>,
+    /// Whether another database's catalog views (`sys`, `INFORMATION_SCHEMA`)
+    /// are read. They describe the DuckDB default catalog, so only a
+    /// statement running in that database reads them correctly.
+    catalog_views: bool,
     /// Relation nodes of the current database.
     local: Vec<*const ObjectName>,
     /// Whether a SELECT INTO creates a table in the current database.
@@ -8069,6 +8122,21 @@ impl Relations {
                 self.foreign
                     .entry(database.value.clone())
                     .or_insert_with(|| name.to_string());
+                if !self.foreign_names.contains(name) {
+                    self.foreign_names.push(name.clone());
+                }
+                // sys.databases lists the same databases everywhere.
+                if let [
+                    _,
+                    ObjectNamePart::Identifier(schema),
+                    ObjectNamePart::Identifier(view),
+                ] = name.0.as_slice()
+                    && (schema.value.eq_ignore_ascii_case("INFORMATION_SCHEMA")
+                        || schema.value.eq_ignore_ascii_case("sys")
+                            && !view.value.eq_ignore_ascii_case("databases"))
+                {
+                    self.catalog_views = true;
+                }
             }
             [ObjectNamePart::Identifier(single)]
                 if self

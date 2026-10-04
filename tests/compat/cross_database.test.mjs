@@ -57,11 +57,6 @@ const known = {
     done: [['done', null, true], ['done', 1, true], ['done', null, false]],
     rowCount: 1,
   }),
-  // The error number matches; the message is DuckDB's, as in the current
-  // database.
-  'unknown object': expected => {
-    expected.errors[0][3] = 'Catalog Error: Table with name missing does not exist!\nDid you mean "items"?\n\nLINE 1: SELECT * FROM dbo.missing\n                      ^'
-  },
   // DDL in another database is refused.
   'create table in another database': expected => {
     expected.errors = [[40515, 1, 16, 'unsupported reference to xdb_foo.dbo.made in another database; USE xdb_foo first', 1]]

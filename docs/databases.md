@@ -177,31 +177,40 @@ catalog's DuckDB name are rejected with an msduck error.
 
 Queries, `INSERT`, `UPDATE`, `DELETE`, variable assignments and
 `IF`/`WHILE` conditions can use another database's tables and views through
-three-part names, as in SQL Server. `reference/cross-database.json`, captured by
-`scripts/capture-cross-database.mjs` from the pinned SQL Server image, holds
-the expected rows, descriptors and errors, and
-`tests/compat/cross_database.test.mjs` replays it. Every database is a
+three-part names, as in SQL Server. `reference/cross-database.json`,
+captured by `scripts/capture-cross-database.mjs` from the pinned SQL Server
+image, holds the expected rows, descriptors, errors and completion tokens,
+and `tests/compat/cross_database.test.mjs` replays it. Every database is a
 separate DuckDB catalog, so the engine places each statement in one of them:
 
-- A statement that references only one other database, or that writes one,
-  runs with that database as DuckDB's default catalog. Features then treat it
-  as the current database: declared column types and nvarchar storage,
-  identity, defaults, triggers, constraints and snapshot isolation checks see
-  that database's catalog objects, as they would after `USE`. Relations of the
-  session's database and of others are read through their own catalogs.
-  `DB_NAME()` and `DB_ID()` in the statement still name the session's
-  database, as captured, and `SCOPE_IDENTITY()` reports the insert. Trigger
-  and other module bodies run in their own database.
-- Any other query or DML statement, such as a join between the current
-  database and another one, or one that reads another database and writes the
-  current one, runs in the current database. Result descriptors and operand
-  types (LEN, concatenation, comparisons of nvarchar columns) of the other
-  database's relations come from that database's catalog objects.
+- Reads (queries, conditions and assignments) run in the session's database,
+  where functions that depend on the current database, such as `OBJECT_ID`,
+  `@@DBTS` and user functions, bind as in SQL Server. Result descriptors and
+  operand types (LEN, concatenation, comparisons of nvarchar columns) of
+  another database's relations come from that database's catalog objects.
+- Another database's catalog views (`b.sys.columns`,
+  `b.INFORMATION_SCHEMA.TABLES`; `sys.databases` excepted) describe it only
+  from inside it, so a query that reads them and nothing else runs in that
+  database. Combined with other databases' objects or user functions, it
+  fails with 40515 `unsupported cross-database statement: it reads catalog
+  views of database '...' together with objects or user functions of other
+  databases`.
+- INSERT, UPDATE and DELETE that write another database run with it as
+  DuckDB's default catalog. Features then treat it as the current database:
+  declared column types and nvarchar storage, identity, defaults, triggers,
+  constraints and snapshot isolation checks see its catalog objects, as they
+  would after `USE`. Relations of the session's database and of others are
+  read through their own catalogs. `DB_NAME()` and `DB_ID()` still name the
+  session's database, as captured, and `SCOPE_IDENTITY()` reports the insert.
+  Trigger bodies run in their own database. DML that writes the current
+  database and reads others runs in the current database.
+- A missing object of another database fails with 208 `Invalid object name
+  'b.schema.object'.`, as captured.
 - Before a statement uses another database, msduck applies the checks `USE`
   makes and keeps the database in use until the statement ends, so `DROP
-  DATABASE` meanwhile fails with 3702. A database another session holds in `SINGLE_USER` fails with
-  924 (state 1, class 14) `Database '...' is already open and can only have
-  one user at a time.`, as captured.
+  DATABASE` meanwhile fails with 3702. A database another session holds in
+  `SINGLE_USER` fails with 924 (state 1, class 14) `Database '...' is
+  already open and can only have one user at a time.`, as captured.
 - Preparation (`sp_prepare`) binds such statements the same way without
   running them, and RPC parameters work as in the current database.
 - A restored database is an ordinary user database and is read the same way.
@@ -234,15 +243,14 @@ Remaining limits, refused explicitly unless noted:
   that writes database '...'`: the destination belongs to the session's
   database, and the statement may write only one. Plain `OUTPUT` works, and
   `OUTPUT INTO` works in statements that write the current database.
-- User functions bind in the session's database, so a statement calling a
-  schema-qualified function (`dbo.f(...)`) runs there: a read of another
-  database works, but a write to another database fails with 40515
-  `unsupported cross-database statement: it writes database '...' and calls
-  functions of the session's database`.
-- Built-in functions that resolve object names, such as `OBJECT_ID`, in a
-  statement that runs in another database resolve them in that database.
-- A missing table in another database fails with 208 but with DuckDB's
-  message, as a missing table in the current database does.
+- User functions bind in the session's database, so a write to another
+  database that calls a schema-qualified function (`dbo.f(...)`) fails with
+  40515 `unsupported cross-database statement: it writes database '...' and
+  calls functions of the session's database`.
+- Built-in functions that depend on the current database, such as
+  `OBJECT_ID` or `@@DBTS`, resolve in the written database in DML that
+  writes another database, and in the other database in reads of its catalog
+  views.
 - Calls to procedures and functions in another database, and synonyms, are not
   resolved.
 
