@@ -11,7 +11,8 @@ Each worker needs an isolated worktree and its own receipt. See
 `docs/agent-work.md` for manual triage, owner publication and recovery, and
 `docs/parallel-collaboration.md` for worker, reviewer and integrator roles.
 Keep temporary files in a private directory under the RAM-backed `/tmp`
-(`export TMPDIR=$(mktemp -d /tmp/msduck-TASK-ID-XXXXXX)`), and delete it, and
+(`TMPDIR=$(mktemp -d /tmp/msduck-TASK-ID-XXXXXX) && export TMPDIR`; stop if
+`mktemp` fails), and delete it, and
 stop every server or container you started, when the run or task ends. Never
 delete other workers' or sessions' files there; see "Temporary files" in
 `docs/agent-work.md`.

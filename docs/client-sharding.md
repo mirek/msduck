@@ -88,9 +88,9 @@ runners to silently skip files; coverage checking also detects that failure.
 Run the harness regressions with:
 
 ```sh
-export TMPDIR=$(mktemp -d /tmp/msduck-shards-XXXXXX)
+TMPDIR=$(mktemp -d /tmp/msduck-shards-XXXXXX) && export TMPDIR || exit 1
+trap 'rm -rf "$TMPDIR"' EXIT
 node --test tests/client-shards.test.mjs tests/client-test-command.test.mjs tests/remote-build.test.mjs
-rm -rf "$TMPDIR"
 ```
 
 They cover exhaustive deterministic partitioning, exact name matching, duplicate

@@ -98,11 +98,15 @@ filled it.
   databases, baseline checkouts, logs and captures:
 
   ```sh
-  export TMPDIR=$(mktemp -d /tmp/msduck-TASK-ID-XXXXXX)
+  TMPDIR=$(mktemp -d /tmp/msduck-TASK-ID-XXXXXX) && export TMPDIR || exit 1
   ```
 
-  Shell state does not persist in some harnesses, so set it again in every
-  command, or record the path and reuse it.
+  Do not write `export TMPDIR=$(mktemp ...)`: `export` succeeds even when
+  `mktemp` fails, leaving `TMPDIR` empty so tools fall back to the shared
+  `/tmp`. Shell state does not persist in some harnesses, so record the path
+  and reuse it in every command.
+- In scripts, remove the directory on every exit path, for example with
+  `trap 'rm -rf "$TMPDIR"' EXIT` right after creating it.
 - Delete it when a test run or the task ends, including after failures and
   interrupted runs. Delete files you no longer need during long tasks too.
 - Before deleting, stop the servers and reference containers you started. A
@@ -110,9 +114,13 @@ filled it.
   processes running after a suite ends.
 - Check free space with `df -h /tmp` before large runs, and clean up your own
   files first when it is low.
-- Never delete another worker's live files. Check with
-  `lsof +D /tmp/<dir>` before removing anything you did not create, and remove
-  stale directories only when no process holds them.
+- Never delete another worker's files. An idle or paused worker holds no open
+  files but may still reuse its directory, so `lsof` alone does not prove a
+  directory is abandoned. Remove a directory you did not create only when its
+  owner is gone: its task is done or blocked, or its worker is stale under
+  "Standing authorization for stale claims" below, nothing in it changed for
+  several hours, and `lsof +D /tmp/<dir>` shows no holder. Record what you
+  removed in your report.
 - Some tools cannot read `/tmp`. A Snap-packaged `gh`, for example, sees its
   own private `/tmp`, so write files passed to it (PR bodies, publication
   change files) under your worktree's ignored `artifacts/` instead.
