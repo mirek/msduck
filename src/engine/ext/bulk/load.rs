@@ -96,9 +96,29 @@ pub(super) struct Load {
 
 impl Load {
     pub fn new(plan: Plan) -> Self {
+        use msduck_core::character::{Family, Length};
+        let limits = plan
+            .columns
+            .iter()
+            .map(|bound| {
+                let Type::Character(character) = bound.declared else {
+                    return None;
+                };
+                let Length::Bounded(width) = character.length() else {
+                    return None;
+                };
+                let units = if matches!(character.family(), Family::Nchar | Family::Nvarchar) {
+                    2
+                } else {
+                    1
+                };
+                Some(usize::from(width) * units)
+            })
+            .collect();
         Self {
             plan,
-            decoder: codec::Decoder::new(codec::EomMode::RequireDone),
+            decoder: codec::Decoder::new(codec::EomMode::RequireDone)
+                .with_character_byte_limits(limits),
             failure: None,
             checked: false,
             rows: Vec::new(),

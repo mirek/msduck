@@ -316,7 +316,8 @@ fn character_length_facts_precede_payload_allocation_and_keep_column_index() {
         wire.extend(length.to_le_bytes());
         // No oversized payload or final DONE is needed to expose the length.
         for split in 0..wire.len() {
-            let mut decoder = Decoder::new(EomMode::RequireDone);
+            let mut decoder = Decoder::new(EomMode::RequireDone)
+                .with_character_byte_limits(vec![None, Some(usize::from(max))]);
             assert!(
                 decoder.push(&wire[..split], false).is_ok(),
                 "id={id:x} split={split}"
@@ -337,13 +338,15 @@ fn character_length_facts_precede_payload_allocation_and_keep_column_index() {
         exact.extend(max.to_le_bytes());
         exact.extend(std::iter::repeat_n(0x41, usize::from(max)));
         exact.extend(done());
-        let mut decoder = Decoder::new(EomMode::RequireDone);
+        let mut decoder = Decoder::new(EomMode::RequireDone)
+            .with_character_byte_limits(vec![None, Some(usize::from(max))]);
         let rows = decoder.push(&exact, true).unwrap().rows;
         assert_eq!(rows[0][1].bytes, Some(vec![0x41; usize::from(max)]));
         if unicode {
             let mut odd = wire[..wire.len() - 2].to_vec();
             odd.extend(3u16.to_le_bytes());
-            let mut decoder = Decoder::new(EomMode::RequireDone);
+            let mut decoder = Decoder::new(EomMode::RequireDone)
+                .with_character_byte_limits(vec![None, Some(usize::from(max))]);
             assert_eq!(decoder.push(&odd, false).err(), Some(Error::Malformed));
         }
     }
@@ -377,4 +380,79 @@ fn legacy_ntext_max_metadata_keeps_isolated_utf16_units() {
     let mut decoder = Decoder::new(EomMode::RequireDone);
     let chunk = decoder.push(&wire, true).unwrap();
     assert_eq!(chunk.rows[0][0].bytes, Some(vec![0x00, 0xd8]));
+}
+
+#[test]
+fn modern_character_rows_use_explicit_source_capacity_not_advertised_width() {
+    for id in [0xa7, 0xaf, 0xe7, 0xef] {
+        let unit = if matches!(id, 0xe7 | 0xef) { 2 } else { 1 };
+        for advertised in [0u16, unit as u16] {
+            let mut ty = vec![id];
+            ty.extend(advertised.to_le_bytes());
+            ty.extend([9, 4, 0xd0, 0, 0x34]);
+            let head = metadata(&[column("value", &ty, 1)]);
+            for size in [None, Some(0), Some(unit), Some(2 * unit), Some(8 * unit)] {
+                let mut wire = head.clone();
+                wire.push(0xd1);
+                wire.extend(size.map_or(u16::MAX, |size| size as u16).to_le_bytes());
+                let expected = size.map(|size| vec![0x41; size]);
+                if let Some(payload) = &expected {
+                    wire.extend(payload);
+                }
+                wire.extend(done());
+                for split in 0..=wire.len() {
+                    for explicit in [false, true] {
+                        let mut decoder = Decoder::new(EomMode::RequireDone);
+                        if explicit {
+                            decoder = decoder.with_character_byte_limits(vec![Some(8 * unit)]);
+                        }
+                        let mut rows = decoder.push(&wire[..split], false).unwrap().rows;
+                        rows.extend(decoder.push(&wire[split..], true).unwrap().rows);
+                        assert_eq!(
+                            rows,
+                            vec![vec![Value {
+                                bytes: expected.clone()
+                            }]],
+                            "id={id:x} width={advertised} split={split} explicit={explicit}"
+                        );
+                    }
+                }
+            }
+            // Source boundary plus one unit, with no payload at all: facts are
+            // emitted before copying a value despite a smaller wire width.
+            let mut prefix = head;
+            prefix.push(0xd1);
+            prefix.extend(((9 * unit) as u16).to_le_bytes());
+            let mut decoder =
+                Decoder::new(EomMode::RequireDone).with_character_byte_limits(vec![Some(8 * unit)]);
+            assert_eq!(
+                decoder.push(&prefix, false).err(),
+                Some(Error::CharacterLength {
+                    column: 0,
+                    bytes: 9 * unit,
+                    max: 8 * unit
+                })
+            );
+            assert_eq!(decoder.push(&[], true).err(), Some(Error::Poisoned));
+        }
+    }
+}
+
+#[test]
+fn explicit_character_limits_do_not_change_binary_or_legacy_framing() {
+    for ty in [&[0xa5, 1, 0][..], &[0x27, 1, 9, 4, 0xd0, 0, 0x34][..]] {
+        let mut wire = metadata(&[column("value", ty, 1)]);
+        wire.extend([0xd1, 2]);
+        if ty[0] == 0xa5 {
+            wire.push(0);
+        }
+        let mut decoder =
+            Decoder::new(EomMode::RequireDone).with_character_byte_limits(vec![Some(8)]);
+        assert_eq!(decoder.push(&wire, false).err(), Some(Error::Malformed));
+    }
+    let mut wire = metadata(&[column("id", &[0x26, 4], 0)]);
+    wire.extend([0xd1, 4, 1, 0, 0, 0]);
+    let mut decoder = Decoder::new(EomMode::RequireDone).with_character_byte_limits(vec![]);
+    assert_eq!(decoder.push(&wire, false).err(), Some(Error::Malformed));
+    assert_eq!(decoder.columns().unwrap().len(), 1);
 }
