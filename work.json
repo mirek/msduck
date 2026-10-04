@@ -11966,7 +11966,7 @@
     {
       "id": "ansi-utf8-native-projection-v1",
       "title": "Complete valid UTF8 native codepage projections using captured maps",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server compatibility goal; current source rejects complete valid UTF8 native CP1251/CP1252 projections despite task942 retaining all63488 valid BMP scalar outputs in four runs, and task956 proving source collation precedence and supplementary controls. Reuse measured tables without guessed encodings or public runtime claims.",
       "scope": [
         "crates/msduck-core/src/ansi_conversion.rs",
@@ -11990,7 +11990,7 @@
     {
       "id": "ansi-utf8-native-expectations-v1",
       "title": "Retain UTF8 projection error tests while admitting captured codepage targets",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing compatibility goal and task958 exact-source test failure: ansi_utf8_projection still asserts UTF8 to CP1251/CP1252 unsupported. New measured projections passed all507904 retained BMP cells and360 original collation rows. Same worker requires this disjoint expectation scope in combined task958 PR; no external content.",
       "issue": 958,
       "scope": [
@@ -12008,7 +12008,7 @@
     {
       "id": "ansi-utf8-native-adapter-verification-v1",
       "title": "Verify measured UTF8 codepage projections through native carriers and Arrow",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server compatibility goal and task958 runtime call-site audit: native Plan validates through complete project, so captured UTF8 codepage support also reaches that adapter. Existing tests assert unsupported and need measured native callback/Arrow coverage. Same root worker owns disjoint companion; no external input.",
       "issue": 958,
       "scope": [
@@ -12028,7 +12028,7 @@
     {
       "id": "ansi-utf8-capacity-separation-expectations-v1",
       "title": "Verify capacity and complete UTF8 projections remain separate",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing compatibility goal and frozenbe1745f Linux workspace failure: tests/ansi_capacity_projection.rs:910 asserts strict UTF8 CP1/2 plans unsupported after completing all512 original capacity observations. New strict complete projections are supported and separately retain malformed rejection. Same worker disjoint one-file test companion for958; preserve all existing raw oracle comparisons.",
       "issue": 958,
       "scope": [
