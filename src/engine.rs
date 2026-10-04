@@ -1224,9 +1224,9 @@ impl Session {
             }
         }
         // DuckDB inserts catalog names unescaped, and a name may contain any
-        // text, so the names are the attached catalogs that reproduce the
-        // diagnostic exactly; failing that, the text between its fixed
-        // phrases.
+        // text, so the names are the one pair of attached catalogs that
+        // reproduces the diagnostic exactly. Without exactly one such pair
+        // the error names no database.
         const MODIFIED: &str = "\" in a transaction that has already modified database \"";
         const END: &str = "\" - a single transaction can only write to a single attached database";
         let attached = self
@@ -1238,37 +1238,33 @@ impl Session {
                     .collect::<duckdb::Result<Vec<_>>>()
             })
             .unwrap_or_default();
-        let names = attached
+        let mut pairs = attached
             .iter()
             .flat_map(|written| attached.iter().map(move |modified| (written, modified)))
-            .find(|(written, modified)| {
+            .filter(|(written, modified)| {
                 rest.strip_prefix(written.as_str())
                     .and_then(|rest| rest.strip_prefix(MODIFIED))
                     .and_then(|rest| rest.strip_prefix(modified.as_str()))
                     .is_some_and(|rest| rest.starts_with(END))
-            })
-            .map(|(written, modified)| (written.clone(), modified.clone()))
-            .or_else(|| {
-                rest.split_once(MODIFIED).and_then(|(written, rest)| {
-                    rest.rsplit_once(END)
-                        .map(|(modified, _)| (written.to_string(), modified.to_string()))
-                })
             });
-        let Some((written, modified)) = names else {
-            return error;
+        let names = match (pairs.next(), pairs.next()) {
+            (Some(pair), None) => Some(pair),
+            _ => None,
         };
         let catalog = self.database.catalog();
-        // A runtime error, which TRY catches, unlike unsupported syntax.
-        SqlError::new(
-            40515,
-            1,
-            format!(
+        let message = match names {
+            Some((written, modified)) => format!(
                 "unsupported cross-database transaction: database '{}' cannot be modified in a transaction that has already modified database '{}'; a transaction may write only one database",
-                catalog.display_name(&written),
-                catalog.display_name(&modified)
+                catalog.display_name(written),
+                catalog.display_name(modified)
             ),
-        )
-        .into()
+            None => {
+                "unsupported cross-database transaction: a transaction may write only one database"
+                    .to_string()
+            }
+        };
+        // A runtime error, which TRY catches, unlike unsupported syntax.
+        SqlError::new(40515, 1, message).into()
     }
 
     /// The session's current database.

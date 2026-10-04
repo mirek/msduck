@@ -662,3 +662,30 @@ fn reads_stay_in_the_session_database_except_for_catalog_views() {
     );
     assert_eq!(catalog(&session), "memory.dbo");
 }
+
+#[test]
+fn ambiguous_write_errors_name_no_database() {
+    let (_server, mut session) = fixture();
+    let phrase = "\" in a transaction that has already modified database \"";
+    let second = format!("b{phrase}c");
+    let third = format!("a{phrase}b");
+    for name in ["a", second.as_str(), third.as_str(), "c"] {
+        ok(&mut session, &format!("CREATE DATABASE [{name}]"));
+        ok(
+            &mut session,
+            &format!("USE [{name}]; CREATE TABLE dbo.t (id INT); USE master"),
+        );
+    }
+    // Writing the third after c reads exactly like writing a after the
+    // second.
+    let (number, _, _, message) = fails(
+        &mut session,
+        &format!("BEGIN TRAN; INSERT c.dbo.t VALUES (1); INSERT [{third}].dbo.t VALUES (1)"),
+    );
+    assert_eq!(number, 40515);
+    assert_eq!(
+        message,
+        "unsupported cross-database transaction: a transaction may write only one database"
+    );
+    assert_eq!(session.transactions, 0);
+}

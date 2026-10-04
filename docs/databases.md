@@ -220,10 +220,11 @@ transaction modify several databases; msduck refuses the statement that would
 modify a second database with error 40515 (state 1, class 16)
 `unsupported cross-database transaction: database 'b' cannot be modified in a
 transaction that has already modified database 'a'; a transaction may write
-only one database`. DuckDB has already aborted the transaction, so its work is
-rolled back at once and the transaction is doomed: outside `TRY` the batch
-ends and rolls it back; inside `TRY` the handler sees `XACT_STATE()` -1 and
-must roll it back. Nothing of it commits. A single statement always writes one
+only one database` (without the names when DuckDB's diagnostic does not
+identify the two databases unambiguously). DuckDB has already aborted the
+transaction, so its work is rolled back at once and the transaction is
+doomed: outside `TRY` the batch ends and rolls it back; inside `TRY` the
+handler sees `XACT_STATE()` -1 and must roll it back. Nothing of it commits. A single statement always writes one
 database. Each statement outside an explicit transaction commits on its own,
 so consecutive statements may write different databases.
 
