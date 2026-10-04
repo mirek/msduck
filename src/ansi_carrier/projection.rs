@@ -1,4 +1,4 @@
-//! Connection-owned complete projections over explicitly identified native carriers.
+//! Connection-owned projections over explicitly identified native carriers.
 use super::{Plan as Storage, is_logical, storage_type, with_native_bytes};
 use duckdb::{
     Connection,
@@ -8,11 +8,24 @@ use duckdb::{
 };
 use msduck_core::{
     ansi_bytes::{AnsiView, EncodingIdentity, checked_byte_total},
-    ansi_conversion::{ProjectedValue, ProjectionLimits, ProjectionTarget, project, stored_utf8},
+    ansi_conversion::{
+        ProjectedValue, ProjectionLimits, ProjectionTarget, capacity, project, stored_utf8,
+    },
 };
 
+/// BulkLoad declaration facts, supplied after root wire/catalog admission.
+/// Encoding and source form must never be inferred from a row's bytes or size.
+#[derive(Clone, Copy, Debug)]
+pub struct CapacityDeclaration {
+    pub source: EncodingIdentity,
+    pub source_form: capacity::SourceForm,
+    pub target: ProjectionTarget,
+    pub family: capacity::Family,
+    pub capacity: capacity::Capacity,
+}
+
 /// Explicit logical identity and active per-cell/chunk input/output payload limits.
-/// This is not a collation, storage-capacity, SQL CAST or wire-admission plan.
+/// This is not a collation, SQL CAST or wire-admission plan.
 #[derive(Clone, Copy, Debug)]
 pub struct Plan {
     source: Storage,
@@ -26,6 +39,7 @@ pub struct Plan {
 enum Decode {
     Strict,
     StoredUtf8,
+    BulkCapacity(capacity::Plan),
 }
 
 impl Plan {
@@ -74,6 +88,33 @@ impl Plan {
             output_chunk_limit,
         )?;
         plan.decode = Decode::StoredUtf8;
+        Ok(plan)
+    }
+
+    /// Apply measured BulkLoad capacity rules to an already admitted source.
+    /// This callback does not establish wire admission, SQL error tokens or
+    /// whole-load transaction behavior. UTF8 sources remain unsupported.
+    pub fn bulk_capacity(
+        declaration: CapacityDeclaration,
+        limits: ProjectionLimits,
+        input_chunk_limit: usize,
+        output_chunk_limit: usize,
+    ) -> anyhow::Result<Self> {
+        let capacity = capacity::Plan::new(
+            declaration.source,
+            declaration.source_form,
+            declaration.target,
+            declaration.family,
+            declaration.capacity,
+        )?;
+        let mut plan = Self::new(
+            declaration.source,
+            declaration.target,
+            limits,
+            input_chunk_limit,
+            output_chunk_limit,
+        )?;
+        plan.decode = Decode::BulkCapacity(capacity);
         Ok(plan)
     }
 
@@ -167,6 +208,7 @@ impl Plan {
                         stored_utf8::to_sql_utf16(self.source.encoding(), Some(view), self.limits)?
                             .map(ProjectedValue::SqlUtf16)
                     }
+                    Decode::BulkCapacity(plan) => plan.apply(Some(view), self.limits)?,
                 }
                 .ok_or_else(|| anyhow::anyhow!("non-NULL ANSI projection became NULL"))?;
                 let size = match &projected {
@@ -452,5 +494,140 @@ mod tests {
         assert!(invoke(&p, &mut wrong_input, &mut output).is_err());
         let mut wrong_output = Output(DataChunkHandle::new(&[storage_type()]));
         assert!(invoke(&p, &mut input, &mut wrong_output).is_err());
+    }
+
+    fn capacity_plan(target: ProjectionTarget, output: usize, chunk: usize) -> Plan {
+        Plan::bulk_capacity(
+            CapacityDeclaration {
+                source: EncodingIdentity::Cp1252,
+                source_form: capacity::SourceForm::Bounded,
+                target,
+                family: capacity::Family::Fixed,
+                capacity: capacity::Capacity::Bounded(2),
+            },
+            ProjectionLimits {
+                input_bytes: 8,
+                output_bytes: output,
+            },
+            16,
+            chunk,
+        )
+        .unwrap()
+    }
+    #[test]
+    fn capacity_late_failures_preserve_initialized_native_and_unicode_outputs() {
+        use capacity::CapacityError;
+        use msduck_core::ansi_bytes::ByteError;
+        use msduck_core::ansi_conversion::{ProjectionError, Resource};
+        for target in [
+            ProjectionTarget::Native(EncodingIdentity::Cp1252),
+            ProjectionTarget::SqlUtf16,
+        ] {
+            let (kind, cell) = if target == ProjectionTarget::SqlUtf16 {
+                (crate::unicode_carrier::kind(), 4)
+            } else {
+                (storage_type(), 2)
+            };
+            let mut input = DataChunkHandle::new(&[storage_type()]);
+            let mut output = Output(DataChunkHandle::new(&[kind]));
+            if target == ProjectionTarget::SqlUtf16 {
+                output.0.set_len(2);
+                let structure = output.0.struct_vector(0);
+                let payload = structure.child(0, 2);
+                payload.insert(0, b"L\0".as_slice());
+                payload.insert(1, b"R\0".as_slice());
+            } else {
+                fill(&output.0, &[1252, 1252], &[b"left", b"right"]);
+            }
+            let before = data_chunk_to_arrow(&output.0).unwrap();
+            fill(&input, &[1252, 1252], &[b"A", b"ABC"]);
+            let error = invoke(
+                &capacity_plan(target, cell, cell * 2),
+                &mut input,
+                &mut output,
+            )
+            .unwrap_err();
+            assert_eq!(
+                error.downcast_ref::<CapacityError>(),
+                Some(&CapacityError::Truncation {
+                    source_bytes: 3,
+                    target_capacity: 2
+                })
+            );
+            assert_eq!(data_chunk_to_arrow(&output.0).unwrap(), before);
+            fill(&input, &[1252, 1252], &[b"A", b"B"]);
+            let error = invoke(
+                &capacity_plan(target, cell - 1, cell * 2),
+                &mut input,
+                &mut output,
+            )
+            .unwrap_err();
+            assert_eq!(
+                error.downcast_ref::<CapacityError>(),
+                Some(&CapacityError::Projection(ProjectionError::Limit {
+                    resource: Resource::Output,
+                    requested: cell,
+                    maximum: cell - 1
+                }))
+            );
+            assert_eq!(data_chunk_to_arrow(&output.0).unwrap(), before);
+            let error = invoke(
+                &capacity_plan(target, cell, cell * 2 - 1),
+                &mut input,
+                &mut output,
+            )
+            .unwrap_err();
+            assert_eq!(
+                error.downcast_ref::<ByteError>(),
+                Some(&ByteError::Limit {
+                    requested: cell * 2,
+                    maximum: cell * 2 - 1
+                })
+            );
+            assert_eq!(data_chunk_to_arrow(&output.0).unwrap(), before);
+            fill(&input, &[1252, 1251], &[b"A", b"B"]);
+            assert!(
+                invoke(
+                    &capacity_plan(target, cell, cell * 2),
+                    &mut input,
+                    &mut output
+                )
+                .is_err()
+            );
+            assert_eq!(data_chunk_to_arrow(&output.0).unwrap(), before);
+            fill(&input, &[1252, 1252], &[b"A", b"B"]);
+            input.struct_vector(0).child(1, 2).set_null(1);
+            assert!(
+                invoke(
+                    &capacity_plan(target, cell, cell * 2),
+                    &mut input,
+                    &mut output
+                )
+                .is_err()
+            );
+            assert_eq!(data_chunk_to_arrow(&output.0).unwrap(), before);
+        }
+    }
+    #[test]
+    fn capacity_zero_rows_still_validate_exact_declared_physical_shapes() {
+        for target in [
+            ProjectionTarget::Native(EncodingIdentity::Cp1252),
+            ProjectionTarget::SqlUtf16,
+        ] {
+            let p = capacity_plan(target, 4, 8);
+            let mut input = DataChunkHandle::new(&[storage_type()]);
+            let mut output = Output(DataChunkHandle::new(&[
+                if target == ProjectionTarget::SqlUtf16 {
+                    crate::unicode_carrier::kind()
+                } else {
+                    storage_type()
+                },
+            ]));
+            invoke(&p, &mut input, &mut output).unwrap();
+            let mut wrong = DataChunkHandle::new(&[Id::Blob.into()]);
+            assert!(invoke(&p, &mut wrong, &mut output).is_err());
+            let mut wrong = Output(DataChunkHandle::new(&[Id::Blob.into()]));
+            assert!(invoke(&p, &mut input, &mut wrong).is_err());
+        }
     }
 }
