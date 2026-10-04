@@ -740,3 +740,19 @@ fn dml_writing_another_database_does_not_read_local_catalog_views() {
     );
     assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.cols"), 0);
 }
+
+#[test]
+fn a_cte_is_not_visible_before_its_declaration() {
+    let (_server, mut session) = fixture();
+    ok(
+        &mut session,
+        "CREATE TABLE dbo.b (id INT); INSERT dbo.b VALUES (1), (2)",
+    );
+    // `b` in the first CTE is master's table; the CTE b comes later.
+    ok(
+        &mut session,
+        "WITH a AS (SELECT id FROM b), b AS (SELECT 1 AS id) INSERT foo.dbo.items (name) SELECT N'cte' FROM a",
+    );
+    assert_eq!(count(&session, "SELECT count(*) FROM foo.dbo.items"), 3);
+    assert_eq!(catalog(&session), "memory.dbo");
+}

@@ -8076,6 +8076,14 @@ fn dml_target(statement: &Statement) -> Option<ObjectName> {
     }
 }
 
+/// The CTEs of one query (`Relations::ctes`).
+#[derive(Default)]
+struct CteScope {
+    names: Vec<String>,
+    bodies: Vec<*const Query>,
+    visible: usize,
+}
+
 /// The relations of a statement, by database (`Session::cross_database`).
 /// Nodes are identified by address, so names that only share a spelling
 /// with a CTE in another scope, a table function or an alias target stay
@@ -8098,8 +8106,11 @@ struct Relations {
     into: bool,
     /// Whether a temporary table or table variable is among the relations.
     temporary: bool,
-    /// The CTE names in scope, innermost query last.
-    ctes: Vec<Vec<String>>,
+    /// The CTE scopes, innermost query last: each query's CTE body nodes
+    /// with their names, and how many of them are visible so far. T-SQL
+    /// has no forward references, so a CTE body sees itself and the CTEs
+    /// before it, and the query body sees all of them.
+    ctes: Vec<CteScope>,
     /// Table function call nodes, such as `GENERATE_SERIES(1, 2)`.
     functions: Vec<*const ObjectName>,
     /// UPDATE and DELETE target nodes that name a FROM alias
@@ -8157,7 +8168,7 @@ impl Relations {
                 if self
                     .ctes
                     .iter()
-                    .flatten()
+                    .flat_map(|scope| &scope.names[..scope.visible])
                     .any(|cte| cte.eq_ignore_ascii_case(&single.value)) => {}
             [ObjectNamePart::Identifier(single)] if single.value.starts_with(['#', '@']) => {
                 self.temporary = true;
@@ -8182,14 +8193,28 @@ impl Relations {
 impl Visitor for Relations {
     type Break = ();
     fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
-        self.ctes.push(
-            query
-                .with
+        // Entering a CTE body makes it and the earlier ones visible.
+        if let Some(scope) = self.ctes.last_mut()
+            && let Some(index) = scope
+                .bodies
                 .iter()
-                .flat_map(|with| &with.cte_tables)
+                .position(|body| std::ptr::eq(*body, query))
+        {
+            scope.visible = index + 1;
+        }
+        let ctes = query
+            .with
+            .iter()
+            .flat_map(|with| &with.cte_tables)
+            .collect::<Vec<_>>();
+        self.ctes.push(CteScope {
+            names: ctes
+                .iter()
                 .map(|cte| cte.alias.name.value.clone())
                 .collect(),
-        );
+            bodies: ctes.iter().map(|cte| &*cte.query as *const Query).collect(),
+            visible: 0,
+        });
         let mut body = query.body.as_ref();
         while let SetExpr::SetOperation { left, .. } = body {
             body = left;
@@ -8203,8 +8228,17 @@ impl Visitor for Relations {
         }
         ControlFlow::Continue(())
     }
-    fn post_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
+    fn post_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
         self.ctes.pop();
+        // After the last CTE body, the query body sees every CTE.
+        if let Some(scope) = self.ctes.last_mut()
+            && scope
+                .bodies
+                .last()
+                .is_some_and(|body| std::ptr::eq(*body, query))
+        {
+            scope.visible = scope.names.len();
+        }
         ControlFlow::Continue(())
     }
     fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {

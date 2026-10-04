@@ -32,6 +32,7 @@ const brief = result => ({
   info: result.info.map(m => [3211, 3014, 4035, 3021].includes(m.number) || m.message?.includes('percent')
     ? [m.number, m.state, m.class] : [m.number, m.state, m.class, m.message, m.lineNumber]),
   done: result.done.map(d => [d.kind, d.rowCount, d.more]),
+  returnStatus: result.returnStatus ?? null,
   rowCount: result.rowCount,
 })
 const same = (name, actual, patch = () => {}) => {
