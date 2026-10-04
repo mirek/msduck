@@ -11900,7 +11900,7 @@
     {
       "id": "bulk-character-source-row-limits-runtime-v1",
       "title": "Admit BulkLoad character ROWs by declared source limits rather than wire width",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Owner continuing fully functional SQL Server-compatible Rust/DuckDB server goal. First-party final task950 independently reviewed original and reproduced oracle: all eight fresh databases agree that modern bounded ROW payloads may exceed advertised0/1 wire width if they fit the declared source width. Existing codec prematurely rejects those successful requests. Work begins only after950 merges/Done and this task is ready; no third-party inputs.",
       "scope": [
         "crates/msduck-tds/src/bulk_load.rs",
@@ -11920,6 +11920,24 @@
       ],
       "issue": 952,
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pmjdc"
+    },
+    {
+      "id": "bulk-character-wire-capacity-bounded-assertions-v1",
+      "title": "Bound failure reporting in large wire-capacity capture assertions",
+      "state": "ready",
+      "authorization": "Owner continuing server goal and resource-safe collaboration requirements. First-party post-merge source review of PR951 found tests passing full near48MiB synthetic captures into node:assert.deepEqual; on an unexpected mismatch Node24 can inspect enormous values before reporting failure. Use bounded boolean comparisons while retaining full original assertions and artifacts. The reference/collector evidence remains unchanged; independent runtime952 proceeds separately.",
+      "scope": [
+        "tests/bulk-character-wire-capacity-capture.test.mjs"
+      ],
+      "dependencies": [
+        "bulk-character-wire-capacity-reference-v1"
+      ],
+      "acceptance": [
+        "Replace whole large capture or recursive sidecar operands to node:assert with isDeepStrictEqual boolean checks and concise fixed error messages. Preserve complete comparisons, expected data, raw retention/resource/trace/corruption checks and original helper/collector/fixture files unchanged. Small scalar or bounded prefix assertions may remain. Do not normalize/sort data, skip failing controls or broaden resource limits.",
+        "Read and check every remaining assert operand for bounded failure formatting. Run the existing focused16-test suite on both hosts; source/fixture hashes and whole comparison checks remain exact. This test-only task needs no native build, no new worker/worktree/cache and no changes to canonical sources/executable. Use the existing worker tree/private JS workspace with own new claim/receipt. Required exact-head CI, independent and verified Codex review or authorized availability fallback, worker-owned merge and prompt registry/issue/project Done completion."
+      ],
+      "issue": 953,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pmjqe"
     }
   ]
 }
