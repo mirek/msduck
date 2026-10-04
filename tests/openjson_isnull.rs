@@ -894,3 +894,62 @@ fn projection_aliases_do_not_shadow_openjson_source_columns() {
         .unwrap();
     assert_eq!(count, 3);
 }
+
+#[test]
+fn conditional_predicate_collation_does_not_change_set_result_equality() {
+    let (_server, mut session) = session();
+    for (index, expression) in [
+        "CASE WHEN N'a' COLLATE Latin1_General_100_BIN2 = N'a' THEN j.[value] ELSE N'x' END",
+        "IIF(N'a' COLLATE Latin1_General_100_BIN2 = N'a',j.[value],N'x')",
+    ]
+    .iter()
+    .enumerate()
+    {
+        batch(
+            &mut session,
+            &format!(
+                r#"CREATE TABLE predicate_domain_{index}(v NVARCHAR(MAX)); INSERT predicate_domain_{index} SELECT {expression} AS v FROM OPENJSON(N'{{"a":"x"}}') j UNION SELECT N'x ';"#
+            ),
+        );
+        let rows: Vec<Vec<u8>> = session
+            .db
+            .prepare(&format!(
+                "SELECT v.__msduck_utf16le FROM predicate_domain_{index}"
+            ))
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<duckdb::Result<_>>()
+            .unwrap();
+        assert_eq!(rows, vec![vec![b'x', 0]]);
+    }
+}
+
+#[test]
+fn query_ordering_alternatives_retain_select_carrier_scope() {
+    let (_server, mut session) = session();
+    for (index, expression) in [
+        "COALESCE(j.[value],N'x')",
+        "CASE WHEN j.[value] IS NULL THEN N'x' ELSE j.[value] END",
+        "IIF(j.[value] IS NULL,N'x',j.[value])",
+    ]
+    .iter()
+    .enumerate()
+    {
+        batch(
+            &mut session,
+            &format!(
+                "CREATE TABLE ordered_null_{index}(v NVARCHAR(MAX)); INSERT ordered_null_{index} SELECT j.[value] FROM OPENJSON(N'[null]') j ORDER BY {expression};"
+            ),
+        );
+        let count: i64 = session
+            .db
+            .query_row(
+                &format!("SELECT count(*) FROM ordered_null_{index} WHERE v IS NULL"),
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+}

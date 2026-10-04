@@ -44,7 +44,9 @@ come from the AST, independent of the document value or returned rows. Query
 and SELECT frames keep nested/sibling sources separate and give local aliases
 priority over correlated outer sources. Projection aliases do not shadow source
 columns inside SELECT expressions; ORDER BY consumers resolve output aliases
-against the projection explicitly. Scalar-query projection checks use that
+against the projection explicitly. ORDER BY alternative expressions are
+rewritten under their completed query’s SELECT scope; that scope is not
+visible while preceding CTE definitions are visited. Scalar-query projection checks use that
 query's frame; set-operation pinning resolves each branch separately. Default
 and explicit aliases are recognized; ambiguous aliases, derived/CTE columns and
 renamed column lists remain unknown. Same-named physical tables retain the
@@ -79,7 +81,10 @@ For the captured UNION cases, input-branch priority retains the first branch’s
 case-equivalent payload. This is evidence for those queries, not a universal
 claim about SQL Server representative selection under arbitrary execution plans.
 The default key is gated against explicit unknown or nondefault collations and
-declared nondefault column collations. Such domains retain the existing native
+declared nondefault column collations.
+Only conditional result operands contribute to that domain: a CASE/IIF
+predicate’s COLLATE does not change the result’s equality. Quoted collation
+names use their identifier value, as in the collation validator. Such domains retain the existing native
 set path; their full collation-aware set compatibility remains unproved.
 This lets the existing comparison and alternative-expression lowering handle
 COALESCE, IIF, CASE, predicates and ordering over direct OPENJSON sources.

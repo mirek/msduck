@@ -311,26 +311,70 @@ struct SetColumn {
 /// collation. Walk declarations, not values; explicit unknown collations must
 /// also stay out of the default-domain rewrite.
 fn default_equality(catalog: &Catalog, expr: &Expr) -> bool {
-    struct Check<'a>(&'a Catalog);
-    impl Visitor for Check<'_> {
-        type Break = ();
-        fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
-            use msduck_sql::dialect::ext::keys::collation::{Sensitivity, sensitivity};
-            let name = match expr {
-                Expr::Collate { collation, .. } => Some(collation.to_string()),
-                Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
-                    self.0.collation(expr).map(str::to_owned)
+    fn at(catalog: &Catalog, expr: &Expr, remaining: usize) -> bool {
+        if remaining == 0 {
+            return false;
+        }
+        struct Check<'a> {
+            catalog: &'a Catalog,
+            remaining: usize,
+            // Result-only alternatives and explicit COLLATE are checked
+            // separately; their predicates or overridden inputs are skipped.
+            skip: usize,
+        }
+        impl Visitor for Check<'_> {
+            type Break = ();
+            fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+                use msduck_sql::dialect::ext::keys::collation::{Sensitivity, sensitivity};
+                if self.skip > 0 {
+                    self.skip += 1;
+                    return ControlFlow::Continue(());
                 }
-                _ => None,
-            };
-            if name.is_some_and(|name| sensitivity(&name) != Some(Sensitivity::Default)) {
-                ControlFlow::Break(())
-            } else {
+                if msduck_sql::expression_metadata::conditional::candidate(expr) {
+                    if !msduck_sql::expression_metadata::conditional::values(expr)
+                        .into_iter()
+                        .all(|value| at(self.catalog, value, self.remaining - 1))
+                    {
+                        return ControlFlow::Break(());
+                    }
+                    self.skip = 1;
+                    return ControlFlow::Continue(());
+                }
+                let name = match expr {
+                    Expr::Collate { collation, .. } => {
+                        self.skip = 1;
+                        Some(match collation.0.as_slice() {
+                            [part] => part
+                                .as_ident()
+                                .map(|name| name.value.clone())
+                                .unwrap_or_else(|| collation.to_string()),
+                            _ => collation.to_string(),
+                        })
+                    }
+                    Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
+                        self.catalog.collation(expr).map(str::to_owned)
+                    }
+                    _ => None,
+                };
+                if name.is_some_and(|name| sensitivity(&name) != Some(Sensitivity::Default)) {
+                    ControlFlow::Break(())
+                } else {
+                    ControlFlow::Continue(())
+                }
+            }
+            fn post_visit_expr(&mut self, _: &Expr) -> ControlFlow<()> {
+                self.skip = self.skip.saturating_sub(1);
                 ControlFlow::Continue(())
             }
         }
+        expr.visit(&mut Check {
+            catalog,
+            remaining,
+            skip: 0,
+        })
+        .is_continue()
     }
-    expr.visit(&mut Check(catalog)).is_continue()
+    at(catalog, expr, 64)
 }
 
 fn character(kind: &DataType) -> bool {
@@ -617,6 +661,7 @@ pub(super) fn rewrite<T: VisitMut>(
         catalog: &'a Catalog,
         parameters: &'a HashMap<String, Parameter>,
         scopes: Vec<Catalog>,
+        orderings: Vec<Option<OrderBy>>,
         apply: bool,
         found: bool,
     }
@@ -629,6 +674,14 @@ pub(super) fn rewrite<T: VisitMut>(
         type Break = ();
         fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
             self.scopes.push(self.catalog().query_scope(query));
+            // ORDER BY is visited after Select's frame is popped. Defer it
+            // without exposing main SELECT sources to preceding WITH queries.
+            self.orderings
+                .push(if matches!(query.body.as_ref(), SetExpr::Select(_)) {
+                    query.order_by.take()
+                } else {
+                    None
+                });
             if !matches!(query.body.as_ref(), SetExpr::SetOperation { .. }) {
                 return ControlFlow::Continue(());
             }
@@ -683,7 +736,14 @@ pub(super) fn rewrite<T: VisitMut>(
             }
             ControlFlow::Continue(())
         }
-        fn post_visit_query(&mut self, _: &mut Query) -> ControlFlow<()> {
+        fn post_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
+            if let Some(mut order) = self.orderings.pop().flatten() {
+                if let SetExpr::Select(select) = query.body.as_ref() {
+                    let scope = self.catalog().select_scope(select);
+                    self.found |= rewrite(&scope, self.parameters, &mut order, self.apply);
+                }
+                query.order_by = Some(order);
+            }
             self.scopes.pop();
             ControlFlow::Continue(())
         }
@@ -749,6 +809,7 @@ pub(super) fn rewrite<T: VisitMut>(
         catalog,
         parameters,
         scopes: Vec::new(),
+        orderings: Vec::new(),
         apply,
         found: false,
     };
@@ -762,9 +823,41 @@ mod set_domain_tests {
     use sqlparser::{dialect::MsSqlDialect, parser::Parser};
 
     #[test]
+    fn ordering_sources_do_not_leak_into_preceding_cte_definitions() {
+        let mut statements = Parser::parse_sql(&MsSqlDialect {},
+            "WITH c AS (SELECT COALESCE(j.value,N'x') AS v) SELECT j.value FROM OPENJSON(N'[null]') j ORDER BY COALESCE(j.value,N'x')").unwrap();
+        let Statement::Query(query) = &statements[0] else {
+            unreachable!()
+        };
+        let cte_before = query.with.as_ref().unwrap().cte_tables[0].query.to_string();
+        assert!(rewrite(
+            &Catalog::default(),
+            &HashMap::new(),
+            &mut statements[0],
+            true
+        ));
+        let Statement::Query(query) = &statements[0] else {
+            unreachable!()
+        };
+        assert_eq!(
+            query.with.as_ref().unwrap().cte_tables[0].query.to_string(),
+            cte_before
+        );
+        assert!(
+            query
+                .order_by
+                .as_ref()
+                .unwrap()
+                .to_string()
+                .contains("__msduck_carrier_input")
+        );
+    }
+
+    #[test]
     fn explicit_set_collations_are_not_assumed_default() {
         for (collation, expected) in [
             ("SQL_Latin1_General_CP1_CI_AS", true),
+            ("[SQL_Latin1_General_CP1_CI_AS]", true),
             ("Latin1_General_100_BIN2", false),
             ("Latin1_General_100_CS_AS", false),
             ("unknown_collation", false),

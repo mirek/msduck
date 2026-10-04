@@ -678,6 +678,124 @@ const rawAlternativeCases = [
       2
     ]
   }
+},
+{
+  "name": "case condition collation only",
+  "query": "SELECT CASE WHEN N'a' COLLATE Latin1_General_100_BIN2 = N'a' THEN j.[value] ELSE N'x' END AS v FROM OPENJSON(N'{\"a\":\"x\"}') j UNION SELECT N'x ' ",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "iif condition collation only",
+  "query": "SELECT IIF(N'a' COLLATE Latin1_General_100_BIN2 = N'a',j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":\"x\"}') j UNION SELECT N'x ' ",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "ordered coalesce NULL source",
+  "query": "SELECT j.[value] FROM OPENJSON(N'[null]') j ORDER BY COALESCE(j.[value],N'x')",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "value",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            null
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "ordered alternative scopes",
+  "query": "SELECT j.[key],j.[value] FROM OPENJSON(N'{\"a\":null,\"b\":\"x\",\"c\":\"A\"}') j ORDER BY COALESCE(j.[value],N'z')",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "key",
+            "NVarChar",
+            8000
+          ],
+          [
+            "value",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "c",
+            "A"
+          ],
+          [
+            "b",
+            "x"
+          ],
+          [
+            "a",
+            null
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      3
+    ]
+  }
 }
 ]
 
