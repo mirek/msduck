@@ -124,9 +124,16 @@ fn unsupported_plans_names_tags_null_children_and_malformed_bytes_are_explicit()
         input_bytes: 0,
         output_bytes: 0,
     };
-    for e in [Encoding::Opaque(65001)] {
-        assert!(Plan::new(Encoding::Utf8, Target::Native(e), zero, 0, 0).is_err());
-    }
+    assert!(
+        Plan::new(
+            Encoding::Utf8,
+            Target::Native(Encoding::Opaque(65001)),
+            zero,
+            0,
+            0
+        )
+        .is_err()
+    );
     assert!(Plan::new(Encoding::Opaque(1252), Target::SqlUtf16, zero, 0, 0).is_err());
     assert!(
         Plan::new(
