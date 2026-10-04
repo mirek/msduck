@@ -11827,6 +11827,33 @@
       ],
       "issue": 945,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PmZSu"
+    },
+    {
+      "id": "bulk-character-admission-runtime-v1",
+      "title": "Apply measured character metadata and row admission in BulkLoad runtime",
+      "state": "backlog",
+      "authorization": "Owner continuing server goal; first-party source analysis and final owner task945 evidence only. Preliminary captures are not sufficient authorization to invent a rule. Begin only after945 merged/Done and this task is made ready.",
+      "scope": [
+        "crates/msduck-core/src/bulk_character_admission.rs",
+        "crates/msduck-core/src/lib.rs",
+        "crates/msduck-core/tests/bulk_character_admission.rs",
+        "src/engine/ext/bulk/wire.rs",
+        "src/engine/ext/bulk/load.rs",
+        "tests/bulk_character_admission.rs",
+        "docs/bulk-character-admission.md"
+      ],
+      "dependencies": [
+        "bulk-character-metadata-reference-v1",
+        "bulk-character-capacity-reference-v1"
+      ],
+      "acceptance": [
+        "Inspect final frozen945 evidence and899/918 controls unchanged, preserving diagnostic/state/severity/completion/readback/original-session differences. Demonstrate predecessor failures in real root Session BulkLoad packet handling. Never infer exact declared/wire width equality from metadata or capacity alone; retained reference separates metadata admission, declared row capacity and target conversion/storage capacity. Derive complete admitted rule from independent ground truth and extend private bounded captures if unresolved.",
+        "Deterministic core admission takes explicit declaration/family/byte-or-unit width/MAX and admitted wire-shape facts without TDS/parser/backend/session/I/O. NULL and zero-row metadata behavior depends on declaration facts, not current payload. Typed unknown/diagnostic decisions are distinct; checked lengths precede payload conversion; no whole-payload copies, hidden effects or guessed diagnostics. Integrate root wire::incompatible and Load::add with real source character declaration facts and correct precedence. Preserve all noncharacter behavior, decoder bounds/framing, bulk transaction/default/staging semantics and original 4804 paths unless exact ground truth proves a change.",
+        "Core replay covers every applicable original945 and899 metadata/row control across all four runs, including both mismatch directions, bounded/MAX forms, fixed/variable families, Unicode TYPE_INFO byte versus declared unit capacity, NULL/empty/allocation boundaries. Real Session integration validates exact errors/completion/readback/counters and subsequent connection recovery, including late row failure and preserving caller transaction/whole-load atomicity. Inputs/expected rows derive from original bytes/units/descriptors, never lossy displays or candidate-generated expectations. Known endpoint/diagnostic gaps stay visible and are not normalized to claim a pass.",
+        "Fresh own claim/receipt in existing isolated root tree only after dependenciesDone/ready publication; scope is exact and no engine.rs/engine.ext.rs/tdslib/target-colation gate changes. Frozen head fmt/workspaceRust/strictworkspacealltargetClippy/allindependentclients/localaudit with complete retained raw differences and source/binary proofs, independent and verified Codex review or authorized fallback, requiredCI/exactheadmerge/Done. Reuse locked canonical Linux cache after other suites terminal; no new agents/worktrees/native caches or unrelated job termination."
+      ],
+      "issue": 947,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PmZ3S"
     }
   ]
 }
