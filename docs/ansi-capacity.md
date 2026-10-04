@@ -1,13 +1,13 @@
 # Native ANSI BulkLoad capacity
 
 `msduck_core::ansi_conversion::capacity::Plan` separates SQL capacity from the
-complete projections in its parent module. A plan validates CP1251/CP1252 source
+complete projections in its parent module. A plan validates CP1251/CP1252/UTF8 source
 identity and bounded/MAX source form, native CP1251/CP1252/UTF8 or SQL UTF16 target, variable/fixed family and
 bounded/MAX capacity before a nullable row is supplied. Source form comes from the admitted declaration,
 not the row length or value. Native capacities count
 bytes; Unicode capacities count two-byte units. Bounded declarations accept
 1..=8000 native bytes or 1..=4000 Unicode units; fixed MAX is invalid.
-Opaque tags and UTF8 source plans are unsupported. The parent's complete
+Opaque tags are unsupported. The parent's complete
 projection remains separate from capacity admission.
 
 The root must first admit the actual source declaration, wire shape and target
@@ -134,3 +134,89 @@ Each matrix's original counters agree within its four runs, while the complete
 sidecars retain respectively1942,2187 and3161 raw differences elsewhere.
 These finite collations and BulkLoad declarations do not establish arbitrary
 collation, CAST/assignment, source-wire admission or runtime adoption.
+
+
+## UTF8 BulkLoad source extension
+
+Task #942 extends capacity to UTF8 source declarations, independently of the
+strict complete-projection API. The original source EOF is checked before
+capacity conversion: a mismatched nominal final span is a typed stream error
+(7339/state1/class16), or the native UTF8 MAX-target BCP error
+(4896/state7/class17). A final span with no recognized lead is the distinct
+9833/state2/class16 boundary failure. These are core observations, not endpoint
+ERROR tokens or a whole-load transaction implementation.
+
+Native UTF8 keeps original bytes. Bounded native UTF8 admission checks the full
+overflow for ASCII spaces, with nominal fitting and fixed padding. Cross-target
+MAX conversion examines a fitted source window of three times the target width;
+bounded sources use the complete source. The captured width1–4 controls retain
+the last checked nonspace/NUL versus a later discarded nonspace. Cropping an
+incomplete variation selector can also discard its preceding base. Original
+source EOF admission remains stricter than this internal window-fitting step.
+
+For Unicode targets, capacity counts decoded UTF16 units and preserves complete
+supplementary pairs. Native CP1251/CP1252 admission checks source bytes in the
+conversion window before applying codepage mapping; converted length alone is
+insufficient. UTF8 ideographic space into VARCHAR(1) fails2628 although its
+codepage projection occupies one byte. SQL-specific malformed repair consumes
+forbidden lead/second-byte pairs together. No platform lossy string supplies an
+oracle. The final payload is preflighted and allocated fallibly; no expanded
+intermediate is required.
+
+The new pure replay preserves all512 original task940 outcomes (248 successful
+observations/496 row applications and264 failed loads), plus4032 earlier
+admitted UTF8 observations/8064 applications/224 failed loads from boundary913,
+bounded-target919, octet and multibyte930. Raw source/native bytes and SQL
+UTF16 units remain distinct from display. Original failed messages can contain
+lone surrogate escapes; their numeric diagnostic fields and empty readbacks are
+read without repairing those messages. Native and pure fixtures are unchanged.
+
+Private four-database/two-container matrices currently retain2816 additional
+capacity/window/selector/EOF observations with2312 failed loads. Tests preserve
+each run's original native/error oracle in lossless JSON literals. A separate
+MAX-source capture contains every63488 valid BMP scalar in original UTF8 order
+and preserves eight original CP1251/CP1252 native outputs. These supply507904
+codepage cells; CP1252 agrees exactly with its existing captured map. CP1251's
+663 non-question-mark cells are retained as a sorted constant table; supplementary
+units retain the original two-question-mark controls. NULL and empty, fixed
+padding, original-input and final-output limits and unchanged source are tested.
+
+Eight native capacity tests passed at checkpoint `1a267cf63ccae0888a4299ffde9188e99a22968b`,
+including all512 original UTF8 callback observations. Six pure tests passed at
+that revision. Full frozen-revision workspace/client/audit verification and
+review remain pending while this task is in progress. These measured profiles do not
+admit arbitrary collations, general CAST/assignment, source CHAR, or public
+engine/catalog/Value/BulkLoad/wire integration.
+
+
+### Independent final-source reproductions
+
+Every private matrix was independently reproduced using the identical frozen
+collector and four fresh databases in two pinned SQL Server containers. Original
+raw captures are unchanged. Full comparison sidecars retain every difference;
+identity-aware signatures verify actual ephemeral names/SPIDs without rewriting
+raw data. The source wrappers, original/reproduction captures, sidecars and proof
+are retained in the worker's `artifacts/compatibility/ansi-utf8-capacity-942/`.
+
+| Matrix | Collector SHA256 | Original raw SHA256 | Reproduction raw SHA256 | Raw differences |
+| --- | --- | --- | --- | ---: |
+| capacity | `9c0806ad16d67b34157bdd889c065020eaf3d7cffca3cdee48ed27f06d8431a5` | `aba20e22e83cee07b2b07e2ec4c8447b214c6a320ce548fbf7dd6c32530faa39` | `52a29a1ecac944a7fa2c54e1751a5eb1f2db7311814d946475b8f129c5236bde` | 6217 |
+| window | `23d8200a80288c002c2e073feb5ae934c8592fa32b34c9cd049cbd06ce37eafd` | `6e03da52b27a7a93e750c6f642f5d9278a7ba7a6e0571a51cb1d2257acddc863` | `907d2bfb174a32d039d1a01f073c3874bdcd2908dd0103e85c27ccccd4a87c05` | 11686 |
+| bmp | `2e11d4946b1c8e8a9a312c00a0fe84d1b1ac1204c933d87ba1a7b83af76c0af6` | `deb2ba4d705112eb08866ff5d7b6b50c82b57dba83ed6756c82794f1dd0d6105` | `6e968193f60e9b651f07af736b69363183810f3e53346c5b8836fe548703baf3` | 6172 |
+| converted-space | `01c65bae67e1d641ee1a74a4d229e73a4728fc46dd92fa4d10d02c9dc3d1142c` | `4853edbbfaf596246c5640f8876fd65ac032332c3dfcf646a806b855662559e3` | `9131ea66d7632780edc07ed3cc9b1e554669607391b1fe2c93b318e380898035` | 10979 |
+| codepage-capacity | `20b81a0b8c79b601de515c8f8af7b74b6322cfe7ee4f0be8e1a8638f7c3c1bb8` | `d5100cbd3efad8353922495959dd32659a80cdb1981ad54f4a0a842935cd811c` | `8232cd67afbdf36d1538c53e7e7196669b11d39f57f937e6afb105c4a3b7124d` | 10588 |
+| eof | `1f030695305a00d9893e2c5ff38cd87364d201431a430eb0bb45a16a79765126` | `9ea710a5dff1982ebb8b172980a345836c774150200b743d0311f63ef80c64da` | `3f071a9ff2266455df0e6f92cefa3f5ad47d03eefc2e4c108c32e0befbf443e3` | 7836 |
+| eof-max | `2cf9f3389bf7f84db439262f48122d7366a38681791038ef02fa760dd764ab1f` | `7b2025ff4e648692441ebfb3a09a221662259bd0020b96e1744fa49d23db7195` | `bab2d048030071c1e458c41b7c8a911d4eeb56ef43d38220c1efa8d37385603b` | 4540 |
+
+Six matrices' complete semantic, request/reply and framing signatures agree.
+The converted-space reproduction retains four actual counter differences: in
+runs1 and3, bounded interrupted-overflow to CP1252 changes @@ERROR2628 to0,
+while the Unicode target changes0 to2628. All four loads still emit
+2628/state1/class16 and store no rows. Their eight differing semantic/readback
+signature leaves and complete raw differences are retained. Core admission and
+native output do not establish a universal @@ERROR rule.
+
+Earlier terminal startup/connection failures and their partial captures are
+preserved separately and are not counted as completed reproductions. Every
+successful acquisition/reproduction awaited container/database cleanup. No new
+agent, worktree, native cache or original reference fixture was needed.

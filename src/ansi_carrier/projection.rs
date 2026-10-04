@@ -52,6 +52,24 @@ impl Plan {
     ) -> anyhow::Result<Self> {
         // Validate the semantic projection before any nullable payload is read.
         project(source, None, target, limits)?;
+        Self::validated_storage(
+            source,
+            target,
+            limits,
+            input_chunk_limit,
+            output_chunk_limit,
+        )
+    }
+
+    // Callers validate their own semantic domain before constructing storage.
+    // Capacity conversion admits UTF8-to-codepage plans outside strict project.
+    fn validated_storage(
+        source: EncodingIdentity,
+        target: ProjectionTarget,
+        limits: ProjectionLimits,
+        input_chunk_limit: usize,
+        output_chunk_limit: usize,
+    ) -> anyhow::Result<Self> {
         if target == ProjectionTarget::SqlUtf16 {
             anyhow::ensure!(
                 limits.output_bytes <= crate::unicode_carrier::CELL_LIMIT
@@ -93,7 +111,7 @@ impl Plan {
 
     /// Apply measured BulkLoad capacity rules to an already admitted source.
     /// This callback does not establish wire admission, SQL error tokens or
-    /// whole-load transaction behavior. UTF8 sources remain unsupported.
+    /// whole-load transaction behavior. Source form and target capacity stay explicit.
     pub fn bulk_capacity(
         declaration: CapacityDeclaration,
         limits: ProjectionLimits,
@@ -107,7 +125,7 @@ impl Plan {
             declaration.family,
             declaration.capacity,
         )?;
-        let mut plan = Self::new(
+        let mut plan = Self::validated_storage(
             declaration.source,
             declaration.target,
             limits,
