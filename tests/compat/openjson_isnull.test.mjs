@@ -185,7 +185,235 @@ const rawAlternativeCases = [
         2
       ]
     }
+  },
+{
+  "name": "integer set",
+  "query": "SELECT COALESCE(j.[value],N'2') AS v FROM OPENJSON(N'{\"a\":\"1\",\"b\":null}') j UNION ALL SELECT 7",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "IntN",
+            4
+          ]
+        ],
+        "rows": [
+          [
+            1
+          ],
+          [
+            2
+          ],
+          [
+            7
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      3
+    ]
   }
+},
+{
+  "name": "smallint set",
+  "query": "SELECT COALESCE(j.[value],N'2') AS v FROM OPENJSON(N'{\"a\":\"1\",\"b\":null}') j UNION ALL SELECT CAST(7 AS SMALLINT)",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "IntN",
+            2
+          ]
+        ],
+        "rows": [
+          [
+            1
+          ],
+          [
+            2
+          ],
+          [
+            7
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      3
+    ]
+  }
+},
+{
+  "name": "nested alternatives",
+  "query": "SELECT COALESCE(COALESCE(j.[value],N'x'),N'y') AS c,CASE WHEN j.[value] IS NULL THEN COALESCE(j.[value],N'x') ELSE N'y' END AS k,COALESCE(IIF(j.[value] IS NULL,N'x',j.[value]),N'y') AS i FROM OPENJSON(N'{\"a\":null}') j",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "c",
+            "NVarChar",
+            65535
+          ],
+          [
+            "k",
+            "NVarChar",
+            65535
+          ],
+          [
+            "i",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x",
+            "x",
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "ansi best fit",
+  "query": "SELECT COALESCE(j.[value],'\u6f22') AS c FROM OPENJSON(N'{\"a\":null}') j",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "c",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "?"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "ansi supplementary",
+  "query": "SELECT COALESCE(j.v,'\ud83e\udd86') AS c FROM OPENJSON(N'{\"v\":null}') WITH(v NVARCHAR(1)) j",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "c",
+            "NVarChar",
+            4
+          ]
+        ],
+        "rows": [
+          [
+            "??"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "distinct union",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":null}') j UNION SELECT N'x '",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "distinct intersect",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":null}') j INTERSECT SELECT N'x '",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": [
+          [
+            "x"
+          ]
+        ]
+      }
+    ],
+    "errors": [],
+    "done": [
+      1
+    ]
+  }
+},
+{
+  "name": "distinct except",
+  "query": "SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{\"a\":null}') j EXCEPT SELECT N'x '",
+  "expected": {
+    "sets": [
+      {
+        "columns": [
+          [
+            "v",
+            "NVarChar",
+            65535
+          ]
+        ],
+        "rows": []
+      }
+    ],
+    "errors": [],
+    "done": [
+      0
+    ]
+  }
+}
 ]
 
 test('OPENJSON alternatives preserve captured raw units, bounded widths and numeric precedence', async t => {

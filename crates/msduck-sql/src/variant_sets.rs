@@ -6,6 +6,7 @@ pub enum Equality {
     Native,
     Variant,
     DateTimeOffset,
+    Unicode,
 }
 impl Equality {
     pub fn key(self, value: Expr) -> Expr {
@@ -13,6 +14,10 @@ impl Equality {
             Self::Native => value,
             Self::Variant => crate::variant_compare::key(value),
             Self::DateTimeOffset => crate::datetimeoffset_compare::key(value),
+            Self::Unicode => crate::expr::unary_function(
+                "__msduck_unicode_order_key",
+                crate::expr::unary_function("__msduck_carrier_input", value),
+            ),
         }
     }
     pub fn special(self) -> bool {
@@ -39,7 +44,39 @@ pub fn supported(op: SetOperator, quantifier: SetQuantifier) -> bool {
         || (op == SetOperator::Union && quantifier == SetQuantifier::All)
 }
 
+fn member_names(body: &SetExpr) -> (String, String) {
+    struct Names(std::collections::HashSet<String>);
+    impl Visitor for Names {
+        type Break = ();
+        fn pre_visit_relation(&mut self, name: &ObjectName) -> std::ops::ControlFlow<()> {
+            self.0.extend(
+                name.0
+                    .iter()
+                    .filter_map(|part| part.as_ident())
+                    .map(|id| id.value.to_lowercase()),
+            );
+            std::ops::ControlFlow::Continue(())
+        }
+    }
+    let mut used = Names(std::collections::HashSet::new());
+    let _ = body.visit(&mut used);
+    let mut fresh = |base: &str| {
+        let mut candidate = base.to_string();
+        let mut suffix = 0;
+        while !used.0.insert(candidate.clone()) {
+            suffix += 1;
+            candidate = format!("{base}_{suffix}");
+        }
+        candidate
+    };
+    (
+        fresh("__variant_left_input"),
+        fresh("__variant_right_input"),
+    )
+}
+
 pub fn membership(body: &mut SetExpr, names: &[String], variants: &[Equality]) {
+    let (left_input, right_input) = member_names(body);
     let SetExpr::SetOperation {
         left, right, op, ..
     } = body
@@ -51,7 +88,7 @@ pub fn membership(body: &mut SetExpr, names: &[String], variants: &[Equality]) {
         .collect::<Vec<_>>()
         .join(",");
     let sql = format!(
-        "WITH __variant_left_input AS (SELECT NULL), __variant_right_input AS (SELECT NULL) SELECT * FROM __variant_left_input AS l({columns}) WHERE {}EXISTS(SELECT 1 FROM __variant_right_input AS r({columns}) WHERE true)",
+        "WITH {left_input}({columns}) AS (SELECT NULL), {right_input}({columns}) AS (SELECT NULL) SELECT * FROM {left_input} AS l({columns}) WHERE {}EXISTS(SELECT 1 FROM {right_input} AS r({columns}) WHERE true)",
         if *op == SetOperator::Except {
             "NOT "
         } else {
@@ -185,5 +222,51 @@ pub fn deduplicate(body: &mut SetExpr, names: &[String], variants: &[Equality]) 
             })
             .collect(),
     ));
-    *body = *inner;
+    if variants
+        .iter()
+        .any(|value| matches!(value, Equality::Unicode))
+    {
+        // Preserve one original payload for equivalent keys, preferring the
+        // shorter binary prefix when trailing spaces are the only difference.
+        // Sort references to materialized branch results, never source operands.
+        let Statement::Query(mut query) =
+            Parser::parse_sql(&GenericDialect {}, "SELECT NULL ORDER BY NULL")
+                .expect("generated character distinct ordering")
+                .remove(0)
+        else {
+            unreachable!()
+        };
+        let template = match &query.order_by.as_ref().unwrap().kind {
+            OrderByKind::Expressions(exprs) => exprs[0].clone(),
+            _ => unreachable!(),
+        };
+        let expressions = variants
+            .iter()
+            .enumerate()
+            .flat_map(|(i, variant)| {
+                let value = Expr::CompoundIdentifier(vec![
+                    Ident::new("__variant_set_source"),
+                    Ident::new(format!("__variant_set_{i}")),
+                ]);
+                let mut key = template.clone();
+                key.expr = variant.key(value.clone());
+                let mut ordering = vec![key];
+                if matches!(variant, Equality::Unicode) {
+                    let mut raw = template.clone();
+                    raw.expr = crate::expr::binary_function(
+                        "struct_extract",
+                        crate::expr::unary_function("__msduck_carrier_input", value),
+                        Expr::Value(Value::SingleQuotedString("__msduck_utf16le".into()).into()),
+                    );
+                    ordering.push(raw);
+                }
+                ordering
+            })
+            .collect();
+        query.order_by.as_mut().unwrap().kind = OrderByKind::Expressions(expressions);
+        query.body = inner;
+        *body = SetExpr::Query(query);
+    } else {
+        *body = *inner;
+    }
 }

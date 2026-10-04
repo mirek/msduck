@@ -53,9 +53,17 @@ convert it to text and lose exact UTF-16 units or change stored values. Characte
 sources instead convert each result branch to a common Unicode carrier
 declaration. This preserves raw UTF-16 through literals, declared parameters
 and ANSI columns, while conditions and selected operands retain their original
-evaluation. Numeric and unresolved alternatives keep the existing path.
-Character-only set branches align complete results, using each branch’s query
-scope; the physical alternative’s internal conversion remains unchanged.
+evaluation. Nested admitted alternatives retain this carrier provenance. ANSI branches
+convert through their declared CP1252 family before Unicode promotion; under
+the supported non-SC collations a supplementary ANSI literal contributes two
+best-fit bytes. Numeric and unresolved alternatives keep the existing path.
+Set branches align complete results using each branch’s query scope. Character
+branches use their common Unicode declaration; proved numeric peers retain
+SQL Server numeric precedence via explicit conversions of the completed branch
+result. Unknown peers stay unresolved. The physical alternative’s internal
+conversion remains unchanged. Distinct UNION and INTERSECT/EXCEPT membership
+use the existing default character equality keys and NULL-safe equality, while
+preserving the selected raw payload and materializing membership inputs once.
 This lets the existing comparison and alternative-expression lowering handle
 COALESCE, IIF, CASE, predicates and ordering over direct OPENJSON sources.
 
@@ -129,3 +137,11 @@ NCHAR(5) yields U+D800, two NUL units and two spaces. msduck currently pads the
 source with spaces and yields U+D800 followed by four spaces. The native test
 records msduck’s current value; it does not establish SQL Server parity for that
 source conversion. Full-width NCHAR source controls avoid this separate gap.
+
+The additional set tests retain complete rows rather than trimming values to
+force equality. Distinct character sets compare keys and select an unchanged
+payload, preferring the shorter binary prefix for equal trailing-space keys.
+Membership wrappers name their generated CTE output columns explicitly and
+avoid referenced user relation names. Nested distinct operators retain their
+own equality behavior beneath UNION ALL; parenthesized ANSI literals retain
+their full best-fit width.

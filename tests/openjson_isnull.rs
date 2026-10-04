@@ -611,3 +611,198 @@ fn openjson_ansi_peer_alternatives_align_with_text_set_branches() {
     units.sort();
     assert_eq!(units, vec![vec![0, 0xd8], vec![b'z', 0], vec![b'z', 0]]);
 }
+
+#[test]
+fn openjson_character_alternatives_keep_numeric_set_precedence() {
+    let (_server, mut session) = session();
+    for kind in ["INT", "SMALLINT", "DECIMAL(5,2)"] {
+        batch(
+            &mut session,
+            &format!(
+                r#"CREATE TABLE numeric_set_{}(v {});
+            INSERT numeric_set_{} SELECT COALESCE(j.[value],N'2') FROM OPENJSON(N'{{"a":"1","b":null}}') j
+            UNION ALL SELECT CAST(7 AS {});"#,
+                kind.split('(').next().unwrap(),
+                kind,
+                kind.split('(').next().unwrap(),
+                kind
+            ),
+        );
+        let values: Vec<i32> = session
+            .db
+            .prepare(&format!(
+                "SELECT CAST(v AS INTEGER) FROM numeric_set_{} ORDER BY v",
+                kind.split('(').next().unwrap()
+            ))
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<duckdb::Result<_>>()
+            .unwrap();
+        assert_eq!(values, vec![1, 2, 7], "{kind}");
+    }
+}
+
+#[test]
+fn nested_openjson_alternatives_keep_carriers_and_ansi_best_fit() {
+    let (_server, mut session) = session();
+    for (index, expression) in [
+        "COALESCE(COALESCE(j.[value],N'x'),N'y')",
+        "CASE WHEN j.[value] IS NULL THEN COALESCE(j.[value],N'x') ELSE N'y' END",
+        "COALESCE(IIF(j.[value] IS NULL,N'x',j.[value]),N'y')",
+        "COALESCE(j.[value],'漢')",
+    ]
+    .iter()
+    .enumerate()
+    {
+        batch(
+            &mut session,
+            &format!(
+                r#"CREATE TABLE nested_alt_{index}(v NVARCHAR(MAX)); INSERT nested_alt_{index} SELECT {expression} FROM OPENJSON(N'{{"a":null}}') j;"#
+            ),
+        );
+        let units: Vec<u8> = session
+            .db
+            .query_row(
+                &format!("SELECT v.__msduck_utf16le FROM nested_alt_{index}"),
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            units,
+            vec![if index == 3 { b'?' } else { b'x' }, 0],
+            "{expression}"
+        );
+    }
+}
+
+#[test]
+fn openjson_distinct_sets_use_character_keys_and_null_equality() {
+    let (_server, mut session) = session();
+    for (index, op) in ["UNION", "INTERSECT", "EXCEPT"].iter().enumerate() {
+        batch(
+            &mut session,
+            &format!(
+                r#"CREATE TABLE distinct_set_{index}(v NVARCHAR(MAX)); INSERT distinct_set_{index}
+            SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{{"a":null}}') j {op} SELECT N'x ';"#
+            ),
+        );
+        let count: i64 = session
+            .db
+            .query_row(
+                &format!("SELECT count(*) FROM distinct_set_{index}"),
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, if *op == "EXCEPT" { 0 } else { 1 }, "{op}");
+        batch(
+            &mut session,
+            &format!(
+                r#"CREATE TABLE null_set_{index}(v NVARCHAR(MAX)); INSERT null_set_{index}
+            SELECT COALESCE(j.[value],CAST(NULL AS NVARCHAR(10))) AS v FROM OPENJSON(N'{{"a":null}}') j {op} SELECT CAST(NULL AS NVARCHAR(10));"#
+            ),
+        );
+        let count: i64 = session
+            .db
+            .query_row(
+                &format!("SELECT count(*) FROM null_set_{index} WHERE v IS NULL"),
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, if *op == "EXCEPT" { 0 } else { 1 }, "NULL {op}");
+    }
+    session
+        .db
+        .execute_batch("CREATE SEQUENCE distinct_calls START 10")
+        .unwrap();
+    batch(
+        &mut session,
+        r#"CREATE TABLE distinct_effect(v NVARCHAR(MAX)); INSERT distinct_effect
+        SELECT COALESCE(j.[value],CAST(nextval('distinct_calls') AS NVARCHAR(10))) AS v FROM OPENJSON(N'{"a":null}') j
+        UNION SELECT N'10 ';"#,
+    );
+    let count: i64 = session
+        .db
+        .query_row("SELECT count(*) FROM distinct_effect", [], |r| r.get(0))
+        .unwrap();
+    let calls: i64 = session
+        .db
+        .query_row(
+            "SELECT last_value FROM duckdb_sequences() WHERE sequence_name='distinct_calls'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!((count, calls), (1, 10));
+}
+
+#[test]
+fn openjson_ansi_supplementary_fallback_counts_best_fit_bytes() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        r#"CREATE TABLE ansi_units(v NVARCHAR(MAX)); INSERT ansi_units
+        SELECT COALESCE(j.v,'🦆') FROM OPENJSON(N'{"v":null}') WITH(v NVARCHAR(1)) j;"#,
+    );
+    let units: Vec<u8> = session
+        .db
+        .query_row("SELECT v.__msduck_utf16le FROM ansi_units", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(units, vec![b'?', 0, b'?', 0]);
+}
+
+#[test]
+fn nested_openjson_alternatives_preserve_isolated_units() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        r#"CREATE TABLE nested_raw(v NVARCHAR(MAX)); INSERT nested_raw
+        SELECT COALESCE(COALESCE(j.[value],N'x'),N'y') FROM OPENJSON(N'{"a":"\ud800"}') j;"#,
+    );
+    let units: Vec<u8> = session
+        .db
+        .query_row("SELECT v.__msduck_utf16le FROM nested_raw", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    assert_eq!(units, vec![0, 0xd8]);
+}
+
+#[test]
+fn openjson_set_wrappers_preserve_user_ctes_and_nested_distinct_operators() {
+    let (_server, mut session) = session();
+    batch(
+        &mut session,
+        r#"CREATE TABLE hygienic_set(v NVARCHAR(MAX)); WITH __variant_left_input(v) AS(SELECT N'b')
+        INSERT hygienic_set SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{"a":"a"}') j
+        INTERSECT SELECT CAST(v AS NVARCHAR(10)) FROM __variant_left_input;
+        CREATE TABLE chained_set(v NVARCHAR(MAX)); INSERT chained_set
+        SELECT COALESCE(j.[value],N'x') AS v FROM OPENJSON(N'{"a":null}') j UNION SELECT N'x ' UNION ALL SELECT N'z';
+        CREATE TABLE parenthesized_ansi(v NVARCHAR(MAX)); INSERT parenthesized_ansi
+        SELECT COALESCE(j.[value],('🦆')) FROM OPENJSON(N'{"a":null}') j;"#,
+    );
+    let count: i64 = session
+        .db
+        .query_row("SELECT count(*) FROM hygienic_set", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 0);
+    let count: i64 = session
+        .db
+        .query_row("SELECT count(*) FROM chained_set", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 2);
+    let units: Vec<u8> = session
+        .db
+        .query_row(
+            "SELECT v.__msduck_utf16le FROM parenthesized_ansi",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(units, vec![b'?', 0, b'?', 0]);
+}

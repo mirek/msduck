@@ -32,6 +32,75 @@ fn mixed(catalog: &Catalog, values: &[&Expr]) -> bool {
     carriers.iter().any(|c| *c) && values.iter().zip(&carriers).any(|(v, c)| !c && !null(v))
 }
 
+/// OPENJSON carrier provenance survives the explicit wrappers this pass adds.
+/// Other producers, casts to ANSI and query outputs remain unresolved.
+fn openjson_carrier(catalog: &Catalog, value: &Expr) -> bool {
+    fn at(catalog: &Catalog, value: &Expr, remaining: usize) -> bool {
+        if remaining == 0 {
+            return false;
+        }
+        if catalog.carrier(value).is_some_and(|column| column.openjson) {
+            return true;
+        }
+        match value {
+            Expr::Nested(inner) => at(catalog, inner, remaining - 1),
+            Expr::Cast {
+                expr, data_type, ..
+            } if matches!(msduck_sql::sql_type::declaration(data_type),
+                Ok(msduck_core::types::Type::Character(character)) if matches!(character.family(), msduck_core::character::Family::Nchar | msduck_core::character::Family::Nvarchar)) =>
+            {
+                at(catalog, expr, remaining - 1)
+            }
+            Expr::Function(f)
+                if f.name
+                    .to_string()
+                    .eq_ignore_ascii_case("__msduck_carrier_input") =>
+            {
+                let FunctionArguments::List(args) = &f.args else {
+                    return false;
+                };
+                matches!(args.args.as_slice(), [FunctionArg::Unnamed(FunctionArgExpr::Expr(inner))] if at(catalog, inner, remaining - 1))
+            }
+            value if msduck_sql::expression_metadata::conditional::candidate(value) => {
+                msduck_sql::expression_metadata::conditional::values(value)
+                    .into_iter()
+                    .any(|inner| at(catalog, inner, remaining - 1))
+            }
+            _ => false,
+        }
+    }
+    at(catalog, value, 64)
+}
+
+fn expression_kind(
+    catalog: &Catalog,
+    value: &Expr,
+    parameters: &HashMap<String, Parameter>,
+) -> Option<DataType> {
+    if let Expr::Nested(inner) | Expr::Collate { expr: inner, .. } = value {
+        return expression_kind(catalog, inner, parameters);
+    }
+    if let Expr::Value(value) = value
+        && let Value::SingleQuotedString(text) = &value.value
+    {
+        // The supported non-SC CP1252 collations convert each UTF-16 unit
+        // independently. A supplementary ANSI literal therefore occupies two
+        // bytes ("??"), before promotion to Unicode.
+        let units = text.encode_utf16().count();
+        return Some(DataType::Varchar(Some(if units > 8000 {
+            CharacterLength::Max
+        } else {
+            CharacterLength::IntegerLength {
+                length: units.max(1) as u64,
+                unit: None,
+            }
+        })));
+    }
+    msduck_sql::expression_metadata::storage::kind(value, parameters, &|expr| {
+        catalog.declaration(expr)
+    })
+}
+
 /// Prove a character-only common result from declarations, never values.
 /// Other type precedence and unresolved alternatives retain the legacy path.
 fn openjson_character_result(
@@ -39,17 +108,13 @@ fn openjson_character_result(
     values: &[&Expr],
     parameters: &HashMap<String, Parameter>,
 ) -> Option<DataType> {
-    if !values
-        .iter()
-        .any(|value| catalog.carrier(value).is_some_and(|c| c.openjson))
-    {
+    if !values.iter().any(|value| openjson_carrier(catalog, value)) {
         return None;
     }
-    let column = |expr: &Expr| catalog.declaration(expr);
     let kinds = values
         .iter()
         .filter(|value| !null(value))
-        .map(|value| msduck_sql::expression_metadata::storage::kind(value, parameters, &column))
+        .map(|value| expression_kind(catalog, value, parameters))
         .collect::<Option<Vec<_>>>()?;
     common_unicode(kinds, parameters)
 }
@@ -120,10 +185,8 @@ fn pin(
     preserve_character: bool,
 ) -> bool {
     let is_mixed = mixed(catalog, &values.iter().map(|v| &**v).collect::<Vec<_>>());
-    let openjson = preserve_character
-        && values
-            .iter()
-            .any(|value| catalog.carrier(value).is_some_and(|column| column.openjson));
+    let openjson =
+        preserve_character && values.iter().any(|value| openjson_carrier(catalog, value));
     if !is_mixed && !openjson {
         return false;
     }
@@ -146,7 +209,12 @@ fn pin(
         if let Some(data_type) = &common {
             // Both carrier and text branches need the same backend family.
             // Each original branch occurs once; the conditional stays lazy.
-            let original = std::mem::replace(value, Expr::Value(Value::Null.into()));
+            let source_kind = expression_kind(catalog, value, parameters);
+            let mut original = std::mem::replace(value, Expr::Value(Value::Null.into()));
+            if let Some(ansi) = source_kind.filter(|kind| matches!(msduck_sql::sql_type::declaration(kind),
+                Ok(msduck_core::types::Type::Character(character)) if matches!(character.family(), msduck_core::character::Family::Char | msduck_core::character::Family::Varchar))) {
+                original = Expr::Cast { kind: CastKind::Cast, expr: Box::new(original), data_type: ansi, format: None };
+            }
             *value = Expr::Cast {
                 kind: CastKind::Cast,
                 expr: Box::new(msduck_sql::expr::unary_function(
@@ -292,14 +360,33 @@ fn character_sets(
                     })
                 })
                 .collect::<Option<Vec<_>>>()?;
-            Some((position, common_unicode(kinds, parameters)?))
+            let common = common_unicode(kinds.clone(), parameters).or_else(|| {
+                let mut numeric = kinds.iter().filter(|kind| {
+                    !matches!(
+                        msduck_sql::sql_type::declaration(kind),
+                        Ok(msduck_core::types::Type::Character(_))
+                    )
+                });
+                let first = numeric.next()?.clone();
+                let first = msduck_sql::expression_metadata::arithmetic::set_type(&first, &first)?;
+                numeric.try_fold(first, |left, right| {
+                    msduck_sql::expression_metadata::arithmetic::set_type(&left, right)
+                })
+            })?;
+            Some((position, common))
         })
         .collect()
 }
 
-fn align_character_sets(body: &mut SetExpr, plans: &[(usize, DataType)]) {
+fn align_character_sets(
+    catalog: &Catalog,
+    body: &mut SetExpr,
+    plans: &[(usize, DataType)],
+    parameters: &HashMap<String, Parameter>,
+) {
     match body {
         SetExpr::Select(select) => {
+            let scope = catalog.select_scope(select);
             for (position, kind) in plans {
                 let Some(item) = select.projection.get_mut(*position) else {
                     continue;
@@ -320,12 +407,42 @@ fn align_character_sets(body: &mut SetExpr, plans: &[(usize, DataType)]) {
                             continue;
                         }
                     };
+                let character_target = matches!(
+                    msduck_sql::sql_type::declaration(kind),
+                    Ok(msduck_core::types::Type::Character(_))
+                );
+                let character_source =
+                    msduck_sql::expression_metadata::storage::kind(
+                        &original,
+                        parameters,
+                        &|value| scope.declaration(value),
+                    )
+                    .is_some_and(|kind| {
+                        matches!(
+                            msduck_sql::sql_type::declaration(&kind),
+                            Ok(msduck_core::types::Type::Character(_))
+                        )
+                    }) || msduck_sql::expression_metadata::conditional::candidate(&original)
+                        && openjson_character_result(
+                            &scope,
+                            &msduck_sql::expression_metadata::conditional::values(&original),
+                            parameters,
+                        )
+                        .is_some();
+                let source = if character_target || character_source {
+                    let packed =
+                        msduck_sql::expr::unary_function("__msduck_carrier_input", original);
+                    if character_target {
+                        packed
+                    } else {
+                        msduck_sql::expr::unary_function("__msduck_unicode_text", packed)
+                    }
+                } else {
+                    original
+                };
                 let expr = Expr::Cast {
                     kind: CastKind::Cast,
-                    expr: Box::new(msduck_sql::expr::unary_function(
-                        "__msduck_carrier_input",
-                        original,
-                    )),
+                    expr: Box::new(source),
                     data_type: kind.clone(),
                     format: None,
                 };
@@ -336,10 +453,15 @@ fn align_character_sets(body: &mut SetExpr, plans: &[(usize, DataType)]) {
             }
         }
         SetExpr::SetOperation { left, right, .. } => {
-            align_character_sets(left, plans);
-            align_character_sets(right, plans);
+            align_character_sets(catalog, left, plans, parameters);
+            align_character_sets(catalog, right, plans, parameters);
         }
-        SetExpr::Query(query) => align_character_sets(&mut query.body, plans),
+        SetExpr::Query(query) => align_character_sets(
+            &catalog.query_scope(query),
+            &mut query.body,
+            plans,
+            parameters,
+        ),
         _ => {}
     }
 }
@@ -401,6 +523,36 @@ fn pin_branches(catalog: &Catalog, body: &mut SetExpr, positions: &[usize]) {
     }
 }
 
+fn character_equality(
+    body: &mut SetExpr,
+    names: &[String],
+    equality: &[msduck_sql::variant_sets::Equality],
+) {
+    let SetExpr::SetOperation { left, right, .. } = body else {
+        return;
+    };
+    character_equality(left, names, equality);
+    character_equality(right, names, equality);
+    let SetExpr::SetOperation {
+        op, set_quantifier, ..
+    } = body
+    else {
+        unreachable!()
+    };
+    if !matches!(
+        set_quantifier,
+        SetQuantifier::None | SetQuantifier::Distinct
+    ) {
+        return;
+    }
+    if *op == SetOperator::Union {
+        *set_quantifier = SetQuantifier::All;
+        msduck_sql::variant_sets::deduplicate(body, names, equality);
+    } else {
+        msduck_sql::variant_sets::membership(body, names, equality);
+    }
+}
+
 /// Pin the mixed carrier columns of `node`, or with `apply` false only
 /// report whether there are any (before their declarations are loaded).
 pub(super) fn rewrite<T: VisitMut>(
@@ -413,6 +565,7 @@ pub(super) fn rewrite<T: VisitMut>(
         catalog: &'a Catalog,
         parameters: &'a HashMap<String, Parameter>,
         scopes: Vec<Catalog>,
+        set_plans: Vec<Vec<(usize, DataType)>>,
         apply: bool,
         found: bool,
     }
@@ -425,6 +578,7 @@ pub(super) fn rewrite<T: VisitMut>(
         type Break = ();
         fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
             self.scopes.push(self.catalog().query_scope(query));
+            self.set_plans.push(Vec::new());
             if !matches!(query.body.as_ref(), SetExpr::SetOperation { .. }) {
                 return ControlFlow::Continue(());
             }
@@ -432,7 +586,13 @@ pub(super) fn rewrite<T: VisitMut>(
             if !character_plans.is_empty() {
                 self.found = true;
                 if self.apply {
-                    align_character_sets(&mut query.body, &character_plans);
+                    *self.set_plans.last_mut().unwrap() = character_plans.clone();
+                    align_character_sets(
+                        self.catalog(),
+                        &mut query.body,
+                        &character_plans,
+                        self.parameters,
+                    );
                 }
             }
             let projections = projections(&query.body);
@@ -466,7 +626,49 @@ pub(super) fn rewrite<T: VisitMut>(
             }
             ControlFlow::Continue(())
         }
-        fn post_visit_query(&mut self, _: &mut Query) -> ControlFlow<()> {
+        fn post_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
+            let plans = self.set_plans.pop().unwrap();
+            if self.apply
+                && plans.iter().any(|(_, kind)| {
+                    matches!(
+                        msduck_sql::sql_type::declaration(kind),
+                        Ok(msduck_core::types::Type::Character(_))
+                    )
+                })
+            {
+                let branches = projections(&query.body);
+                if let Some(first) = branches.first() {
+                    let names: Vec<String> = first
+                        .projection
+                        .iter()
+                        .map(|item| match item {
+                            SelectItem::ExprWithAlias { alias, .. } => alias.value.clone(),
+                            SelectItem::UnnamedExpr(Expr::Identifier(name)) => name.value.clone(),
+                            SelectItem::UnnamedExpr(Expr::CompoundIdentifier(names)) => names
+                                .last()
+                                .map(|name| name.value.clone())
+                                .unwrap_or_default(),
+                            _ => String::new(),
+                        })
+                        .collect();
+                    let equality: Vec<_> = (0..names.len())
+                        .map(|position| {
+                            if plans.iter().any(|(p, kind)| {
+                                *p == position
+                                    && matches!(
+                                        msduck_sql::sql_type::declaration(kind),
+                                        Ok(msduck_core::types::Type::Character(_))
+                                    )
+                            }) {
+                                msduck_sql::variant_sets::Equality::Unicode
+                            } else {
+                                msduck_sql::variant_sets::Equality::Native
+                            }
+                        })
+                        .collect();
+                    character_equality(&mut query.body, &names, &equality);
+                }
+            }
             self.scopes.pop();
             ControlFlow::Continue(())
         }
@@ -532,6 +734,7 @@ pub(super) fn rewrite<T: VisitMut>(
         catalog,
         parameters,
         scopes: Vec::new(),
+        set_plans: Vec::new(),
         apply,
         found: false,
     };
