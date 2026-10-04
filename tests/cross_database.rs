@@ -769,7 +769,16 @@ fn views_over_catalog_views_read_their_own_database() {
         &mut session,
         "CREATE VIEW dbo.cols2 AS SELECT name FROM dbo.cols",
     );
+    // A view that merely names a column like the dependent view.
+    ok(
+        &mut session,
+        "CREATE VIEW dbo.innocent AS SELECT id AS cols, name FROM dbo.items",
+    );
     ok(&mut session, "USE master");
+    ok(
+        &mut session,
+        "IF (SELECT COUNT(*) FROM foo.dbo.innocent i JOIN dbo.loc l ON l.id = i.cols) <> 1 THROW 50001, 'innocent', 1",
+    );
     for view in ["cols", "cols2"] {
         ok(
             &mut session,

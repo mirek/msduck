@@ -801,35 +801,59 @@ pub(crate) fn catalog_dependent_views(
             ))
         })?
         .collect::<duckdb::Result<Vec<_>>>()?;
-    let reads = |sql: &str, schema: &str| {
-        sql.match_indices(schema).any(|(at, _)| {
-            let before = sql[..at].chars().next_back();
-            let after = sql[at + schema.len()..]
-                .trim_start_matches('"')
-                .chars()
-                .next();
-            !before.is_some_and(|c| c.is_alphanumeric() || c == '_') && after == Some('.')
-        })
+    // The relations each definition reads, as lower-case (schema, name);
+    // a definition DuckDB's SQL cannot be parsed back from counts as
+    // reading catalog views, conservatively.
+    let relations = |sql: &str| -> Option<Vec<(String, String)>> {
+        let statements =
+            sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::DuckDbDialect {}, sql)
+                .ok()?;
+        let mut found = Vec::new();
+        let _ = visit_relations(&statements, |name: &ObjectName| {
+            let parts = name
+                .0
+                .iter()
+                .map(|part| match part {
+                    ObjectNamePart::Identifier(ident) => ident.value.to_lowercase(),
+                    part => part.to_string().to_lowercase(),
+                })
+                .collect::<Vec<_>>();
+            match parts.as_slice() {
+                [name] => found.push(("dbo".to_string(), name.clone())),
+                [.., schema, name] => found.push((schema.clone(), name.clone())),
+                [] => {}
+            }
+            std::ops::ControlFlow::<()>::Continue(())
+        });
+        Some(found)
     };
+    let views = views
+        .into_iter()
+        .map(|(schema, view, sql)| {
+            // The first relation is the view being created.
+            let read = relations(&sql).map(|mut read| {
+                read.retain(|relation| *relation != (schema.clone(), view.clone()));
+                read
+            });
+            (schema, view, read)
+        })
+        .collect::<Vec<_>>();
     let mut dependent = std::collections::HashSet::new();
-    for (schema, view, sql) in &views {
-        if reads(sql, "sys") || reads(sql, "information_schema") {
+    for (schema, view, read) in &views {
+        if read.as_ref().is_none_or(|read| {
+            read.iter()
+                .any(|(schema, _)| schema == "sys" || schema == "information_schema")
+        }) {
             dependent.insert((schema.clone(), view.clone()));
         }
     }
     // Views over such views, to a fixed point.
     loop {
         let before = dependent.len();
-        for (schema, view, sql) in &views {
-            if !dependent.contains(&(schema.clone(), view.clone()))
-                && dependent.iter().any(|(_, name)| {
-                    sql.match_indices(name.as_str()).any(|(at, _)| {
-                        let before = sql[..at].chars().next_back();
-                        let after = sql[at + name.len()..].chars().next();
-                        !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
-                            && !after.is_some_and(|c| c.is_alphanumeric() || c == '_')
-                    })
-                })
+        for (schema, view, read) in &views {
+            if read
+                .as_ref()
+                .is_some_and(|read| read.iter().any(|relation| dependent.contains(relation)))
             {
                 dependent.insert((schema.clone(), view.clone()));
             }
