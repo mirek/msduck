@@ -12139,6 +12139,27 @@
         "Scope exactly root concat annotation and carrier predicate lower files; reuse existing rootworker/worktree/private new receipt/cache/runnerlock. Combine with PR964 and linked companion claims. Exacthead fmt/strictworkspacealltargetClippy/workspaceRust/alltargetbuild/npm/rawaudit/requiredCI and independent/verifiedCodexreview or ownerfallback; merge exacthead and promptly complete protected registry/issues/project."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pm9wn"
+    },
+    {
+      "id": "tmp-hygiene-v1",
+      "title": "Use /tmp for temporary files with explicit hygiene rules",
+      "state": "ready",
+      "authorization": "Direct owner instruction in session msduck-f7 (2026-10-04): \"ok, actually use /tmp which has ram backed filesystem, but please add instructions about hygiene - delete unused files, we had 62GB there that was full\". First-party incident evidence: 16,523 stale /tmp/msduck-* directories and two orphaned msduck test servers; a live session's /tmp/claude-<uid> task directory was deleted. No external content.",
+      "scope": [
+        "AGENTS.md",
+        "docs/agent-work.md",
+        "docs/parallel-collaboration.md",
+        "docs/client-sharding.md",
+        "docs/remote-build.md"
+      ],
+      "acceptance": [
+        "AGENTS.md and docs/agent-work.md direct workers to a private per-worker directory under the RAM-backed /tmp (mktemp -d /tmp/msduck-<task>-XXXXXX, exported as TMPDIR) instead of the worktree .tmp/, with durable evidence still in artifacts/.",
+        "Hygiene rules: delete your directory when a run or task ends, including after failures; stop servers and containers you started before deleting their files and leave no orphaned msduck processes; check free space before large runs; never delete other workers' live files (check with lsof) and never touch other sessions' harness directories such as /tmp/claude-<uid>/; record the incident as the reason without hardcoding one host's sizes as general guidance.",
+        "docs/parallel-collaboration.md points to the rule; docs/client-sharding.md and docs/remote-build.md examples use the new TMPDIR convention. Documentation only: source/link review, open PR linking #968, Codex review or recorded fallback, merge with the exact head, publish done."
+      ],
+      "dependencies": [],
+      "issue": 968,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pm-Wp"
     }
   ]
 }
