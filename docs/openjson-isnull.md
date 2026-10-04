@@ -40,9 +40,13 @@ The predicate catalog now declares direct OPENJSON sources before lowering:
 `key` is NVARCHAR(4000), `value` is NVARCHAR(MAX), and `type` is integer.
 WITH columns use their explicit declarations: NVARCHAR/NCHAR are carriers,
 VARCHAR/CHAR are backend text, and other types stay non-text. These declarations
-come from the AST, independent of the document value or returned rows. Default
-and explicit aliases are recognized; ambiguous aliases and renamed column lists
-remain unknown. Quoted `[@p]` columns stay distinct from unquoted scalar `@p`.
+come from the AST, independent of the document value or returned rows. Query
+and SELECT frames keep nested/sibling sources separate and give local aliases
+priority over correlated outer sources. Scalar-query projection checks use that
+query's frame; set-operation pinning resolves each branch separately. Default
+and explicit aliases are recognized; ambiguous aliases, derived/CTE columns and
+renamed column lists remain unknown. Same-named physical tables retain the
+existing conservative shared description. Quoted `[@p]` columns stay distinct from unquoted scalar `@p`.
 ISNULL keeps its direct OPENJSON carrier first argument: its native dispatch
 already packs replacements into that type, so declaration pinning must not
 convert it to text and lose exact UTF-16 units or change stored values. Other

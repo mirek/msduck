@@ -95,9 +95,9 @@ pub(super) fn sites<T: Visit>(node: &T) -> bool {
 }
 
 /// The projections of a set operation's branches.
-fn projections(body: &SetExpr) -> Vec<&Vec<SelectItem>> {
+fn projections(body: &SetExpr) -> Vec<&Select> {
     match body {
-        SetExpr::Select(select) => vec![&select.projection],
+        SetExpr::Select(select) => vec![select],
         SetExpr::SetOperation { left, right, .. } => {
             let mut all = projections(left);
             all.extend(projections(right));
@@ -120,6 +120,7 @@ fn item_expr(item: &SelectItem) -> Option<&Expr> {
 fn pin_branches(catalog: &Catalog, body: &mut SetExpr, positions: &[usize]) {
     match body {
         SetExpr::Select(select) => {
+            let catalog = catalog.select_scope(select);
             for &position in positions {
                 let Some(item) = select.projection.get_mut(position) else {
                     continue;
@@ -169,35 +170,63 @@ fn pin_branches(catalog: &Catalog, body: &mut SetExpr, positions: &[usize]) {
 pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T, apply: bool) -> bool {
     struct Pin<'a> {
         catalog: &'a Catalog,
+        scopes: Vec<Catalog>,
         apply: bool,
         found: bool,
+    }
+    impl Pin<'_> {
+        fn catalog(&self) -> &Catalog {
+            self.scopes.last().unwrap_or(self.catalog)
+        }
     }
     impl VisitorMut for Pin<'_> {
         type Break = ();
         fn pre_visit_query(&mut self, query: &mut Query) -> ControlFlow<()> {
+            self.scopes.push(self.catalog().query_scope(query));
             if !matches!(query.body.as_ref(), SetExpr::SetOperation { .. }) {
                 return ControlFlow::Continue(());
             }
             let projections = projections(&query.body);
-            let width = projections.first().map_or(0, |p| p.len());
-            if projections.iter().any(|p| p.len() != width) {
+            let width = projections.first().map_or(0, |s| s.projection.len());
+            if projections.iter().any(|s| s.projection.len() != width) {
                 return ControlFlow::Continue(());
             }
             let positions: Vec<usize> = (0..width)
                 .filter(|&position| {
-                    let values: Option<Vec<&Expr>> = projections
+                    let values: Option<Vec<(&Expr, bool)>> = projections
                         .iter()
-                        .map(|p| item_expr(&p[position]))
+                        .map(|select| {
+                            let scope = self.catalog().select_scope(select);
+                            item_expr(&select.projection[position])
+                                .map(|value| (value, scope.carrier(value).is_some()))
+                        })
                         .collect();
-                    values.is_some_and(|values| mixed(self.catalog, &values))
+                    values.is_some_and(|values| {
+                        values.iter().any(|(_, carrier)| *carrier)
+                            && values
+                                .iter()
+                                .any(|(value, carrier)| !carrier && !null(value))
+                    })
                 })
                 .collect();
             if !positions.is_empty() {
                 self.found = true;
                 if self.apply {
-                    pin_branches(self.catalog, &mut query.body, &positions);
+                    pin_branches(self.catalog(), &mut query.body, &positions);
                 }
             }
+            ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &mut Query) -> ControlFlow<()> {
+            self.scopes.pop();
+            ControlFlow::Continue(())
+        }
+        fn pre_visit_select(&mut self, select: &mut Select) -> ControlFlow<()> {
+            self.scopes.push(self.catalog().select_scope(select));
+            ControlFlow::Continue(())
+        }
+        fn post_visit_select(&mut self, _: &mut Select) -> ControlFlow<()> {
+            self.scopes.pop();
             ControlFlow::Continue(())
         }
         fn post_visit_expr(&mut self, expr: &mut Expr) -> ControlFlow<()> {
@@ -212,7 +241,7 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T, apply: bool)
                     if let Some(otherwise) = else_result {
                         values.push(otherwise);
                     }
-                    pin(self.catalog, values, self.apply)
+                    pin(self.catalog(), values, self.apply)
                 }
                 Expr::Function(f) => match f.name.to_string().to_ascii_uppercase().as_str() {
                     "ISNULL" => {
@@ -221,16 +250,16 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T, apply: bool)
                         // into the first carrier's type. Pinning it to text
                         // would lose unpaired units and change stored values.
                         if values.first().is_some_and(|first| {
-                            self.catalog.carrier(first).is_some_and(|c| c.openjson)
+                            self.catalog().carrier(first).is_some_and(|c| c.openjson)
                         }) {
                             false
                         } else {
-                            pin(self.catalog, values, self.apply)
+                            pin(self.catalog(), values, self.apply)
                         }
                     }
-                    "COALESCE" => pin(self.catalog, arguments(f), self.apply),
+                    "COALESCE" => pin(self.catalog(), arguments(f), self.apply),
                     "IIF" => pin(
-                        self.catalog,
+                        self.catalog(),
                         arguments(f).into_iter().skip(1).collect(),
                         self.apply,
                     ),
@@ -244,6 +273,7 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T, apply: bool)
     }
     let mut pin = Pin {
         catalog,
+        scopes: Vec::new(),
         apply,
         found: false,
     };

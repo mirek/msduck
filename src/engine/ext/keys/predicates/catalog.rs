@@ -1,12 +1,9 @@
 //! The columns of the relations a statement reads, for recognizing
 //! references to Unicode carrier columns before translation.
 //!
-//! Names resolve against every relation the statement names, not per
-//! scope: a reference counts as a carrier only when every relation that has
-//! a column of that name (or every relation its qualifier names) agrees
-//! that it is a carrier, and the statement defines no alias or derived
-//! column of that name. Anything else, including columns of derived tables
-//! and CTEs, is left alone.
+//! References resolve within explicit query/select scopes, with nearest-scope
+//! alias shadowing and correlated fallback. Physical descriptions of same-named
+//! tables remain conservative; derived and CTE columns remain unknown here.
 use anyhow::Result;
 use sqlparser::ast::*;
 use std::collections::{HashMap, HashSet};
@@ -41,7 +38,7 @@ pub(super) enum Resolution<'a> {
 /// unknown here.
 const DERIVED: &str = "";
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(super) struct Catalog {
     /// Table name (lowercase, last part) to its columns (lowercase).
     tables: HashMap<String, HashMap<String, Column>>,
@@ -52,6 +49,57 @@ pub(super) struct Catalog {
     defined: HashSet<String>,
     /// The relations by their AST spelling, with their table name.
     names: HashMap<String, String>,
+    scopes: Vec<Scope>,
+}
+
+#[derive(Clone, Default)]
+struct Scope {
+    tables: HashSet<String>,
+    qualifiers: HashMap<String, HashSet<String>>,
+    defined: HashSet<String>,
+}
+
+// Collect only sources in this SELECT or statement; nested queries have their
+// own frames. Visiting a SELECT separately also separates UNION branch sources.
+#[derive(Default)]
+struct LocalRelations {
+    relations: Relations,
+    depth: usize,
+}
+impl Visitor for LocalRelations {
+    type Break = ();
+    fn pre_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
+        self.depth += 1;
+        ControlFlow::Continue(())
+    }
+    fn post_visit_query(&mut self, _: &Query) -> ControlFlow<()> {
+        self.depth -= 1;
+        ControlFlow::Continue(())
+    }
+    fn pre_visit_select(&mut self, select: &Select) -> ControlFlow<()> {
+        if self.depth == 0 {
+            for item in &select.projection {
+                if let SelectItem::ExprWithAlias { alias, .. } = item {
+                    self.relations.defined.insert(lower(alias));
+                }
+            }
+        }
+        ControlFlow::Continue(())
+    }
+    fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
+        if self.depth == 0 {
+            self.relations.pre_visit_table_factor(factor)
+        } else {
+            ControlFlow::Continue(())
+        }
+    }
+    fn pre_visit_relation(&mut self, name: &ObjectName) -> ControlFlow<()> {
+        if self.depth == 0 {
+            self.relations.pre_visit_relation(name)
+        } else {
+            ControlFlow::Continue(())
+        }
+    }
 }
 
 fn scalar_variable(ident: &Ident) -> bool {
@@ -241,6 +289,50 @@ fn collations(db: &duckdb::Connection, spelling: &str) -> HashMap<String, String
 }
 
 impl Catalog {
+    fn local_scope<T: Visit>(&self, node: &T) -> Self {
+        let mut local = LocalRelations::default();
+        let _ = node.visit(&mut local);
+        let mut catalog = self.clone();
+        let mut relations = local.relations;
+        let mut renamed = HashMap::new();
+        for (name, columns) in relations.openjson {
+            let scoped = format!("\0scope{}-{name}", self.scopes.len());
+            catalog.tables.insert(scoped.clone(), columns);
+            renamed.insert(name, scoped);
+        }
+        for tables in relations.qualifiers.values_mut() {
+            *tables = tables
+                .iter()
+                .map(|t| renamed.get(t).unwrap_or(t).clone())
+                .collect();
+        }
+        catalog.scopes.push(Scope {
+            tables: relations.qualifiers.values().flatten().cloned().collect(),
+            qualifiers: relations.qualifiers,
+            defined: relations.defined,
+        });
+        catalog
+    }
+
+    pub fn select_scope(&self, select: &Select) -> Self {
+        self.local_scope(select)
+    }
+
+    pub fn query_scope(&self, query: &Query) -> Self {
+        let mut catalog = self.clone();
+        let mut scope = Scope::default();
+        if let Some(with) = &query.with {
+            for cte in &with.cte_tables {
+                scope.defined.insert(lower(&cte.alias.name));
+                scope
+                    .defined
+                    .extend(cte.alias.columns.iter().map(|c| lower(&c.name)));
+            }
+        }
+        catalog.scopes.push(scope);
+        catalog
+    }
+
     /// The columns of the relations `node` reads, from DuckDB's catalog.
     pub fn load<T: Visit>(db: &duckdb::Connection, node: &T) -> Result<Self> {
         let mut relations = Relations::default();
@@ -250,6 +342,7 @@ impl Catalog {
             qualifiers: relations.qualifiers,
             defined: relations.defined,
             names: HashMap::new(),
+            scopes: Vec::new(),
         };
         for (spelling, table) in &relations.backend {
             // A CTE of the same name hides the table.
@@ -314,7 +407,7 @@ impl Catalog {
             }
         }
         catalog.names = relations.names;
-        Ok(catalog)
+        Ok(catalog.local_scope(node))
     }
 
     /// Add the SQL Server declarations of the carrier columns, which costs
@@ -388,27 +481,9 @@ impl Catalog {
     /// The collation of the column `expr` refers to, when it unambiguously
     /// refers to a column with a collation of its own.
     pub fn collation(&self, expr: &Expr) -> Option<&str> {
-        let (tables, name): (Vec<&String>, String) = match expr {
-            Expr::Nested(inner) => return self.collation(inner),
-            Expr::Identifier(ident)
-                if !scalar_variable(ident) && !self.defined.contains(&lower(ident)) =>
-            {
-                (self.tables.keys().collect(), lower(ident))
-            }
-            Expr::CompoundIdentifier(parts) if parts.len() >= 2 => {
-                let tables = self.qualifiers.get(&lower(&parts[parts.len() - 2]))?;
-                if tables.iter().any(|t| !self.tables.contains_key(t)) {
-                    return None;
-                }
-                (tables.iter().collect(), lower(parts.last()?))
-            }
-            _ => return None,
-        };
+        let columns = self.candidates(expr)?;
         let mut found: Option<Option<&str>> = None;
-        for table in tables {
-            let Some(column) = self.tables.get(table).and_then(|c| c.get(&name)) else {
-                continue;
-            };
+        for column in columns {
             match found {
                 Some(existing) if existing != column.collation.as_deref() => return None,
                 _ => found = Some(column.collation.as_deref()),
@@ -421,6 +496,47 @@ impl Catalog {
     /// for references this catalog cannot resolve (derived tables, CTEs,
     /// aliases, outer or missing columns).
     fn candidates(&self, expr: &Expr) -> Option<Vec<&Column>> {
+        if let Expr::Nested(inner) = expr {
+            return self.candidates(inner);
+        }
+        if !self.scopes.is_empty() {
+            for scope in self.scopes.iter().rev() {
+                let (tables, name) = match expr {
+                    Expr::Identifier(id) if !scalar_variable(id) => {
+                        if scope.defined.contains(&lower(id)) {
+                            return None;
+                        }
+                        (&scope.tables, lower(id))
+                    }
+                    Expr::CompoundIdentifier(parts) if parts.len() >= 2 => {
+                        let qualifier = lower(&parts[parts.len() - 2]);
+                        let Some(tables) = scope.qualifiers.get(&qualifier) else {
+                            if scope.defined.contains(&qualifier) {
+                                return None;
+                            }
+                            continue;
+                        };
+                        (tables, lower(parts.last()?))
+                    }
+                    _ => return None,
+                };
+                // Unknown local sources can shadow an outer bare reference.
+                if tables.iter().any(|t| !self.tables.contains_key(t)) {
+                    return None;
+                }
+                let columns: Vec<&Column> = tables
+                    .iter()
+                    .filter_map(|t| self.tables.get(t).and_then(|c| c.get(&name)))
+                    .collect();
+                if !columns.is_empty() {
+                    return Some(columns);
+                }
+                if matches!(expr, Expr::CompoundIdentifier(_)) {
+                    return None; // A local qualifier shadows outer qualifiers.
+                }
+            }
+            return None;
+        }
         let (tables, name): (Vec<&String>, String) = match expr {
             Expr::Nested(inner) => return self.candidates(inner),
             Expr::Identifier(ident)
@@ -491,36 +607,13 @@ impl Catalog {
 
     /// Resolve a column reference against the relations of the statement.
     pub fn resolve(&self, expr: &Expr) -> Resolution<'_> {
-        let (tables, name): (Vec<&String>, String) = match expr {
-            Expr::Nested(inner) => return self.resolve(inner),
-            Expr::Identifier(ident)
-                if !scalar_variable(ident) && !self.defined.contains(&lower(ident)) =>
-            {
-                (self.tables.keys().collect(), lower(ident))
-            }
-            Expr::CompoundIdentifier(parts) if parts.len() >= 2 => {
-                let qualifier = lower(&parts[parts.len() - 2]);
-                let Some(tables) = self.qualifiers.get(&qualifier) else {
-                    return Resolution::Unknown;
-                };
-                // A derived table or a relation DuckDB could not describe.
-                if tables.iter().any(|t| !self.tables.contains_key(t)) {
-                    return Resolution::Unknown;
-                }
-                let Some(last) = parts.last() else {
-                    return Resolution::Unknown;
-                };
-                (tables.iter().collect(), lower(last))
-            }
-            _ => return Resolution::Unknown,
+        let Some(columns) = self.candidates(expr) else {
+            return Resolution::Unknown;
         };
         let mut found: Option<&Column> = None;
         let mut plain = false;
         let mut text = false;
-        for table in tables {
-            let Some(column) = self.tables.get(table).and_then(|c| c.get(&name)) else {
-                continue;
-            };
+        for column in columns {
             if !column.carrier {
                 plain = true;
                 text |= column.text;
@@ -552,6 +645,7 @@ mod tests {
             qualifiers: relations.qualifiers,
             defined: relations.defined,
             names: relations.names,
+            scopes: Vec::new(),
         }
     }
 

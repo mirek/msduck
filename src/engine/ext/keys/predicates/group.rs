@@ -333,13 +333,27 @@ pub(super) fn sites(statement: &Statement) -> bool {
 }
 
 pub(super) fn rewrite(catalog: &Catalog, statement: &mut Statement) {
-    struct Rewrite<'a>(&'a Catalog);
+    struct Rewrite<'a>(&'a Catalog, Vec<Catalog>);
+    impl Rewrite<'_> {
+        fn catalog(&self) -> &Catalog {
+            self.1.last().unwrap_or(self.0)
+        }
+    }
     impl VisitorMut for Rewrite<'_> {
         type Break = ();
         fn pre_visit_query(&mut self, q: &mut Query) -> ControlFlow<()> {
-            query(self.0, q);
+            let mut scope = self.catalog().query_scope(q);
+            if let SetExpr::Select(select) = q.body.as_ref() {
+                scope = scope.select_scope(select);
+            }
+            self.1.push(scope);
+            query(self.catalog(), q);
+            ControlFlow::Continue(())
+        }
+        fn post_visit_query(&mut self, _: &mut Query) -> ControlFlow<()> {
+            self.1.pop();
             ControlFlow::Continue(())
         }
     }
-    let _ = VisitMut::visit(statement, &mut Rewrite(catalog));
+    let _ = VisitMut::visit(statement, &mut Rewrite(catalog, Vec::new()));
 }

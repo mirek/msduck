@@ -247,3 +247,96 @@ fn openjson_isnull_null_fallback_keeps_exact_utf16_storage() {
         ]
     );
 }
+
+#[test]
+fn nested_openjson_sources_do_not_poison_outer_null_fallbacks() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let (response, ok) = session.batch_response(
+        "CREATE TABLE scoped_values(id INT,value NVARCHAR(10),fallback VARCHAR(10));
+         INSERT scoped_values VALUES(1,N'ok','unused'),(2,NULL,'x')",
+        &Default::default(),
+        false,
+        None,
+    );
+    assert!(ok, "{response:?}");
+    for (index, expression) in [
+        "COALESCE(value,N'x')",
+        "COALESCE(value,fallback)",
+        "CASE WHEN value IS NULL THEN N'x' ELSE value END",
+        "IIF(value IS NULL,N'x',value)",
+    ]
+    .iter()
+    .enumerate()
+    {
+        for (source_index, source) in [
+            "OPENJSON(N'[1]') j",
+            "OPENJSON(N'[1]') WITH(value INT) j",
+            "(SELECT j.value FROM OPENJSON(N'[1]') j) d",
+        ]
+        .iter()
+        .enumerate()
+        {
+            let table = format!("scope_result_{index}_{source_index}");
+            let sql = format!(
+                "SELECT id,{expression} AS v INTO {table} FROM scoped_values WHERE EXISTS(SELECT 1 FROM {source})"
+            );
+            let (response, ok) = session.batch_response(&sql, &Default::default(), false, None);
+            assert!(ok, "{sql}: {response:?}");
+            let values:Vec<String>=session.db.prepare(&format!(
+                "SELECT __msduck_carrier_utf8(__msduck_carrier_input(v)) FROM {table} ORDER BY id"))
+                .unwrap().query_map([],|r|r.get(0)).unwrap().collect::<duckdb::Result<_>>().unwrap();
+            assert_eq!(values, vec!["ok", "x"], "{sql}");
+        }
+    }
+}
+
+#[test]
+fn openjson_scope_shadowing_correlation_and_set_branches_stay_distinct() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    let setup = "CREATE TABLE scope_outer(value NVARCHAR(10)); INSERT scope_outer VALUES(NULL)";
+    assert!(
+        session
+            .batch_response(setup, &Default::default(), false, None)
+            .1
+    );
+    for (index,sql) in [
+        "SELECT COALESCE(value,N'x') AS v FROM scope_outer j WHERE EXISTS(SELECT 1 FROM OPENJSON(N'[1]') WITH(value INT) j WHERE j.value IS NULL)",
+        "WITH c AS(SELECT j.value FROM OPENJSON(N'[1]') j) SELECT COALESCE(value,N'x') AS v FROM scope_outer WHERE EXISTS(SELECT 1 FROM c)",
+        "SELECT COALESCE(value,N'x') AS v FROM scope_outer UNION ALL SELECT COALESCE(value,N'z') FROM OPENJSON(N'[null]') WITH(value NVARCHAR(10)) j",
+        "SELECT ISNULL(j.value,N'x') AS v FROM OPENJSON(N'[null]') j WHERE EXISTS(SELECT 1 WHERE ISNULL(j.value,N'x')=N'x')",
+    ].iter().enumerate() {
+        let sql=format!("SELECT v INTO scope_control_{index} FROM ({sql}) q");
+        let (response,ok)=session.batch_response(&sql,&Default::default(),false,None);
+        assert!(ok,"{sql}: {response:?}");
+        let values:Vec<String>=session.db.prepare(&format!(
+            "SELECT __msduck_carrier_utf8(__msduck_carrier_input(v)) FROM scope_control_{index} ORDER BY v"))
+            .unwrap().query_map([],|r|r.get(0)).unwrap().collect::<duckdb::Result<_>>().unwrap();
+        assert_eq!(values,if index==2 {vec!["x","z"]} else {vec!["x"]},"{sql}");
+    }
+}
+
+#[test]
+fn scoped_set_pinning_keeps_carrier_and_text_branches_bindable() {
+    let server = Server::open(":memory:").unwrap();
+    let mut session = Session::new(server.connection().unwrap()).unwrap();
+    for sql in [
+        "CREATE TABLE scope_set(value NVARCHAR(10)); INSERT scope_set VALUES(N'a')",
+        "SELECT value AS v INTO scoped_union FROM scope_set UNION ALL SELECT N'b'",
+    ] {
+        let (response, ok) = session.batch_response(sql, &Default::default(), false, None);
+        assert!(ok, "{sql}: {response:?}");
+    }
+    let values: Vec<String> = session
+        .db
+        .prepare(
+            "SELECT __msduck_carrier_utf8(__msduck_carrier_input(v)) FROM scoped_union ORDER BY v",
+        )
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(values, vec!["a", "b"]);
+}
