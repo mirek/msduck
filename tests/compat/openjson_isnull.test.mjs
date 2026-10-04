@@ -1360,6 +1360,136 @@ const expressionCollationCases = [
         1
       ]
     }
+  },
+  {
+    "name": "concat",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(CONCAT(t.doc,N'')) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "concat_ws",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(CONCAT_WS(N'',t.doc,N'')) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "json_query",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(JSON_QUERY(t.doc)) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "replace",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(REPLACE(t.doc,N'not-present',N'x')) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "substring",
+    "query": "SELECT j.value FROM expression_input t CROSS APPLY OPENJSON(SUBSTRING(t.doc,1,4000)) j WHERE j.value=N'x' ORDER BY j.[key]",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "value",
+              "NVarChar",
+              65535
+            ]
+          ],
+          "rows": [
+            [
+              "x"
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
   }
 ]
 

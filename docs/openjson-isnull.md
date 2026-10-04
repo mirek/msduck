@@ -228,3 +228,10 @@ This does not establish general expression or wire-collation parity. The
 additional explicit COLLATE operand in a `+` control still has a separately
 observed backend binding limitation; its complete raw error is retained with
 the reference evidence rather than counted as a matching result.
+
+The same declaration labels now pass through CONCAT/CONCAT_WS and supported
+character-source functions, including JSON_QUERY, REPLACE and SUBSTRING.
+Five further complete pinned captures verify the original function inputs and
+case-sensitive filtering without changing rows, descriptor names/types/lengths,
+errors or completion counts. Numeric CONCAT inputs contribute coercible-default
+labels; they cannot override an implicitly collated character input.

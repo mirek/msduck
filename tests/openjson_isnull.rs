@@ -1080,6 +1080,11 @@ fn openjson_character_expressions_inherit_declared_input_collation() {
         "ISNULL(t.doc,N'[]')",
         "CASE WHEN 1=1 THEN t.doc ELSE N'[]' END",
         "IIF(1=1,t.doc,N'[]')",
+        "CONCAT(t.doc,N'')",
+        "CONCAT_WS(N'',t.doc,N'')",
+        "JSON_QUERY(t.doc)",
+        "REPLACE(t.doc,N'not-present',N'x')",
+        "SUBSTRING(t.doc,1,4000)",
     ]
     .iter()
     .enumerate()

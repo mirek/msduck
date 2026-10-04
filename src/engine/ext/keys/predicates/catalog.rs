@@ -238,6 +238,28 @@ fn source_collation(catalog: Option<&Catalog>, input: &Expr) -> Option<String> {
         .map(str::to_owned)
 }
 
+fn noncharacter_source(catalog: Option<&Catalog>, expr: &Expr) -> bool {
+    match expr {
+        Expr::Cast { data_type, .. }
+        | Expr::Convert {
+            data_type: Some(data_type),
+            ..
+        } => msduck_sql::sql_type::declaration(data_type).is_ok_and(|kind| {
+            !matches!(
+                kind,
+                msduck_core::types::Type::Character(_)
+                    | msduck_core::types::Type::Text
+                    | msduck_core::types::Type::Ntext
+            )
+        }),
+        Expr::Value(v) => matches!(v.value, Value::Number(..) | Value::Boolean(_)),
+        Expr::Identifier(_) | Expr::CompoundIdentifier(_) => catalog.is_some_and(|catalog| {
+            matches!(catalog.resolve(expr), Resolution::Plain { text: false })
+        }),
+        _ => false,
+    }
+}
+
 /// Combine declaration labels using the deterministic coercion rules. Bound
 /// recursion and never evaluate conditional branches or JSON input values.
 fn source_label(
@@ -251,13 +273,16 @@ fn source_label(
         return None;
     }
     let label = |expr: &Expr| source_label(catalog, expr, depth - 1);
-    let combine = |operands: Vec<&Expr>| {
+    let combine = |operands: Vec<&Expr>, coerce: bool| {
         let mut result: Option<Label> = None;
         for operand in operands {
             if matches!(operand, Expr::Value(v) if v.value == Value::Null) {
                 continue;
             }
-            let next = label(operand)?;
+            let next = label(operand).or_else(|| {
+                (coerce && noncharacter_source(catalog, operand))
+                    .then(|| Label::CoercibleDefault(DEFAULT.into()))
+            })?;
             result = Some(match result {
                 Some(previous) => previous.combine(&next).ok()?,
                 None => next,
@@ -271,6 +296,7 @@ fn source_label(
             _ => collation.to_string(),
         })),
         Expr::Nested(inner) => label(inner),
+        Expr::Substring { expr, .. } | Expr::Trim { expr, .. } => label(expr),
         Expr::Cast {
             expr, data_type, ..
         }
@@ -285,28 +311,7 @@ fn source_label(
         {
             // A non-character intermediate domain resets the label.
             label(expr).or_else(|| {
-                let noncharacter = match expr.as_ref() {
-                    Expr::Cast { data_type, .. }
-                    | Expr::Convert {
-                        data_type: Some(data_type),
-                        ..
-                    } => msduck_sql::sql_type::declaration(data_type).is_ok_and(|kind| {
-                        !matches!(
-                            kind,
-                            msduck_core::types::Type::Character(_)
-                                | msduck_core::types::Type::Text
-                                | msduck_core::types::Type::Ntext
-                        )
-                    }),
-                    Expr::Value(v) => matches!(v.value, Value::Number(..) | Value::Boolean(_)),
-                    Expr::Identifier(_) | Expr::CompoundIdentifier(_) => {
-                        catalog.is_some_and(|catalog| {
-                            matches!(catalog.resolve(expr), Resolution::Plain { text: false })
-                        })
-                    }
-                    _ => false,
-                };
-                noncharacter.then(|| Label::CoercibleDefault(DEFAULT.into()))
+                noncharacter_source(catalog, expr).then(|| Label::CoercibleDefault(DEFAULT.into()))
             })
         }
         Expr::Identifier(ident) if scalar_variable(ident) => {
@@ -332,7 +337,7 @@ fn source_label(
             left,
             op: BinaryOperator::Plus | BinaryOperator::StringConcat,
             right,
-        } => combine(vec![left, right]),
+        } => combine(vec![left, right], false),
         Expr::Case {
             conditions,
             else_result,
@@ -343,6 +348,7 @@ fn source_label(
                 .map(|condition| &condition.result)
                 .chain(else_result.as_deref())
                 .collect(),
+            false,
         ),
         Expr::Function(f) => {
             let FunctionArguments::List(list) = &f.args else {
@@ -357,10 +363,19 @@ fn source_label(
                 })
                 .collect::<Option<_>>()?;
             match f.name.to_string().to_ascii_uppercase().as_str() {
-                "COALESCE" | "ISNULL" => combine(operands),
+                "COALESCE" | "ISNULL" => combine(operands, false),
+                "CONCAT" | "CONCAT_WS" => combine(operands, true),
+                // These character functions inherit their character source;
+                // positions, counts, paths and replacement values do not set
+                // the result's declaration label.
+                "UPPER" | "LOWER" | "LEFT" | "RIGHT" | "LTRIM" | "RTRIM" | "TRIM" | "SUBSTRING"
+                | "REVERSE" | "REPLICATE" | "REPLACE" | "STUFF" | "TRANSLATE" | "JSON_VALUE"
+                | "JSON_QUERY" | "JSON_MODIFY" | "QUOTENAME" => {
+                    operands.first().and_then(|expr| label(expr))
+                }
                 "IIF" if operands.len() == 3 => {
                     operands.remove(0);
-                    combine(operands)
+                    combine(operands, false)
                 }
                 _ => None,
             }
