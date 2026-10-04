@@ -11754,6 +11754,30 @@
       ],
       "issue": 940,
       "projectItem": "PVTI_lAHNIXHOAZHkr84PmQd-"
+    },
+    {
+      "id": "ansi-utf8-capacity-core-v1",
+      "title": "Apply SQL Server UTF8 BulkLoad capacity in the deterministic core",
+      "state": "ready",
+      "authorization": "Owner continuing full SQL Server compatible Rust/DuckDB server goal. Original owner-run UTF8 capacity940 and completed single-byte capacity914/921 and storedUTF8 decoding933 establish the remaining deterministic capacity gap; worker940 remains independently responsible for merge. No third-party input approved.",
+      "scope": [
+        "crates/msduck-core/src/ansi_conversion/capacity.rs",
+        "crates/msduck-core/tests/ansi_capacity_utf8.rs",
+        "docs/ansi-capacity.md"
+      ],
+      "dependencies": [
+        "bulk-character-utf8-capacity-reference-v1",
+        "ansi-stored-utf8-projection-v1",
+        "ansi-cp1251-capacity-v1"
+      ],
+      "acceptance": [
+        "Implement UTF8 source capacity from explicit admitted source form, source/target identity, fixed/variable family and target bytes/UTF16 units. Preserve completed CP1251/CP1252 and strict/stored APIs. Ground admission, malformed consumption, fitting and padding in actual SQL Server BulkLoad observations; do not substitute at-rest decoding or universal trimming. Preserve distinguishable captured failure numbers/states as typed core data without fabricating endpoint diagnostics. Validate declaration facts before NULL and source/resource limits before reading payload; immutable source, checked preflight and fallible final allocation, no lossy String/full expanded temporary or hidden effects.",
+        "Replay all applicable original512 UTF8 capacity940 observations and relevant unchanged existing UTF8 sources/target references across their four runs using native/SQL-unit expected fields and original typed failures, never client display or candidate-generated expectations. Capture additional private frozen boundary/window/valid-scalar/malformed/EOF/source-form matrices against four fresh databases in two pinned SQL17.0.4065.4 containers as needed to establish the general algorithm, with final-source independent reproduction, pinned unchanged helpers and full raw packets/descriptors/errors/info/DONE/callback/original-session counters and complete unnormalized sidecars. Preserve raw evidence before semantic validation; inherit48MiB/500000node/depth64 and2MiB phase/1024frame/connect2sec limits, exclusive output guards and awaited cleanup. Record exact finite evidence and unresolved domains rather than inventing behavior.",
+        "Meaningful pure tests cover target-byte versus UTF16-unit capacity, supplementary pairs, exact/one-above limits, fixed empty padding, MAX/full conversion, spaces versus NUL/NBSP, malformed/incomplete/boundary precedence, NULL/tag mismatch, original-input and final-output budgets and unchanged source. Full frozen-head AGENTS fmt/workspaceRust/strictall-targetClippy/client/audit with retained differences and exact source/binary proof; independent and verified Codex review or authorized availability fallback, requiredCI, exact-head merge and prompt registry/issue/project Done. No root/native adapter/engine/Value/catalog/TDS/shared helper/original reference edits; coordinate subsequent runtime adoption.",
+        "Reuse own existing isolated worktree and locked canonical Linux cache after native938 terminal completion; private reference workspace and already cached SQL image only. No new agents/worktrees/native caches or unrelated job termination. Do not begin edits until940 is merged and Done; acquire own fresh claim, verify before resuming/writes/push/PR updates."
+      ],
+      "issue": 942,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PmR3f"
     }
   ]
 }
