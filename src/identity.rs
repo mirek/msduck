@@ -117,14 +117,14 @@ fn sequence_key(name: &str, schema: &str) -> Result<(String, String)> {
     }
 }
 
-fn references_sequence(default: &str, name: &str, schema: &str) -> Result<bool> {
+fn references_sequence(default: &str, name: &str, bindings: &[(String, String)]) -> Result<bool> {
     let mut parser = Parser::new(&GenericDialect {}).try_with_sql(default)?;
     let expr = parser.parse_expr()?;
     ensure!(
         parser.peek_token().token == sqlparser::tokenizer::Token::EOF,
         "Unsupported native default dependency syntax"
     );
-    let expected = sequence_key(name, schema)?;
+    let expected = sequence_key(name, "")?;
     let mut found = false;
     let mut failure = None;
     let _ = visit_expressions(&expr, |expr| {
@@ -151,7 +151,24 @@ fn references_sequence(default: &str, name: &str, schema: &str) -> Result<bool> 
             let Some(name) = sequence_argument(value)? else {
                 return Ok(false);
             };
-            let actual = sequence_key(&name, schema)?;
+            let mut actual = sequence_key(&name, "")?;
+            if actual.0.is_empty() {
+                // DuckDB binds defaults when created, and keeps their SQL text
+                // unqualified even after the connection's search path changes.
+                // Its dependency catalog identifies bound sequences per table,
+                // not per column. Ambiguous same-name bindings remain explicit.
+                let mut matches = bindings
+                    .iter()
+                    .filter(|(_, name)| name.eq_ignore_ascii_case(&actual.1));
+                let binding = matches.next().ok_or_else(|| {
+                    anyhow::anyhow!("Unknown bound private sequence default reference")
+                })?;
+                ensure!(
+                    matches.next().is_none(),
+                    "Ambiguous bound private sequence default reference"
+                );
+                actual.0.clone_from(&binding.0);
+            }
             Ok(actual.0.eq_ignore_ascii_case(&expected.0)
                 && actual.1.eq_ignore_ascii_case(&expected.1))
         })();
@@ -178,7 +195,17 @@ pub(crate) fn dependent_columns(
     db: &Connection,
     name: &str,
 ) -> Result<Vec<(String, String, String)>> {
-    let schema: String = db.query_row("SELECT current_schema()", [], |row| row.get(0))?;
+    let mut dependencies = db.prepare("SELECT DISTINCT t.schema_name,t.table_name,s.schema_name,s.sequence_name FROM duckdb_dependencies() d JOIN duckdb_sequences() s ON d.objid=s.sequence_oid JOIN duckdb_tables() t ON d.refobjid=t.table_oid AND t.database_oid=s.database_oid WHERE t.database_name=current_database()")?;
+    let bindings = dependencies
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?
+        .collect::<duckdb::Result<Vec<_>>>()?;
     let mut statement = db.prepare("SELECT table_schema,table_name,column_name,column_default FROM information_schema.columns WHERE table_catalog=current_database() AND column_default IS NOT NULL")?;
     let mut dependents = Vec::new();
     for row in statement.query_map([], |row| {
@@ -190,7 +217,14 @@ pub(crate) fn dependent_columns(
         ))
     })? {
         let (table_schema, table, column, default) = row?;
-        if references_sequence(&default, name, &schema)? {
+        let table_bindings = bindings
+            .iter()
+            .filter(|(schema, name, _, _)| {
+                schema.eq_ignore_ascii_case(&table_schema) && name.eq_ignore_ascii_case(&table)
+            })
+            .map(|(_, _, schema, name)| (schema.clone(), name.clone()))
+            .collect::<Vec<_>>();
+        if references_sequence(&default, name, &table_bindings)? {
             dependents.push((table_schema, table, column));
         }
     }
@@ -519,6 +553,129 @@ pub fn create(db: &Connection, statement: &Statement, autocommit: bool) -> Resul
 #[cfg(test)]
 mod tests {
     #[test]
+    fn bound_default_dependencies_survive_schema_changes_and_shadowing() {
+        for context in ["SET schema='dbo'", "SET search_path='dbo,main'"] {
+            let db = Connection::open_in_memory().unwrap();
+            db.execute_batch("CREATE SCHEMA dbo").unwrap();
+            let parse = |sql: &str| {
+                Parser::parse_sql(&sqlparser::dialect::MsSqlDialect {}, sql)
+                    .unwrap()
+                    .remove(0)
+            };
+            create(
+                &db,
+                &parse("CREATE TABLE dbo.ids(id INT IDENTITY(10,5),v INT,keeper INT)"),
+                true,
+            )
+            .unwrap();
+            db.execute_batch("INSERT INTO dbo.ids(v,keeper) VALUES(1,7)")
+                .unwrap();
+            let name = table_sequences(
+                &db,
+                &ObjectName::from(vec![Ident::new("dbo"), Ident::new("ids")]),
+            )
+            .unwrap()
+            .remove(0);
+            let basename = name.strip_prefix("main.").unwrap();
+            db.execute_batch(&format!("CREATE TABLE main.dep(d BIGINT DEFAULT nextval('{basename}')); CREATE SEQUENCE dbo.{basename} START 100; {context}; CREATE TABLE dbo.shadow(d BIGINT DEFAULT nextval('{basename}')); BEGIN" )).unwrap();
+            let dependents = dependent_columns(&db, &name).unwrap();
+            assert!(dependents.iter().any(|(schema, table, column)| {
+                schema == "main" && table == "dep" && column == "d"
+            }));
+            assert!(!dependents.iter().any(|(_, table, _)| table == "shadow"));
+            let Statement::AlterTable(mut alter) = parse("ALTER TABLE dbo.ids DROP COLUMN v")
+            else {
+                panic!("expected ALTER TABLE");
+            };
+            let Statement::AlterTable(id) = parse("ALTER TABLE dbo.ids DROP COLUMN id") else {
+                panic!("expected ALTER TABLE");
+            };
+            alter.operations.extend(id.operations);
+            assert!(crate::table_alter::execute(&db, &alter, false).is_err());
+            assert!(drop_table(&db, &parse("DROP TABLE dbo.ids"), false).is_err());
+            assert_eq!(
+                db.query_row("SELECT id,v,keeper FROM dbo.ids", [], |row| {
+                    Ok((
+                        row.get::<_, i32>(0)?,
+                        row.get::<_, i32>(1)?,
+                        row.get::<_, i32>(2)?,
+                    ))
+                })
+                .unwrap(),
+                (10, 1, 7)
+            );
+            assert_eq!(
+                db.query_row(
+                    "SELECT last_value FROM duckdb_sequences() WHERE schema_name='main'",
+                    [],
+                    |row| row.get::<_, i64>(0)
+                )
+                .unwrap(),
+                10
+            );
+            db.execute_batch("INSERT INTO main.dep DEFAULT VALUES; INSERT INTO dbo.shadow DEFAULT VALUES; COMMIT").unwrap();
+            assert_eq!(
+                db.query_row("SELECT d FROM main.dep", [], |row| row.get::<_, i64>(0))
+                    .unwrap(),
+                15
+            );
+            assert_eq!(
+                db.query_row("SELECT d FROM dbo.shadow", [], |row| row.get::<_, i64>(0))
+                    .unwrap(),
+                100
+            );
+            db.execute_batch("DROP TABLE main.dep").unwrap();
+            drop_table(&db, &parse("DROP TABLE dbo.ids"), true).unwrap();
+            assert_eq!(
+                db.query_row(
+                    "SELECT count(*) FROM duckdb_sequences() WHERE schema_name='main'",
+                    [],
+                    |row| row.get::<_, i64>(0)
+                )
+                .unwrap(),
+                0
+            );
+            db.execute_batch("INSERT INTO dbo.shadow DEFAULT VALUES")
+                .unwrap();
+            assert_eq!(
+                db.query_row("SELECT max(d) FROM dbo.shadow", [], |row| row
+                    .get::<_, i64>(0))
+                    .unwrap(),
+                101
+            );
+        }
+    }
+
+    #[test]
+    fn ambiguous_unqualified_bound_defaults_remain_explicit() {
+        let db = Connection::open_in_memory().unwrap();
+        let basename = "__msduck_identity_11111111111111111111111111111111";
+        db.execute_batch(&format!("CREATE SCHEMA dbo; CREATE SEQUENCE main.{basename} START 10; CREATE SEQUENCE dbo.{basename} START 100; CREATE TABLE main.dep(a BIGINT DEFAULT nextval('main.{basename}'),b BIGINT DEFAULT nextval('dbo.{basename}'),c BIGINT DEFAULT nextval('{basename}'))")).unwrap();
+        let error = dependent_columns(&db, &format!("main.{basename}")).unwrap_err();
+        assert!(error.to_string().contains("Ambiguous bound"));
+        assert_eq!(
+            db.query_row(
+                "SELECT count(*) FROM duckdb_sequences() WHERE last_value IS NULL",
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .unwrap(),
+            2
+        );
+        db.execute_batch("INSERT INTO main.dep DEFAULT VALUES")
+            .unwrap();
+        assert_eq!(
+            db.query_row("SELECT a,b,c FROM main.dep", [], |row| Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?
+            )))
+            .unwrap(),
+            (10, 100, 11)
+        );
+    }
+
+    #[test]
     fn dependency_preflight_keeps_prior_ddl_and_caller_transaction_usable() {
         let db = Connection::open_in_memory().unwrap();
         db.execute_batch("CREATE SCHEMA dbo").unwrap();
@@ -642,8 +799,8 @@ mod tests {
             .unwrap(),
             10
         );
-        assert!(references_sequence("nextval(lower('main.example'))", &name, "main").is_err());
-        assert!(!references_sequence("nextval(NULL)", &name, "main").unwrap());
+        assert!(references_sequence("nextval(lower('main.example'))", &name, &[]).is_err());
+        assert!(!references_sequence("nextval(NULL)", &name, &[]).unwrap());
     }
 
     use super::*;
