@@ -11402,7 +11402,7 @@
     {
       "id": "v025-openjson-catalog-v1",
       "title": "Declare OPENJSON key/value/WITH columns in the Unicode predicate catalog",
-      "state": "backlog",
+      "state": "ready",
       "authorization": "Direct owner instruction in session msduck-f7 (2026-10-03) to fix the v0.2.5 workload report (umbrella #864) until it lands in a published container. First-party remainder of v025-openjson-isnull-v1 (issue #900): COALESCE/IIF/CASE/comparisons over direct OPENJSON carrier columns need the predicate catalog, whose files are held by v025-default-collation-v1. No external content.",
       "scope": [
         "src/engine/ext/keys/predicates/catalog.rs",
