@@ -124,9 +124,16 @@ fn unsupported_plans_names_tags_null_children_and_malformed_bytes_are_explicit()
         input_bytes: 0,
         output_bytes: 0,
     };
-    for e in [Encoding::Cp1251, Encoding::Cp1252, Encoding::Opaque(65001)] {
-        assert!(Plan::new(Encoding::Utf8, Target::Native(e), zero, 0, 0).is_err());
-    }
+    assert!(
+        Plan::new(
+            Encoding::Utf8,
+            Target::Native(Encoding::Opaque(65001)),
+            zero,
+            0,
+            0
+        )
+        .is_err()
+    );
     assert!(Plan::new(Encoding::Opaque(1252), Target::SqlUtf16, zero, 0, 0).is_err());
     assert!(
         Plan::new(
@@ -744,4 +751,161 @@ fn unicode_constructor_obeys_existing_carrier_limits_before_any_payload() {
         )
         .is_ok()
     );
+}
+
+#[test]
+fn captured_utf8_codepage_rows_survive_native_callbacks_storage_and_arrow_chunks() {
+    type Cell = (Option<Vec<u8>>, Option<Vec<u8>>);
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../reference/bulk-character-collation-precedence.json"
+    ))
+    .unwrap();
+    let mut groups: [Vec<Cell>; 2] = [Vec::new(), Vec::new()];
+    let mut observations = 0;
+    assert_eq!(fixture["runs"].as_array().unwrap().len(), 4);
+    for run in fixture["runs"].as_array().unwrap() {
+        for observation in run["observations"].as_array().unwrap() {
+            let case = &observation["case"];
+            let source = if case["declared"].is_null() {
+                &case["default"]
+            } else {
+                &case["declared"]
+            };
+            if source != "utf8" {
+                continue;
+            }
+            let index = match case["target"].as_str().unwrap() {
+                "cp1251" => 0,
+                "cp1252" => 1,
+                _ => continue,
+            };
+            let inputs = observation["input"].as_array().unwrap();
+            let rows = observation["readback"]["result"]["sets"][1]["rows"]
+                .as_array()
+                .unwrap();
+            assert_eq!(inputs.len(), rows.len());
+            observations += 1;
+            for (input, row) in inputs.iter().zip(rows) {
+                assert_eq!(input["id"], row[0]);
+                let expected = if row[2].is_null() {
+                    None
+                } else {
+                    assert_eq!(row[2]["kind"], "binary");
+                    Some(hex(row[2]["value"].as_str().unwrap()))
+                };
+                groups[index].push((input["valueHex"].as_str().map(hex), expected));
+            }
+        }
+    }
+    assert_eq!(observations, 72);
+    assert_eq!(groups.iter().map(Vec::len).sum::<usize>(), 360);
+    for (target, cells) in [Encoding::Cp1251, Encoding::Cp1252].into_iter().zip(groups) {
+        assert_eq!(cells.len(), 180);
+        let db = Connection::open_in_memory().unwrap();
+        storage(Encoding::Utf8).register(&db).unwrap();
+        plan(Encoding::Utf8, Target::Native(target))
+            .register(&db, "__msduck_ansi_project_check")
+            .unwrap();
+        for (input, expected) in &cells {
+            check(
+                &db,
+                Encoding::Utf8,
+                Target::Native(target),
+                input.as_deref(),
+                expected.as_deref(),
+            );
+        }
+        db.execute_batch("CREATE TABLE original_input(id BIGINT,b BLOB)")
+            .unwrap();
+        let repeats = 16;
+        {
+            let mut app = db.appender("original_input").unwrap();
+            for index in 0..cells.len() * repeats {
+                app.append_row(duckdb::params![
+                    index as i64,
+                    cells[index % cells.len()]
+                        .0
+                        .clone()
+                        .map(Value::Blob)
+                        .unwrap_or(Value::Null)
+                ])
+                .unwrap();
+            }
+            app.flush().unwrap();
+        }
+        db.execute_batch(&format!("CREATE TABLE projected AS SELECT id,__msduck_ansi_project_check({}(b)) v FROM original_input",storage(Encoding::Utf8).pack_function())).unwrap();
+        let mut statement = db.prepare("SELECT v FROM projected ORDER BY id").unwrap();
+        let batches: Vec<_> = statement.query_arrow([]).unwrap().collect();
+        assert!(batches.len() > 1);
+        let mut index = 0;
+        for batch in batches {
+            let array = batch.column(0);
+            for row in 0..batch.num_rows() {
+                let value = storage(target)
+                    .read_array(array.as_ref(), row)
+                    .unwrap()
+                    .map(|value| value.into_parts().1);
+                assert_eq!(
+                    value,
+                    cells[index % cells.len()].1,
+                    "target {target:?}, row {index}"
+                );
+                index += 1;
+            }
+        }
+        assert_eq!(index, cells.len() * repeats);
+        // A failed call does not corrupt the registered plan or subsequent values.
+        for invalid in ["80", "eda080", "f09080"] {
+            let sql = format!(
+                "SELECT __msduck_ansi_project_check({}(from_hex('{invalid}')))",
+                storage(Encoding::Utf8).pack_function()
+            );
+            assert!(
+                db.query_row::<Value, _, _>(&sql, [], |row| row.get(0))
+                    .is_err()
+            );
+            check(
+                &db,
+                Encoding::Utf8,
+                Target::Native(target),
+                Some(b"A"),
+                Some(b"A"),
+            );
+        }
+        let limited = Plan::new(
+            Encoding::Utf8,
+            Target::Native(target),
+            ProjectionLimits {
+                input_bytes: 16,
+                output_bytes: 1,
+            },
+            64,
+            64,
+        )
+        .unwrap();
+        limited
+            .register(&db, "__msduck_ansi_project_limited")
+            .unwrap();
+        for input in ["4142", "f09fa686"] {
+            let sql = format!(
+                "SELECT __msduck_ansi_project_limited({}(from_hex('{input}')))",
+                storage(Encoding::Utf8).pack_function()
+            );
+            assert!(
+                db.query_row::<Value, _, _>(&sql, [], |row| row.get(0))
+                    .is_err()
+            );
+        }
+        let value: Value = db
+            .query_row(
+                &format!(
+                    "SELECT __msduck_ansi_project_limited({}(from_hex('41')))",
+                    storage(Encoding::Utf8).pack_function()
+                ),
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(actual(&value, Target::Native(target)), Some(b"A".to_vec()));
+    }
 }

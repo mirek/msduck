@@ -309,11 +309,7 @@ fn every_retained_malformed_input_stays_outside_the_scalar_domain() {
 
 #[test]
 fn declarations_nullable_precedence_and_structured_byte_errors_are_explicit() {
-    for target in [
-        ProjectionTarget::Native(EncodingIdentity::Cp1251),
-        ProjectionTarget::Native(EncodingIdentity::Cp1252),
-        ProjectionTarget::Native(EncodingIdentity::Opaque(65001)),
-    ] {
+    for target in [ProjectionTarget::Native(EncodingIdentity::Opaque(65001))] {
         let ProjectionTarget::Native(encoding) = target else {
             unreachable!()
         };
@@ -329,6 +325,8 @@ fn declarations_nullable_precedence_and_structured_byte_errors_are_explicit() {
         }
     }
     for target in [
+        ProjectionTarget::Native(EncodingIdentity::Cp1251),
+        ProjectionTarget::Native(EncodingIdentity::Cp1252),
         ProjectionTarget::Native(EncodingIdentity::Utf8),
         ProjectionTarget::SqlUtf16,
     ] {
@@ -344,7 +342,19 @@ fn declarations_nullable_precedence_and_structured_byte_errors_are_explicit() {
                 limits(0, 0)
             )
             .unwrap()
-            .map(raw),
+            .map(|value| match value {
+                ProjectedValue::Native(value) => {
+                    let ProjectionTarget::Native(expected) = target else {
+                        panic!("expected UTF16 output")
+                    };
+                    assert_eq!(value.view().encoding(), expected);
+                    value.view().bytes().to_vec()
+                }
+                ProjectedValue::SqlUtf16(units) => {
+                    assert_eq!(target, ProjectionTarget::SqlUtf16);
+                    units.into_iter().flat_map(u16::to_le_bytes).collect()
+                }
+            }),
             Some(vec![])
         );
         assert_eq!(

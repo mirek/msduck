@@ -431,7 +431,8 @@ fn walk_utf8(input: &[u8], mut emit: impl FnMut(&[u16])) {
         emit(&units[..count]);
     }
 }
-fn codepage_unit(target: EncodingIdentity, unit: u16) -> u8 {
+// Shared captured mapping; complete projections do not apply capacity rules.
+pub(super) fn codepage_unit(target: EncodingIdentity, unit: u16) -> u8 {
     if target == EncodingIdentity::Cp1252 {
         const MAP: &[u8; 65536] = include_bytes!("../character/windows_1252.bin");
         MAP[usize::from(unit)]

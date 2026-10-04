@@ -235,9 +235,7 @@ fn project_utf8(
     target: ProjectionTarget,
     limits: ProjectionLimits,
 ) -> Result<Option<ProjectedValue>, ProjectionError> {
-    if let ProjectionTarget::Native(encoding) = target
-        && encoding != EncodingIdentity::Utf8
-    {
+    if let ProjectionTarget::Native(encoding @ EncodingIdentity::Opaque(_)) = target {
         return Err(ProjectionError::UnsupportedTarget(encoding));
     }
     let Some(value) = value else { return Ok(None) };
@@ -285,7 +283,36 @@ fn project_utf8(
             units.extend(text.encode_utf16());
             ProjectedValue::SqlUtf16(units)
         }
-        ProjectionTarget::Native(_) => unreachable!("UTF8 target validated before NULL"),
+        ProjectionTarget::Native(
+            encoding @ (EncodingIdentity::Cp1251 | EncodingIdentity::Cp1252),
+        ) => {
+            let output_bytes = text.chars().try_fold(0usize, |count, scalar| {
+                count
+                    .checked_add(scalar.len_utf16())
+                    .ok_or(ProjectionError::LengthOverflow)
+            })?;
+            check_limit(Resource::Output, output_bytes, limits.output_bytes)?;
+            let mut bytes = allocate(output_bytes, output_bytes)?;
+            bytes.extend(
+                text.encode_utf16()
+                    .map(|unit| capacity::codepage_unit(encoding, unit)),
+            );
+            ProjectedValue::Native(
+                AnsiBytes::from_vec(encoding, bytes, limits.output_bytes).map_err(|error| {
+                    match error {
+                        ByteError::LengthOverflow => ProjectionError::LengthOverflow,
+                        ByteError::Limit { requested, maximum } => ProjectionError::Limit {
+                            resource: Resource::Output,
+                            requested,
+                            maximum,
+                        },
+                    }
+                })?,
+            )
+        }
+        ProjectionTarget::Native(EncodingIdentity::Opaque(_)) => {
+            unreachable!("opaque target rejected before NULL")
+        }
     };
     Ok(Some(projected))
 }

@@ -3,8 +3,8 @@
 `msduck_core::ansi_conversion::project` consumes an explicit source declaration,
 an optional native `AnsiView`, a `ProjectionTarget` and `ProjectionLimits`.
 CP1251 and CP1252 sources admit native CP1251, CP1252, UTF8 and SQL UTF16 targets.
-Valid UTF8 scalar sources admit native UTF8 identity and SQL UTF16 units only;
-UTF8-to-CP1251/CP1252 conversion remains unsupported, including for NULL.
+Valid UTF8 scalar sources admit native CP1251, CP1252, UTF8 identity and SQL
+UTF16 targets under the captured profiles described below.
 Opaque numeric tags do not alias named encodings. Unsupported plans
 fail before NULL handling; a non-NULL carrier must match its declaration.
 NULL stays `None` and empty input produces an empty non-NULL projected value.
@@ -47,7 +47,7 @@ an output resource limit of one byte fails even though the separately captured
 BulkLoad into UTF8 VARCHAR(1) succeeds with an empty value. That family-specific
 SQL behavior belongs to the capacity layer.
 
-General Unicode-to-codepage best-fit conversion, arbitrary encodings, malformed
+Unicode-source codepage conversion, arbitrary encodings, malformed
 UTF8 source semantics and Unicode-source isolated surrogates are not admitted.
 The [native storage prototype](ansi-carrier.md) is complete; Value binding,
 BulkLoad/catalog/output integration remain pending under the
@@ -103,8 +103,33 @@ flags 96, version 2, sort 0) are checked; none enables an operational collation 
 Every successful value checks exact and one-under active byte limits and source
 immutability. Supplementary and scalar-boundary controls use captured SQL units.
 
-The capacity layer still rejects UTF8 sources. General UTF8-to-single-byte best
-fit, malformed SQL decoding/admission, isolated UTF16 surrogates and complete
-storage/BulkLoad/output adoption remain separate work. The valid domain is a
+The capacity layer handles captured UTF8 source families separately. Arbitrary
+codepages, isolated UTF16 source surrogates and complete root storage/BulkLoad/
+output adoption remain separate work. The valid domain is a
 Unicode scalar contract supported by finite SQL observations, not exhaustive
 proof of SQL Server behavior across contexts or collations.
+
+## Complete valid UTF8 to CP1251/CP1252
+
+Complete projections now share the measured unit maps used by the capacity
+layer. The CP1251 map comes from all 63,488 valid BMP scalars in each of four
+original task942 runs; CP1252 agrees with the existing full captured BMP map.
+The existing capacity test compares this API against every one of those eight
+original native outputs. No capacity truncation, source window or padding is
+applied here. The retained acquisition and independent reproduction hashes are
+in [ansi-capacity.md](ansi-capacity.md).
+
+A separate test preserves all 72 applicable observations and 360 rows from
+`reference/bulk-character-collation-precedence.json`. Explicit source COLLATE
+and the captured database default select the interpretation independently of
+the wire collation. UTF8 `c3a9` yields native CP1251 `65` and CP1252 `e9`; the
+retained supplementary duck scalar yields `3f3f` in both. Conversion proceeds
+by UTF16 units using the captured non-SC codepage profiles. Supplementary
+replacement follows those retained controls; no SC codepage profile is admitted.
+
+Strict validation and source/input checks precede output counting. Output uses
+one byte per UTF16 unit, including both units of a supplementary scalar. Checked
+counting and output limits precede fallible allocation; no expanded Unicode
+temporary is allocated. NULL and empty remain distinct, and native output
+retains its explicit encoding. This does not enable root Value, catalog,
+storage, assignment, BulkLoad or result-writer integration.

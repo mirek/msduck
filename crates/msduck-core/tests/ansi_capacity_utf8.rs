@@ -384,6 +384,20 @@ fn every_valid_bmp_scalar_matches_each_original_bulk_codepage_output() {
             .unwrap();
             let expected = unpack(&captured["native"]);
             assert_eq!(expected.len(), 63488);
+            // Independent retained SQL outputs also cover the complete projection
+            // API, with no cropping/padding or malformed-decoding behavior.
+            let full = msduck_core::ansi_conversion::project(
+                EncodingIdentity::Utf8,
+                Some(AnsiView::new(EncodingIdentity::Utf8, &input, input.len()).unwrap()),
+                ProjectionTarget::Native(target),
+                ProjectionLimits {
+                    input_bytes: input.len(),
+                    output_bytes: expected.len(),
+                },
+            )
+            .unwrap()
+            .unwrap();
+            assert_eq!(projected_bytes(full), expected);
             assert_eq!(
                 apply(plan, Some(&input), input.len(), expected.len())
                     .unwrap()
