@@ -11758,7 +11758,7 @@
     {
       "id": "ansi-utf8-capacity-core-v1",
       "title": "Apply SQL Server UTF8 BulkLoad capacity in the deterministic core",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing full SQL Server compatible Rust/DuckDB server goal. Original owner-run UTF8 capacity940 and completed single-byte capacity914/921 and storedUTF8 decoding933 establish the remaining deterministic capacity gap; worker940 remains independently responsible for merge. No third-party input approved.",
       "scope": [
         "crates/msduck-core/src/ansi_conversion/capacity.rs",
@@ -11782,7 +11782,7 @@
     {
       "id": "ansi-utf8-capacity-expectations-v1",
       "title": "Update predecessor declaration guards for proven UTF8 capacity",
-      "state": "ready",
+      "state": "done",
       "authorization": "Owner continuing SQL Server compatibility goal. Claimed942 extends the capacity kernel; completed914/921/938 tests and bridge docs currently assert every UTF8 source is unsupported. This disjoint companion removes only superseded UTF8 guards and documents inherited bridge behavior; it does not broaden942 immutable scope or claim runtime integration. Same worker will claim and verify both tasks and close both from one focused exact-head PR after all gates.",
       "scope": [
         "crates/msduck-core/tests/ansi_capacity.rs",
