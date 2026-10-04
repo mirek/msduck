@@ -11872,6 +11872,30 @@
         "Fresh own exclusive claim/receipt in existing root worktree; no scope overlap or new worker/worktree/native cache. Include in paired PR948 with both task criteria, frozen exact-head full AGENTS checks, raw audit comparison/source-binary evidence, independent and verified Codex review or authorized availability fallback, required CI, exact-head merge and prompt Done/issue/project completion for both tasks. Honor canonical remote build lock and do not overwrite an executable during tests."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PmcjP"
+    },
+    {
+      "id": "bulk-character-wire-capacity-reference-v1",
+      "title": "Measure BulkLoad wire-only character ROW overflow against source declarations",
+      "state": "ready",
+      "authorization": "Owner continuing fully functional SQL Server-compatible Rust/DuckDB server goal. First-party PR948 runtime/codec analysis: valid zero-width metadata is measured, but ROW payload exceeding wire TYPE_INFO while fitting source declaration remains explicitly unmeasured4804. Acquire independent SQL Server evidence before changing runtime/decoder rules; no third-party content.",
+      "scope": [
+        "scripts/capture-bulk-character-wire-capacity.mjs",
+        "reference/bulk-character-wire-capacity.json",
+        "tests/bulk-character-wire-capacity-capture.test.mjs",
+        "docs/bulk-character-wire-capacity-reference.md"
+      ],
+      "dependencies": [
+        "bulk-character-admission-runtime-v1",
+        "bulk-character-wire-length-facts-v1"
+      ],
+      "acceptance": [
+        "Capture bounded modern CHAR/VARCHAR/NCHAR/NVARCHAR ROW cases separating actual original ROW byte length, wire0/1 width and declared1/8 source width at a bounded8 target. Include NULL, empty, one and two ASCII units, allowing wire-only overflow to be distinguished from declared-source overflow and valid controls. Fixed Unicode TYPE_INFO capacity is bytes whereas declared width is units. Do not assume malformed wire lengths are SQL4815,4816,4804 or successful; retain actual full error tuples, completion packets, native bytes, original-session counters and recovery before inferring rules. Each emitted request must independently validate full original TYPE_INFO/ROW/NULL framing and INSERT BULK declaration against case facts; any source/wire MAX precedence controls must remain distinct and attributable.",
+        "Use immutable reviewed character-metadata/conversion/reference helpers without modifying them. Modern raw type adapters must send the intended original bytes even when payload exceeds advertised wire width; validate actual outbound bytes independently rather than relying on tedious generation. Bound cases, byte lengths, capture JSON/nodes/depth, callback and connect timeouts, packet count/bytes and retained memory; no whole fixture assertions or candidate-generated expected SQL behavior. Preserve incomplete failures/raw files before validation and exclusively create outputs. Credentials must never enter argv or artifacts; retain only post-login packets. Use fresh bounded SQL Server databases in two pinned17.0.4065.4 containers, two databases each, awaited own-container cleanup, and complete final source/helper provenance.",
+        "Freeze collector source, retain four-run raw acquisition and independently verify request/result/descriptor/diagnostic/completion/readback/counter agreement, keeping every original difference and ephemeral identity visible. A final independent four-database reproduction must cover the exact final source; retain raw reproduction and complete comparison sidecars. Commit unchanged original reference fixture and focused meaningful Node capture/replay/resource tests plus limitations documentation; do not normalize raw evidence or claim endpoint/full compatibility from finite controls. SQL diagnostic or decoder implementation remains a separate task after this task merges/Done.",
+        "Use an existing isolated worker worktree with a fresh own exclusive claim and private receipt; no new agents/worktrees/native caches. Reuse the existing private Linux JS/Docker reference workspace, fresh attributable output names and existing node_modules link; do not synchronize canonical build/source or run native suites while another worker uses it. Capture-only work needs focused Node checks on both hosts, frozen-source hashes, exact-head required CI, independent/verified Codex review or authorized availability fallback, worker-owned exact-head merge and prompt registry/issue/project Done completion. Respect owner-held engine.rs and every other ready task scope."
+      ],
+      "issue": 950,
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PmicE"
     }
   ]
 }
