@@ -22,4 +22,26 @@ The retained separated-projection artifact is16032371bytes, SHA256 `04b4b4960311
 
 ## Remaining work
 
+### Further source-form and EOF controls
+
+Four additional private diagnostic captures completed normally with awaited container cleanup: 40 source-form observations, 68 minimal tail observations, 176 prefix/tail observations and 512 observations covering every terminal octet. Each compares `DECLARE @v varchar(64)` with `varchar(max)`, followed by separate native bytes, `LEN`/`DATALENGTH`, and binary Unicode projection SELECTs. These are diagnostic evidence, not additions to the independently reproduced four-run reference or a completed decoder rule. MAX length values retain their BigInt string representation; bounded values retain their Int representation.
+
+For `1054F55C7B96`, bounded construction retains `1054F55C`; MAX retains every input byte, yet both Unicode projections produce `10005400FDFF5C00`. `C899AC` becomes empty during bounded construction and during MAX Unicode projection, despite `C899` alone being the complete scalar U+0219. `CA9481D4` fails with9833 during bounded construction and during MAX projection. Appending `42` changes these EOF outcomes. A rule that only removes an incomplete final scalar cannot explain these observations.
+
+With four ASCII `41` bytes followed by each possible terminal octet, bounded native readback has the following exact groups. MAX native readback preserves all256 inputs and its Unicode projection agrees with the bounded result. All512 observations succeed without SQL errors.
+
+| Terminal octet | Bounded native result |
+| --- | --- |
+| `00..7F` | All five supplied bytes |
+| `C2..DF`, `E0`, `E2..EE`, `F0..F2`, `F4` | Four `41` bytes |
+| `80..C1`, `E1`, `EF`, `F3`, `F5..FF` | Three `41` bytes |
+
+The unusual `E1`, `EF`, and `F3` outcomes are measured, not inferred from a Unicode lead-byte range. They require further context tests before incorporation into a general boundary algorithm. Ordinary repair remains separately necessary after determining the retained prefix; EOF fitting cannot be replaced by the client decoder.
+
+The complete private raw artifacts are retained without normalization: source-form SHA256 `c19b76b992f9c24577d0bb36e5481d31a01f7a38038f2b4d24826f0736edeb0a`, minimal-tail `5ea2287f2dbc9a326d69983ace52eb973f1ca658641336311b9a46922748b8ce`, prefix/tail `8938c5be922548d9671b1f4861a5ec637289ff4210fd518ac7ce57905ee39e00`, and terminal-octet `747d5b5836f0d5094a2bd93bb050e06963b9d3f211970a50ae2cd760c76aceef`. Each includes its exact collector source hash and SQL text. These probes refute additional candidate algorithms; they do not replace the full implementation and verification requirements below.
+
+An additional72-observation capture checks complete sequences beginning with the three unusual terminal bytes. `E18080`, `E1A080`, `EF8080`, `EFBFBF`, `F3808080` and `F3BFBFBF` survive complete EOF and an appended ASCII `41`. Appending `E1`, `EF` or `F3` instead removes the whole sequence in these controls. Appending `80` removes the complete three-byte sequences but raises9833 after the four-byte sequences. Its raw SHA256 is `52b40360a59e49f5da9ca999bfad69940ec32eb505e03e3e7d572441cf1f9792`.
+
+Finally,40 controls assign the binary literal to a `varbinary(max)` variable before converting it to varchar. Their complete result sets, typed rows and errors match the original source-form controls. The additional DECLARE produces an extra completion token, so all40 complete result objects differ and remain preserved; this is not a full-result equality claim. This diagnostic's raw SHA256 is `fb6641fc5ebe1c5dc20cbf36531915550711ed1e6b52eba57e5ffd79f35a4d72`. It does not establish equality for every possible parameter, table or expression source.
+
 Determine the SQL tail/projection rules and implement the deterministic projector with explicit source identity/NULL/resource plans, exact output preflight and fallible allocation. Ground it against both these outcomes and unchanged admitted BulkLoad rows. Complete full exact-head Rust/client/audit verification, independent/Codex review, required CI, merge and registry/project completion. This checkpoint is not runtime support, admission or capacity completion. Engine/Value/TDS integration remains under the separately coordinated adapter plan.
