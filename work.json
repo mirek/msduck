@@ -12103,6 +12103,24 @@
         "Use existing root worktree and private new receipt; no additionalagents/worktrees/nativecachecopies. Exacthead fmt/strictworkspacealltargetsClippy/fullworkspaceRust/alltargetbuild/npm/manualnewclients/rawaudit, exactrequiredCI, independent/verifiedCodexreview or authorizedfallback, ownerworkermerge and registry/project/issuecompletion. KeepPRdraft until proof and gates pass."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84Pm5Yd"
+    },
+    {
+      "id": "openjson-isnull-carrier-pinning-v1",
+      "title": "Preserve OPENJSON ISNULL Unicode carriers during predicate pinning",
+      "state": "ready",
+      "authorization": "Continuing owner SQL Server compatibility goal. Exacthead3c1a657 fullworkspace test isnull_over_openjson_values_reaches_stored_rows fails because newcatalog recognition sends ISNULL first carriers through pinning to VARCHAR, losing unpaired UTF16 units and native storage. Keep originalregression intact; ownerfirstparty nativeproof, noexternalinput. Same rootworker owns companion catalog/test/docsclaim and reuses its worktree/cache.",
+      "issue": 966,
+      "scope": [
+        "src/engine/ext/keys/predicates/pin.rs",
+        "tests/openjson_isnull.rs"
+      ],
+      "dependencies": [],
+      "acceptance": [
+        "Preserve exact carrier storage and unpaired UTF16 units for direct OPENJSON ISNULL first arguments; use explicit catalog provenance supplied under the sameworkers existing catalogclaim when needed. Keep typed/lazy replacements and first argument evaluation unchanged; do not broadly change physical-column conversions. Retain COALESCE/IIF/CASE mixed-family pinning and existingambiguity barriers.",
+        "Existing isnull_over_openjson_values_reaches_stored_rows must pass unchanged, including rawSTRUCT payloadchecks. Add meaningful NULL-fallback/carrier native regression, replay entire original21caseclient and scalar-variable controls without skips, deadlinechanges or rawcomparison filtering. Retain all remaining widths/ANSI/function propagation gaps honestly.",
+        "Implement under a fresh private exclusive claim and verified catalogcompanion receipt in the existing rootworktree; scope exactlytwofiles plus its separatelyownedcatalog/tests/docs. Noengine edits/newworkers/trees/caches. Exact frozenfmt/workspaceRust/strictalltargetClippy/alltargetbuild/npm/rawaudit/requiredCI and independent/Codexreview or authorizedfallback; combine with ownerPR964 if appropriate, then merge and complete bothprotectedtasks/projects/issues."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84Pm6j7"
     }
   ]
 }
