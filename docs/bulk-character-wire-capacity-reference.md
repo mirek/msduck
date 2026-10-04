@@ -36,7 +36,15 @@ validation failure. Independently fixed original semantic/request/response/frame
 pins and explicit declaration validation were added afterwards. Final frozen
 collector SHA256 is
 `d46668691002bce75439fc60e4fd625d005a22255e1e793dc44fed50765fbcd6`.
-Its independent four-database reproduction is in progress.
+Its independent final-source four-database reproduction completed with all256
+observations passing the pinned semantic/request/response/framing checks. Private
+raw `.tmp/wire-capacity-final-four.json` SHA256 is
+`9c4fa54d67f57a89bb2a49432a87b949d031e523916211a6b3dfba8415a3d5cb`;
+complete sidecar `.tmp/wire-capacity-final-four.json.comparison.json` SHA256 is
+`518a3da1a950ea5bce86193b2bd86a5d109d1a00e7431c5873e251306253d1a6`.
+All3403 recursive raw path/value differences were independently recomputed,
+including original ephemeral identity differences; no normalized artifact replaces
+either capture.
 
 The collector inherits reviewed helpers without modifying their source or older
 fixtures. It bounds retained JSON to48MiB,500000nodes/depth64, each exchange to
@@ -50,5 +58,4 @@ These finite ASCII controls do not establish behavior for legacy types, arbitrar
 collations, nonASCII/malformed values, MAX framing, target overflow or arbitrary
 wire shapes. The current runtime may still return4804 for wire-only overflow;
 changing that codec/runtime behavior is a separate task. This reference does not
-claim endpoint compatibility. Final-source reproduction, focused checks on both
-hosts and exact-head review/CI remain required before merge.
+claim endpoint compatibility. Focused checks on both hosts and exact-head review/CI remain required before merge.

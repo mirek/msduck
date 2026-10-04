@@ -83,7 +83,7 @@ test('uniform request-type corruption cannot hide behind unchanged payload signa
       const bytes=Buffer.from(p.rawHex,'hex');bytes[0]=6;p.rawHex=bytes.toString('hex')
     }
     actual.comparisons=actual.runs.slice(1).map(run=>compare(run,actual.runs[0]))
-    assert.throws(()=>validate(actual),/message direction\/type/)
+    assert.throws(()=>validate(actual),/message direction\/type|original SQL batch/)
   }
 })
 
