@@ -812,6 +812,8 @@ pub(crate) fn catalog_dependent_views(
         // itself and the earlier CTEs; the query body sees all of them.
         struct Reads {
             scopes: Vec<(Vec<String>, Vec<*const Query>, usize)>,
+            /// Table function call nodes, which are not relations.
+            functions: Vec<*const ObjectName>,
             found: Vec<(String, String)>,
         }
         impl Visitor for Reads {
@@ -848,7 +850,24 @@ pub(crate) fn catalog_dependent_views(
                 }
                 std::ops::ControlFlow::Continue(())
             }
+            fn pre_visit_table_factor(
+                &mut self,
+                factor: &TableFactor,
+            ) -> std::ops::ControlFlow<()> {
+                if let TableFactor::Table {
+                    name,
+                    args: Some(_),
+                    ..
+                } = factor
+                {
+                    self.functions.push(name);
+                }
+                std::ops::ControlFlow::Continue(())
+            }
             fn pre_visit_relation(&mut self, name: &ObjectName) -> std::ops::ControlFlow<()> {
+                if self.functions.contains(&(name as *const ObjectName)) {
+                    return std::ops::ControlFlow::Continue(());
+                }
                 let parts = name
                     .0
                     .iter()
@@ -872,6 +891,7 @@ pub(crate) fn catalog_dependent_views(
         }
         let mut reads = Reads {
             scopes: Vec::new(),
+            functions: Vec::new(),
             found: Vec::new(),
         };
         let _ = statements.visit(&mut reads);

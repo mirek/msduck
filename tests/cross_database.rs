@@ -920,3 +920,22 @@ fn view_ctes_follow_declaration_order_and_bracketed_local_views_count() {
         40515
     );
 }
+
+#[test]
+fn table_function_calls_in_views_are_not_view_dependencies() {
+    let (_server, mut session) = fixture();
+    ok(&mut session, "USE foo");
+    ok(
+        &mut session,
+        "CREATE VIEW dbo.string_split AS SELECT name AS value FROM sys.columns",
+    );
+    ok(
+        &mut session,
+        "CREATE VIEW dbo.parts AS SELECT value FROM STRING_SPLIT(N'1,2', N',')",
+    );
+    ok(&mut session, "USE master");
+    ok(
+        &mut session,
+        "IF (SELECT COUNT(*) FROM foo.dbo.parts p JOIN dbo.loc l ON 1 = 1) <> 2 THROW 50001, 'parts', 1",
+    );
+}
