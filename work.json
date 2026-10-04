@@ -12231,6 +12231,22 @@
         "Reuse same root worktree/cache/receipt and Linux lock. Original/new native/client/pinned SQLServer controls plus full frozen fmt/strictClippy/workspaceRust/alltargetbuild/npm/rawaudit/exactCI/reviews. CombinePR964, merge then complete registry/project/issue."
       ],
       "projectItem": "PVTI_lAHNIXHOAZHkr84PnLdk"
+    },
+    {
+      "id": "openjson-distinct-set-equality-v1",
+      "title": "Preserve Unicode equality keys in distinct set plans",
+      "state": "ready",
+      "authorization": "Continuing owner full SQL Server compatibility goal and verified owner-initiated Codex4178148797 on PR964. Add an explicit pure Unicode equality strategy to existing set adapter; companion966 owns choosing it for admitted OPENJSON character plans and native/client proof. Same root worker/tree/cache; noengine/newworkers/externalcontent.",
+      "scope": [
+        "crates/msduck-sql/src/variant_sets.rs"
+      ],
+      "dependencies": [],
+      "issue": 974,
+      "acceptance": [
+        "Add explicit Unicode key strategy using existing native key function names in the deterministic AST set adapter; no I/O/global state or DuckDB dependency. Preserve selected raw payloads, output names and NULL equality while avoiding repeated branch evaluation.",
+        "Companion966 owns root application and native/client/pinned reference tests for UNION/INTERSECT/EXCEPT; sameworker reusedtree/cache/lock, combinePR964 and all frozenfmt/strictClippy/workspaceRust/alltargetbuild/npm/rawaudit/exactCI/review/fallback gates. Worker owns merge then registry/issues/project completion."
+      ],
+      "projectItem": "PVTI_lAHNIXHOAZHkr84PnRyr"
     }
   ]
 }
