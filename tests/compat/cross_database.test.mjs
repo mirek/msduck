@@ -27,6 +27,10 @@ const brief = result => ({
   columns: result.sets.map(set => set.columns.map(c => [c.name, c.type, c.length, c.precision, c.scale, c.flags, c.collation])),
   rows: result.sets.map(set => set.rows),
   errors: result.errors.map(e => [e.number, e.state, e.class, e.message, e.lineNumber]),
+  // Informational messages, with BACKUP/RESTORE progress reduced as the
+  // capture reduces it.
+  info: result.info.map(m => [3211, 3014, 4035, 3021].includes(m.number) || m.message?.includes('percent')
+    ? [m.number, m.state, m.class] : [m.number, m.state, m.class, m.message, m.lineNumber]),
   done: result.done.map(d => [d.kind, d.rowCount, d.more]),
   rowCount: result.rowCount,
 })
