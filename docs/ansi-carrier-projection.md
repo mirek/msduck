@@ -22,8 +22,51 @@ UTF16 target plans additionally obey the existing Unicode carrier ceilings: 16 M
 
 ## Stored UTF8 adapter verification
 
-Task #936 is in progress. Native callback tests replay all6088 original outcomes from the unchanged stored projection fixture, SHA256 `04b4b49603116046ac475d31a244207aa61054a672aacaffa976a106800961e9`: all native identities,5476 Unicode successes including NULL/empty, and612 boundary failures. All33 frozen public EOF/selector controls are also exercised through DuckDB. Tests preserve the distinction between SQL Server9833 in the reference and the backend callback's stored-boundary error; the adapter does not fabricate SQL Server tokens or claim engine integration.
+Task #936 merged in PR #937. Native callback tests replay all6088 original outcomes from the unchanged stored projection fixture, SHA256 `04b4b49603116046ac475d31a244207aa61054a672aacaffa976a106800961e9`: all native identities,5476 Unicode successes including NULL/empty, and612 boundary failures. All33 frozen public EOF/selector controls are also exercised through DuckDB. Tests preserve the distinction between SQL Server9833 in the reference and the backend callback's stored-boundary error; the adapter does not fabricate SQL Server tokens or claim engine integration.
 
 Stored-plan construction uses the same existing Unicode carrier ceilings and cell/chunk consistency checks. Original input budgets apply before EOF fitting, even when fitting would discard every byte. Private callback tests verify exact physical source/output shape on zero rows, typed boundary/resource causes, source-tag/NULL-child rejection and unchanged initialized UTF16 output after late errors. SQL tests verify statement-atomic failure across10000 rows and at per-cell/per-chunk output limits, rollback and connection reuse. Native bytes and projected UTF16 values survive database restart and Arrow reads. A volatile original is evaluated exactly once per row across10000 rows, with NULL/empty/malformed/supplementary/ASCII values shifting positions across chunks.
 
-Focused native and existing strict-projection suites have passed. Full frozen-revision workspace/client/audit checks, independent/Codex reviews, required CI and merge/completion remain pending. Operational UTF8 catalog/Value/BulkLoad/wire consumers remain separately coordinated; registering this internal function does not enable a collation gate or public endpoint behavior.
+Full frozen-revision formatting, strict workspace Clippy, workspace Rust, all520 client tests, independent/Codex reviews and required CI passed at `218d546d02db08e956433bbf24651314aca992d2`. The325-case audit retained four raw cell differences against its baseline: the two rows of a derived-table APPLY query without ORDER BY exchanged positions. All other fields matched; raw evidence was preserved without normalization. This local audit records existing gaps, rather than proving full SQL Server compatibility. Operational UTF8 catalog/Value/BulkLoad/wire consumers remain separately coordinated; registering this internal function does not enable a collation gate or public endpoint behavior.
+
+## Explicit BulkLoad capacity adapter
+
+`Plan::bulk_capacity` takes a `CapacityDeclaration` containing source encoding,
+bounded/MAX source form, target encoding, fixed/variable target family and SQL
+capacity. It validates these declaration facts with the completed deterministic
+`capacity::Plan` before any nullable input. CP1251/CP1252 sources are supported;
+UTF8 and opaque sources remain unsupported. Native CP1251/CP1252/UTF8 and SQL
+UTF16 targets retain their exact physical identities. The strict and stored
+projection constructors retain their independent behavior.
+
+The root must first admit the real source declaration, TYPE_INFO and catalog
+profile. This adapter does not infer those facts from a row, validate a source
+CHAR-to-MAX wire declaration, or apply a universal SQL CAST/assignment policy.
+The capacity kernel preserves the captured bounded/MAX overflow windows,
+cropping and fixed padding described in [ansi-capacity.md](ansi-capacity.md).
+SQL capacity and caller resource limits are independent: original input bytes
+are bounded before fitting, fixed padding counts against output budgets, and
+UTF16 outputs retain the existing Unicode carrier ceilings. NULL is distinct
+from an empty input that pads to a nonempty fixed result.
+
+The selected mode uses the same whole-chunk shape/tag/child/input preflight and
+checked output preparation as complete projections. A truncation is a typed
+`CapacityError`, distinct from byte/resource errors. Callback errors do not
+emit SQL Server2628 tokens or establish whole-BulkLoad transaction, counter or
+trigger behavior. Every fallible payload preparation precedes output mutation;
+the backend statement-atomicity tests cover this callback boundary.
+
+Task #938 is in progress. Its native suite retains all476 admitted original
+observations from the unchanged conversion895, capacity899 and trailing909
+references (3248 row applications,64 failed loads), plus all1144 four-run
+CP1251 native/error oracles (2336 applications,920 failed loads). The latter
+are read directly from the original losslessly packed literal retained by the
+completed core tests, pinned at SHA256
+`3c03d3bc52f7aba997518a87cad832d11f296e71ce3cc13ca972665a4a49367b`.
+No expected result is generated by the kernel being tested. Native failure
+checks preserve the distinction between reference2628 and callback truncation;
+they do not substitute cell evaluation for complete endpoint token evidence.
+
+All27 focused native tests and strict workspace all-target Clippy passed in
+the existing locked Linux cache. Full frozen-revision verification, independent/
+Codex review, exact-head CI and merge remain pending. Engine/Value/catalog/BulkLoad/wire adoption is still required
+for public runtime behavior; this internal adapter does not enable a collation.
