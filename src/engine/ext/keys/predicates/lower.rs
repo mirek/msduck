@@ -248,6 +248,9 @@ fn passes(expr: &Expr) -> bool {
                 | "arg_min"
                 | "arg_max"
                 | "__msduck_isnull"
+                | "__msduck_isnull_subquery"
+                | "__msduck_isnull_nvarchar_width"
+                | "__msduck_isnull_nchar_width"
         )
     })
 }
@@ -418,11 +421,51 @@ fn dispatched(operands: &[&Expr]) -> bool {
 
 /// The rewrite of one comparison, or `None` when it needs none.
 fn compare(left: &Expr, op: &BinaryOperator, right: &Expr) -> Option<Expr> {
-    if comparison(op) && (marked(left) || marked(right)) {
+    // Width adapters return Unicode but may contain a scalar query. For
+    // text peers, key each operand once without duplicating that query in a
+    // typeof CASE. Numeric/unknown peers retain the old backend coercion
+    // through text; passing an integer to a Unicode key would reject it.
+    let unicode_width = |value: &Expr| {
+        function_name(value).is_some_and(|name| {
+            matches!(
+                name.as_str(),
+                "__msduck_isnull_nvarchar_width" | "__msduck_isnull_nchar_width"
+            )
+        })
+    };
+    let text_peer = |value: &Expr| {
+        narrow(value)
+            || matches!(value,
+            Expr::Value(v) if matches!(v.value, Value::SingleQuotedString(_) | Value::NationalStringLiteral(_)))
+            || matches!(
+                value,
+                Expr::Cast {
+                    data_type: DataType::Varchar(_) | DataType::Text | DataType::String(_),
+                    ..
+                }
+            )
+    };
+    let width_text =
+        unicode_width(left) && text_peer(right) || unicode_width(right) && text_peer(left);
+    if comparison(op) && (marked(left) || marked(right) || width_text) {
         return Some(Expr::BinaryOp {
             left: Box::new(strict_key(left)),
             op: op.clone(),
             right: Box::new(strict_key(right)),
+        });
+    }
+    if comparison(op) && (unicode_width(left) || unicode_width(right)) {
+        let text = |value: &Expr| {
+            if unicode_width(value) {
+                call(TEXT, vec![input(value.clone())])
+            } else {
+                value.clone()
+            }
+        };
+        return Some(Expr::BinaryOp {
+            left: Box::new(text(left)),
+            op: op.clone(),
+            right: Box::new(text(right)),
         });
     }
     if !comparison(op) || !dispatched(&[left, right]) {

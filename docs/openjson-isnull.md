@@ -24,13 +24,13 @@ and filters with `ISNULL(old_value, N'') <> ISNULL(new_value, N'')`.
   functions and APPLY, which the predicate catalog cannot type.
 - The NVARCHAR and NCHAR widths that ISNULL applies for a known bounded
   first argument (`__msduck_isnull_nvarchar_width`,
-  `__msduck_isnull_nchar_width`) accept VARCHAR text and carriers and
-  return text, as the predicate pins convert carrier columns mixed with
-  text. Previously a carrier from an aggregate subquery, as in
-  `N'text' + ISNULL((SELECT MAX(v) FROM ...), N'')`, reached the
-  VARCHAR-only width function and failed to bind (found while verifying
-  #901); a carrier result would also have failed in comparisons with
-  literals. An unpaired surrogate in such a bounded result becomes U+FFFD.
+  `__msduck_isnull_nchar_width`) preserve their input family. Text returns
+  text; a carrier returns a carrier bounded directly in UTF-16 units,
+  with NCHAR padding and NULL validity preserved. No lossy Unicode decoding
+  occurs on the carrier path. This includes aggregate-subquery results.
+- Scalar-query binding avoids repeating the first query across native type
+  prototypes; see [binding evidence and scope guards](isnull-subquery-binding.md).
+
 
 The multirow trigger from the report, ISNULL over OPENJSON keys and values
 in projections and stored results, and ISNULL over aggregated subqueries now
@@ -43,6 +43,10 @@ VARCHAR/CHAR are backend text, and other types stay non-text. These declarations
 come from the AST, independent of the document value or returned rows. Default
 and explicit aliases are recognized; ambiguous aliases and renamed column lists
 remain unknown. Quoted `[@p]` columns stay distinct from unquoted scalar `@p`.
+ISNULL keeps its direct OPENJSON carrier first argument: its native dispatch
+already packs replacements into that type, so declaration pinning must not
+convert it to text and lose exact UTF-16 units or change stored values. Other
+mixed alternatives still use declaration pinning.
 This lets the existing comparison and alternative-expression lowering handle
 COALESCE, IIF, CASE, predicates and ordering over direct OPENJSON sources.
 
@@ -90,13 +94,6 @@ The tedious test lists them exactly:
 - ISNULL with a VARCHAR first argument and a carrier replacement holding
   characters outside Windows-1252 fails on the wire instead of returning
   `?`; the same happens for VARCHAR and NVARCHAR variables.
-- Bounded NVARCHAR/NCHAR ISNULL results are text, so an isolated
-  surrogate in a carrier first argument becomes U+FFFD. Stored columns
-  already behaved this way through the predicate pins before this change
-  (verified against the previous lowering with a TDS-parameter value); the
-  aggregate-subquery form previously failed to bind. Keeping exact units
-  needs carrier-aware comparison of these results, which belongs to the
-  predicate lowering.
 - A non-text replacement of a Unicode first argument converts with
   DuckDB's text cast, so `ISNULL(j.[value], CAST(1 AS BIT))` returns
   `true` and dates lose their SQL Server style. NVARCHAR variables and

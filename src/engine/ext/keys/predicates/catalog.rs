@@ -15,6 +15,8 @@ use std::ops::ControlFlow;
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Column {
     pub carrier: bool,
+    /// Direct OPENJSON source; ISNULL already has carrier-aware dispatch.
+    pub openjson: bool,
     /// Whether the backend type is text (VARCHAR or a carrier).
     pub text: bool,
     /// The SQL Server declaration of a carrier column, after [`Catalog::declare`].
@@ -87,6 +89,7 @@ fn openjson_columns(columns: &[OpenJsonTableColumn]) -> HashMap<String, Column> 
         );
         Column {
             carrier,
+            openjson: true,
             text: family.is_some(),
             declared: carrier.then_some(declared),
             collation: None,
@@ -271,6 +274,7 @@ impl Catalog {
                 let carrier = crate::unicode_carrier::is_storage_name(&kind);
                 let column = Column {
                     carrier,
+                    openjson: false,
                     text: carrier || kind == "VARCHAR",
                     declared: None,
                     collation: collations.get(&name).cloned(),
@@ -287,6 +291,7 @@ impl Catalog {
                             name,
                             Column {
                                 carrier: false,
+                                openjson: false,
                                 text,
                                 declared: None,
                                 collation,

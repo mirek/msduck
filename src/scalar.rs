@@ -91,6 +91,15 @@ pub fn register(db: &Connection) -> duckdb::Result<()> {
             cast_to_type(__msduck_unicode_text(CAST(replacement AS STRUCT(__msduck_utf16le BLOB))), first_value)
         ELSE cast_to_type(replacement, first_value) END)",
     )?;
+    // Only scalar-query first operands use this wrapper. The original macro
+    // repeats cheap bound-column references instead of rebinding the query
+    // in each typeof/cast_to_type prototype. Keep the replacement inside the
+    // original fallback, so a non-NULL first value does not evaluate it.
+    db.execute_batch(
+        "CREATE OR REPLACE MACRO main.__msduck_isnull_subquery(first_value, replacement) AS
+        (SELECT main.__msduck_isnull(__msduck_isnull_bound_first, replacement)
+         FROM (SELECT first_value AS __msduck_isnull_bound_first) __msduck_isnull_bound_input)",
+    )?;
     // Unicode widths of an ISNULL result, which is a carrier when its first
     // argument is one; overloads avoid copying the (already expanded) ISNULL
     // into a typeof dispatch.
@@ -131,11 +140,16 @@ impl<const FIXED: bool> VScalar for IsnullWidth<FIXED> {
         let source = input.flat_vector(0);
         let carrier = crate::unicode_carrier::is_logical(&source.logical_type());
         let widths = input.flat_vector(1);
-        let mut result = output.flat_vector();
         let mut remaining = crate::unicode_carrier::CHUNK_LIMIT;
         for row in 0..len {
             if source.row_is_null(row as u64) || widths.row_is_null(row as u64) {
-                result.set_null(row);
+                if carrier {
+                    let mut result = output.struct_vector();
+                    result.set_null(row);
+                    result.child(0, len).set_null(row);
+                } else {
+                    output.flat_vector().set_null(row);
+                }
                 continue;
             }
             let width = unsafe { widths.as_slice_with_len::<i32>(len)[row] };
@@ -144,7 +158,9 @@ impl<const FIXED: bool> VScalar for IsnullWidth<FIXED> {
                 Length::Bounded(width.try_into().map_err(|_| "invalid Unicode width")?),
             )
             .map_err(|_| "invalid Unicode width")?;
-            let mut text = if carrier {
+            if carrier {
+                let result = output.struct_vector();
+                let data_out = result.child(0, len);
                 let data = input.struct_vector(0).child(0, len);
                 if data.row_is_null(row as u64) {
                     return Err("invalid Unicode carrier: NULL payload".into());
@@ -157,11 +173,33 @@ impl<const FIXED: bool> VScalar for IsnullWidth<FIXED> {
                     .chunks_exact(2)
                     .map(|b| u16::from_le_bytes([b[0], b[1]]))
                     .collect();
-                String::from_utf16_lossy(&units)
-            } else {
-                let bytes = crate::unicode_carrier::bytes(&source, row, len)?;
-                String::from_utf8(bytes)?
-            };
+                let target = CharacterType::new(
+                    if FIXED {
+                        Family::Nchar
+                    } else {
+                        Family::Nvarchar
+                    },
+                    target.length(),
+                )?;
+                let msduck_core::character::ConvertedUnicode::Unicode(units) =
+                    target.cast_utf16(&units)?
+                else {
+                    unreachable!("Unicode target")
+                };
+                let size = units
+                    .len()
+                    .checked_mul(2)
+                    .ok_or("Unicode width output exceeds configured limit")?;
+                if size > remaining {
+                    return Err("Unicode width output exceeds configured limit".into());
+                }
+                remaining -= size;
+                let encoded: Vec<_> = units.iter().flat_map(|u| u.to_le_bytes()).collect();
+                data_out.insert(row, encoded.as_slice());
+                continue;
+            }
+            let bytes = crate::unicode_carrier::bytes(&source, row, len)?;
+            let mut text = String::from_utf8(bytes)?;
             // As __msduck_nchar_width: pad, then take the prefix.
             if FIXED {
                 text.push_str(&" ".repeat(usize::try_from(width)?));
@@ -171,23 +209,24 @@ impl<const FIXED: bool> VScalar for IsnullWidth<FIXED> {
                 return Err("Unicode width output exceeds configured limit".into());
             }
             remaining -= value.len();
-            result.insert(row, value.as_ref());
+            output.flat_vector().insert(row, value.as_ref());
         }
         Ok(())
     }
     fn signatures() -> Vec<ScalarFunctionSignature> {
-        [
-            LogicalTypeId::Varchar.into(),
-            crate::unicode_carrier::kind(),
-        ]
-        .into_iter()
-        .map(|source| {
+        vec![
             ScalarFunctionSignature::exact(
-                vec![source, LogicalTypeId::Integer.into()],
+                vec![LogicalTypeId::Varchar.into(), LogicalTypeId::Integer.into()],
                 LogicalTypeId::Varchar.into(),
-            )
-        })
-        .collect()
+            ),
+            ScalarFunctionSignature::exact(
+                vec![
+                    crate::unicode_carrier::kind(),
+                    LogicalTypeId::Integer.into(),
+                ],
+                crate::unicode_carrier::kind(),
+            ),
+        ]
     }
 }
 struct BitwiseNot;

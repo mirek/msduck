@@ -215,7 +215,20 @@ pub(super) fn rewrite<T: VisitMut>(catalog: &Catalog, node: &mut T, apply: bool)
                     pin(self.catalog, values, self.apply)
                 }
                 Expr::Function(f) => match f.name.to_string().to_ascii_uppercase().as_str() {
-                    "ISNULL" | "COALESCE" => pin(self.catalog, arguments(f), self.apply),
+                    "ISNULL" => {
+                        let values = arguments(f);
+                        // OPENJSON's ISNULL dispatch already packs replacements
+                        // into the first carrier's type. Pinning it to text
+                        // would lose unpaired units and change stored values.
+                        if values.first().is_some_and(|first| {
+                            self.catalog.carrier(first).is_some_and(|c| c.openjson)
+                        }) {
+                            false
+                        } else {
+                            pin(self.catalog, values, self.apply)
+                        }
+                    }
+                    "COALESCE" => pin(self.catalog, arguments(f), self.apply),
                     "IIF" => pin(
                         self.catalog,
                         arguments(f).into_iter().skip(1).collect(),

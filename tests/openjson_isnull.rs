@@ -188,15 +188,15 @@ fn isnull_widths_convert_carriers_of_aggregated_subqueries() {
         ),
         vec![vec![Some("1".into())]]
     );
-    // Both overloads give text: VARCHAR and carriers, NULLs and NCHAR padding.
+    // The carrier overload retains units; decode valid text only for this display assertion.
     assert_eq!(
         rows(
             &session,
             4,
             "SELECT __msduck_isnull_nvarchar_width('a🦆bc', 3),
-                    __msduck_isnull_nvarchar_width(__msduck_pack_unicode('abcd'), 2),
-                    __msduck_isnull_nchar_width(__msduck_pack_unicode('a'), 3),
-                    __msduck_isnull_nchar_width(NULL::STRUCT(__msduck_utf16le BLOB), 3)"
+                    __msduck_unicode_text(__msduck_isnull_nvarchar_width(__msduck_pack_unicode('abcd'), 2)),
+                    __msduck_unicode_text(__msduck_isnull_nchar_width(__msduck_pack_unicode('a'), 3)),
+                    __msduck_unicode_text(__msduck_isnull_nchar_width(NULL::STRUCT(__msduck_utf16le BLOB), 3))"
         ),
         vec![vec![
             Some("a🦆".into()),
@@ -204,5 +204,46 @@ fn isnull_widths_convert_carriers_of_aggregated_subqueries() {
             Some("a  ".into()),
             None
         ]]
+    );
+}
+
+#[test]
+fn openjson_isnull_null_fallback_keeps_exact_utf16_storage() {
+    let (_server, mut session) = session();
+    use msduck::parameter::Parameter;
+    use msduck_core::{
+        character::{CharacterType, Family, Length},
+        types::Type,
+        value::Value,
+    };
+    let parameters = std::collections::HashMap::from([(
+        "@fallback".into(),
+        Parameter {
+            value: Value::Unicode(vec![0xd800]),
+            data_type: Type::Character(
+                CharacterType::new(Family::Nvarchar, Length::Bounded(1)).unwrap(),
+            ),
+        },
+    )]);
+    let sql = r#"SELECT j.[key] AS k, ISNULL(j.[value], @fallback) AS preserved
+            INTO isnull_surrogate_fallback
+            FROM OPENJSON(N'{"a":null,"b":"\ud800","c":"x"}') j"#;
+    let (response, ok) = session.batch_response(sql, &parameters, false, None);
+    assert!(ok, "{response:?}");
+    let actual: Vec<(Vec<u8>, Vec<u8>)> = session
+        .db
+        .prepare("SELECT k.__msduck_utf16le, preserved.__msduck_utf16le FROM isnull_surrogate_fallback ORDER BY k.__msduck_utf16le")
+        .unwrap()
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .collect::<duckdb::Result<_>>()
+        .unwrap();
+    assert_eq!(
+        actual,
+        vec![
+            (vec![b'a', 0], vec![0, 0xd8]),
+            (vec![b'b', 0], vec![0, 0xd8]),
+            (vec![b'c', 0], vec![b'x', 0]),
+        ]
     );
 }

@@ -349,7 +349,8 @@ pub fn annotated_unicode_casts<T: VisitMut>(node: &mut T) {
                     if msduck_sql::money_cast::money_type(data_type).is_some());
             let json_consumer = matches!(expr, Expr::Function(function)
                 if matches!(function.name.to_string().to_ascii_uppercase().as_str(),
-                    "ISJSON" | "JSON_VALUE" | "JSON_QUERY" | "JSON_PATH_EXISTS" | "STRING_ESCAPE"
+                    "ISJSON" | "JSON_VALUE" | "JSON_QUERY" | "JSON_PATH_EXISTS" | "STRING_ESCAPE" | "ISNULL"
+                    | "__MSDUCK_UNICODE_VALUE" | "__MSDUCK_UNICODE_MAYBE"
                     | "__MSDUCK_MIN_BIN2_UNICODE" | "__MSDUCK_MAX_BIN2_UNICODE"
                     | "__MSDUCK_MIN_BIN2_ANSI" | "__MSDUCK_MAX_BIN2_ANSI"));
             // Scoped BIN2 annotations must survive until aggregate lowering.
