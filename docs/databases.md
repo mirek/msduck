@@ -104,6 +104,7 @@ user database:
 | `user_access`, `user_access_desc` | tinyint, nvarchar | 0/1/2, `MULTI_USER`/`SINGLE_USER`/`RESTRICTED_USER` as set by ALTER DATABASE |
 | `is_read_only` | bit | 0 |
 | `state`, `state_desc` | tinyint, nvarchar | 0, `ONLINE` |
+| `snapshot_isolation_state`, `snapshot_isolation_state_desc` | tinyint, nvarchar(60) | 0 `OFF`, 1 `ON`, 2 `IN_TRANSITION_TO_OFF`, 3 `IN_TRANSITION_TO_ON`, as set by `ALTER DATABASE ... SET ALLOW_SNAPSHOT_ISOLATION`; always 1 for `master` |
 | `is_read_committed_snapshot_on` | bit | as set by ALTER DATABASE; 0 for `master` |
 | `recovery_model`, `recovery_model_desc` | tinyint, nvarchar | 3, `SIMPLE` |
 
@@ -151,11 +152,11 @@ Expected tokens and errors below were captured from SQL Server 2025
   ENVCHANGE reports its stored name. An unknown database fails the login with
   4060 (state 1, class 11) followed by 18456.
 - In `database.schema.object` relation names, the database resolves through the
-  catalog, published databases only. An unknown one fails with 208 `Invalid
-  object name '...'`. A name in the current database is bound as
-  `schema.object`, so declared metadata and storage coercions apply. Binding
-  reads the current database's catalog objects, so a reference to another
-  database is refused explicitly: `USE` it first.
+  catalog, published databases only, case-insensitively. An unknown one fails
+  with 208 `Invalid object name '...'`. `database..object` names the `dbo`
+  schema. A name in the current database is bound as `schema.object`, so
+  declared metadata and storage coercions apply. Other databases are covered in
+  [Cross-database names](#cross-database-names).
 - A `USE` inside a top-level `sp_executesql` RPC, as tedious `execSql` sends,
   persists for the connection, as captured from SQL Server. Only nested
   `EXEC sp_executesql` inside a batch reverts it, and msduck does not run that
@@ -172,14 +173,107 @@ The catalog uses SQL Server diagnostics for:
 DuckDB's own catalog names (`memory`, `system`, `temp`) and the primary
 catalog's DuckDB name are rejected with an msduck error.
 
+## Cross-database names
+
+Queries, `INSERT`, `UPDATE`, `DELETE`, variable assignments and
+`IF`/`WHILE` conditions can use another database's tables and views through
+three-part names, as in SQL Server. `reference/cross-database.json`,
+captured by `scripts/capture-cross-database.mjs` from the pinned SQL Server
+image, holds the expected rows, descriptors, errors and completion tokens,
+and `tests/compat/cross_database.test.mjs` replays it. Every database is a
+separate DuckDB catalog, so the engine places each statement in one of them:
+
+- Reads (queries, conditions and assignments) run in the session's database,
+  where functions that depend on the current database, such as `OBJECT_ID`,
+  `@@DBTS` and user functions, bind as in SQL Server. Result descriptors and
+  operand types (LEN, concatenation, comparisons of nvarchar columns) of
+  another database's relations come from that database's catalog objects.
+- Another database's catalog views (`b.sys.columns`,
+  `b.INFORMATION_SCHEMA.TABLES`; `sys.databases` excepted), and its views
+  whose definitions read them, directly or through other views, describe it
+  only from inside it, so a query that reads them and nothing else runs in that
+  database. Combined with other databases' objects or user functions, it
+  fails with 40515 `unsupported cross-database statement: it reads catalog
+  views of database '...' together with objects or user functions of other
+  databases`. DML may read another database's catalog views only when it
+  writes that database and reads no third one; otherwise it fails with 40515
+  `unsupported cross-database statement: it reads catalog views of another
+  database than the one it writes`. DML that writes another database may not read the
+  session database's catalog views, or its views over them, either (40515 `... and reads catalog views
+  of the session's database`).
+- INSERT, UPDATE and DELETE that write another database run with it as
+  DuckDB's default catalog. Features then treat it as the current database:
+  declared column types and nvarchar storage, identity, defaults, triggers,
+  constraints and snapshot isolation checks see its catalog objects, as they
+  would after `USE`. Relations of the session's database and of others are
+  read through their own catalogs. `DB_NAME()` and `DB_ID()` still name the
+  session's database, as captured, and `SCOPE_IDENTITY()` reports the insert.
+  Trigger bodies run in their own database. DML that writes the current
+  database and reads others runs in the current database.
+- A missing object of another database fails with 208 `Invalid object name
+  'b.schema.object'.`, as captured.
+- Before a statement uses another database, msduck applies the checks `USE`
+  makes and keeps the database in use until the statement ends, so `DROP
+  DATABASE` meanwhile fails with 3702. A database another session holds in
+  `SINGLE_USER` fails with 924 (state 1, class 14) `Database '...' is
+  already open and can only have one user at a time.`, as captured.
+- Preparation (`sp_prepare`) binds such statements the same way without
+  running them, and RPC parameters work as in the current database.
+- A restored database is an ordinary user database and is read the same way.
+- Detecting reads of catalog views through views is textual: a view whose
+  DuckDB definition cannot be parsed counts as reading catalog views, and
+  unusual definitions may be placed conservatively (refused) or, in rare
+  shapes, not recognized.
+
+DuckDB writes one attached database per transaction. SQL Server lets one
+transaction modify several databases; msduck refuses the statement that would
+modify a second database with error 40515 (state 1, class 16)
+`unsupported cross-database transaction: database 'b' cannot be modified in a
+transaction that has already modified database 'a'; a transaction may write
+only one database` (without the names when DuckDB's diagnostic does not
+identify the two databases unambiguously). DuckDB has already aborted the
+transaction, so its work is rolled back at once and the transaction is
+doomed: outside `TRY` the batch ends and rolls it back; inside `TRY` the
+handler sees `XACT_STATE()` -1 and must roll it back. Nothing of it commits. A single statement always writes one
+database. Each statement outside an explicit transaction commits on its own,
+so consecutive statements may write different databases.
+
+Remaining limits, refused explicitly unless noted:
+
+- DDL on another database's objects (`CREATE TABLE b.dbo.t`, `DROP TABLE`,
+  `CREATE INDEX`, `ALTER TABLE`) and `MERGE` with another database's objects
+  fail with 40515 `unsupported reference to ... in another database; USE ...
+  first`, as do `BULK INSERT` targets, computed column definitions and inline
+  function bodies that name another database. `TRUNCATE TABLE b.dbo.t` fails
+  with `unsupported TRUNCATE target`.
+- A statement that writes another database and also reads a temporary table
+  or table variable fails with 40515 `unsupported cross-database statement`:
+  temporary objects belong to the session's database.
+- A statement that writes another database and has `OUTPUT ... INTO` fails
+  with 40515 `unsupported cross-database statement: OUTPUT INTO in a statement
+  that writes database '...'`: the destination belongs to the session's
+  database, and the statement may write only one. Plain `OUTPUT` works, and
+  `OUTPUT INTO` works in statements that write the current database.
+- User functions bind in the session's database, so a write to another
+  database that calls a schema-qualified function (`dbo.f(...)`) fails with
+  40515 `unsupported cross-database statement: it writes database '...' and
+  calls functions of the session's database`.
+- Built-in functions that depend on the current database, such as
+  `OBJECT_ID` or `@@DBTS`, resolve in the written database in DML that
+  writes another database, and in the other database in reads of its catalog
+  views.
+- Calls to procedures and functions in another database, and synonyms, are not
+  resolved.
+
 ## Not yet supported
 
 - `tempdb`, `model` and `msdb`;
-- `ALTER DATABASE` options other than `READ_COMMITTED_SNAPSHOT` and user access
-  ([ALTER DATABASE](alter-database-sessions.md)), and `CREATE DATABASE` file or
-  non-server collation options;
-- references to another database's objects (cross-database queries, DML and
-  DDL); DuckDB would also write only one attached database per transaction;
+- `ALTER DATABASE` options other than `READ_COMMITTED_SNAPSHOT`, user access
+  ([ALTER DATABASE](alter-database-sessions.md)) and `ALLOW_SNAPSHOT_ISOLATION`
+  ([transactions](gaps-transactions.md#allow_snapshot_isolation-and-snapshot-transactions)),
+  and `CREATE DATABASE` file or non-server collation options;
+- DDL on another database's objects, and transactions that write more than one
+  database (see [Cross-database names](#cross-database-names));
 - SQL Server resolves `USE` and three-part names when it compiles a batch, so an
   unknown database aborts the whole batch before any statement runs. msduck
   resolves them per statement, so earlier statements in the batch still run,

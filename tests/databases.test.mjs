@@ -121,9 +121,12 @@ test('database-qualified names resolve within the current database', { timeout: 
   assert.deepEqual((await batch(c, 'IF EXISTS (SELECT 1 FROM q1.dbo.t) SELECT 1')).rows, [[1]])
   await batch(c, 'USE master')
   assert.deepEqual((await batch(c, 'SELECT name FROM master.sys.databases WHERE database_id = 1')).rows, [['master']])
-  // Binding reads the current database's catalog, so other databases are refused.
-  assert.match((await failure(batch(c, 'SELECT x FROM q1.dbo.t')))[3], /unsupported reference to q1\.dbo\.t in another database/)
-  assert.match((await failure(batch(c, 'IF EXISTS (SELECT 1 FROM q1.dbo.t) SELECT 1')))[3], /unsupported reference to q1\.dbo\.t/)
+  // Other databases are read and written through their own catalogs
+  // (tests/compat/cross_database.test.mjs); their DDL is refused.
+  assert.deepEqual((await batch(c, 'SELECT x FROM q1.dbo.t')).rows, [[7]])
+  assert.deepEqual((await batch(c, 'IF EXISTS (SELECT 1 FROM q1.dbo.t) SELECT 1')).rows, [[1]])
+  assert.equal((await failure(batch(c, "INSERT q1.dbo.t VALUES (8, 'abcd')")))[0], 2628)
+  assert.match((await failure(batch(c, 'CREATE TABLE q1.dbo.w (v INT)')))[3], /unsupported reference to q1\.dbo\.w in another database/)
   assert.deepEqual(await failure(batch(c, 'SELECT x FROM nope.dbo.t')), [208, 1, 16, "Invalid object name 'nope.dbo.t'."])
   assert.deepEqual(await failure(batch(c, 'INSERT nope.dbo.t VALUES (1)')), [208, 1, 16, "Invalid object name 'nope.dbo.t'."])
 })

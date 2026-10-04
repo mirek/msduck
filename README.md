@@ -28,8 +28,9 @@ transactions, prepared execution and credential-file rotation.
 `CREATE DATABASE`, `DROP DATABASE`, `USE`, `DB_NAME`/`DB_ID`, `sys.databases`
 and database-qualified names work against user databases that file-backed
 servers keep next to the primary file, and LOGIN7 can select any existing
-database. Tokens and errors follow SQL Server captures; see
-[Databases](docs/databases.md) for the limits, such as references to
+database. Queries and DML reach other databases through three-part names,
+writing one database per transaction. Tokens and errors follow SQL Server
+captures; see [Databases](docs/databases.md) for the limits, such as DDL on
 another database's objects. `ALTER DATABASE ... SET READ_COMMITTED_SNAPSHOT`,
 `SINGLE_USER`, `RESTRICTED_USER` and `MULTI_USER` with `WITH ROLLBACK IMMEDIATE`
 (which closes the other sessions using the database), `ROLLBACK AFTER` or

@@ -372,6 +372,16 @@ pub struct Session {
     ansi_warnings: bool,
     datefirst: i32,
     backend_datefirst: std::cell::Cell<i32>,
+    /// Statements running in another database (see `enter_home`).
+    catalog_homes: std::cell::Cell<u32>,
+    /// Set by `execute_routed` for the `execute` call it makes.
+    routed: std::cell::Cell<bool>,
+    /// Databases that running statements use besides the current one
+    /// (`use_other`, `enter_home`); they count as the session's own uses.
+    other_uses: OtherUses,
+    /// Set when such a statement could not restore the session database
+    /// as the connection's DuckDB default catalog.
+    catalog_displaced: std::cell::Cell<bool>,
     transaction_doomed: bool,
     caught_error: Option<SqlError>,
     read_cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
@@ -448,6 +458,10 @@ impl Session {
             ansi_warnings: true,
             datefirst: 7,
             backend_datefirst: std::cell::Cell::new(7),
+            catalog_homes: std::cell::Cell::new(0),
+            routed: std::cell::Cell::new(false),
+            other_uses: Default::default(),
+            catalog_displaced: std::cell::Cell::new(false),
             transaction_doomed: false,
             caught_error: None,
             read_cancel: None,
@@ -487,7 +501,9 @@ impl Session {
 
     /// How many of this session's uses and holds are on a catalog alias.
     fn own_uses(&self, alias: &str) -> usize {
-        usize::from(self.database.alias() == alias) + self.held(alias)
+        usize::from(self.database.alias() == alias)
+            + self.held(alias)
+            + self.other_uses.count(alias)
     }
 
     fn held(&self, alias: &str) -> usize {
@@ -784,12 +800,27 @@ impl Session {
     /// cannot be read or modified; like SQL Server, an unknown database makes
     /// the object name invalid (208). A name in the current database becomes
     /// `schema.object`, so binding, metadata and storage coercions apply as
-    /// usual. Those read the current database's catalog objects, so a
-    /// reference to another database is refused rather than bound without
-    /// its declared metadata.
+    /// usual. Features that bind against the current database's catalog
+    /// objects use this form, which refuses a reference to another database
+    /// rather than binding it without its declared metadata.
     fn qualify_databases<T: VisitMut>(&self, node: &mut T) -> Result<()> {
+        self.qualify_relations(node, false)
+    }
+
+    /// `qualify_databases` for statements the engine plans itself, which may
+    /// read another database: such a relation names that database's quoted
+    /// DuckDB catalog, whose catalog objects supply its metadata (see
+    /// `cross_database`). Already qualified names are kept, so this
+    /// can run again on its own output.
+    fn qualify_databases_across<T: VisitMut>(&self, node: &mut T) -> Result<()> {
+        self.qualify_relations(node, true)
+    }
+
+    fn qualify_relations<T: VisitMut>(&self, node: &mut T, across: bool) -> Result<()> {
         struct Qualify<'a> {
             session: &'a Session,
+            across: bool,
+            current: Option<String>,
         }
         impl VisitorMut for Qualify<'_> {
             type Break = anyhow::Error;
@@ -815,15 +846,46 @@ impl Session {
                         "unsupported server-qualified object name {written}"
                     ));
                 }
+                // `database..object` names the default schema, which is dbo.
+                if let ObjectNamePart::Identifier(schema) = &mut relation.0[1]
+                    && schema.value.is_empty()
+                    && schema.quote_style.is_none()
+                {
+                    *schema = Ident::new("dbo");
+                }
                 let ObjectNamePart::Identifier(database) = &mut relation.0[0] else {
                     return ControlFlow::Break(anyhow::anyhow!(
                         "unsupported object name {written}"
                     ));
                 };
                 let catalog = self.session.database.catalog();
-                match catalog.resolve(&self.session.db, &database.value) {
-                    Ok(Some(alias)) if alias == self.session.database.alias() => {
+                let resolved = match catalog.resolve(&self.session.db, &database.value) {
+                    // A name the engine itself qualified with master's
+                    // catalog; client SQL carries source spans and cannot
+                    // name DuckDB's catalog.
+                    Ok(None)
+                        if database.quote_style == Some('"')
+                            && database.span == sqlparser::tokenizer::Span::empty()
+                            && database.value == catalog.primary() =>
+                    {
+                        Ok(Some(catalog.primary().to_string()))
+                    }
+                    resolved => resolved,
+                };
+                let current = match &self.current {
+                    Some(current) => current,
+                    None => match self.session.current_alias() {
+                        Ok(current) => self.current.insert(current),
+                        Err(error) => return ControlFlow::Break(error),
+                    },
+                };
+                match resolved {
+                    Ok(Some(alias)) if alias == *current => {
                         relation.0.remove(0);
+                        ControlFlow::Continue(())
+                    }
+                    Ok(Some(alias)) if self.across => {
+                        *database = Ident::with_quote('"', alias);
                         ControlFlow::Continue(())
                     }
                     Ok(Some(_)) => ControlFlow::Break(anyhow::anyhow!(
@@ -837,10 +899,448 @@ impl Session {
                 }
             }
         }
-        match node.visit(&mut Qualify { session: self }) {
+        match node.visit(&mut Qualify {
+            session: self,
+            across,
+            current: None,
+        }) {
             ControlFlow::Continue(()) => Ok(()),
             ControlFlow::Break(error) => Err(error),
         }
+    }
+
+    /// Qualify a statement's relations: queries, DML and variable
+    /// assignments may read other databases (see `cross_database`); other
+    /// statements, such as DDL, are refused there.
+    fn qualify_statement(&self, statement: &mut Statement) -> Result<()> {
+        if matches!(
+            statement,
+            Statement::Query(_)
+                | Statement::Insert(_)
+                | Statement::Update(_)
+                | Statement::Delete(_)
+                | Statement::Set(_)
+                | Statement::Declare { .. }
+        ) {
+            self.qualify_databases_across(statement)
+        } else {
+            // DROP names objects outside relation positions. Another
+            // database's objects are refused like other DDL on them.
+            if let Statement::Drop { names, .. } = statement {
+                let catalog = self.database.catalog();
+                for name in names.iter_mut().filter(|name| name.0.len() == 3) {
+                    let Some(database) = name.0[0].as_ident() else {
+                        continue;
+                    };
+                    match catalog.resolve(&self.db, &database.value)? {
+                        Some(alias) if alias == self.current_alias()? => {
+                            name.0.remove(0);
+                        }
+                        Some(_) => bail!(
+                            "unsupported reference to {} in another database; USE {} first",
+                            name.0
+                                .iter()
+                                .filter_map(|part| part.as_ident().map(|ident| ident.value.clone()))
+                                .collect::<Vec<_>>()
+                                .join("."),
+                            database.value
+                        ),
+                        None => {}
+                    }
+                }
+            }
+            self.qualify_databases(statement)
+        }
+    }
+
+    /// The DuckDB catalog names resolve against: the session's database, or
+    /// the one a statement runs in (see `cross_database`).
+    fn current_alias(&self) -> Result<String> {
+        if self.catalog_homes.get() > 0 || self.catalog_displaced.get() {
+            Ok(self
+                .db
+                .query_row("SELECT current_database()", [], |row| row.get(0))?)
+        } else {
+            Ok(self.database.alias().to_string())
+        }
+    }
+
+    /// The database a query or DML statement qualified by
+    /// `qualify_databases_across` runs in, when that is not the current one.
+    ///
+    /// A statement whose relations all belong to one other database runs
+    /// with that database as the DuckDB default catalog, so every metadata
+    /// lookup, storage coercion and write sees it as it would after USE.
+    /// Other statements run in the current database: they may read other
+    /// databases, whose metadata comes from their own catalogs, but may not
+    /// write them. Other statement kinds are refused, as before.
+    fn cross_database<T: Visit>(
+        &self,
+        node: &T,
+        statement: Option<&Statement>,
+    ) -> Result<CrossDatabase> {
+        let relations = Relations::collect(
+            node,
+            self.current_alias()?,
+            &statement.map(alias_targets).unwrap_or_default(),
+        );
+        // Modules of other databases are not resolved; the current
+        // database's may be named with three parts.
+        for function in &relations.qualified_functions {
+            let Some(database) = function.0.first().and_then(|part| part.as_ident()) else {
+                continue;
+            };
+            let alias = match self.database.catalog().resolve(&self.db, &database.value)? {
+                Some(alias) => alias,
+                // DuckDB's catalog name only where the engine generated it.
+                None if database.value == relations.current
+                    && database.span == sqlparser::tokenizer::Span::empty() =>
+                {
+                    relations.current.clone()
+                }
+                None => bail!("unsupported reference to function {function} in another database"),
+            };
+            if alias != relations.current {
+                bail!("unsupported reference to function {function} in another database");
+            }
+        }
+        let Some((database, written)) = relations.foreign.first_key_value() else {
+            return Ok(CrossDatabase::Local);
+        };
+        let display = |alias: &str| self.database.catalog().display_name(alias);
+        // Access to each database is checked first, as USE checks it (924
+        // for SINGLE_USER held elsewhere); then, like SQL Server, a missing
+        // object of another database is an invalid object name.
+        // The guards are kept until the statement ends (see `CrossDatabase`),
+        // so the databases cannot be dropped in between.
+        let held = self.use_others(&relations.foreign.keys().cloned().collect::<Vec<_>>())?;
+        // Views of another database that read its catalog views count as
+        // reading them.
+        let mut catalog_views = relations.catalog_views;
+        let mut catalog_view_database = relations.catalog_view_database.clone();
+        if !catalog_views {
+            let mut dependent = std::collections::HashMap::new();
+            for name in &relations.foreign_names {
+                let [ObjectNamePart::Identifier(database), schema, object] = name.0.as_slice()
+                else {
+                    continue;
+                };
+                if !dependent.contains_key(&database.value) {
+                    dependent.insert(
+                        database.value.clone(),
+                        crate::query_catalog::catalog_dependent_views(&self.db, &database.value)?,
+                    );
+                }
+                let (Some(schema), Some(object)) = (schema.as_ident(), object.as_ident()) else {
+                    continue;
+                };
+                let key = (schema.value.to_lowercase(), object.value.to_lowercase());
+                if dependent[&database.value].contains(&key) {
+                    catalog_views = true;
+                    catalog_view_database.get_or_insert_with(|| database.value.clone());
+                }
+            }
+        }
+        for name in &relations.foreign_names {
+            if let Some((alias, local)) =
+                crate::query_catalog::foreign_relation(&self.db, &relations.current, name)?
+                && !crate::query_catalog::in_catalog(&self.db, &alias, || {
+                    self.db.query_row(
+                        "SELECT __msduck_object_id(?,NULL) IS NOT NULL",
+                        [local.to_string()],
+                        |row| row.get::<_, bool>(0),
+                    )
+                })?
+            {
+                let parts = local
+                    .0
+                    .iter()
+                    .map(|part| match part {
+                        ObjectNamePart::Identifier(ident) => ident.value.clone(),
+                        part => part.to_string(),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(".");
+                bail!(SqlError::new(
+                    208,
+                    1,
+                    format!("Invalid object name '{}.{parts}'.", display(&alias)),
+                ));
+            }
+        }
+        let dml = match statement {
+            None => None,
+            Some(Statement::Query(query)) => match query.body.as_ref() {
+                SetExpr::Insert(statement)
+                | SetExpr::Update(statement)
+                | SetExpr::Delete(statement) => Some(statement),
+                _ => None,
+            },
+            Some(
+                statement @ (Statement::Insert(_) | Statement::Update(_) | Statement::Delete(_)),
+            ) => Some(statement),
+            Some(_) => {
+                bail!(
+                    "unsupported reference to {} in another database; USE {} first",
+                    written,
+                    display(database)
+                )
+            }
+        };
+        // OUTPUT INTO names its destination outside relation positions, in
+        // the session's database, which a statement running in another
+        // database would neither resolve nor be allowed to write.
+        let refuse_output_into = |written: &str| -> Result<()> {
+            if dml.is_some_and(output_into) {
+                bail!(
+                    "unsupported cross-database statement: OUTPUT INTO in a statement that writes database '{written}'"
+                );
+            }
+            Ok(())
+        };
+        // User functions bind in the session's database, so a statement
+        // that calls them stays there: a read reads the other database from
+        // here, and a write to it is refused.
+        let refuse_routines = |written: &str| -> Result<()> {
+            if relations.routines {
+                bail!(
+                    "unsupported cross-database statement: it writes database '{written}' and calls functions of the session's database"
+                );
+            }
+            Ok(())
+        };
+        // Reads stay in the session's database, where functions that depend
+        // on the current database (OBJECT_ID, @@DBTS, user functions) bind,
+        // and read other databases through their catalogs. Another
+        // database's catalog views describe it only from inside it.
+        if dml.is_none() {
+            if !catalog_views {
+                return Ok(CrossDatabase::Mixed(held));
+            }
+            if relations.foreign.len() == 1
+                && relations.local.is_empty()
+                && !relations.into
+                && !relations.routines
+            {
+                return Ok(CrossDatabase::Home(database.clone(), held));
+            }
+            bail!(
+                "unsupported cross-database statement: it reads catalog views of database '{}' together with objects or user functions of other databases",
+                display(catalog_view_database.as_deref().unwrap_or(database))
+            );
+        }
+        // DML reads another database's catalog views correctly only while
+        // running in that database, which it does when it writes there and
+        // reads no third database.
+        let refuse_catalog_views = || -> Result<()> {
+            if catalog_views && relations.foreign.len() > 1 {
+                bail!(
+                    "unsupported cross-database statement: it reads catalog views of another database than the one it writes"
+                );
+            }
+            Ok(())
+        };
+        if relations.foreign.len() == 1 && relations.local.is_empty() && !relations.into {
+            refuse_output_into(&display(database))?;
+            refuse_routines(&display(database))?;
+            return Ok(CrossDatabase::Home(database.clone(), held));
+        }
+        // A statement that writes another database runs there, reading the
+        // current database and any others through three-part names.
+        let target = dml.and_then(dml_target);
+        if let Some(target) = target
+            && let [ObjectNamePart::Identifier(alias), _, _] = target.0.as_slice()
+            && relations.foreign.contains_key(&alias.value)
+        {
+            // Temporary objects belong to the session's database.
+            if relations.temporary {
+                bail!(
+                    "unsupported cross-database statement: it writes {} in database '{}' and also references temporary tables or table variables",
+                    target.0[1..]
+                        .iter()
+                        .map(|part| part.to_string())
+                        .collect::<Vec<_>>()
+                        .join("."),
+                    display(&alias.value)
+                );
+            }
+            refuse_output_into(&display(&alias.value))?;
+            refuse_routines(&display(&alias.value))?;
+            refuse_catalog_views()?;
+            let local_dependent =
+                crate::query_catalog::catalog_dependent_views(&self.db, &relations.current)?;
+            let reads_local_views = relations.local_names.iter().any(|name| {
+                let parts = name
+                    .0
+                    .iter()
+                    .filter_map(|part| part.as_ident().map(|ident| ident.value.to_lowercase()))
+                    .collect::<Vec<_>>();
+                match parts.as_slice() {
+                    [object] => local_dependent.contains(&("dbo".to_string(), object.clone())),
+                    [schema, object] => local_dependent.contains(&(schema.clone(), object.clone())),
+                    _ => false,
+                }
+            });
+            if relations.local_catalog_views || reads_local_views {
+                bail!(
+                    "unsupported cross-database statement: it writes database '{}' and reads catalog views of the session's database",
+                    display(&alias.value)
+                );
+            }
+            return Ok(CrossDatabase::Home(alias.value.clone(), held));
+        }
+        if catalog_views {
+            bail!(
+                "unsupported cross-database statement: it reads catalog views of another database than the one it writes"
+            );
+        }
+        Ok(CrossDatabase::Mixed(held))
+    }
+
+    /// Make `home`, another database, the connection's DuckDB default
+    /// catalog for one statement, after the checks USE makes (user access,
+    /// transitions). Like USE, the returned guard keeps the database from
+    /// being dropped meanwhile. `leave_home` restores the previous catalog.
+    /// USE cannot run in an aborted DuckDB transaction, so a failed restore
+    /// is retried by `restore_catalog` before the next statement and after
+    /// ROLLBACK.
+    fn enter_home(&self, home: &str) -> Result<Home> {
+        let previous =
+            self.db
+                .query_row("SELECT current_database(),current_schema()", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })?;
+        // While the statement runs, `execute_in_home` makes the other
+        // database the session's and the session's database a use of the
+        // statement, as `own_uses` counts them.
+        let OtherUse { guard, .. } = self.use_other(home)?;
+        self.catalog_homes.set(self.catalog_homes.get() + 1);
+        Ok(Home {
+            previous,
+            guard,
+            _counted: self.other_uses.add(self.database.alias()),
+        })
+    }
+
+    fn leave_home(&self, home: Home) {
+        self.catalog_homes.set(self.catalog_homes.get() - 1);
+        if crate::query_catalog::leave_catalog(&self.db, &home.previous).is_err() {
+            self.catalog_displaced.set(true);
+        }
+    }
+
+    /// Hold the other databases a statement reads, with the checks USE
+    /// makes, while it runs in the current database.
+    fn use_others(&self, aliases: &[String]) -> Result<Vec<OtherUse>> {
+        let previous =
+            self.db
+                .query_row("SELECT current_database(),current_schema()", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })?;
+        let guards = aliases
+            .iter()
+            .map(|alias| self.use_other(alias))
+            .collect::<Result<Vec<_>>>();
+        if crate::query_catalog::leave_catalog(&self.db, &previous).is_err() {
+            self.catalog_displaced.set(true);
+        }
+        guards
+    }
+
+    fn use_other(&self, alias: &str) -> Result<OtherUse> {
+        let catalog = self.database.catalog();
+        let guard = catalog.enter_as(&self.db, &catalog.display_name(alias), &|alias| {
+            self.own_uses(alias)
+        })?;
+        Ok(OtherUse {
+            _counted: self.other_uses.add(alias),
+            guard,
+        })
+    }
+
+    /// Make the session's database the DuckDB default catalog again after a
+    /// statement in another database could not restore it.
+    fn restore_catalog(&self) {
+        if self.catalog_homes.get() == 0
+            && self.catalog_displaced.get()
+            && crate::query_catalog::leave_catalog(
+                &self.db,
+                &(self.database.alias().to_string(), "dbo".to_string()),
+            )
+            .is_ok()
+        {
+            self.catalog_displaced.set(false);
+        }
+    }
+
+    /// DuckDB writes one attached database per transaction. Name the
+    /// databases instead of DuckDB's catalogs. DuckDB has aborted the
+    /// transaction, so its work is rolled back now and the session's
+    /// transaction is doomed, with an empty DuckDB transaction in its place:
+    /// outside TRY the batch ends and rolls it back, inside TRY the handler
+    /// runs and must roll it back. Nothing it wrote commits.
+    fn single_database_writes(&mut self, error: anyhow::Error) -> anyhow::Error {
+        // Only DuckDB's own diagnostic; a THROW or RAISERROR may quote it.
+        let Some(message) = error
+            .chain()
+            .find_map(|cause| cause.downcast_ref::<duckdb::Error>())
+            .map(|native| native.to_string())
+        else {
+            return error;
+        };
+        let Some(rest) =
+            message.strip_prefix("TransactionContext Error: Attempting to write to database \"")
+        else {
+            return error;
+        };
+        if self.transactions > 0 {
+            self.transaction_doomed = true;
+            if self.db.execute_batch("ROLLBACK; BEGIN TRANSACTION").is_ok() {
+                self.restore_catalog();
+            }
+        }
+        // DuckDB inserts catalog names unescaped, and a name may contain any
+        // text, so the names are the one pair of attached catalogs that
+        // reproduces the diagnostic exactly. Without exactly one such pair
+        // the error names no database.
+        const MODIFIED: &str = "\" in a transaction that has already modified database \"";
+        const END: &str = "\" - a single transaction can only write to a single attached database";
+        let attached = self
+            .db
+            .prepare("SELECT database_name FROM duckdb_databases() WHERE NOT internal")
+            .and_then(|mut query| {
+                query
+                    .query_map([], |row| row.get::<_, String>(0))?
+                    .collect::<duckdb::Result<Vec<_>>>()
+            })
+            .unwrap_or_default();
+        let mut pairs = attached
+            .iter()
+            .flat_map(|written| attached.iter().map(move |modified| (written, modified)))
+            .filter(|(written, modified)| {
+                rest.strip_prefix(written.as_str())
+                    .and_then(|rest| rest.strip_prefix(MODIFIED))
+                    .and_then(|rest| rest.strip_prefix(modified.as_str()))
+                    .is_some_and(|rest| rest.starts_with(END))
+            });
+        let names = match (pairs.next(), pairs.next()) {
+            (Some(pair), None) => Some(pair),
+            _ => None,
+        };
+        let catalog = self.database.catalog();
+        let message = match names {
+            Some((written, modified)) => format!(
+                "unsupported cross-database transaction: database '{}' cannot be modified in a transaction that has already modified database '{}'; a transaction may write only one database",
+                catalog.display_name(written),
+                catalog.display_name(modified)
+            ),
+            None => {
+                "unsupported cross-database transaction: a transaction may write only one database"
+                    .to_string()
+            }
+        };
+        // A runtime error, which TRY catches, unlike unsupported syntax.
+        SqlError::new(40515, 1, message).into()
     }
 
     /// The session's current database.
@@ -912,7 +1412,7 @@ impl Session {
             .collect();
         let mut parameters = batch_variables(&statements, &parameters)?;
         let mut pending = statements.into_iter().rev().collect::<Vec<_>>();
-        while let Some(mut statement) = pending.pop() {
+        while let Some(statement) = pending.pop() {
             crate::query_catalog::validate_cte_columns(&self.db, &statement)?;
             if let Some((body, handler)) = try_catch_parts(&statement) {
                 pending.extend(handler.iter().rev().cloned());
@@ -1091,92 +1591,124 @@ impl Session {
                 ),
                 "unsupported prepared statement kind"
             );
-            // Lower assignments exactly as execution does, but only bind the
-            // resulting query. Preparation must not evaluate or store values.
-            if let Some((update, with)) = msduck_sql::output::joined_update(&statement) {
-                self.plan_joined_execution(update, with.cloned(), &parameters)?;
-                continue;
+            // Databases resolve as execution resolves them (see `execute`).
+            let mut qualified = statement.clone();
+            if self.qualify_databases_across(&mut qualified).is_ok() {
+                match self.cross_database(&qualified, Some(&qualified))? {
+                    CrossDatabase::Local => {}
+                    CrossDatabase::Home(home, others) => {
+                        let targets = alias_targets(&qualified);
+                        rehome(&mut qualified, &home, &self.current_alias()?, &targets);
+                        let _others = others;
+                        let home = self.enter_home(&home)?;
+                        let result = self.validate_prepared_dml(qualified, &mut parameters);
+                        self.leave_home(home);
+                        result?;
+                        continue;
+                    }
+                    CrossDatabase::Mixed(others) => {
+                        let _others = others;
+                        self.validate_prepared_dml(qualified, &mut parameters)?;
+                        continue;
+                    }
+                }
             }
-            if let Statement::Query(query) = &mut statement {
-                crate::query_catalog::bind_query_with_parameters(&self.db, query, &parameters)?;
-            }
-            self.lower_output(&mut statement, &parameters)?;
-            let runtime_percentile_plans = percentile_plans(&statement, &parameters)?;
-            self.bind_dml(&mut statement, &parameters)?;
-            crate::query_catalog::lower_recursion(&self.db, &mut statement)?;
-            let json = crate::for_json::Output::take(&self.db, &mut statement)?;
-            self.lower_database_functions(&mut statement)?;
-            self.qualify_databases(&mut statement)?;
-            self.lower_session_functions(&mut statement, &mut parameters)?;
-            ext::rewrite(self, &mut statement, &parameters)?;
-            select_assignments(&mut statement, &parameters)?;
-            let into = crate::select_into::take(&mut statement)?;
-            let money_columns = crate::insert::money_columns(&statement, &parameters);
-            crate::update::expand_compound(&self.db, &mut statement)?;
-            let money_assignments = crate::update::money_assignments(&statement, &parameters);
-            crate::aggregate_columns::annotate(&self.db, &mut statement, &parameters)
-                .map_err(anyhow::Error::msg)?;
-            crate::query_catalog::bind_unicode_operations(&self.db, &mut statement, &parameters)?;
-            crate::concat_lower::annotated_unicode_casts(&mut statement);
-            crate::for_json::lower_nested(&self.db, &mut statement, &parameters)?;
-            let mut percentile_parameters = parameters.clone();
-            let bindings = runtime_percentile_plans
-                .iter()
-                .map(|_| {
-                    (
-                        percentile_binding(
-                            &mut percentile_parameters,
-                            ParameterValue::Double(0.0),
-                            SqlType::Float,
-                        ),
-                        None,
-                        false,
-                    )
-                })
-                .collect::<Vec<_>>();
-            lower_runtime_percentiles(&mut statement, &bindings)?;
-            let mut translator = Translator {
-                parameters: &percentile_parameters,
-                values: Vec::new(),
-                parameter_slots: HashMap::new(),
-                transactions: self.transactions,
-                options_mask: self.options_mask(),
-                transaction_doomed: self.transaction_doomed,
-                original_login: &self.original_login,
-                clock: crate::current_time::now(),
-                rowcount: self.rowcount,
-                last_error: self.last_error,
-                caught_error: self.caught_error.as_ref(),
-                spid: self.process.spid(),
-            };
-            if let ControlFlow::Break(error) = VisitMut::visit(&mut statement, &mut translator) {
-                bail!(error);
-            }
-            let _rand_scopes = rand::lower(
-                &mut statement,
-                &mut translator.values,
-                &self.diagnostics.rand,
-                &self.rand,
+            self.validate_prepared_dml(statement, &mut parameters)?;
+        }
+        Ok(())
+    }
+    /// Bind one query or DML statement of `validate_prepared_statements`.
+    fn validate_prepared_dml(
+        &self,
+        mut statement: Statement,
+        parameters: &mut HashMap<String, Parameter>,
+    ) -> Result<()> {
+        // Lower assignments exactly as execution does, but only bind the
+        // resulting query. Preparation must not evaluate or store values.
+        if let Some((update, with)) = msduck_sql::output::joined_update(&statement) {
+            return self
+                .plan_joined_execution(update, with.cloned(), parameters)
+                .map(|_| ());
+        }
+        if let Statement::Query(query) = &mut statement {
+            crate::query_catalog::bind_query_with_parameters(&self.db, query, parameters)?;
+        }
+        self.lower_output(&mut statement, parameters)?;
+        let runtime_percentile_plans = percentile_plans(&statement, parameters)?;
+        self.bind_dml(&mut statement, parameters)?;
+        crate::query_catalog::lower_recursion(&self.db, &mut statement)?;
+        let json = crate::for_json::Output::take(&self.db, &mut statement)?;
+        self.lower_database_functions(&mut statement)?;
+        self.qualify_databases_across(&mut statement)?;
+        self.lower_session_functions(&mut statement, parameters)?;
+        ext::rewrite(self, &mut statement, parameters)?;
+        select_assignments(&mut statement, parameters)?;
+        let into = crate::select_into::take(&mut statement)?;
+        let money_columns = crate::insert::money_columns(&statement, parameters);
+        crate::update::expand_compound(&self.db, &mut statement)?;
+        let money_assignments = crate::update::money_assignments(&statement, parameters);
+        crate::aggregate_columns::annotate(&self.db, &mut statement, parameters)
+            .map_err(anyhow::Error::msg)?;
+        crate::query_catalog::bind_unicode_operations(&self.db, &mut statement, parameters)?;
+        crate::concat_lower::annotated_unicode_casts(&mut statement);
+        crate::for_json::lower_nested(&self.db, &mut statement, parameters)?;
+        let mut percentile_parameters = parameters.clone();
+        let bindings = runtime_percentile_plans
+            .iter()
+            .map(|_| {
+                (
+                    percentile_binding(
+                        &mut percentile_parameters,
+                        ParameterValue::Double(0.0),
+                        SqlType::Float,
+                    ),
+                    None,
+                    false,
+                )
+            })
+            .collect::<Vec<_>>();
+        lower_runtime_percentiles(&mut statement, &bindings)?;
+        let mut translator = Translator {
+            parameters: &percentile_parameters,
+            values: Vec::new(),
+            parameter_slots: HashMap::new(),
+            transactions: self.transactions,
+            options_mask: self.options_mask(),
+            transaction_doomed: self.transaction_doomed,
+            original_login: &self.original_login,
+            clock: crate::current_time::now(),
+            rowcount: self.rowcount,
+            last_error: self.last_error,
+            caught_error: self.caught_error.as_ref(),
+            spid: self.process.spid(),
+        };
+        if let ControlFlow::Break(error) = VisitMut::visit(&mut statement, &mut translator) {
+            bail!(error);
+        }
+        let _rand_scopes = rand::lower(
+            &mut statement,
+            &mut translator.values,
+            &self.diagnostics.rand,
+            &self.rand,
+        )?;
+        crate::insert::lower(&self.db, &mut statement, &money_columns)?;
+        crate::update::lower(&self.db, &mut statement, &money_assignments)?;
+        if let Some(target) = into {
+            crate::select_into::definition(
+                &self.db,
+                &target,
+                &statement.to_string(),
+                &translator.values,
             )?;
-            crate::insert::lower(&self.db, &mut statement, &money_columns)?;
-            crate::update::lower(&self.db, &mut statement, &money_assignments)?;
-            if let Some(target) = into {
-                crate::select_into::definition(
-                    &self.db,
-                    &target,
-                    &statement.to_string(),
-                    &translator.values,
-                )?;
-            }
-            self.db.prepare(&statement.to_string())?;
-            if let Some(json) = json {
-                let names = crate::for_json::Output::names(
-                    &self.db,
-                    &statement.to_string(),
-                    &translator.values,
-                )?;
-                json.plan(&names)?;
-            }
+        }
+        self.db.prepare(&statement.to_string())?;
+        if let Some(json) = json {
+            let names = crate::for_json::Output::names(
+                &self.db,
+                &statement.to_string(),
+                &translator.values,
+            )?;
+            json.plan(&names)?;
         }
         Ok(())
     }
@@ -1228,7 +1760,30 @@ impl Session {
         parameters: &HashMap<String, Parameter>,
     ) -> Result<duckdb::core::LogicalTypeId> {
         self.lower_database_functions(&mut expression)?;
-        self.qualify_databases(&mut expression)?;
+        self.qualify_databases_across(&mut expression)?;
+        // Other databases are entered as execution enters them.
+        match self.cross_database(&expression, None)? {
+            CrossDatabase::Local => self.validate_prepared_expression_here(expression, parameters),
+            CrossDatabase::Home(home, others) => {
+                rehome(&mut expression, &home, &self.current_alias()?, &[]);
+                let _others = others;
+                let home = self.enter_home(&home)?;
+                let result = self.validate_prepared_expression_here(expression, parameters);
+                self.leave_home(home);
+                result
+            }
+            CrossDatabase::Mixed(others) => {
+                let _others = others;
+                self.validate_prepared_expression_here(expression, parameters)
+            }
+        }
+    }
+
+    fn validate_prepared_expression_here(
+        &self,
+        mut expression: Expr,
+        parameters: &HashMap<String, Parameter>,
+    ) -> Result<duckdb::core::LogicalTypeId> {
         let lowered = self.lower_session_functions_shared(&mut expression, parameters)?;
         let parameters = &*lowered;
         ext::rewrite(self, &mut expression, parameters)?;
@@ -1757,7 +2312,10 @@ impl Session {
                 }
                 continue;
             }
-            match self.execute(statement.clone(), &mut variables) {
+            match self
+                .execute(statement.clone(), &mut variables)
+                .map_err(|error| self.single_database_writes(error))
+            {
                 Ok(Execution {
                     tokens,
                     count,
@@ -2269,6 +2827,7 @@ impl Session {
             "Cannot roll back {name}. No transaction or savepoint of that name was found."
         );
         self.db.execute_batch("ROLLBACK")?;
+        self.restore_catalog();
         let mut out = Vec::new();
         tds::transaction_env(&mut out, 10, self.transaction_descriptor);
         self.transactions = 0;
@@ -2374,18 +2933,114 @@ impl Session {
         Ok(plan)
     }
 
+    /// Route a statement that names another database (see `cross_database`)
+    /// and run it through `execute` again. Statements nest deeply through
+    /// triggers and procedures, so the copies stay out of `execute`'s frame.
+    #[inline(never)]
+    fn execute_routed(
+        &mut self,
+        statement: &mut Statement,
+        parameters: &mut HashMap<String, Parameter>,
+    ) -> Result<Execution> {
+        let statement = Box::new(std::mem::replace(
+            statement,
+            Statement::Commit {
+                chain: false,
+                end: false,
+                modifier: None,
+            },
+        ));
+        let result = match self.route_databases(statement)? {
+            Routed::Here(statement) => {
+                self.routed.set(true);
+                self.execute(*statement, parameters)
+            }
+            Routed::Home(statement, home, others) => {
+                let _others = others;
+                self.execute_in_home(*statement, &home, parameters)
+            }
+            Routed::Mixed(statement, others) => {
+                let _others = others;
+                self.routed.set(true);
+                self.execute(*statement, parameters)
+            }
+        };
+        result.map_err(|error| self.single_database_writes(error))
+    }
+
+    /// Decide where a query or DML statement that names another database
+    /// runs (see `cross_database`). Statements nest deeply through triggers
+    /// and procedures, so the copies stay out of `execute`'s frame.
+    #[inline(never)]
+    fn route_databases(&self, statement: Box<Statement>) -> Result<Routed> {
+        // An unknown database may be one a feature creates on first use
+        // (msdb); the feature hooks see such statements first.
+        let mut qualified = statement.clone();
+        if self.qualify_databases_across(&mut *qualified).is_err() {
+            return Ok(Routed::Here(statement));
+        }
+        Ok(match self.cross_database(&*qualified, Some(&*qualified))? {
+            CrossDatabase::Local => Routed::Here(statement),
+            // msdb-only statements are routed by the backup feature.
+            CrossDatabase::Home(home, _)
+                if self
+                    .database
+                    .catalog()
+                    .display_name(&home)
+                    .eq_ignore_ascii_case(crate::database_catalog::MSDB) =>
+            {
+                Routed::Here(statement)
+            }
+            CrossDatabase::Home(home, others) => {
+                // DB_NAME() and DB_ID() keep naming the session's database;
+                // features see the other one as current.
+                self.lower_database_functions(&mut *qualified)?;
+                let targets = alias_targets(&qualified);
+                rehome(&mut *qualified, &home, &self.current_alias()?, &targets);
+                Routed::Home(qualified, home, others)
+            }
+            CrossDatabase::Mixed(others) => Routed::Mixed(qualified, others),
+        })
+    }
+
+    /// Run a statement whose relations all belong to `home`, another
+    /// database, as if the session used that database.
+    #[inline(never)]
+    fn execute_in_home(
+        &mut self,
+        statement: Statement,
+        home: &str,
+        parameters: &mut HashMap<String, Parameter>,
+    ) -> Result<Execution> {
+        let mut home = self.enter_home(home)?;
+        std::mem::swap(&mut self.database, &mut home.guard);
+        self.routed.set(true);
+        let result = self.execute(statement, parameters);
+        std::mem::swap(&mut self.database, &mut home.guard);
+        self.leave_home(home);
+        result
+    }
+
     fn execute(
         &mut self,
         mut statement: Statement,
         parameters: &mut HashMap<String, Parameter>,
     ) -> Result<Execution> {
-        if let Some(execution) = ext::statement(self, &mut statement, parameters)? {
-            return Ok(execution);
+        self.restore_catalog();
+        if !self.routed.replace(false) && names_other_databases(&statement) {
+            return self.execute_routed(&mut statement, parameters);
+        }
+        // Feature hooks (MERGE, triggers, constraints) write through DuckDB
+        // too; see `single_database_writes`.
+        match ext::statement(self, &mut statement, parameters) {
+            Ok(Some(execution)) => return Ok(execution),
+            Ok(None) => {}
+            Err(error) => return Err(self.single_database_writes(error)),
         }
         // Resolve database names before any DDL dispatch or catalog
         // bookkeeping, which see only two-part names.
         self.lower_database_functions(&mut statement)?;
-        self.qualify_databases(&mut statement)?;
+        self.qualify_statement(&mut statement)?;
         self.lower_session_functions(&mut statement, parameters)?;
         ext::rewrite(self, &mut statement, parameters)?;
         if let Statement::CreateTable(table) = &mut statement {
@@ -2479,7 +3134,10 @@ impl Session {
         if result.is_err() && own_transaction {
             let _ = self.db.execute_batch("ROLLBACK");
         }
-        result
+        // Statements of procedure and trigger bodies reach DuckDB here
+        // without the batch loop, so writes to a second database are
+        // reported and doom the transaction here too.
+        result.map_err(|error| self.single_database_writes(error))
     }
     fn execute_drop_index(
         &mut self,
@@ -2583,7 +3241,7 @@ impl Session {
             return Ok(execution);
         }
         self.lower_database_functions(&mut statement)?;
-        self.qualify_databases(&mut statement)?;
+        self.qualify_statement(&mut statement)?;
         self.lower_session_functions(&mut statement, parameters)?;
         if let Statement::Print(print) = &statement {
             let unicode = print_is_unicode(&print.message, parameters);
@@ -3819,9 +4477,41 @@ impl Session {
         predicate: bool,
         diagnostics: Option<&crate::statement_diagnostics::Scope>,
     ) -> Result<Value> {
-        self.sync_datefirst()?;
+        self.restore_catalog();
         self.lower_database_functions(&mut expression)?;
-        self.qualify_databases(&mut expression)?;
+        self.qualify_databases_across(&mut expression)?;
+        match self.cross_database(&expression, None)? {
+            CrossDatabase::Local => {}
+            CrossDatabase::Home(home, others) => {
+                rehome(&mut expression, &home, &self.current_alias()?, &[]);
+                let _others = others;
+                let home = self.enter_home(&home)?;
+                let result =
+                    self.evaluate_expression_here(expression, parameters, predicate, diagnostics);
+                self.leave_home(home);
+                return result;
+            }
+            CrossDatabase::Mixed(others) => {
+                let _others = others;
+                return self.evaluate_expression_here(
+                    expression,
+                    parameters,
+                    predicate,
+                    diagnostics,
+                );
+            }
+        }
+        self.evaluate_expression_here(expression, parameters, predicate, diagnostics)
+    }
+
+    fn evaluate_expression_here(
+        &self,
+        mut expression: Expr,
+        parameters: &HashMap<String, Parameter>,
+        predicate: bool,
+        diagnostics: Option<&crate::statement_diagnostics::Scope>,
+    ) -> Result<Value> {
+        self.sync_datefirst()?;
         let lowered = self.lower_session_functions_shared(&mut expression, parameters)?;
         let parameters = &*lowered;
         ext::rewrite(self, &mut expression, parameters)?;
@@ -7332,4 +8022,455 @@ mod duplicate_index_runtime_tests {
                 .1
         );
     }
+}
+
+/// The table a one-part name means when it is the alias of one of `tables`.
+fn resolve_alias(name: &ObjectName, tables: &[&TableWithJoins]) -> Option<ObjectName> {
+    let [ObjectNamePart::Identifier(single)] = name.0.as_slice() else {
+        return None;
+    };
+    tables.iter().find_map(|table| {
+        std::iter::once(&table.relation)
+            .chain(table.joins.iter().map(|join| &join.relation))
+            .find_map(|factor| match factor {
+                TableFactor::Table {
+                    name: table,
+                    alias: Some(alias),
+                    ..
+                } if alias.name.value.eq_ignore_ascii_case(&single.value) => Some(table.clone()),
+                _ => None,
+            })
+    })
+}
+
+/// The one-part UPDATE or DELETE target nodes that name a FROM alias
+/// (`UPDATE i ... FROM t AS i`) rather than a table. They are identified by
+/// address, so other relations spelled like the alias stay tables.
+fn alias_targets(statement: &Statement) -> Vec<*const ObjectName> {
+    let statement = match statement {
+        Statement::Query(query) => match query.body.as_ref() {
+            SetExpr::Update(statement) | SetExpr::Delete(statement) => statement,
+            _ => return vec![],
+        },
+        statement => statement,
+    };
+    let (written, tables): (Vec<&ObjectName>, Vec<&TableWithJoins>) = match statement {
+        Statement::Update(update) => {
+            let TableFactor::Table { name, .. } = &update.table.relation else {
+                return vec![];
+            };
+            let mut tables = vec![&update.table];
+            if let Some(
+                UpdateTableFromKind::BeforeSet(from) | UpdateTableFromKind::AfterSet(from),
+            ) = &update.from
+            {
+                tables.extend(from);
+            }
+            (vec![name], tables)
+        }
+        Statement::Delete(delete) => {
+            let (FromTable::WithFromKeyword(from) | FromTable::WithoutKeyword(from)) = &delete.from;
+            (delete.tables.iter().collect(), from.iter().collect())
+        }
+        _ => return vec![],
+    };
+    written
+        .into_iter()
+        .filter(|name| resolve_alias(name, &tables).is_some())
+        .map(|name| name as *const ObjectName)
+        .collect()
+}
+
+/// Whether an INSERT, UPDATE or DELETE has `OUTPUT ... INTO`.
+fn output_into(statement: &Statement) -> bool {
+    let output = match statement {
+        Statement::Insert(insert) => &insert.output,
+        Statement::Update(update) => &update.output,
+        Statement::Delete(delete) => &delete.output,
+        _ => return false,
+    };
+    matches!(
+        output,
+        Some(OutputClause::Output {
+            into_table: Some(_),
+            ..
+        })
+    )
+}
+
+/// The relation an INSERT, UPDATE or DELETE writes, with a FROM alias
+/// resolved to its table.
+fn dml_target(statement: &Statement) -> Option<ObjectName> {
+    let resolve = |name: &ObjectName, tables: &[&TableWithJoins]| {
+        resolve_alias(name, tables).unwrap_or_else(|| name.clone())
+    };
+    match statement {
+        Statement::Insert(insert) => match &insert.table {
+            TableObject::TableName(name) => Some(name.clone()),
+            _ => None,
+        },
+        Statement::Update(update) => {
+            let TableFactor::Table { name, .. } = &update.table.relation else {
+                return None;
+            };
+            let mut tables = vec![&update.table];
+            if let Some(
+                UpdateTableFromKind::BeforeSet(from) | UpdateTableFromKind::AfterSet(from),
+            ) = &update.from
+            {
+                tables.extend(from);
+            }
+            Some(resolve(name, &tables))
+        }
+        Statement::Delete(delete) => {
+            let (FromTable::WithFromKeyword(from) | FromTable::WithoutKeyword(from)) = &delete.from;
+            let tables = from.iter().collect::<Vec<_>>();
+            match delete.tables.first() {
+                Some(name) => Some(resolve(name, &tables)),
+                None => match from.first().map(|table| &table.relation) {
+                    Some(TableFactor::Table { name, .. }) => Some(name.clone()),
+                    _ => None,
+                },
+            }
+        }
+        _ => None,
+    }
+}
+
+/// The CTEs of one query (`Relations::ctes`).
+#[derive(Default)]
+struct CteScope {
+    names: Vec<String>,
+    bodies: Vec<*const Query>,
+    visible: usize,
+}
+
+/// The relations of a statement, by database (`Session::cross_database`).
+/// Nodes are identified by address, so names that only share a spelling
+/// with a CTE in another scope, a table function or an alias target stay
+/// tables.
+#[derive(Default)]
+struct Relations {
+    current: String,
+    foreign: std::collections::BTreeMap<String, String>,
+    /// Relations of other databases, as qualified.
+    foreign_names: Vec<ObjectName>,
+    /// Whether another database's catalog views (`sys`, `INFORMATION_SCHEMA`)
+    /// are read. They describe the DuckDB default catalog, so only a
+    /// statement running in that database reads them correctly.
+    catalog_views: bool,
+    /// The database whose catalog views are read first.
+    catalog_view_database: Option<String>,
+    /// Whether the session database's catalog views are read.
+    local_catalog_views: bool,
+    /// The names of `local`, other than temporary objects.
+    local_names: Vec<ObjectName>,
+    /// Relation nodes of the current database.
+    local: Vec<*const ObjectName>,
+    /// Whether a SELECT INTO creates a table in the current database.
+    into: bool,
+    /// Whether a temporary table or table variable is among the relations.
+    temporary: bool,
+    /// The CTE scopes, innermost query last: each query's CTE body nodes
+    /// with their names, and how many of them are visible so far. T-SQL
+    /// has no forward references, so a CTE body sees itself and the CTEs
+    /// before it, and the query body sees all of them.
+    ctes: Vec<CteScope>,
+    /// Table function call nodes, such as `GENERATE_SERIES(1, 2)`.
+    functions: Vec<*const ObjectName>,
+    /// UPDATE and DELETE target nodes that name a FROM alias
+    /// (`alias_targets`).
+    targets: Vec<*const ObjectName>,
+    /// Whether the statement calls schema-qualified (user) functions, which
+    /// bind in the session's database.
+    routines: bool,
+    /// Three-part function calls, which may name another database's module.
+    qualified_functions: Vec<ObjectName>,
+}
+impl Relations {
+    fn collect<T: Visit>(node: &T, current: String, targets: &[*const ObjectName]) -> Self {
+        let mut relations = Relations {
+            current,
+            targets: targets.to_vec(),
+            ..Default::default()
+        };
+        let _ = node.visit(&mut relations);
+        relations
+    }
+
+    /// Whether `name` is a relation node of the current database.
+    fn local(&self, name: &ObjectName) -> bool {
+        self.local.iter().any(|local| std::ptr::eq(*local, name))
+    }
+
+    fn add(&mut self, name: &ObjectName) {
+        let node = name as *const ObjectName;
+        if self.targets.contains(&node) || self.functions.contains(&node) {
+            return;
+        }
+        match name.0.as_slice() {
+            [ObjectNamePart::Identifier(database), _, _]
+                if !database.value.eq_ignore_ascii_case(&self.current) =>
+            {
+                self.foreign
+                    .entry(database.value.clone())
+                    .or_insert_with(|| name.to_string());
+                if !self.foreign_names.contains(name) {
+                    self.foreign_names.push(name.clone());
+                }
+                // sys.databases lists the same databases everywhere.
+                if let [
+                    _,
+                    ObjectNamePart::Identifier(schema),
+                    ObjectNamePart::Identifier(view),
+                ] = name.0.as_slice()
+                    && (schema.value.eq_ignore_ascii_case("INFORMATION_SCHEMA")
+                        || schema.value.eq_ignore_ascii_case("sys")
+                            && !view.value.eq_ignore_ascii_case("databases"))
+                {
+                    self.catalog_views = true;
+                    self.catalog_view_database
+                        .get_or_insert_with(|| database.value.clone());
+                }
+            }
+            [ObjectNamePart::Identifier(single)]
+                if self
+                    .ctes
+                    .iter()
+                    .flat_map(|scope| &scope.names[..scope.visible])
+                    .any(|cte| cte.eq_ignore_ascii_case(&single.value)) => {}
+            [ObjectNamePart::Identifier(single)] if single.value.starts_with(['#', '@']) => {
+                self.temporary = true;
+                self.local.push(node);
+            }
+            _ => {
+                if let [
+                    ObjectNamePart::Identifier(schema),
+                    ObjectNamePart::Identifier(view),
+                ] = name.0.as_slice()
+                    && (schema.value.eq_ignore_ascii_case("INFORMATION_SCHEMA")
+                        || schema.value.eq_ignore_ascii_case("sys")
+                            && !view.value.eq_ignore_ascii_case("databases"))
+                {
+                    self.local_catalog_views = true;
+                }
+                self.local.push(node);
+                self.local_names.push(name.clone());
+            }
+        }
+    }
+}
+impl Visitor for Relations {
+    type Break = ();
+    fn pre_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
+        // Entering a CTE body makes it and the earlier ones visible.
+        if let Some(scope) = self.ctes.last_mut()
+            && let Some(index) = scope
+                .bodies
+                .iter()
+                .position(|body| std::ptr::eq(*body, query))
+        {
+            scope.visible = index + 1;
+        }
+        let ctes = query
+            .with
+            .iter()
+            .flat_map(|with| &with.cte_tables)
+            .collect::<Vec<_>>();
+        self.ctes.push(CteScope {
+            names: ctes
+                .iter()
+                .map(|cte| cte.alias.name.value.clone())
+                .collect(),
+            bodies: ctes.iter().map(|cte| &*cte.query as *const Query).collect(),
+            visible: 0,
+        });
+        let mut body = query.body.as_ref();
+        while let SetExpr::SetOperation { left, .. } = body {
+            body = left;
+        }
+        // SELECT INTO creates its one- or two-part target in the
+        // current database.
+        if let SetExpr::Select(select) = body
+            && select.into.is_some()
+        {
+            self.into = true;
+        }
+        ControlFlow::Continue(())
+    }
+    fn post_visit_query(&mut self, query: &Query) -> ControlFlow<()> {
+        self.ctes.pop();
+        // After the last CTE body, the query body sees every CTE.
+        if let Some(scope) = self.ctes.last_mut()
+            && scope
+                .bodies
+                .last()
+                .is_some_and(|body| std::ptr::eq(*body, query))
+        {
+            scope.visible = scope.names.len();
+        }
+        ControlFlow::Continue(())
+    }
+    fn pre_visit_table_factor(&mut self, factor: &TableFactor) -> ControlFlow<()> {
+        if let TableFactor::Table {
+            name,
+            args: Some(_),
+            ..
+        } = factor
+        {
+            self.functions.push(name);
+            self.routines |= name.0.len() > 1;
+            if name.0.len() > 2 {
+                self.qualified_functions.push(name.clone());
+            }
+        }
+        ControlFlow::Continue(())
+    }
+    fn pre_visit_expr(&mut self, expr: &Expr) -> ControlFlow<()> {
+        if let Expr::Function(function) = expr {
+            self.routines |= function.name.0.len() > 1;
+            if function.name.0.len() > 2 {
+                self.qualified_functions.push(function.name.clone());
+            }
+        }
+        ControlFlow::Continue(())
+    }
+    fn pre_visit_relation(&mut self, relation: &ObjectName) -> ControlFlow<()> {
+        self.add(relation);
+        ControlFlow::Continue(())
+    }
+}
+
+/// A statement running in another database (`Session::enter_home`).
+struct Home {
+    previous: (String, String),
+    /// The other database, in use while the statement runs.
+    guard: crate::database_catalog::Use,
+    /// The session's database, swapped out for `guard`, stays its own use.
+    _counted: Counted,
+}
+
+/// Another database that a running statement uses (`Session::use_other`).
+struct OtherUse {
+    guard: crate::database_catalog::Use,
+    _counted: Counted,
+}
+
+/// Databases running statements use, by catalog alias.
+#[derive(Default)]
+struct OtherUses(std::sync::Arc<std::sync::Mutex<HashMap<String, usize>>>);
+
+impl OtherUses {
+    fn add(&self, alias: &str) -> Counted {
+        *self
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .entry(alias.to_string())
+            .or_default() += 1;
+        Counted {
+            alias: alias.to_string(),
+            uses: self.0.clone(),
+        }
+    }
+
+    fn count(&self, alias: &str) -> usize {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(alias)
+            .copied()
+            .unwrap_or(0)
+    }
+}
+
+/// One entry of `OtherUses`, removed when dropped.
+struct Counted {
+    alias: String,
+    uses: std::sync::Arc<std::sync::Mutex<HashMap<String, usize>>>,
+}
+
+impl Drop for Counted {
+    fn drop(&mut self) {
+        let mut uses = self
+            .uses
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(count) = uses.get_mut(&self.alias) {
+            *count -= 1;
+            if *count == 0 {
+                uses.remove(&self.alias);
+            }
+        }
+    }
+}
+
+/// Whether `Session::execute` routes a statement (`execute_routed`): a query
+/// or DML statement with a three-part relation name.
+fn names_other_databases(statement: &Statement) -> bool {
+    matches!(
+        statement,
+        Statement::Query(_) | Statement::Insert(_) | Statement::Update(_) | Statement::Delete(_)
+    ) && (visit_relations(statement, |relation| {
+        if relation.0.len() >= 3 {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    })
+    .is_break()
+        || visit_expressions(statement, |expr| match expr {
+            Expr::Function(function) if function.name.0.len() >= 3 => ControlFlow::Break(()),
+            _ => ControlFlow::Continue(()),
+        })
+        .is_break())
+}
+
+/// Where `Session::execute` runs a statement.
+enum Routed {
+    Here(Box<Statement>),
+    Home(Box<Statement>, String, Vec<OtherUse>),
+    Mixed(Box<Statement>, Vec<OtherUse>),
+}
+
+/// How a statement refers to databases other than the current one.
+enum CrossDatabase {
+    /// Only the current database.
+    Local,
+    /// `0`, another database, in which the statement runs, because it
+    /// writes it or reads only its catalog views. `1` holds every other
+    /// database the statement uses until it ends.
+    Home(String, Vec<OtherUse>),
+    /// Runs in the current database, reading the other databases it holds.
+    Mixed(Vec<OtherUse>),
+}
+
+/// Name relations as seen from `home`, the database a statement runs in:
+/// drop `home`'s catalog and give relations of `current`, the session's
+/// database, its catalog.
+fn rehome<T: Visit + VisitMut>(
+    node: &mut T,
+    home: &str,
+    current: &str,
+    targets: &[*const ObjectName],
+) {
+    let relations = Relations::collect(&*node, current.to_string(), targets);
+    let _ = visit_relations_mut(node, |relation| {
+        if let [ObjectNamePart::Identifier(database), _, _] = relation.0.as_slice()
+            && database.value == home
+        {
+            relation.0.remove(0);
+        } else if relations.local(relation) {
+            if relation.0.len() == 1 {
+                relation
+                    .0
+                    .insert(0, ObjectNamePart::Identifier(Ident::new("dbo")));
+            }
+            relation.0.insert(
+                0,
+                ObjectNamePart::Identifier(Ident::with_quote('"', current)),
+            );
+        }
+        ControlFlow::<()>::Continue(())
+    });
 }
