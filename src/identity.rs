@@ -51,7 +51,7 @@ fn table_key(name: &ObjectName) -> Option<(String, String)> {
 }
 
 // Defaults are catalog SQL, never commands to execute. Only statically known
-// nextval arguments establish dependencies; uncertainty must stay explicit.
+// sequence arguments establish dependencies; uncertainty must stay explicit.
 fn sequence_argument(expr: &Expr) -> Result<Option<String>> {
     match expr {
         Expr::Value(value) => match &value.value {
@@ -136,7 +136,9 @@ fn references_sequence(default: &str, name: &str, bindings: &[(String, String)])
             .0
             .last()
             .and_then(ObjectNamePart::as_ident)
-            .is_some_and(|id| id.value.eq_ignore_ascii_case("nextval"))
+            .is_some_and(|id| {
+                id.value.eq_ignore_ascii_case("nextval") || id.value.eq_ignore_ascii_case("currval")
+            })
         {
             return std::ops::ControlFlow::Continue(());
         }
@@ -553,6 +555,88 @@ pub fn create(db: &Connection, statement: &Statement, autocommit: bool) -> Resul
 #[cfg(test)]
 mod tests {
     #[test]
+    fn currval_dependencies_preflight_before_destructive_ddl() {
+        for qualified in [true, false] {
+            let db = Connection::open_in_memory().unwrap();
+            db.execute_batch("CREATE SCHEMA dbo").unwrap();
+            let parse = |sql: &str| {
+                Parser::parse_sql(&sqlparser::dialect::MsSqlDialect {}, sql)
+                    .unwrap()
+                    .remove(0)
+            };
+            create(
+                &db,
+                &parse("CREATE TABLE dbo.ids(id INT IDENTITY(10,5),v INT,keeper INT)"),
+                true,
+            )
+            .unwrap();
+            db.execute_batch("INSERT INTO dbo.ids(v,keeper) VALUES(1,7)")
+                .unwrap();
+            let name = table_sequences(
+                &db,
+                &ObjectName::from(vec![Ident::new("dbo"), Ident::new("ids")]),
+            )
+            .unwrap()
+            .remove(0);
+            let argument = if qualified {
+                name.as_str()
+            } else {
+                name.strip_prefix("main.").unwrap()
+            };
+            db.execute_batch(&format!("SET schema='dbo'; CREATE TABLE dbo.dep(d BIGINT DEFAULT currval('{argument}')); BEGIN")).unwrap();
+            let dependents = dependent_columns(&db, &name).unwrap();
+            assert!(
+                dependents
+                    .iter()
+                    .any(|(schema, table, column)| schema == "dbo"
+                        && table == "dep"
+                        && column == "d")
+            );
+            let Statement::AlterTable(mut drop) = parse("ALTER TABLE dbo.ids DROP COLUMN v") else {
+                panic!()
+            };
+            let Statement::AlterTable(id) = parse("ALTER TABLE dbo.ids DROP COLUMN id") else {
+                panic!()
+            };
+            drop.operations.extend(id.operations);
+            assert!(crate::table_alter::execute(&db, &drop, false).is_err());
+            assert!(drop_table(&db, &parse("DROP TABLE dbo.ids"), false).is_err());
+            assert_eq!(
+                db.query_row("SELECT id,v,keeper FROM dbo.ids", [], |row| Ok((
+                    row.get::<_, i32>(0)?,
+                    row.get::<_, i32>(1)?,
+                    row.get::<_, i32>(2)?
+                )))
+                .unwrap(),
+                (10, 1, 7)
+            );
+            db.execute_batch("INSERT INTO dbo.dep DEFAULT VALUES; COMMIT")
+                .unwrap();
+            assert_eq!(
+                db.query_row("SELECT d FROM dbo.dep", [], |row| row.get::<_, i64>(0))
+                    .unwrap(),
+                10
+            );
+            assert_eq!(
+                db.query_row("SELECT last_value FROM duckdb_sequences()", [], |row| row
+                    .get::<_, i64>(
+                    0
+                ))
+                .unwrap(),
+                10
+            );
+            db.execute_batch("DROP TABLE dbo.dep").unwrap();
+            drop_table(&db, &parse("DROP TABLE dbo.ids"), true).unwrap();
+            assert_eq!(
+                db.query_row("SELECT count(*) FROM duckdb_sequences()", [], |row| row
+                    .get::<_, i64>(0))
+                    .unwrap(),
+                0
+            );
+        }
+    }
+
+    #[test]
     fn bound_default_dependencies_survive_schema_changes_and_shadowing() {
         for context in ["SET schema='dbo'", "SET search_path='dbo,main'"] {
             let db = Connection::open_in_memory().unwrap();
@@ -766,6 +850,8 @@ mod tests {
             format!("nextval('main.'||'{basename}')"),
             format!("\"nextval\"('{name}')"),
             format!("nextval('{basename}')"),
+            format!("currval('{}')+1", name.to_ascii_uppercase()),
+            format!("currval('{basename}'::VARCHAR)"),
         ]
         .iter()
         .enumerate()
@@ -780,8 +866,8 @@ mod tests {
         ))
         .unwrap();
         let dependents = dependent_columns(&db, &name).unwrap();
-        assert_eq!(dependents.len(), 7);
-        for index in 0..6 {
+        assert_eq!(dependents.len(), 9);
+        for index in 0..8 {
             assert!(
                 dependents
                     .iter()
