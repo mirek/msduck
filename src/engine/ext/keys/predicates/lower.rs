@@ -440,10 +440,13 @@ fn compare(left: &Expr, op: &BinaryOperator, right: &Expr) -> Option<Expr> {
                 v.value,
                 Value::SingleQuotedString(_) | Value::NationalStringLiteral(_)
             ),
-            Expr::Cast {
-                data_type: DataType::Varchar(_) | DataType::Text | DataType::String(_),
-                ..
-            } => true,
+            Expr::Cast { data_type, .. } => {
+                matches!(data_type, DataType::Text | DataType::String(_))
+                    || matches!(
+                        msduck_sql::sql_type::declaration(data_type),
+                        Ok(msduck_core::types::Type::Character(_))
+                    )
+            }
             Expr::Function(f) => matches!(
                 f.name.to_string().as_str(),
                 MARK | TEXT
@@ -457,6 +460,20 @@ fn compare(left: &Expr, op: &BinaryOperator, right: &Expr) -> Option<Expr> {
                     | "__msduck_cast_carrier_nchar"
                     | "__msduck_isnull_nvarchar_width"
                     | "__msduck_isnull_nchar_width"
+                    // The bottom-up translator has already lowered public
+                    // character CAST/TRY_CAST peers to these typed adapters.
+                    | "__msduck_cast_nvarchar"
+                    | "__msduck_try_nvarchar"
+                    | "__msduck_cast_varchar"
+                    | "__msduck_try_varchar"
+                    | "__msduck_cast_char"
+                    | "__msduck_try_char"
+                    | "__msduck_cast_carrier_char"
+                    | "__msduck_cast_carrier_varchar"
+                    | "__msduck_nchar_width"
+                    | "__msduck_nvarchar_width"
+                    | "__msduck_char_width"
+                    | "__msduck_varchar_width"
             ),
             // MAYBE and generic names containing "unicode" are not type
             // declarations: e.g. __msduck_unicode itself returns an integer.

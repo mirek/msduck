@@ -59,6 +59,11 @@ evaluation. Nested admitted alternatives retain this carrier provenance. ANSI br
 convert through their declared CP1252 family before Unicode promotion; under
 the supported non-SC collations a supplementary ANSI literal contributes two
 best-fit bytes. Numeric and unresolved alternatives keep the existing path.
+Comparisons of bounded scalar-query ISNULL results with declared character
+CAST/TRY_CAST and width adapters use the same default character equality key.
+The bottom-up translator may already have replaced CAST syntax with a typed
+adapter; only explicitly known character producers are admitted, leaving
+numeric-returning or unknown functions on the existing coercion path.
 Set branches align each immediate child result using its own query scope.
 An inner DISTINCT finishes in its own character domain before a numeric parent
 converts its completed output: `01 UNION 1 UNION ALL 7` therefore retains both

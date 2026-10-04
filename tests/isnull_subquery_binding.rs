@@ -345,3 +345,22 @@ fn width_adapter_does_not_promote_unknown_integer_marker_to_text() {
         1
     );
 }
+
+#[test]
+fn scalar_isnull_width_comparisons_key_all_character_cast_families() {
+    let (_server, mut session) = session();
+    for (index, kind) in ["NVARCHAR", "NCHAR", "CHAR", "VARCHAR"].iter().enumerate() {
+        let sql = format!(
+            "CREATE TABLE cast_peer_{index}(v INT); INSERT cast_peer_{index} SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x') = CAST(N'x ' AS {kind}(2)) THEN 1 ELSE 0 END;"
+        );
+        let (response, ok) = session.batch_response(&sql, &Default::default(), false, None);
+        assert!(ok, "{kind}: {response:?}");
+        let hit: i32 = session
+            .db
+            .query_row(&format!("SELECT v FROM cast_peer_{index}"), [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(hit, 1, "{kind}");
+    }
+}

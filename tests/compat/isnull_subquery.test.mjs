@@ -37,3 +37,124 @@ test('ISNULL scalar-query carriers retain captured UTF-16 values and descriptors
   })
   assert.deepEqual(actual, carrierExpected)
 })
+
+// Pinned SQL Server17.0.4065.4: character casts use padded collation equality.
+const characterPeerCases = [
+  {
+    "name": "NVARCHAR",
+    "query": "SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x') = CAST(N'x ' AS NVARCHAR(2)) THEN 1 ELSE 0 END AS v",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "Int",
+              null
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "NCHAR",
+    "query": "SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x') = CAST(N'x ' AS NCHAR(2)) THEN 1 ELSE 0 END AS v",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "Int",
+              null
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "CHAR",
+    "query": "SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x') = CAST(N'x ' AS CHAR(2)) THEN 1 ELSE 0 END AS v",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "Int",
+              null
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  },
+  {
+    "name": "VARCHAR",
+    "query": "SELECT CASE WHEN ISNULL((SELECT CAST(NULL AS NVARCHAR(2))),N'x') = CAST(N'x ' AS VARCHAR(2)) THEN 1 ELSE 0 END AS v",
+    "expected": {
+      "sets": [
+        {
+          "columns": [
+            [
+              "v",
+              "Int",
+              null
+            ]
+          ],
+          "rows": [
+            [
+              1
+            ]
+          ]
+        }
+      ],
+      "errors": [],
+      "done": [
+        1
+      ]
+    }
+  }
+]
+
+test('ISNULL scalar-query comparisons retain captured character peer equality', async t => {
+  const connection = await start(t)
+  for (const entry of characterPeerCases) {
+    const raw = await capture(connection, entry.query)
+    const actual = canonical({
+      sets: raw.sets.map(set => ({columns: set.columns.map(c => [c.name,c.type,c.length]), rows:set.rows})),
+      errors: raw.errors,
+      done: raw.done.filter(d => d.kind === 'done' || d.kind === 'doneInProc').map(d => d.rowCount),
+    })
+    assert.deepEqual(actual, entry.expected, entry.name)
+  }
+})
