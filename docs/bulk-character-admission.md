@@ -9,8 +9,9 @@ Server databases. Its collector and acquisition evidence are documented in
 The deterministic `msduck_core::bulk_character_admission` module receives a
 validated source declaration and explicit decoded wire family, byte length or
 PLP framing, nullability and target MAX facts. It has no parser, TDS, database,
-session or environmental dependency. Unknown wire shapes remain distinguishable
-from measured diagnostics. Bounded wire widths need not equal declared widths.
+session or environmental dependency. Unknown modern wire shapes remain distinguishable
+from measured diagnostics and return an explicit unsupported error; they never
+fall through legacy family admission. Bounded wire widths need not equal declared widths.
 CHAR and VARCHAR are distinct source/wire families, as are NCHAR and NVARCHAR.
 Either a source MAX declaration or a target MAX column requires PLP framing.
 Those metadata checks apply before NULL rows, independently of payload contents.
@@ -69,3 +70,23 @@ compare number/state/severity/message/procedure/line, not full identity-equal
 error tokens. Complete frozen-revision verification, audit comparison and reviews
 remain required before merge. Native ANSI encoding/catalog/wire gates and full
 endpoint compatibility remain separate work.
+
+A bounded private extension measured modern zero-width TYPE_INFO. SQL Server
+accepts zero-width metadata for a matching source/wire family and bounded target;
+NULL stays NULL and empty fixed sources receive their declared padding. Family
+mismatch remains4816/state1, taking precedence over targetMAX4816/state2. Four
+fresh databases on two pinned17.0.4065.4 containers agree on all32 controls,
+including original outgoing payloads, full diagnostics apart from separately
+retained server identity, callback row counts, native readback and session
+counters. This contradicts treating all zero-width metadata as malformed.
+The unchanged raw capture is retained privately as
+`.tmp/bulk-character-zero-width-capture.json`, SHA256
+`47e87eb5e996b6505c3bd16aca82b068ac11e4aee15432e1ea568a78ac76961a`;
+`.tmp/bulk-character-zero-width-proof.json` records agreement. The bounded
+collector `.tmp/bulk-character-zero-width-probe.mjs` reuses the immutable
+reference collector helpers and2MiB/1024packet exchange envelopes,48MiB retained
+budget,15second bulk callback limit and awaited own-container cleanup. The
+Session regression retains original first-run requests/results directly in its
+claimed source file; it verifies all32 diagnostic/readback/counter controls.
+Unmeasured modern shape failures are explicit platform unsupported errors,
+not newly asserted SQL Server diagnostics. Legacy shapes retain their gates.

@@ -161,7 +161,7 @@ impl Load {
                 // value with length n) with state 1 and severity 17, after
                 // the metadata checks.
                 let error = match self.decoder.columns() {
-                    None => SqlError::new(4804, 2, PREMATURE_END),
+                    None => SqlError::new(4804, 2, PREMATURE_END).into(),
                     Some(columns) => {
                         let mismatch = (!self.checked).then(|| self.check(columns)).flatten();
                         mismatch.or_else(|| {
@@ -175,15 +175,15 @@ impl Load {
                             let Type::Character(character) = bound.declared else { return None; };
                             (msduck_core::bulk_character_admission::row(character, Some(bytes))
                                 == msduck_core::bulk_character_admission::Row::DeclaredLengthExceeded)
-                                .then(|| declared_length_error(column))
+                                .then(|| declared_length_error(column).into())
                         }).unwrap_or_else(|| {
                             let mut error = SqlError::new(4804, 1, PREMATURE_END);
                             error.severity = 17;
-                            error
+                            error.into()
                         })
                     }
                 };
-                self.fail(&[error]);
+                self.fail_with(&error);
                 return;
             }
         };
@@ -192,7 +192,7 @@ impl Load {
         {
             self.checked = true;
             if let Some(error) = self.check(columns) {
-                self.fail(&[error]);
+                self.fail_with(&error);
                 return;
             }
         }
@@ -218,23 +218,30 @@ impl Load {
     }
 
     /// SQL Server's checks of the COLMETADATA token.
-    fn check(&self, columns: &[wire::WireColumn]) -> Option<SqlError> {
+    fn check(&self, columns: &[wire::WireColumn]) -> Option<anyhow::Error> {
         if columns.len() != self.plan.columns.len() {
-            return Some(SqlError::new(4804, 3, PREMATURE_END));
+            return Some(SqlError::new(4804, 3, PREMATURE_END).into());
         }
         for (index, (wire_column, bound)) in columns.iter().zip(&self.plan.columns).enumerate() {
             let target = self.plan.target(bound);
-            if let Some(state) =
-                wire::incompatible(wire_column, &bound.declared, target.nullable, target.max)
-            {
-                return Some(SqlError::new(
-                    4816,
-                    state,
-                    format!(
-                        "Invalid column type from bcp client for colid {}.",
-                        index + 1
-                    ),
-                ));
+            let state =
+                match wire::incompatible(wire_column, &bound.declared, target.nullable, target.max)
+                {
+                    Ok(state) => state,
+                    Err(error) => return Some(error),
+                };
+            if let Some(state) = state {
+                return Some(
+                    SqlError::new(
+                        4816,
+                        state,
+                        format!(
+                            "Invalid column type from bcp client for colid {}.",
+                            index + 1
+                        ),
+                    )
+                    .into(),
+                );
             }
         }
         None

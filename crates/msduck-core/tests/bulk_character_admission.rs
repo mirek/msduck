@@ -101,11 +101,7 @@ fn declarations_precede_nulls_and_lengths_are_original_bytes() {
         admission::row(declared, Some(usize::MAX)),
         Row::DeclaredLengthExceeded
     );
-    for length in [
-        WireLength::BoundedBytes(0),
-        WireLength::BoundedBytes(3),
-        WireLength::BoundedBytes(8002),
-    ] {
+    for length in [WireLength::BoundedBytes(3), WireLength::BoundedBytes(8002)] {
         assert_eq!(
             admission::metadata(
                 declared,
@@ -256,4 +252,52 @@ fn original_capacity_controls_keep_metadata_before_source_and_target_capacity() 
     assert_eq!(checked, 384);
     assert_eq!(metadata_failures, 48);
     assert_eq!(row_failures, 8);
+}
+
+#[test]
+fn measured_zero_wire_width_keeps_metadata_and_fixed_source_rules() {
+    for family in [
+        Family::Char,
+        Family::Varchar,
+        Family::Nchar,
+        Family::Nvarchar,
+    ] {
+        let declared = CharacterType::new(family, Length::Bounded(8)).unwrap();
+        let wire = Wire {
+            family,
+            length: WireLength::BoundedBytes(0),
+            nullable: true,
+        };
+        assert_eq!(
+            admission::metadata(declared, wire, true, false),
+            Metadata::Admitted
+        );
+        assert_eq!(
+            admission::metadata(declared, wire, true, true),
+            Metadata::MaxFraming
+        );
+        assert_eq!(
+            admission::metadata(declared, wire, false, false),
+            Metadata::FamilyOrNullability
+        );
+        let other = match family {
+            Family::Char => Family::Varchar,
+            Family::Varchar => Family::Char,
+            Family::Nchar => Family::Nvarchar,
+            Family::Nvarchar => Family::Nchar,
+        };
+        assert_eq!(
+            admission::metadata(
+                declared,
+                Wire {
+                    family: other,
+                    ..wire
+                },
+                true,
+                true
+            ),
+            Metadata::FamilyOrNullability
+        );
+        assert_eq!(admission::row(declared, Some(0)), Row::Admitted);
+    }
 }

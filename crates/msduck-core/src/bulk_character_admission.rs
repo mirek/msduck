@@ -22,8 +22,7 @@ impl Wire {
     pub fn is_supported_shape(self) -> bool {
         match self.length {
             WireLength::BoundedBytes(bytes) => {
-                bytes != 0
-                    && bytes <= 8000
+                bytes <= 8000
                     && (!matches!(self.family, Family::Nchar | Family::Nvarchar) || bytes % 2 == 0)
             }
             WireLength::Plp => matches!(self.family, Family::Varchar | Family::Nvarchar),
