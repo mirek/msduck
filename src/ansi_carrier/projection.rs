@@ -8,7 +8,7 @@ use duckdb::{
 };
 use msduck_core::{
     ansi_bytes::{AnsiView, EncodingIdentity, checked_byte_total},
-    ansi_conversion::{ProjectedValue, ProjectionLimits, ProjectionTarget, project},
+    ansi_conversion::{ProjectedValue, ProjectionLimits, ProjectionTarget, project, stored_utf8},
 };
 
 /// Explicit logical identity and active per-cell/chunk input/output payload limits.
@@ -19,6 +19,13 @@ pub struct Plan {
     target: ProjectionTarget,
     limits: ProjectionLimits,
     output_chunk_limit: usize,
+    decode: Decode,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Decode {
+    Strict,
+    StoredUtf8,
 }
 
 impl Plan {
@@ -47,7 +54,27 @@ impl Plan {
             target,
             limits,
             output_chunk_limit,
+            decode: Decode::Strict,
         })
+    }
+
+    /// SQL UTF16 projection of stored UTF8 bytes, including measured EOF fitting
+    /// and malformed repair. This does not admit a wire value or apply capacity.
+    /// Source and target identity are fixed declaration facts, even for NULL.
+    pub fn stored_utf8_to_sql_utf16(
+        limits: ProjectionLimits,
+        input_chunk_limit: usize,
+        output_chunk_limit: usize,
+    ) -> anyhow::Result<Self> {
+        let mut plan = Self::new(
+            EncodingIdentity::Utf8,
+            ProjectionTarget::SqlUtf16,
+            limits,
+            input_chunk_limit,
+            output_chunk_limit,
+        )?;
+        plan.decode = Decode::StoredUtf8;
+        Ok(plan)
     }
 
     /// Register on this connection only, under a caller-owned internal identifier.
@@ -132,9 +159,16 @@ impl Plan {
             }
             let payload = with_native_bytes(&bytes, row, len, |value| {
                 let view = AnsiView::new(self.source.encoding(), value, self.limits.input_bytes)?;
-                let projected =
-                    project(self.source.encoding(), Some(view), self.target, self.limits)?
-                        .ok_or_else(|| anyhow::anyhow!("non-NULL ANSI projection became NULL"))?;
+                let projected = match self.decode {
+                    Decode::Strict => {
+                        project(self.source.encoding(), Some(view), self.target, self.limits)?
+                    }
+                    Decode::StoredUtf8 => {
+                        stored_utf8::to_sql_utf16(self.source.encoding(), Some(view), self.limits)?
+                            .map(ProjectedValue::SqlUtf16)
+                    }
+                }
+                .ok_or_else(|| anyhow::anyhow!("non-NULL ANSI projection became NULL"))?;
                 let size = match &projected {
                     ProjectedValue::Native(bytes) => bytes.view().bytes().len(),
                     ProjectedValue::SqlUtf16(units) => units
@@ -335,5 +369,88 @@ mod tests {
         .unwrap();
         assert!(invoke(&p, &mut input, &mut output).is_err());
         assert_eq!(read(&output.0), before);
+    }
+    fn unicode_values(chunk: &DataChunkHandle) -> Vec<duckdb::types::Value> {
+        let batch = data_chunk_to_arrow(chunk).unwrap();
+        (0..batch.num_rows())
+            .map(|row| crate::unicode_carrier::read(batch.column(0).as_ref(), row).unwrap())
+            .collect()
+    }
+    #[test]
+    fn stored_boundary_and_resource_failures_preserve_initialized_unicode_output() {
+        use msduck_core::ansi_bytes::ByteError;
+        use msduck_core::ansi_conversion::stored_utf8::StoredUtf8Error;
+        let stored = |input, output, input_chunk, output_chunk| {
+            Plan::stored_utf8_to_sql_utf16(
+                ProjectionLimits {
+                    input_bytes: input,
+                    output_bytes: output,
+                },
+                input_chunk,
+                output_chunk,
+            )
+            .unwrap()
+        };
+        let mut input = DataChunkHandle::new(&[storage_type()]);
+        let mut output = Output(DataChunkHandle::new(&[crate::unicode_carrier::kind()]));
+        output.0.set_len(2);
+        let structure = output.0.struct_vector(0);
+        let payload = structure.child(0, 2);
+        payload.insert(0, b"L\0".as_slice());
+        payload.insert(1, b"R\0".as_slice());
+        let before = unicode_values(&output.0);
+        fill(&input, &[65001, 65001], &[b"A", &[0x80]]);
+        let error = invoke(&stored(8, 8, 16, 16), &mut input, &mut output).unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<StoredUtf8Error>(),
+            Some(&StoredUtf8Error::InvalidBoundary)
+        );
+        assert_eq!(unicode_values(&output.0), before);
+        fill(&input, &[65001, 65001], &[b"A", b"B"]);
+        let error = invoke(&stored(1, 2, 2, 3), &mut input, &mut output).unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<ByteError>(),
+            Some(&ByteError::Limit {
+                requested: 4,
+                maximum: 3
+            })
+        );
+        assert_eq!(unicode_values(&output.0), before);
+        fill(&input, &[65001, 65001], &[b"A", &[0xc2, 0x80]]);
+        let error = invoke(&stored(1, 2, 2, 4), &mut input, &mut output).unwrap_err();
+        assert_eq!(
+            error.downcast_ref::<ByteError>(),
+            Some(&ByteError::Limit {
+                requested: 2,
+                maximum: 1
+            })
+        );
+        assert_eq!(unicode_values(&output.0), before);
+        fill(&input, &[65001, 1252], &[b"A", b"B"]);
+        assert!(invoke(&stored(8, 8, 16, 16), &mut input, &mut output).is_err());
+        assert_eq!(unicode_values(&output.0), before);
+        fill(&input, &[65001, 65001], &[b"A", b"B"]);
+        input.struct_vector(0).child(1, 2).set_null(1);
+        assert!(invoke(&stored(8, 8, 16, 16), &mut input, &mut output).is_err());
+        assert_eq!(unicode_values(&output.0), before);
+    }
+    #[test]
+    fn stored_zero_rows_require_exact_source_and_unicode_output_shapes() {
+        let p = Plan::stored_utf8_to_sql_utf16(
+            ProjectionLimits {
+                input_bytes: 0,
+                output_bytes: 0,
+            },
+            0,
+            0,
+        )
+        .unwrap();
+        let mut input = DataChunkHandle::new(&[storage_type()]);
+        let mut output = Output(DataChunkHandle::new(&[crate::unicode_carrier::kind()]));
+        invoke(&p, &mut input, &mut output).unwrap();
+        let mut wrong_input = DataChunkHandle::new(&[Id::Blob.into()]);
+        assert!(invoke(&p, &mut wrong_input, &mut output).is_err());
+        let mut wrong_output = Output(DataChunkHandle::new(&[storage_type()]));
+        assert!(invoke(&p, &mut input, &mut wrong_output).is_err());
     }
 }
